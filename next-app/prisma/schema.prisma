@@ -1,0 +1,1471 @@
+// =============================================================
+// DOODLY — Database schema (Prisma + PostgreSQL / Supabase)
+// -------------------------------------------------------------
+// This is the production data model behind the storefront, the
+// customer dashboard, the admin ERP, and the delivery app.
+// Generate the client with:  npx prisma generate
+// Push to Supabase Postgres:  npx prisma migrate dev
+// =============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")        // Supabase pooled connection
+  directUrl = env("DIRECT_URL")          // Supabase direct (migrations)
+}
+
+// ----------------------------------------------------------------
+// ENUMS
+// ----------------------------------------------------------------
+enum Role {
+  CUSTOMER
+  DELIVERY_EXECUTIVE
+  SUPPORT
+  OPERATIONS
+  PROCUREMENT
+  ACCOUNTANT
+  INVENTORY
+  QUALITY
+  MARKETING
+  ADMIN
+  SUPER_ADMIN
+}
+
+// FULL also grants module specials (refund/approve/adjust/assign)
+enum PermLevel {
+  NONE
+  VIEW
+  MANAGE
+  FULL
+}
+
+// The "CMS flip"; Low Stock is DERIVED from stock vs lowStockThreshold, never stored
+enum ProductStatus {
+  AVAILABLE
+  DRAFT
+  COMING_SOON
+  OUT_OF_STOCK
+  DISCONTINUED
+  HIDDEN
+  ARCHIVED
+}
+
+enum VariantType {
+  TRIAL
+  SUBSCRIPTION
+}
+
+enum SubStatus {
+  ACTIVE
+  PAUSED
+  VACATION
+  CANCELLED
+  COMPLETED
+}
+
+// Executive workflow
+enum DeliveryStatus {
+  SCHEDULED
+  ASSIGNED
+  ACCEPTED
+  PACKED
+  OUT_FOR_DELIVERY
+  ON_THE_WAY
+  REACHED
+  DELIVERED
+  FAILED
+  SKIPPED
+}
+
+enum IssueType {
+  CUSTOMER_UNAVAILABLE
+  WRONG_ADDRESS
+  DAMAGED_BOTTLE
+  PAYMENT_ISSUE
+  PRODUCT_ISSUE
+  DELIVERY_FAILED
+}
+
+enum IssuePriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum OrderType {
+  SUBSCRIPTION
+  ONE_TIME
+  EXTRA
+  SAMPLE
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  UPI
+  CARD
+  NETBANKING
+  WALLET
+  CASH
+}
+
+enum BottleEvent {
+  ISSUED
+  RETURNED
+  LOST
+  DEPOSIT_CHARGED
+  DEPOSIT_REFUNDED
+}
+
+enum TxnType {
+  CREDIT
+  DEBIT
+}
+
+enum NotifChannel {
+  SMS
+  WHATSAPP
+  PUSH
+  EMAIL
+}
+
+// ----------------------------------------------------------------
+// IDENTITY & PROFILE
+// ----------------------------------------------------------------
+model User {
+  id            String   @id @default(cuid())
+  phone         String   @unique                 // primary login (OTP)
+  email         String?  @unique
+  name          String?
+  role          Role     @default(CUSTOMER)
+  walletPaise   Int      @default(0)             // store money in paise (int, no float)
+  referralCode  String   @unique @default(cuid())
+  referredById  String?
+  referredBy    User?    @relation("Referrals", fields: [referredById], references: [id])
+  referrals     User[]   @relation("Referrals")
+  loyaltyPoints Int      @default(0)
+  notes         String?                          // admin-only notes
+  tags          String[]                         // e.g. ["premium","fragile-door"]
+  createdAt     DateTime @default(now())
+
+  addresses     Address[]
+  subscriptions Subscription[]
+  orders        Order[]
+  payments      Payment[]
+  invoices      Invoice[]
+  bottleLedger  BottleLedger[]
+  recurringMethods RecurringPaymentMethod[]
+  walletTxns    WalletTxn[]
+  reviews       Review[]
+  notifications Notification[]
+  driver        Driver?
+  // ---- RBAC / account security ----
+  status          UserStatus   @default(ACTIVE)        // active / disabled / locked
+  deletedAt       DateTime?                            // soft delete
+  forcePwReset    Boolean      @default(false)
+  twoFactorOn     Boolean      @default(false)         // enforce for ADMIN / SUPER_ADMIN
+  roleAssignments UserRoleAssignment[]                 // secondary roles (multi-role)
+  auditLogs       AuditLog[]
+  logins          LoginHistory[]
+  assignmentLogs  AssignmentLog[]                      // assignment actions performed by this user (admin/ops)
+  bulkAssignments BulkOrderRequest[]                   // bulk enquiries assigned to this staff member
+  bulkNotes       BulkOrderNote[]                      // bulk-enquiry notes authored by this user
+  trialCashback   TrialCashback?                       // once-per-customer trial-pack cashback ledger
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+  LOCKED
+}
+
+// ===== RBAC (data-driven so new departments need no code change) =====
+model RoleDef {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  label     String
+  isSystem  Boolean  @default(true)
+  perms     RolePermission[]
+}
+model Permission {
+  id      String @id @default(cuid())
+  module  String
+  action  String
+  perms   RolePermission[]
+  @@unique([module, action])
+}
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  role         RoleDef    @relation(fields: [roleId], references: [id])
+  permissionId String?
+  permission   Permission? @relation(fields: [permissionId], references: [id])
+  module       String
+  level        PermLevel  @default(NONE)
+  @@unique([roleId, module])
+}
+model UserRoleAssignment {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  roleKey   String
+  createdAt DateTime @default(now())
+  @@unique([userId, roleKey])
+}
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  actorRole String?
+  action    String
+  target    String?
+  ip        String?
+  device    String?
+  browser   String?
+  createdAt DateTime @default(now())
+  @@index([userId, createdAt])
+}
+model LoginHistory {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  success   Boolean
+  ip        String?
+  device    String?
+  browser   String?
+  createdAt DateTime @default(now())
+  @@index([userId, createdAt])
+}
+
+model Address {
+  id           String  @id @default(cuid())
+  userId       String
+  user         User    @relation(fields: [userId], references: [id])
+  label        String  @default("Home")
+  line1        String
+  line2        String?
+  city         String
+  pincode      String
+  lat          Float?
+  lng          Float?
+  isDefault    Boolean @default(false)
+  deliveryNote String?                           // "leave at door", gate code, etc.
+  zoneId       String?
+  zone         DeliveryZone? @relation(fields: [zoneId], references: [id])
+  subscriptions Subscription[]
+}
+
+// ----------------------------------------------------------------
+// CATALOGUE  (admin-editable = the CMS)
+// ----------------------------------------------------------------
+model Product {
+  id           String        @id @default(cuid())
+  slug         String        @unique              // "milk","curd","paneer","kova","ghee"
+  name         String
+  category     String?
+  description  String                             // short description
+  longDesc     String?
+  story        String?
+  usage        String?
+  storage      String?
+  ingredients  String?
+  allergens    String?
+  status            ProductStatus @default(COMING_SOON) // flip to AVAILABLE to launch
+  visible           Boolean       @default(true)        // HIDDEN from listings when false
+  lowStockThreshold Int           @default(20)          // stock <= this (and > 0) => "Low Stock" badge
+  restockDate       DateTime?                           // shown on Out of Stock ("Available again …")
+  imageUrl     String?                            // featured image (Cloudinary)
+  sortOrder    Int           @default(0)
+  ratingValue  Float         @default(0)
+  ratingCount  Int           @default(0)
+  launchDate   DateTime?                            // a FUTURE date => "Coming Soon" badge
+  endDate      DateTime?
+  cities       String[]                           // available cities
+  // normalized 1:1 / 1:many detail tables — no JSON blobs
+  variants     Variant[]
+  images       ProductImage[]
+  badges       ProductBadge[]
+  pricing      Pricing?
+  nutrition    NutritionalInformation?
+  quality      QualityParameters?
+  seo          SeoMetadata?
+}
+
+model Variant {
+  id          String      @id @default(cuid())
+  productId   String
+  product     Product     @relation(fields: [productId], references: [id])
+  label       String                              // "500 ml"
+  displayName String?                             // "500 ml Daily Bottle"
+  sku         String?     @unique
+  ml          Int
+  type        VariantType @default(SUBSCRIPTION)
+  dailyPaise  Int?                                // per-delivery price (subscription)
+  fixedPaise  Int?                                // trial: total price (e.g. 20000 = ₹200)
+  fixedDays   Int?                                // trial: number of days (e.g. 3)
+  stock             Int     @default(0)
+  lowStockThreshold Int     @default(20)            // per-variant Low Stock cutoff
+  restockDate       DateTime?
+  weightG     Int?                                // grams
+  active      Boolean     @default(true)
+  subItems    SubscriptionItem[]
+}
+
+model Plan {
+  id            String  @id @default(cuid())
+  slug          String  @unique                   // "single","p7","p30","p90"
+  name          String                            // "30-Day Morning Ritual"
+  days          Int
+  discountBps   Int     @default(0)               // basis points: 500 = 5%, 800 = 8%
+  badge         String?                           // "Most popular", "Best value"
+  description   String?
+  autoRenew     Boolean @default(true)
+  active        Boolean @default(true)
+  subscriptions Subscription[]
+}
+
+// ---- normalized product-detail tables (1 row per product) -----
+model Pricing {
+  id                    String  @id @default(cuid())
+  productId             String  @unique
+  product               Product @relation(fields: [productId], references: [id])
+  mrpPaise              Int
+  sellingPaise          Int
+  costPaise             Int?
+  offerPaise            Int?
+  discountBps           Int     @default(0)
+  taxBps                Int     @default(0)
+  depositPaise          Int     @default(0)       // glass-bottle deposit
+  deliveryPaise         Int     @default(0)
+  freeDeliveryOverPaise Int     @default(0)
+}
+
+model NutritionalInformation {
+  id        String  @id @default(cuid())
+  productId String  @unique
+  product   Product @relation(fields: [productId], references: [id])
+  fat       String?
+  snf       String?
+  protein   String?
+  calcium   String?
+  energy    String?
+  carbs     String?
+  sugar     String?
+  minerals  String?
+  vitamins  String?
+}
+
+model QualityParameters {
+  id             String  @id @default(cuid())
+  productId      String  @unique
+  product        Product @relation(fields: [productId], references: [id])
+  fatPct         String?
+  snf            String?
+  lactometer     String?
+  collectionTemp String?
+  storageTemp    String?
+  batchNo        String?
+  milkType       String?
+  animalType     String?
+  collectionDate String?
+  expiry         String?
+}
+
+model ProductImage {
+  id         String  @id @default(cuid())
+  productId  String
+  product    Product @relation(fields: [productId], references: [id])
+  url        String                              // Cloudinary URL
+  alt        String?
+  sortOrder  Int     @default(0)
+  isFeatured Boolean @default(false)
+}
+
+model ProductBadge {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  label     String                              // "Farm Fresh"
+  icon      String?
+  enabled   Boolean @default(true)
+  sortOrder Int     @default(0)
+}
+
+model SeoMetadata {
+  id              String  @id @default(cuid())
+  productId       String  @unique
+  product         Product @relation(fields: [productId], references: [id])
+  metaTitle       String?
+  metaDescription String?
+  ogImageUrl      String?
+  canonicalUrl    String?
+  keywords        String[]
+}
+
+// ----------------------------------------------------------------
+// SUBSCRIPTION ENGINE
+// ----------------------------------------------------------------
+model Subscription {
+  id              String     @id @default(cuid())
+  userId          String
+  user            User       @relation(fields: [userId], references: [id])
+  planId          String
+  plan            Plan       @relation(fields: [planId], references: [id])
+  addressId       String
+  address         Address    @relation(fields: [addressId], references: [id])
+  status          SubStatus  @default(ACTIVE)
+  startDate       DateTime
+  endDate         DateTime?
+  deliverySlot    String     @default("06:00-08:00")
+  nextDeliveryAt  DateTime?
+  autoRenew       Boolean    @default(true)
+  pausedFrom      DateTime?
+  pausedUntil     DateTime?                        // Vacation Mode window
+  skipDates       DateTime[]                       // Emergency Skip individual days
+  createdAt       DateTime   @default(now())
+
+  items           SubscriptionItem[]
+  deliveries      Delivery[]
+  autopay         AutopaySubscription?
+}
+
+// ===== Delivery coverage (serviceable pincodes / zones / waitlist) =====
+// Canonical zone model — also used by DELIVERY LOGISTICS (addresses, routes).
+model DeliveryZone {
+  id        String               @id @default(cuid())
+  name      String
+  executive String?
+  pincodes  ServiceablePincode[]
+  addresses Address[]
+  routes    Route[]
+}
+model ServiceablePincode {
+  id        String   @id @default(cuid())
+  pincode   String   @unique
+  area      String
+  city      String
+  state     String
+  zoneId    String?
+  zone      DeliveryZone? @relation(fields: [zoneId], references: [id])
+  charge    Int      @default(0)                  // delivery charge (₹)
+  slot      String   @default("6:00–8:00 AM")
+  eta       String?
+  enabled   Boolean  @default(true)               // disable without deleting
+  createdAt DateTime @default(now())
+}
+model WaitlistRequest {
+  id        String   @id @default(cuid())
+  name      String
+  mobile    String
+  email     String?
+  address   String?
+  pincode   String                                // grouped by pincode/area/city in Admin
+  createdAt DateTime @default(now())
+}
+
+// ===== Auto-pay (recurring) =====
+enum AutopayStatus {
+  ACTIVE
+  RETRY
+  SUSPENDED
+  CANCELLED
+  INACTIVE
+}
+
+enum AttemptStatus {
+  SUCCESS
+  FAILED
+  PENDING
+}
+
+model RecurringPaymentMethod {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String                                // "UPI AutoPay" | "Credit Card" | …
+  token     String?                               // gateway mandate / token — NEVER raw card data
+  label     String?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  autopays  AutopaySubscription[]
+}
+model AutopaySubscription {
+  id             String       @id @default(cuid())
+  gatewaySubId   String?      @unique               // Razorpay subscription id (sub_xxx)
+  subscriptionId String       @unique
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+  methodId       String?
+  method         RecurringPaymentMethod? @relation(fields: [methodId], references: [id])
+  status         AutopayStatus @default(ACTIVE)
+  nextRenewalAt  DateTime
+  amountPaise    Int
+  attempts       Int          @default(0)         // resets on success; suspend at the configured retryLimit
+  createdAt      DateTime     @default(now())
+  renewals       RenewalHistory[]
+}
+model RenewalHistory {
+  id          String   @id @default(cuid())
+  autopayId   String
+  autopay     AutopaySubscription @relation(fields: [autopayId], references: [id])
+  amountPaise Int
+  status      AttemptStatus
+  chargedAt   DateTime @default(now())
+  attempts    PaymentAttempt[]
+}
+model PaymentAttempt {
+  id          String   @id @default(cuid())
+  renewalId   String?
+  renewal     RenewalHistory? @relation(fields: [renewalId], references: [id])
+  status      AttemptStatus
+  gatewayRef  String?
+  error       String?                             // friendly reason; raw gateway error never shown to customer
+  attemptedAt DateTime @default(now())
+}
+
+// Singleton delivery config — drives the start-date CUT-OFF rule everywhere
+// (web + future mobile, via the same scheduling service). Editable in Admin
+// (/admin/delivery-settings); the 8 PM default is configurable, never hardcoded.
+// Cut-off is evaluated in the CUSTOMER's local timezone.
+model DeliverySettings {
+  id               String     @id @default("default")
+  cutoffHour       Int        @default(20)                  // 20:00 = 8 PM
+  cutoffMinute     Int        @default(0)
+  slotStart        String     @default("06:00 AM")
+  slotEnd          String     @default("08:00 AM")
+  availableDays    Int[]      @default([0,1,2,3,4,5,6])      // 0=Sun … 6=Sat
+  weekendDelivery  Boolean    @default(true)
+  holidays         DateTime[]                               // no delivery (festivals etc.)
+  blackoutDates    DateTime[]                               // maintenance / service unavailable
+  minAdvanceDays   Int        @default(1)
+  maxAdvanceDays   Int        @default(30)                  // max advance booking
+  updatedAt        DateTime   @updatedAt
+}
+
+model SubscriptionItem {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+  variantId      String
+  variant        Variant      @relation(fields: [variantId], references: [id])
+  qty            Int          @default(1)          // bottles per delivery
+}
+
+// ----------------------------------------------------------------
+// ORDERS & DELIVERY
+// ----------------------------------------------------------------
+model Order {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id])
+  type         OrderType     @default(SUBSCRIPTION)
+  subtotalPaise Int
+  discountPaise Int          @default(0)
+  depositPaise  Int          @default(0)           // bottle deposit
+  taxPaise      Int          @default(0)           // GST
+  deliveryPaise Int          @default(0)
+  totalPaise    Int
+  status        PaymentStatus @default(PENDING)
+  createdAt    DateTime      @default(now())
+  delivery     Delivery?
+  payment      Payment?
+  invoice      Invoice?
+}
+
+model Delivery {
+  id             String         @id @default(cuid())
+  subscriptionId String?
+  subscription   Subscription?  @relation(fields: [subscriptionId], references: [id])
+  orderId        String?        @unique
+  order          Order?         @relation(fields: [orderId], references: [id])
+  date           DateTime                          // the delivery date
+  status         DeliveryStatus @default(SCHEDULED)
+  routeId        String?
+  route          Route?         @relation(fields: [routeId], references: [id])
+  driverId       String?
+  driver         Driver?        @relation(fields: [driverId], references: [id])
+  sequence       Int?                              // stop order on the route
+  deliveredAt    DateTime?
+  otp            String?                           // delivery OTP
+  podPhotoUrl    String?                           // proof-of-delivery (Cloudinary)
+  customerRemark String?
+  cashCollected  Int            @default(0)        // paise, COD
+  bottlesOut     Int            @default(0)        // bottles handed over
+  bottlesIn      Int            @default(0)        // empties collected
+  bottleEvents   BottleLedger[]
+  issues         DeliveryIssue[]
+  // ---- Auto-assignment system ----
+  bottleCount    Int            @default(1)        // bottles for THIS delivery (capacity unit)
+  slot           String?                           // delivery slot key (e.g. "6:00-8:00 AM")
+  assignment     DeliveryAssignment?
+  queueEntry     AssignmentQueue?
+}
+
+// ----------------------------------------------------------------
+// EMPTY-BOTTLE TRACKING  (per-customer ledger)
+// ----------------------------------------------------------------
+model BottleLedger {
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id])
+  deliveryId  String?
+  delivery    Delivery?    @relation(fields: [deliveryId], references: [id])
+  event       BottleEvent
+  qty         Int
+  amountPaise Int          @default(0)             // for deposit/lost charges
+  note        String?
+  createdAt   DateTime     @default(now())
+  // Pending bottles for a user = sum(ISSUED) - sum(RETURNED) - sum(LOST)
+}
+
+// ----------------------------------------------------------------
+// WALLET / PAYMENTS / INVOICES
+// ----------------------------------------------------------------
+model WalletTxn {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  type              TxnType                              // CREDIT | DEBIT
+  kind              String   @default("adjustment")      // cashback | referral | promo | usage | topup | refund | adjustment | reversal
+  amountPaise       Int                                  // always positive; `type` gives direction
+  balanceAfterPaise Int      @default(0)                 // wallet balance immediately after this txn
+  reference         String   @unique                     // human ref, e.g. "WTX-7K3M2A"
+  description       String?
+  reason            String                               // legacy short tag ("referral","refund","topup","order")
+  subscriptionId    String?
+  orderId           String?
+  reversedTxnId     String?  @unique                     // if this row reverses another txn, points to it
+  createdById       String?                              // admin user id for manual credit/debit (null = system)
+  createdAt         DateTime @default(now())
+  @@index([userId, createdAt])
+  @@index([kind, createdAt])
+}
+
+// Idempotency ledger for the Trial Pack cashback — userId UNIQUE guarantees a
+// customer can only ever receive the trial cashback once (DB-enforced, race-safe).
+model TrialCashback {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id])
+  trialOrderId   String?
+  subscriptionId String?
+  amountPaise    Int
+  status         String   @default("CREDITED")          // CREDITED | VOID
+  walletTxnId    String?
+  creditedAt     DateTime @default(now())
+}
+
+// Admin-configurable cashback rules (singleton). Change without touching code.
+model CashbackConfig {
+  id                String   @id @default("default")
+  enabled           Boolean  @default(true)
+  amountPaise       Int      @default(20000)             // ₹200 trial-pack cashback
+  eligiblePlanSlugs String[] @default(["p30", "p90"])    // 30-Day Morning Ritual, 90-Day Nourish Plan
+  expiryDays        Int?                                 // null = wallet credit never expires
+  updatedAt         DateTime @updatedAt
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  orderId         String        @unique
+  order           Order         @relation(fields: [orderId], references: [id])
+  method          PaymentMethod
+  amountPaise     Int
+  status          PaymentStatus @default(PENDING)
+  razorpayOrderId String?
+  razorpayPayId   String?
+  createdAt       DateTime      @default(now())
+}
+
+model Invoice {
+  id          String   @id @default(cuid())
+  number      String   @unique                     // DOODLY/2026/00001
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  orderId     String   @unique
+  order       Order    @relation(fields: [orderId], references: [id])
+  gstPaise    Int      @default(0)
+  pdfUrl      String?
+  issuedAt    DateTime @default(now())
+}
+
+// ----------------------------------------------------------------
+// FARMER PROCUREMENT & QUALITY CONTROL
+// ----------------------------------------------------------------
+model Farmer {
+  id           String        @id @default(cuid())
+  name         String
+  phone        String
+  village      String
+  ratePerLitre Int                                 // paise
+  active       Boolean       @default(true)
+  procurements Procurement[]
+}
+
+model Procurement {
+  id            String       @id @default(cuid())
+  farmerId      String
+  farmer        Farmer       @relation(fields: [farmerId], references: [id])
+  collectedAt   DateTime
+  litres        Float
+  fatPct        Float
+  snfPct        Float
+  lactometer    Float?
+  temperatureC  Float?
+  batchNo       String       @unique
+  accepted      Boolean      @default(true)
+  amountPaise   Int                                // payable to farmer
+  qualityTest   QualityTest?
+}
+
+model QualityTest {
+  id            String      @id @default(cuid())
+  procurementId String      @unique
+  procurement   Procurement @relation(fields: [procurementId], references: [id])
+  fatPct        Float
+  snfPct        Float
+  lactometer    Float
+  temperatureC  Float
+  passed        Boolean
+  rejectReason  String?
+  labReportUrl  String?
+  testedAt      DateTime    @default(now())
+}
+
+// ----------------------------------------------------------------
+// INVENTORY
+// ----------------------------------------------------------------
+model InventoryItem {
+  id          String   @id @default(cuid())
+  sku         String   @unique                     // "MILK_RAW","BOTTLE_1L","CAP","LABEL"
+  name        String
+  unit        String                               // "litre","piece"
+  quantity    Float    @default(0)
+  reorderAt   Float    @default(0)                 // stock alert threshold
+  updatedAt   DateTime @updatedAt
+}
+
+// ----------------------------------------------------------------
+// DELIVERY LOGISTICS
+// ----------------------------------------------------------------
+// (DeliveryZone is defined once above under "Delivery coverage".)
+
+model Driver {                                    // = Delivery Executive (own /delivery login & role)
+  id          String     @id @default(cuid())
+  userId      String     @unique
+  user        User       @relation(fields: [userId], references: [id])
+  employeeId  String?    @unique                   // "DRV-07" — login via employeeId+password or mobile+OTP
+  vehicleNo   String?
+  zoneId      String?                              // assigned zone (scopes which deliveries they see)
+  active      Boolean    @default(true)
+  lat         Float?                               // last known GPS (live tracking, if enabled)
+  lng         Float?
+  lastSeenAt  DateTime?
+  rating      Float      @default(5)
+  routes      Route[]
+  deliveries  Delivery[]
+  issues      DeliveryIssue[]
+  // ---- Auto-assignment system ----
+  capacity       DeliveryCapacity?
+  execStatus     ExecutiveStatus?
+  assignments    DeliveryAssignment[]
+  trips          TripHistory[]
+  assignmentLogs AssignmentLog[]
+}
+
+model DeliveryIssue {
+  id          String        @id @default(cuid())
+  deliveryId  String?
+  delivery    Delivery?     @relation(fields: [deliveryId], references: [id])
+  driverId    String
+  driver      Driver        @relation(fields: [driverId], references: [id])
+  type        IssueType
+  priority    IssuePriority @default(MEDIUM)
+  comments    String?
+  photoUrl    String?
+  createdAt   DateTime      @default(now())
+}
+
+model Route {
+  id         String       @id @default(cuid())
+  name       String
+  date       DateTime
+  zoneId     String?
+  zone       DeliveryZone? @relation(fields: [zoneId], references: [id])
+  driverId   String?
+  driver     Driver?      @relation(fields: [driverId], references: [id])
+  deliveries Delivery[]
+}
+
+// ----------------------------------------------------------------
+// GROWTH: referral, loyalty, coupons, reviews
+// ----------------------------------------------------------------
+model Coupon {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  description  String?
+  discountBps  Int?                                // % off
+  flatPaise    Int?                                // flat off
+  firstOrderOnly Boolean @default(false)
+  maxRedemptions Int?
+  redeemed     Int      @default(0)
+  expiresAt    DateTime?
+  active       Boolean  @default(true)
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  target    String                                 // "milk","delivery","driver"
+  rating    Int                                    // 1..5
+  comment   String?
+  createdAt DateTime @default(now())
+}
+
+// ----------------------------------------------------------------
+// NOTIFICATIONS  (SMS / WhatsApp / Push / Email)
+// ----------------------------------------------------------------
+model Notification {
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id])
+  channel   NotifChannel
+  title     String
+  body      String
+  sentAt    DateTime?
+  readAt    DateTime?
+  createdAt DateTime     @default(now())
+}
+
+// ----------------------------------------------------------------
+// CMS  (editable homepage content, banners, FAQs, testimonials)
+// ----------------------------------------------------------------
+model CmsBlock {
+  id        String   @id @default(cuid())
+  key       String   @unique                       // "hero","banner.1","faq.list"
+  type      String                                 // "hero","banner","faq","testimonial","blog"
+  data      Json                                   // flexible content payload
+  published Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+}
+
+// ================================================================
+// AUTO DELIVERY ASSIGNMENT SYSTEM
+// Capacity-aware distribution of deliveries to executives (45 bottles/
+// trip), overflow queue, return-trip continuation, full audit trail.
+// ================================================================
+
+// Lifecycle of a single delivery's assignment to an executive.
+enum AssignmentStatus {
+  ASSIGNED
+  ACCEPTED
+  OUT_FOR_DELIVERY
+  COMPLETED
+  RETURNED_TO_DAIRY
+  CANCELLED
+  REASSIGNED
+}
+
+// Live availability of a delivery executive. Only AVAILABLE / RETURNED_TO_DAIRY can take new work.
+enum ExecAvailability {
+  AVAILABLE
+  ASSIGNED
+  ACCEPTED
+  OUT_FOR_DELIVERY
+  COMPLETED
+  RETURNED_TO_DAIRY
+  OFFLINE
+  BREAK
+}
+
+// A queued (unassigned) delivery waiting for capacity.
+enum QueueStatus {
+  PENDING
+  ASSIGNED
+  CANCELLED
+}
+
+// A trip = one batch an executive carries out and brings back.
+enum TripStatus {
+  ASSIGNED
+  ACCEPTED
+  OUT_FOR_DELIVERY
+  COMPLETED
+  RETURNED_TO_DAIRY
+}
+
+// Every assignment mutation is logged for a complete audit trail.
+enum AssignmentAction {
+  AUTO_ASSIGN
+  MANUAL_ASSIGN
+  REASSIGN
+  UNASSIGN
+  MOVE
+  QUEUE
+  DEQUEUE
+  LOCK
+  UNLOCK
+  STATUS_CHANGE
+  RETURN_TRIP
+  FAIL
+  RETRY
+}
+
+// Per-executive carrying capacity (default 45 bottles/trip). Editable by admin.
+model DeliveryCapacity {
+  id         String   @id @default(cuid())
+  driverId   String   @unique
+  driver     Driver   @relation(fields: [driverId], references: [id])
+  maxBottles Int      @default(45)
+  active     Boolean  @default(true)
+  updatedAt  DateTime @updatedAt
+}
+
+// Live executive availability + current trip load (one row per executive).
+model ExecutiveStatus {
+  id              String           @id @default(cuid())
+  driverId        String           @unique
+  driver          Driver           @relation(fields: [driverId], references: [id])
+  availability    ExecAvailability @default(AVAILABLE)
+  currentTripId   String?
+  assignedBottles Int              @default(0)        // bottles currently loaded for the live trip
+  lastChangedAt   DateTime         @updatedAt
+  @@index([availability])
+}
+
+// A delivery assigned to an executive on a trip. deliveryId is UNIQUE → a
+// delivery can never be double-assigned (DB-enforced, race-safe).
+model DeliveryAssignment {
+  id          String           @id @default(cuid())
+  deliveryId  String           @unique
+  delivery    Delivery         @relation(fields: [deliveryId], references: [id])
+  driverId    String
+  driver      Driver           @relation(fields: [driverId], references: [id])
+  tripId      String?
+  trip        TripHistory?     @relation(fields: [tripId], references: [id])
+  slot        String
+  date        DateTime
+  bottles     Int
+  status      AssignmentStatus @default(ASSIGNED)
+  sequence    Int?                                    // stop order within the trip
+  area        String?
+  zoneId      String?
+  locked      Boolean          @default(false)        // admin lock → excluded from auto reassignment
+  assignedAt  DateTime         @default(now())
+  acceptedAt  DateTime?
+  completedAt DateTime?
+  @@index([driverId, date, slot])
+  @@index([status, slot, date])
+  @@index([zoneId, area])
+}
+
+// Overflow: deliveries that couldn't be assigned yet. deliveryId UNIQUE → no dup queue rows.
+model AssignmentQueue {
+  id         String      @id @default(cuid())
+  deliveryId String      @unique
+  delivery   Delivery    @relation(fields: [deliveryId], references: [id])
+  slot       String
+  date       DateTime
+  bottles    Int
+  area       String?
+  zoneId     String?
+  status     QueueStatus @default(PENDING)
+  priority   Int         @default(0)                  // higher = assigned sooner (FIFO tiebreak by createdAt)
+  reason     String?                                  // "capacity_full" | "no_executive" | "oversize"
+  createdAt  DateTime    @default(now())
+  assignedAt DateTime?
+  @@index([status, slot, date, priority])
+}
+
+// A trip an executive runs (a batch up to capacity), then returns to dairy.
+model TripHistory {
+  id           String               @id @default(cuid())
+  driverId     String
+  driver       Driver               @relation(fields: [driverId], references: [id])
+  slot         String
+  date         DateTime
+  status       TripStatus           @default(ASSIGNED)
+  totalBottles Int                  @default(0)
+  stops        Int                  @default(0)
+  startedAt    DateTime?
+  returnedAt   DateTime?
+  createdAt    DateTime             @default(now())
+  assignments  DeliveryAssignment[]
+  @@index([driverId, date, slot])
+  @@index([status])
+}
+
+// Immutable audit log of every assignment action.
+model AssignmentLog {
+  id           String           @id @default(cuid())
+  action       AssignmentAction
+  deliveryId   String?
+  driverId     String?
+  driver       Driver?          @relation(fields: [driverId], references: [id])
+  tripId       String?
+  actorId      String?                                // admin/ops user who performed it (null = system)
+  actor        User?            @relation(fields: [actorId], references: [id])
+  actorRole    String?
+  fromDriverId String?                                // for MOVE/REASSIGN
+  toDriverId   String?
+  bottles      Int?
+  note         String?
+  meta         Json?
+  createdAt    DateTime         @default(now())
+  @@index([deliveryId, createdAt])
+  @@index([driverId, createdAt])
+  @@index([action, createdAt])
+}
+
+// ================================================================
+// BULK MILK REQUESTS
+// Enquiry-based bulk orders for weddings, events, catering, hotels,
+// restaurants, festivals, etc. Not an instant checkout — submitted
+// requests land in the admin Bulk Orders module for follow-up.
+// ================================================================
+
+enum BulkStatus {
+  NEW
+  CONTACTED
+  QUOTATION_SENT
+  CONFIRMED
+  SCHEDULED
+  DELIVERED
+  CANCELLED
+}
+
+enum BulkEventType {
+  WEDDING
+  HOUSEWARMING
+  BIRTHDAY
+  RELIGIOUS
+  CATERING
+  HOTEL
+  RESTAURANT
+  CORPORATE
+  FESTIVAL
+  OTHER
+}
+
+enum BulkQtyUnit {
+  LITRES
+  BOTTLES
+}
+
+enum ContactMethod {
+  PHONE
+  WHATSAPP
+  EMAIL
+}
+
+model BulkOrderRequest {
+  id                     String        @id @default(cuid())
+  code                   String        @unique               // human Request ID, e.g. "BULK-7K3M2A"
+  // customer details
+  fullName               String
+  mobile                 String
+  email                  String?
+  // event details
+  eventType              BulkEventType
+  eventDate              DateTime
+  deliveryTime           String                              // free text, e.g. "7:00 AM"
+  deliveryAddress        String
+  city                   String
+  pincode                String
+  // order details
+  quantity               Int                                 // > 0 (validated)
+  unit                   BulkQtyUnit   @default(LITRES)
+  additionalRequirements String?
+  // contact + notes
+  preferredContact       ContactMethod @default(PHONE)
+  specialInstructions    String?
+  // workflow
+  status                 BulkStatus    @default(NEW)
+  assignedToId           String?
+  assignedTo             User?         @relation(fields: [assignedToId], references: [id])
+  notes                  BulkOrderNote[]
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  @@index([status, createdAt])
+  @@index([eventDate])
+}
+
+// Notes + status-change audit trail for a bulk request.
+model BulkOrderNote {
+  id        String           @id @default(cuid())
+  requestId String
+  request   BulkOrderRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  body      String
+  kind      String           @default("note")              // "note" | "status" | "system"
+  authorId  String?
+  author    User?            @relation(fields: [authorId], references: [id])
+  createdAt DateTime         @default(now())
+  @@index([requestId, createdAt])
+}
+
+// ================================================================
+// B2B ORDER MANAGEMENT
+// Bulk dairy orders for businesses (hotels, restaurants, cafés, …).
+// Admin / Super-Admin only. Sequential Business IDs + order numbers
+// via the atomic Counter. Future-ready: branches, credit accounts.
+// ================================================================
+
+// Atomic, gapless sequence generator (Business IDs, order numbers, …).
+model Counter {
+  key   String @id
+  value Int    @default(0)
+}
+
+// Singleton CMS override for the "UNFOLD PURE" brand-story page (/doodly).
+// `data` is a small JSON patch deep-merged over config/brand-story.ts defaults,
+// so admins can edit the hero copy, CTA links and QR destination with no deploy.
+model BrandStoryConfig {
+  id        String   @id @default("default")
+  data      Json?
+  updatedAt DateTime @updatedAt
+}
+
+// ===== Help Center (FAQ knowledge base, admin-editable; analytics) =====
+// Seeded once from config/help-center.ts, then fully managed in Admin → Help
+// Center (add/edit/delete/reorder/publish) with no code change. `views` powers
+// the "most viewed" report. Stable `id` lets a config FAQ and its DB row match.
+model HelpArticle {
+  id        String   @id                              // stable slug (e.g. "what-is-doodly") or cuid for admin-created
+  category  String
+  question  String
+  answer    String
+  keywords  String[]
+  videoUrl  String?                                   // future: admin-uploaded help video
+  sortOrder Int      @default(0)
+  published Boolean  @default(true)
+  views     Int      @default(0)
+  source    String   @default("seed")                 // "seed" | "admin"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category, sortOrder])
+  @@index([published])
+}
+
+// Search analytics — every query is logged with its result count, so the admin
+// sees the most-searched keywords AND "unanswered" searches (resultCount = 0).
+model HelpSearch {
+  id          String   @id @default(cuid())
+  term        String
+  resultCount Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([term])
+  @@index([createdAt])
+}
+
+// ===== Global Smart Search (Cmd+K palette) — analytics + trending =====
+// Every query/click/no-result is logged so the admin sees most-searched
+// keywords, no-result terms, most-clicked targets and a conversion rate.
+model SearchEvent {
+  id        String   @id @default(cuid())
+  kind      String                                    // "query" | "click" | "noresult"
+  term      String
+  target    String?                                   // clicked item id (kind = click)
+  scope     String?                                   // public | customer | admin
+  createdAt DateTime @default(now())
+
+  @@index([kind, term])
+  @@index([createdAt])
+}
+
+// Admin-managed trending searches (seeded from config TRENDING_DEFAULTS).
+model TrendingSearch {
+  id        String   @id @default(cuid())
+  term      String   @unique
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([active, sortOrder])
+}
+
+enum BusinessType {
+  HOTEL
+  RESTAURANT
+  CAFE
+  BAKERY
+  SWEET_SHOP
+  TEA_STALL
+  CATERING
+  HOSTEL
+  HOSPITAL
+  CORPORATE
+  OTHER
+}
+
+enum PaymentTerm {
+  CASH
+  CREDIT
+  WEEKLY
+  MONTHLY
+  ADVANCE
+}
+
+enum B2BOrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  OUT_FOR_DELIVERY
+  DELIVERED
+  COMPLETED
+  CANCELLED
+}
+
+enum B2BPaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  CREDIT
+}
+
+model Business {
+  id             String        @id @default(cuid())
+  code           String        @unique                 // "DOO-B2B-000001" — sequential, never reused
+  name           String
+  type           BusinessType  @default(OTHER)
+  // primary contact
+  contactPerson  String
+  mobile         String
+  altMobile      String?
+  email          String?
+  // address (Google-Maps assisted → lat/lng stored)
+  line1          String
+  landmark       String?
+  area           String?
+  city           String        @default("Vijayawada")
+  state          String        @default("Andhra Pradesh")
+  pincode        String
+  lat            Float?
+  lng            Float?
+  // GST / billing
+  gst            String?
+  pan            String?
+  billingAddress String?
+  // commercials
+  paymentTerm    PaymentTerm   @default(CASH)
+  discountBps    Int           @default(0)             // default per-business discount (basis points)
+  creditLimitPaise Int         @default(0)
+  preferredTime  String?
+  deliveryNotes  String?
+  // lifecycle
+  active         Boolean       @default(true)
+  deletedAt      DateTime?                             // soft delete (super-admin)
+  createdById    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  orders         BusinessOrder[]
+  payments       BusinessPayment[]
+  @@index([name])
+  @@index([mobile])
+  @@index([gst])
+  @@index([active, deletedAt])
+}
+
+model BusinessOrder {
+  id            String           @id @default(cuid())
+  code          String           @unique               // "B2B-ORD-2026-000125"
+  businessId    String
+  business      Business         @relation(fields: [businessId], references: [id])
+  status        B2BOrderStatus   @default(PENDING)
+  deliveryDate  DateTime
+  deliveryTime  String                                 // free text: "5:30 AM", "Custom", …
+  deliveryNotes String?
+  subtotalPaise Int              @default(0)
+  discountPaise Int              @default(0)
+  taxPaise      Int              @default(0)
+  totalPaise    Int              @default(0)
+  paidPaise     Int              @default(0)
+  paymentTerm   PaymentTerm
+  paymentStatus B2BPaymentStatus @default(PENDING)
+  remarks       String?
+  createdById   String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  items         BusinessOrderItem[]
+  payments      BusinessPayment[]
+  invoice       BusinessInvoice?
+  @@index([businessId, createdAt])
+  @@index([status, deliveryDate])
+  @@index([deliveryDate])
+}
+
+model BusinessOrderItem {
+  id             String        @id @default(cuid())
+  orderId        String
+  order          BusinessOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productSlug    String
+  productName    String                                // snapshot at order time
+  quantity       Float
+  unit           String                                // "Litres" | "KG" | "Bottles"
+  unitPricePaise Int
+  lineTotalPaise Int
+}
+
+model BusinessPayment {
+  id           String         @id @default(cuid())
+  businessId   String
+  business     Business       @relation(fields: [businessId], references: [id])
+  orderId      String?
+  order        BusinessOrder? @relation(fields: [orderId], references: [id])
+  amountPaise  Int
+  method       String                                  // cash | upi | bank | adjustment
+  reference    String?
+  note         String?
+  recordedById String?
+  createdAt    DateTime       @default(now())
+  @@index([businessId, createdAt])
+}
+
+model BusinessInvoice {
+  id         String        @id @default(cuid())
+  number     String        @unique                     // "DOODLY/B2B/2026/00001"
+  orderId    String        @unique
+  order      BusinessOrder @relation(fields: [orderId], references: [id])
+  businessId String
+  gstPaise   Int           @default(0)
+  pdfUrl     String?
+  issuedAt   DateTime      @default(now())
+}
+
+// ===================================================================
+// Daily Expense Management (Finance → Daily Expenses)
+// Admin / Accountant / Super-Admin only. ERP-style: categories,
+// approval workflow, partial payments, attachments, audit trail.
+// Sequential per-day IDs reuse the Counter model (EXP-YYYYMMDD-NNNN).
+// Designed to extend to cost centers / budgets / recurring / vendors
+// without schema rewrites (fields are additive).
+// ===================================================================
+
+enum ExpensePaymentMode {
+  CASH
+  UPI
+  BANK_TRANSFER
+  CREDIT_CARD
+  DEBIT_CARD
+  CHEQUE
+  WALLET
+  OTHER
+}
+
+enum ExpenseStatus {
+  PENDING_APPROVAL
+  APPROVED
+  PAID
+  PARTIALLY_PAID
+  REJECTED
+  CANCELLED
+}
+
+model ExpenseCategory {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  slug      String    @unique
+  active    Boolean   @default(true)
+  sortOrder Int       @default(0)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  expenses  Expense[]
+}
+
+model Expense {
+  id            String             @id @default(cuid())
+  code          String             @unique                  // "EXP-20260701-0001"
+  date          DateTime                                    // expense date (not created date)
+  title         String
+  categoryId    String
+  category      ExpenseCategory    @relation(fields: [categoryId], references: [id])
+  description   String?
+  vendor        String?
+  invoiceNo     String?
+
+  paymentMode   ExpensePaymentMode @default(CASH)
+  amountPaise   Int                                         // base amount (excl. GST when gstIncluded=false)
+  gstIncluded   Boolean            @default(false)
+  gstPaise      Int                @default(0)
+  totalPaise    Int                                         // amount + (gst when not already included)
+  paidPaise     Int                @default(0)
+
+  status        ExpenseStatus      @default(PENDING_APPROVAL)
+
+  // staff name snapshots (selected from existing users; ids kept for reference)
+  requestedBy   String?
+  approvedBy    String?
+  paidBy        String?
+  createdById   String?
+
+  notes         String?
+  approvedAt    DateTime?
+  paidAt        DateTime?
+  deletedAt     DateTime?                                   // soft delete
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  attachments   ExpenseAttachment[]
+  payments      ExpensePayment[]
+  auditLogs     ExpenseAuditLog[]
+
+  @@index([date])
+  @@index([status, date])
+  @@index([categoryId, date])
+  @@index([vendor])
+  @@index([deletedAt])
+}
+
+model ExpenseAttachment {
+  id          String   @id @default(cuid())
+  expenseId   String
+  expense     Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  name        String
+  kind        String                                        // invoice | receipt | bill | screenshot | pdf | image | other
+  url         String?                                       // storage URL (Supabase/Cloudinary in prod)
+  mime        String?
+  sizeBytes   Int      @default(0)
+  uploadedById String?
+  createdAt   DateTime @default(now())
+}
+
+model ExpensePayment {
+  id           String             @id @default(cuid())
+  expenseId    String
+  expense      Expense            @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  amountPaise  Int
+  mode         ExpensePaymentMode @default(CASH)
+  reference    String?
+  note         String?
+  paidBy       String?
+  recordedById String?
+  createdAt    DateTime           @default(now())
+
+  @@index([expenseId, createdAt])
+}
+
+model ExpenseAuditLog {
+  id         String   @id @default(cuid())
+  expenseId  String
+  expense    Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  action     String                                         // created | updated | approved | rejected | paid | partially_paid | cancelled | deleted
+  detail     String?
+  fromStatus String?
+  toStatus   String?
+  actorId    String?
+  actorName  String?
+  createdAt  DateTime @default(now())
+
+  @@index([expenseId, createdAt])
+}

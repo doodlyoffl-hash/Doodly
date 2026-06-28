@@ -1,0 +1,59 @@
+# ============================================================
+# DOODLY — repository ignore rules (root)
+# Covers both the static Phase-1 app and next-app/.
+# ============================================================
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Next.js / build output
+.next/
+out/
+build/
+dist/
+
+# Testing / coverage
+coverage/
+
+# Environment & secrets — NEVER commit (.env.example is kept as a template)
+.env
+.env.local
+.env*.local
+.env.production
+*.pem
+
+# TypeScript / tooling
+*.tsbuildinfo
+next-env.d.ts
+
+# Hosting
+.vercel
+
+# Prisma local databases
+prisma/*.db
+prisma/migrations/dev.db*
+
+# Editors / IDEs
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Claude Code local project config (machine-specific)
+.claude/
+
+# OS / OneDrive cruft
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+*~
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*

@@ -1,0 +1,470 @@
+/* =============================================================
+   DOODLY — Motion layer (ADDITIVE ONLY)
+   Loaded after styles.css + app.css. Adds animation, hover and
+   micro-interaction polish by targeting EXISTING classes. Changes
+   no layout, colour, branding, structure or business logic.
+   Style: Apple x Stripe x Country Delight — subtle, premium, 60fps
+   (transform/opacity only). Fully gated by prefers-reduced-motion.
+   ============================================================= */
+
+/* ---------- Cross-document page transitions (Chrome; degrades gracefully) ---------- */
+@view-transition { navigation: auto; }
+::view-transition-old(root) { animation: vtOut .26s cubic-bezier(.4,0,.2,1) both; }
+::view-transition-new(root) { animation: vtIn .34s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes vtOut { to { opacity: 0; transform: translateY(-6px); } }
+@keyframes vtIn  { from { opacity: 0; transform: translateY(10px); } }
+
+/* ---------- First-paint entrances ---------- */
+.logo-img { animation: logoIn .7s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes logoIn { from { opacity: 0; transform: translateY(-5px) scale(.95); } }
+
+.nav { animation: navDrop .6s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes navDrop { from { opacity: 0; transform: translateY(-8px); } }
+
+/* ---------- Nav: animated underline ---------- */
+.nav-links a { position: relative; }
+.nav-links a::after {
+  content: ""; position: absolute; left: 0; right: 100%; bottom: -6px; height: 2px;
+  border-radius: 2px; background: var(--grad-leaf); transition: right .3s cubic-bezier(.2,.8,.2,1);
+}
+.nav-links a:hover::after, .nav-links a.active::after { right: 0; }
+
+/* ---------- Mobile menu: staggered slide-in ---------- */
+.mobile-menu.open a { animation: menuItem .34s cubic-bezier(.2,.8,.2,1) both; }
+.mobile-menu.open a:nth-child(1){ animation-delay:.02s } .mobile-menu.open a:nth-child(2){ animation-delay:.05s }
+.mobile-menu.open a:nth-child(3){ animation-delay:.08s } .mobile-menu.open a:nth-child(4){ animation-delay:.11s }
+.mobile-menu.open a:nth-child(5){ animation-delay:.14s } .mobile-menu.open a:nth-child(6){ animation-delay:.17s }
+.mobile-menu.open a:nth-child(7){ animation-delay:.20s } .mobile-menu.open a:nth-child(8){ animation-delay:.23s }
+.mobile-menu.open a:nth-child(9){ animation-delay:.26s } .mobile-menu.open a:nth-child(n+10){ animation-delay:.29s }
+@keyframes menuItem { from { opacity: 0; transform: translateY(-7px); } }
+
+/* =============================================================
+   Premium header: animated glass fx, logo, badge, scroll, CTA
+   ============================================================= */
+.nav { transition: height .32s cubic-bezier(.2,.8,.2,1), box-shadow .32s ease, background .3s ease, -webkit-backdrop-filter .3s ease, backdrop-filter .3s ease; }
+.nav .wrap { position: relative; z-index: 2; }
+
+/* animated glass fx layer (decorative, behind content) */
+.nav-fx { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.nav-shimmer { position: absolute; top: 0; bottom: 0; left: -60%; width: 55%; opacity: .5;
+  background: linear-gradient(110deg, transparent, rgba(255,255,255,.5) 40%, rgba(143,227,181,.2) 50%, rgba(255,255,255,.5) 60%, transparent);
+  animation: navShimmer 9s ease-in-out infinite; }
+@keyframes navShimmer { 0% { transform: translateX(0); } 100% { transform: translateX(300%); } }
+[data-theme="dark"] .nav-shimmer { opacity: .22; }
+.nav-drip, .nav-bubble { position: absolute; border-radius: 50%; }
+.nav-drip { width: 6px; height: 7px; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; background: radial-gradient(circle at 30% 30%, #fff, #d9f5e6); opacity: .5; animation: navDrip linear infinite; }
+.nav-drip.d1 { left: 26%; animation-duration: 7s; } .nav-drip.d2 { left: 54%; animation-duration: 9s; animation-delay: 2s; } .nav-drip.d3 { left: 80%; animation-duration: 8s; animation-delay: 4.5s; }
+@keyframes navDrip { 0% { transform: translateY(-10px); opacity: 0; } 15% { opacity: .5; } 100% { transform: translateY(36px); opacity: 0; } }
+.nav-bubble { width: 8px; height: 8px; bottom: -8px; background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.9), rgba(143,227,181,.3)); opacity: .4; animation: navBubble linear infinite; }
+.nav-bubble.b1 { left: 42%; animation-duration: 11s; } .nav-bubble.b2 { left: 68%; animation-duration: 13s; animation-delay: 3s; }
+@keyframes navBubble { 0% { transform: translateY(0) scale(.7); opacity: 0; } 20% { opacity: .4; } 100% { transform: translateY(-46px) scale(1); opacity: 0; } }
+.nav-leaf { position: absolute; left: 16%; top: -8px; width: 9px; height: 9px; background: var(--leaf); opacity: 0; border-radius: 0 100% 0 100%; animation: navLeaf 15s linear infinite 3s; }
+@keyframes navLeaf { 0% { transform: translate(0,-8px) rotate(0); opacity: 0; } 12% { opacity: .32; } 100% { transform: translate(70px,42px) rotate(240deg); opacity: 0; } }
+.nav-spark { position: absolute; left: 66px; top: 13px; width: 11px; height: 11px; background: #fff; opacity: 0;
+  clip-path: polygon(50% 0,58% 42%,100% 50%,58% 58%,50% 100%,42% 58%,0 50%,42% 42%); animation: navSpark 6.5s ease-in-out infinite 1.5s; }
+@keyframes navSpark { 0%,100% { transform: scale(0) rotate(0); opacity: 0; } 50% { transform: scale(1) rotate(90deg); opacity: .85; } }
+.nav-delivery { display: none; }
+@media (min-width: 900px) {
+  .nav-delivery { display: block; position: absolute; left: 0; right: 0; bottom: 7px; height: 14px; }
+  .nav-road { position: absolute; left: 10%; right: 10%; top: 9px; height: 1px; background: linear-gradient(90deg, transparent, rgba(31,174,102,.22), transparent); }
+  .nav-van { position: absolute; top: 0; left: 6%; color: var(--leaf-600); opacity: 0; animation: navVan 18s linear infinite 5s; }
+}
+@keyframes navVan { 0% { left: 6%; opacity: 0; } 5% { opacity: .5; } 48% { left: 90%; opacity: .5; } 54% { opacity: 0; } 100% { left: 90%; opacity: 0; } }
+
+/* logo: gentle float + light reflection + hover scale */
+.nav .logo { position: relative; overflow: hidden; flex-shrink: 0; animation: floaty 6s ease-in-out 1.2s infinite; }
+.nav .logo-img, .nav-right { flex-shrink: 0; }   /* logo + actions never collapse, at any width */
+.nav .logo-img { transition: transform .3s cubic-bezier(.2,.8,.2,1), height .3s ease; }
+.nav .logo:hover .logo-img { transform: scale(1.06); }
+.nav .logo::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(115deg, transparent 42%, rgba(255,255,255,.65) 50%, transparent 58%);
+  transform: translateX(-170%); animation: fsLogoSheen 9s ease-in-out 2.5s infinite; }
+
+/* nav links: hover lift + active glow (underline animation already defined above) */
+.nav-links a { transition: color .2s ease, transform .2s ease; }
+.nav-links a:hover { transform: translateY(-1px); color: var(--leaf-600); }
+.nav-links a.active { color: var(--leaf-600); }
+.nav-links a.active::after { box-shadow: 0 0 8px rgba(31,174,102,.55); }
+
+/* freshness badge (wide screens) */
+.nav-fresh { display: none; align-items: center; gap: .45rem; margin-left: 14px; flex-shrink: 0; white-space: nowrap;
+  font-size: .74rem; font-weight: 700; color: var(--forest-700); background: var(--mint-soft); border: 1px solid var(--mint); border-radius: 999px; padding: .32rem .7rem; }
+.nav-fresh .nf-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--leaf); box-shadow: 0 0 0 0 rgba(31,174,102,.5); animation: fsPing 2s ease-out infinite; }
+@media (min-width: 1440px) { .nav-fresh { display: inline-flex; } .nav-links { gap: 20px; } }
+
+/* scrolled state: shrink + stronger blur/shadow + smaller logo */
+.nav.scrolled { height: 56px; box-shadow: 0 6px 22px rgba(15,61,46,.12);
+  -webkit-backdrop-filter: saturate(180%) blur(24px); backdrop-filter: saturate(180%) blur(24px); }
+.nav.scrolled .logo-img { height: 24px; }
+
+/* Subscribe CTA: periodic glow pulse (hover lift + ripple already handled) */
+.nav-cta.btn-primary { animation: navCtaPulse 13s ease-in-out infinite; }
+@keyframes navCtaPulse { 0%,88%,100% { box-shadow: 0 10px 24px rgba(31,174,102,.34); } 94% { box-shadow: 0 10px 30px rgba(31,174,102,.6), 0 0 0 4px rgba(31,174,102,.14); } }
+
+/* burger icon swap */
+#navBurger svg { transition: transform .25s ease; }
+
+/* ---------- Buttons: press, sheen, ripple ---------- */
+.btn { position: relative; overflow: hidden; }
+.btn:active { transform: translateY(1px) scale(.985); }
+.btn-primary::before, .btn-cta::before, .btn-dark::before {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,.35) 50%, transparent 65%);
+  transform: translateX(-130%); pointer-events: none;
+}
+.btn-primary:hover::before, .btn-cta:hover::before, .btn-dark:hover::before { animation: sheen .85s ease; }
+@keyframes sheen { to { transform: translateX(130%); } }
+.rpl {
+  position: absolute; border-radius: 50%; background: rgba(255,255,255,.45);
+  transform: translate(-50%,-50%) scale(0); pointer-events: none; animation: rpl .6s ease-out forwards;
+}
+.btn-ghost .rpl, .btn-ghost ~ .rpl { background: rgba(31,174,102,.22); }
+@keyframes rpl { to { transform: translate(-50%,-50%) scale(1); opacity: 0; } }
+
+/* ---------- Hero: glass sheen, gentle bob, floating fx ---------- */
+.hero .wrap { position: relative; z-index: 1; }
+.hero-card { position: relative; }
+.hero-card::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; overflow: hidden;
+  background: linear-gradient(120deg, transparent 38%, rgba(255,255,255,.28) 50%, transparent 62%);
+  transform: translateX(-140%); pointer-events: none;
+  animation: glassSheen 7s ease-in-out 1.4s infinite;
+}
+@keyframes glassSheen { 0%,72%,100% { transform: translateX(-140%); } 86% { transform: translateX(140%); } }
+.hero .bottle, .pd-gallery .bottle { animation: bottleBob 5.5s ease-in-out infinite; transform-origin: 50% 80%; }
+@keyframes bottleBob { 0%,100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-7px) rotate(-1.2deg); } }
+
+/* decorative fx layer injected by motion.js (absolute, no layout impact) */
+.fx-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.fx-bubble {
+  position: absolute; bottom: -24px; border-radius: 50%;
+  background: radial-gradient(circle at 32% 30%, rgba(255,255,255,.85), rgba(143,227,181,.22));
+  box-shadow: inset 0 0 6px rgba(255,255,255,.5); animation: rise linear infinite;
+}
+@keyframes rise { 0% { transform: translateY(0) scale(.7); opacity: 0; } 15% { opacity: .55; } 100% { transform: translateY(-150px) scale(1); opacity: 0; } }
+.fx-drip {
+  position: absolute; top: -12px; width: 7px; height: 9px;
+  border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
+  background: radial-gradient(circle at 30% 25%, #fff, #d7f4e6); opacity: .6; animation: drip linear infinite;
+}
+@keyframes drip { 0% { transform: translateY(0) scaleY(.9); opacity: 0; } 10% { opacity: .6; } 100% { transform: translateY(46px) scaleY(1.1); opacity: 0; } }
+
+/* ---------- Reveals: a touch more polish on the existing .reveal ---------- */
+.reveal { transition: opacity .7s ease, transform .7s cubic-bezier(.2,.8,.2,1); }
+
+/* ---------- Product cards ---------- */
+.product { transition: transform .32s cubic-bezier(.2,.8,.2,1), box-shadow .32s ease; }
+.product:hover { box-shadow: var(--shadow-lg); }
+.product .pemoji { display: inline-block; transition: transform .4s cubic-bezier(.2,.8,.2,1); transform-origin: 50% 80%; }
+.product:hover .pemoji { transform: scale(1.14) rotate(-5deg); }
+/* floating product bottle + glass reflection */
+.pstage .pbottle { animation: bottleFloat 5s ease-in-out infinite; transition: transform .35s cubic-bezier(.2,.8,.2,1); }
+@keyframes bottleFloat { 0%,100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-6px) rotate(-1.4deg); } }
+.product:hover .pstage .pbottle { animation-play-state: paused; transform: scale(1.06) translateY(-4px); }
+/* animated "Farm Fresh" badge shine */
+.badge-fresh { overflow: hidden; }
+.badge-fresh::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(120deg, transparent 40%, rgba(255,255,255,.55) 50%, transparent 60%);
+  transform: translateX(-120%); animation: sheen 3.8s ease-in-out 1.2s infinite; }
+.pd-thumbs .th { transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
+.pd-thumbs .th:hover { transform: translateY(-2px); }
+/* premium image zoom on hover (desktop pointers only) */
+@media (hover: hover) and (pointer: fine) and (min-width: 900px) {
+  .pd-stage:hover .pd-main { transform: scale(1.6); }
+}
+.product .plink svg { transition: transform .25s ease; }
+.product:hover .plink svg { transform: translateX(4px); }
+.product.is-soon .pemoji { animation: floaty 4.5s ease-in-out infinite; }
+@keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+.badge-soon { animation: softPulse 2.6s ease-in-out infinite; }
+@keyframes softPulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.06); opacity: .82; } }
+
+/* ---------- Subscription / plan cards ---------- */
+.plan { transition: transform .3s cubic-bezier(.2,.8,.2,1), box-shadow .3s ease; }
+.plan.best { position: relative; }
+.plan.best::after {
+  content: ""; position: absolute; inset: -2px; border-radius: inherit; pointer-events: none;
+  animation: planGlow 2.8s ease-in-out infinite;
+}
+@keyframes planGlow {
+  0%,100% { box-shadow: 0 0 0 2px var(--leaf), 0 0 0 0 rgba(31,174,102,0); }
+  50%     { box-shadow: 0 0 0 2px var(--leaf), 0 0 26px 3px rgba(31,174,102,.34); }
+}
+.plan .ptag { animation: tagFloat 3.2s ease-in-out infinite; }
+@keyframes tagFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+.builder .opt { transition: border-color .2s, background .2s, transform .18s cubic-bezier(.2,.8,.2,1); }
+.builder .opt:hover { transform: translateY(-2px); }
+.builder .opt.active { animation: optPop .32s cubic-bezier(.2,.8,.2,1); }
+@keyframes optPop { 0% { transform: scale(.99); } 60% { transform: scale(1.015); } 100% { transform: scale(1); } }
+/* milk-pour shimmer on the summary bottle when the selection changes */
+.summary-bottle.pour { animation: pour .5s ease; }
+@keyframes pour { 0% { filter: brightness(1.25); transform: translateY(-2px); } 100% { filter: none; transform: none; } }
+.saved { transition: background .3s, color .3s; }
+.saved:not(.zero) { animation: savedPop .5s cubic-bezier(.2,.8,.2,1); }
+@keyframes savedPop { 0% { transform: scale(.96); } 55% { transform: scale(1.03); } 100% { transform: scale(1); } }
+
+/* ---------- KPI / stat cards & dashboards ---------- */
+.kpi, .qa-tile, .tile, .panel { transition: transform .3s cubic-bezier(.2,.8,.2,1), box-shadow .3s ease; }
+.kpi:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+.kpi .delta { display: inline-block; animation: deltaIn .5s .3s both; }
+@keyframes deltaIn { from { opacity: 0; transform: translateY(4px); } }
+.badge.green::before { animation: dotPing 2.4s ease-in-out infinite; }
+@keyframes dotPing { 0%,100% { box-shadow: 0 0 0 0 rgba(31,174,102,.0); } 50% { box-shadow: 0 0 0 3px rgba(31,174,102,.18); } }
+
+/* ---------- Icons: playful hover ---------- */
+.feature .ic, .qa-tile .ic, .state .ic, .post .cover { transition: transform .4s cubic-bezier(.2,.8,.2,1); }
+.feature:hover .ic, .qa-tile:hover .ic { transform: translateY(-3px) rotate(-6deg) scale(1.06); }
+.post:hover .cover { transform: scale(1.04); }
+.sb-link svg { transition: transform .25s ease; }
+.sb-link:hover svg { transform: translateX(2px) scale(1.08); }
+.tb-icon:hover svg, .icon-btn:hover svg { transition: transform .3s ease; }
+.tb-icon:hover svg { transform: rotate(8deg); }
+
+/* ---------- Timeline / delivery ---------- */
+.tl-item.active .dot { animation: dotPulse 1.8s ease-in-out infinite; }
+@keyframes dotPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(31,174,102,.28); } 50% { box-shadow: 0 0 0 7px rgba(31,174,102,.05); } }
+.tl-item.done .dot { animation: checkPop .45s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes checkPop { 0% { transform: scale(.6); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
+.timeline { position: relative; }
+.timeline.tl-go::before { transform-origin: top center; animation: drawLine .9s cubic-bezier(.4,0,.2,1) both; }
+@keyframes drawLine { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+/* delivery truck injected by motion.js into .steps on the delivery page */
+.steps { position: relative; }
+.fx-truck { position: absolute; top: -16px; left: 0; color: var(--leaf-600); animation: truckRun 9s linear infinite; }
+@keyframes truckRun { 0% { left: -6%; opacity: 0; } 6% { opacity: 1; } 94% { opacity: 1; } 100% { left: 102%; opacity: 0; } }
+
+/* ---------- Charts: bars/donut grow on load (motion.js sets the values) ---------- */
+.bars .bar { transition: height .9s cubic-bezier(.2,.8,.2,1); }
+.donut { transition: transform .6s cubic-bezier(.2,.8,.2,1), opacity .6s ease; }
+.donut.spin-in { animation: donutIn .8s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes donutIn { from { opacity: 0; transform: rotate(-18deg) scale(.92); } }
+
+/* ---------- Forms ---------- */
+.field input, .field select, .field textarea, .input, .otp-row input {
+  transition: border-color .2s, box-shadow .25s, transform .2s ease;
+}
+.field input:focus, .field textarea:focus, .otp-row input:focus { transform: translateY(-1px); }
+.shake { animation: shake .4s cubic-bezier(.36,.07,.19,.97); }
+@keyframes shake { 10%,90%{transform:translateX(-1px)} 20%,80%{transform:translateX(2px)} 30%,50%,70%{transform:translateX(-4px)} 40%,60%{transform:translateX(4px)} }
+.btn.is-success { background: var(--leaf) !important; color: #fff !important; }
+
+/* ---------- Sparkle (bottle-return milestone) ---------- */
+.spark { position: fixed; width: 8px; height: 8px; border-radius: 50%; pointer-events: none; z-index: 300;
+  background: radial-gradient(circle, #fff, var(--mint)); animation: spark .9s ease-out forwards; }
+@keyframes spark { to { transform: translate(var(--dx), var(--dy)) scale(.2); opacity: 0; } }
+
+/* ---------- Branded boot loader (in the page shell before layout mounts) ---------- */
+.boot { display: grid; place-items: center; min-height: 60vh; gap: 16px; }
+.boot .ripple { position: relative; width: 64px; height: 64px; }
+.boot .ripple span { position: absolute; inset: 0; margin: auto; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--grad-leaf); animation: drop 1.6s cubic-bezier(.4,0,.2,1) infinite; }
+.boot .ripple i { position: absolute; inset: 0; margin: auto; width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid var(--leaf); opacity: 0; animation: ring 1.6s cubic-bezier(.2,.8,.2,1) infinite; }
+.boot .ripple i:nth-child(2){ animation-delay: .5s; }
+@keyframes drop { 0% { transform: translateY(-18px) scaleY(1.3); } 35% { transform: translateY(0) scaleY(.8); }
+  45% { transform: translateY(0) scaleY(1); } 100% { transform: translateY(0); } }
+@keyframes ring { 30% { opacity: .6; transform: scale(.4); } 100% { opacity: 0; transform: scale(2.6); } }
+.boot .boot-word { font-family: "Fraunces", serif; color: var(--leaf-600); font-weight: 600; letter-spacing: .04em; animation: pulseWord 1.6s ease-in-out infinite; }
+@keyframes pulseWord { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
+
+/* =============================================================
+   Quick-buy trial widget animations
+   ============================================================= */
+.qbuy-card { animation: floaty 6s ease-in-out infinite, qbPulse 18s ease-in-out infinite; }
+.qbuy-fab { animation: floaty 6s ease-in-out infinite; }
+@keyframes qbPulse { 0%,90%,100% { box-shadow: var(--shadow-lg); } 95% { box-shadow: var(--shadow-lg), 0 0 0 5px rgba(31,174,102,.16); } }
+.qbuy-cta, .hero-card .js-qorder { animation: qbGlow 2.8s ease-in-out infinite; }
+@keyframes qbGlow { 0%,100% { box-shadow: 0 8px 20px rgba(31,174,102,.32); } 50% { box-shadow: 0 10px 30px rgba(31,174,102,.55); } }
+.qbuy-flag { overflow: hidden; }
+.qbuy-flag::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(115deg, transparent 40%, rgba(255,255,255,.6) 50%, transparent 60%);
+  transform: translateX(-160%); animation: fsLogoSheen 5s ease-in-out 2s infinite; }
+@media (max-width: 620px) { .qbuy.open .qbuy-card { animation: qbExpand .32s cubic-bezier(.2,.8,.2,1); } }
+@keyframes qbExpand { from { opacity: 0; transform: translateY(16px) scale(.97); } to { opacity: 1; transform: none; } }
+
+/* =============================================================
+   Animated dairy-farm footer scene (additive; behind the columns)
+   ============================================================= */
+.footer.has-scene { position: relative; padding-bottom: 220px;
+  background: linear-gradient(180deg, #F2F6F1 0%, #EAF4EF 42%, #E9F4FF 100%); }
+.footer.has-scene .wrap { position: relative; z-index: 2; }
+.footer-scene { position: absolute; left: 0; right: 0; bottom: 0; height: 220px; z-index: 0; pointer-events: none; }
+.footer-scene .scene-svg { width: 100%; height: 100%; display: block; }
+
+/* milk-wave divider sitting on the footer's top edge */
+.footer-wave { position: absolute; left: 0; right: 0; top: 0; transform: translateY(-99%); height: 52px; line-height: 0; pointer-events: none; z-index: 1; overflow: hidden; }
+.footer-wave svg { width: 116%; height: 100%; margin-left: -8%; display: block; }
+.footer-wave .wv1 { fill: #F2F6F1; }
+.footer-wave .wv2 { fill: #E2F1E9; }
+.footer-wave .wv { animation: fsWave 11s ease-in-out infinite alternate; }
+.footer-wave .wv2 { animation-duration: 8s; }
+@keyframes fsWave { from { transform: translateX(-22px); } to { transform: translateX(22px); } }
+
+/* scene element animations (all transform/opacity, 60fps) */
+.fs-sun { transform-box: fill-box; transform-origin: center; animation: fsSun 6s ease-in-out infinite; }
+@keyframes fsSun { 0%,100% { transform: scale(1); opacity: .96; } 50% { transform: scale(1.04); opacity: 1; } }
+.fs-rays { opacity: .4; animation: fsRays 7s ease-in-out infinite; }
+@keyframes fsRays { 0%,100% { opacity: .26; } 50% { opacity: .55; } }
+.fs-cloud { animation: fsCloud 70s ease-in-out infinite alternate; }
+.fs-cloud-b { animation-duration: 92s; animation-delay: -24s; }
+@keyframes fsCloud { from { transform: translateX(-34px); } to { transform: translateX(48px); } }
+.fs-mist { animation: fsMist 34s ease-in-out infinite alternate; }
+@keyframes fsMist { from { transform: translateX(-24px); opacity: .3; } to { transform: translateX(24px); opacity: .5; } }
+.fs-tree { transform-box: fill-box; transform-origin: 50% 100%; animation: fsSway 6s ease-in-out infinite alternate; }
+.fs-tree-b { animation-duration: 7.4s; animation-delay: -1.5s; }
+@keyframes fsSway { from { transform: rotate(-1.6deg); } to { transform: rotate(1.6deg); } }
+.fs-grass { transform-box: fill-box; transform-origin: bottom; animation: fsBlade 3.6s ease-in-out infinite alternate; }
+.fs-grass:nth-child(2n) { animation-duration: 4.3s; animation-delay: -1s; }
+.fs-grass:nth-child(3n) { animation-duration: 3.1s; animation-delay: -.6s; }
+@keyframes fsBlade { from { transform: rotate(-5deg); } to { transform: rotate(5deg); } }
+.fs-bird { transform-box: fill-box; }
+.fs-bird-1 { animation: fsBird1 24s linear infinite; }
+.fs-bird-2 { animation: fsBird2 30s linear infinite 6s; }
+.fs-bird-3 { animation: fsBird3 27s linear infinite 14s; }
+@keyframes fsBird1 { from { transform: translate(-40px,58px); } to { transform: translate(1500px,30px); } }
+@keyframes fsBird2 { from { transform: translate(-40px,42px); } to { transform: translate(1500px,66px); } }
+@keyframes fsBird3 { from { transform: translate(-40px,74px); } to { transform: translate(1500px,50px); } }
+.fs-bird .wing { transform-box: fill-box; transform-origin: center; animation: fsFlap .5s ease-in-out infinite; }
+@keyframes fsFlap { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(.55); } }
+.fs-van { animation: fsDrive 26s linear infinite; }
+@keyframes fsDrive { 0% { transform: translateX(0); } 8% { transform: translateX(0); } 72% { transform: translateX(1700px); } 100% { transform: translateX(1700px); } }
+.fs-fill { transform-box: fill-box; transform-origin: bottom; animation: fsFill 6s ease-in-out infinite; }
+@keyframes fsFill { 0% { transform: scaleY(.06); } 45% { transform: scaleY(1); } 82% { transform: scaleY(1); } 100% { transform: scaleY(.06); } }
+.fs-glow { transform-box: fill-box; transform-origin: center; animation: fsGlow 4s ease-in-out infinite; }
+@keyframes fsGlow { 0%,100% { opacity: .4; transform: scale(1); } 50% { opacity: .65; transform: scale(1.06); } }
+.fs-spark { transform-box: fill-box; transform-origin: center; animation: fsSpark 2.6s ease-in-out infinite; }
+.fs-spark-2 { animation-delay: .8s; } .fs-spark-3 { animation-delay: 1.6s; }
+@keyframes fsSpark { 0%,100% { transform: scale(0); opacity: 0; } 50% { transform: scale(1); opacity: 1; } }
+.fs-pour { animation: fsPour 1.3s ease-in-out infinite; }
+@keyframes fsPour { 0%,100% { opacity: .2; } 50% { opacity: .95; } }
+.fs-butterfly { transform-box: fill-box; animation: fsFly 9s ease-in-out infinite; }
+@keyframes fsFly { 0% { transform: translate(0,0); } 25% { transform: translate(44px,-16px); } 50% { transform: translate(86px,2px); } 75% { transform: translate(40px,-10px); } 100% { transform: translate(0,0); } }
+.fs-butterfly .bfly { transform-box: fill-box; transform-origin: center; animation: fsFlutter .3s ease-in-out infinite; }
+@keyframes fsFlutter { 0%,100% { transform: scaleX(1); } 50% { transform: scaleX(.5); } }
+.fs-bubble { transform-box: fill-box; animation: fsBub 7s ease-in infinite; }
+.fs-bubble-2 { animation-duration: 8.5s; animation-delay: -2s; }
+.fs-bubble-3 { animation-duration: 6.5s; animation-delay: -3.5s; }
+.fs-bubble-4 { animation-duration: 9s; animation-delay: -1s; }
+@keyframes fsBub { 0% { transform: translateY(0) scale(.7); opacity: 0; } 20% { opacity: .7; } 100% { transform: translateY(-48px) scale(1); opacity: 0; } }
+
+/* footer logo: float + light reflection sweep */
+.foot-logo { position: relative; display: inline-block; overflow: hidden; border-radius: 8px; }
+.foot-logo .logo-img { animation: logoIn .7s cubic-bezier(.2,.8,.2,1) both, floaty 5s ease-in-out 1s infinite; }
+.foot-logo::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(115deg, transparent 40%, rgba(255,255,255,.7) 50%, transparent 60%);
+  transform: translateX(-160%); animation: fsLogoSheen 6s ease-in-out 1.5s infinite; }
+@keyframes fsLogoSheen { 0%,82%,100% { transform: translateX(-160%); } 91% { transform: translateX(160%); } }
+
+/* Fresh Every Morning badge */
+.fresh-badge { display: inline-flex; align-items: center; gap: .5rem; margin-top: 16px; position: relative; overflow: hidden;
+  font-size: .72rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--forest-700);
+  background: var(--mint-soft); border: 1px solid var(--mint); border-radius: 999px; padding: .42rem .8rem; }
+.fresh-badge .fb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--leaf); animation: fsPing 2s ease-out infinite; }
+/* In the hero, sit the badge on its own line above the eyebrow */
+.hero-copy .fresh-badge { display: flex; width: fit-content; margin: 0 0 14px; }
+@keyframes fsPing { 0% { box-shadow: 0 0 0 0 rgba(31,174,102,.5); } 70%,100% { box-shadow: 0 0 0 8px rgba(31,174,102,0); } }
+.fresh-badge::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(115deg, transparent 42%, rgba(255,255,255,.6) 50%, transparent 58%);
+  transform: translateX(-160%); animation: fsLogoSheen 5s ease-in-out 2s infinite; }
+
+/* social icons */
+.socials { display: flex; gap: 10px; margin-top: 16px; }
+.socials .soc { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--forest);
+  background: var(--glass-bg); border: 1px solid var(--glass-brd); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--shadow-sm); transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, color .2s, background .2s; }
+.socials .soc:hover { transform: translateY(-3px) scale(1.06); color: #fff; background: var(--grad-leaf); box-shadow: 0 10px 22px rgba(31,174,102,.4); }
+.socials .soc:focus-visible { outline: none; transform: translateY(-2px) scale(1.04); box-shadow: 0 0 0 3px var(--mint), 0 8px 18px rgba(31,174,102,.32); }
+/* Decorative dairy motif filling the empty area beside the footer brand block.
+   Shown only in the stacked band where that gap exists (≥600px and <1024px) so it
+   never overlaps content or appears on mobile/large desktop. Decorative + aria-hidden. */
+.foot-decor { display: none; }
+@media (min-width: 600px) and (max-width: 1023px) {
+  .footer .about { position: relative; }
+  .foot-decor { display: block; position: absolute; right: 5%; top: 46%; width: clamp(130px, 21vw, 200px); transform: translateY(-50%); opacity: .7; pointer-events: none; }
+}
+.foot-decor .fd-svg { width: 100%; height: auto; display: block; }
+.foot-decor .fd-bottle { animation: fdFloat 6s ease-in-out infinite; }
+.foot-decor .fd-glow { animation: fdGlow 6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.foot-decor .fd-drop-1 { animation: fdFloat 5s ease-in-out infinite; }
+.foot-decor .fd-drop-2 { animation: fdFloat 6.5s ease-in-out .9s infinite; }
+.foot-decor .fd-spark { transform-box: fill-box; transform-origin: center; animation: fdTwinkle 2.6s ease-in-out infinite; }
+.foot-decor .fd-spark-2 { animation-delay: 1.1s; }
+@keyframes fdFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes fdGlow { 0%, 100% { opacity: .32; } 50% { opacity: .58; } }
+@keyframes fdTwinkle { 0%, 100% { opacity: .3; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.1); } }
+
+/* WhatsApp icon gets its own brand-green accent on hover/focus */
+.socials .soc-wa:hover { background: linear-gradient(135deg, #25D366, #128C7E); box-shadow: 0 10px 22px rgba(37,211,102,.42); }
+.socials .soc-wa:focus-visible { box-shadow: 0 0 0 3px #a7f3c6, 0 8px 18px rgba(37,211,102,.34); }
+.socials .soc svg { width: 18px; height: 18px; }
+
+/* footer link micro-interactions (the column + contact links).
+   Block + fit-content keeps each link on its own line (no merging) while the animated
+   underline hugs the label width. Brand logo + social icons live in .about, untouched. */
+.footer-links a { position: relative; display: block; width: fit-content; transition: color .2s, transform .2s, text-shadow .2s; }
+.footer-links a::after { content: ""; position: absolute; left: 0; bottom: 1px; height: 1.5px; width: 0; background: var(--grad-leaf); transition: width .3s cubic-bezier(.2,.8,.2,1); }
+.footer-links a:hover { transform: translateY(-1px); color: var(--leaf-600); text-shadow: 0 0 12px rgba(31,174,102,.25); }
+.footer-links a:hover::after { width: 100%; }
+/* subtle staggered fade-in of footer columns (runs on load; below the fold so users
+   only ever see the settled state — no risk of stuck-hidden; reduced-motion disables it) */
+.footer-links .foot-col { animation: footColIn .5s both cubic-bezier(.2,.8,.2,1); }
+.footer-links .foot-col:nth-child(2) { animation-delay: .06s; }
+.footer-links .foot-col:nth-child(3) { animation-delay: .12s; }
+.footer-links .foot-col:nth-child(4) { animation-delay: .18s; }
+.footer-links .foot-col:nth-child(5) { animation-delay: .24s; }
+@keyframes footColIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* dark mode: keep the dawn scene legible against a deep footer */
+[data-theme="dark"] .footer.has-scene { background: linear-gradient(180deg, var(--surface-2) 0%, #0c2419 46%, #0c2a36 100%); }
+[data-theme="dark"] .footer-wave .wv1 { fill: var(--surface-2); }
+[data-theme="dark"] .footer-wave .wv2 { fill: #143026; }
+[data-theme="dark"] .footer-scene { filter: brightness(.9) saturate(.92); }
+[data-theme="dark"] .footer-scene::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7,20,14,.5), rgba(7,20,14,0) 38%); }
+
+@media (max-width: 620px) {
+  .footer.has-scene { padding-bottom: 150px; }
+  .footer-scene { height: 150px; }
+}
+
+/* =============================================================
+   Reduced motion: disable EVERYTHING here (incl. pseudo-elements,
+   which the base * reset in styles.css does not cover).
+   ============================================================= */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .fx-layer, .fx-truck, .nav-fx { display: none !important; }
+  .nav-links a::after { transition: none; }
+  /* footer scene: rest in a tidy static state */
+  .fs-bird, .fs-van { display: none !important; }
+  .fs-fill { transform: scaleY(1) !important; }
+}
+
+/* Shipping policy — delivery van driving its route (reduced-motion disables it) */
+.sv-van { animation: svDrive 7.5s linear infinite; }
+@keyframes svDrive { 0% { transform: translateX(-110px); } 100% { transform: translateX(740px); } }
+.sv-wheel { transform-box: fill-box; transform-origin: center; animation: svSpin 1s linear infinite; }
+@keyframes svSpin { to { transform: rotate(360deg); } }
+.sv-dash { stroke-dasharray: 9 12; animation: svFlow 1.6s linear infinite; }
+@keyframes svFlow { to { stroke-dashoffset: -42; } }
+.sv-bottle { animation: svBob 2.8s ease-in-out infinite; }
+@keyframes svBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
+/* Refund & return policy — rotating return cycle + bobbing coin/bottle */
+.rf-ring { transform-box: fill-box; transform-origin: center; animation: rfSpin 9s linear infinite; }
+@keyframes rfSpin { to { transform: rotate(360deg); } }
+.rf-bottle { animation: svBob 2.8s ease-in-out infinite; }
+.rf-coin { animation: svBob 2.6s ease-in-out infinite; }
+
+/* Terms & conditions — gently floating document with a pulsing "agreed" seal */
+.tc-doc { animation: svBob 3.2s ease-in-out infinite; }
+.tc-seal { transform-box: fill-box; transform-origin: center; animation: tcPulse 2.4s ease-in-out infinite; }
+@keyframes tcPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.09); } }
+
+/* Privacy policy — floating shield with pulsing "protection" rings */
+.pv-shield { animation: svBob 3.2s ease-in-out infinite; }
+.pv-ring { transform-box: fill-box; transform-origin: center; animation: pvPulse 3s ease-out infinite; }
+.pv-ring-2 { animation-delay: 1.5s; }
+@keyframes pvPulse { 0% { transform: scale(.7); opacity: .55; } 100% { transform: scale(1.25); opacity: 0; } }

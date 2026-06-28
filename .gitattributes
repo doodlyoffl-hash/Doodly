@@ -1,0 +1,19 @@
+# Normalize line endings: store as LF in the repo, check out native on each OS.
+# Prevents cross-platform CRLF churn (whole-repo "modified" diffs on Windows).
+* text=auto
+
+# Treat common binaries as binary (no EOL conversion, no diff noise).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.avif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.pdf binary
+*.mp4 binary
+*.webm binary

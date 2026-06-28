@@ -1,0 +1,44 @@
+/* POST /api/payments/verify — success callback from Razorpay Checkout.
+   Verifies the signature, then marks the order paid. The webhook is the
+   source of truth; this gives the customer an instant confirmation. */
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { verifyPaymentSignature } from "@/lib/razorpay";
+import { db } from "@/lib/db";
+import { creditTrialCashback } from "@/lib/wallet/service";
+
+export const runtime = "nodejs";
+
+const Body = z.object({
+  razorpay_order_id: z.string(),
+  razorpay_payment_id: z.string(),
+  razorpay_signature: z.string(),
+});
+
+export async function POST(req: NextRequest) {
+  const parsed = Body.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Validation failed" }, { status: 422 });
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = parsed.data;
+
+  const ok = verifyPaymentSignature({ orderId: razorpay_order_id, paymentId: razorpay_payment_id, signature: razorpay_signature });
+  if (!ok) return NextResponse.json({ verified: false, error: "Signature mismatch" }, { status: 400 });
+
+  // Mark the pre-created Payment row (made at order time) as PAID. Idempotent;
+  // the webhook is the source of truth, this is just for instant UX.
+  const payment = await db.payment.findFirst({ where: { razorpayOrderId: razorpay_order_id }, select: { userId: true, orderId: true } });
+  await db.payment.updateMany({
+    where: { razorpayOrderId: razorpay_order_id },
+    data: { status: "PAID", razorpayPayId: razorpay_payment_id },
+  }).catch((e) => console.error("payment.update", e?.message));
+
+  // Mark the order paid + (idempotently) credit the Trial Pack cashback if the
+  // customer just upgraded to an eligible plan. Never blocks the confirmation.
+  let cashback: { credited: boolean; amountPaise?: number; balancePaise?: number; reference?: string } | null = null;
+  if (payment) {
+    await db.order.update({ where: { id: payment.orderId }, data: { status: "PAID" } }).catch(() => {});
+    try { cashback = await creditTrialCashback({ userId: payment.userId }); }
+    catch (e) { console.error("payment.cashback", (e as Error)?.message); }
+  }
+
+  return NextResponse.json({ verified: true, cashback });
+}

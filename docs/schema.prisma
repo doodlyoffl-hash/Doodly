@@ -1,0 +1,685 @@
+// =============================================================
+// DOODLY — Database schema (Prisma + PostgreSQL / Supabase)
+// -------------------------------------------------------------
+// This is the production data model behind the storefront, the
+// customer dashboard, the admin ERP, and the delivery app.
+// Generate the client with:  npx prisma generate
+// Push to Supabase Postgres:  npx prisma migrate dev
+// =============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")        // Supabase pooled connection
+  directUrl = env("DIRECT_URL")          // Supabase direct (migrations)
+}
+
+// ----------------------------------------------------------------
+// ENUMS
+// ----------------------------------------------------------------
+enum Role            { CUSTOMER  DELIVERY_EXECUTIVE  SUPPORT  OPERATIONS  PROCUREMENT  ACCOUNTANT  INVENTORY  QUALITY  MARKETING  ADMIN  SUPER_ADMIN }
+enum PermLevel       { NONE  VIEW  MANAGE  FULL }   // FULL also grants module specials (refund/approve/adjust/assign)
+enum ProductStatus   { AVAILABLE DRAFT COMING_SOON OUT_OF_STOCK DISCONTINUED HIDDEN ARCHIVED }  // <- the "CMS flip"; Low Stock is DERIVED from stock vs lowStockThreshold, never stored
+enum VariantType     { TRIAL SUBSCRIPTION }
+enum SubStatus       { ACTIVE PAUSED VACATION CANCELLED COMPLETED }
+enum DeliveryStatus  { SCHEDULED ASSIGNED ACCEPTED PACKED OUT_FOR_DELIVERY ON_THE_WAY REACHED DELIVERED FAILED SKIPPED }  // executive workflow
+enum IssueType       { CUSTOMER_UNAVAILABLE WRONG_ADDRESS DAMAGED_BOTTLE PAYMENT_ISSUE PRODUCT_ISSUE DELIVERY_FAILED }
+enum IssuePriority   { LOW MEDIUM HIGH }
+enum OrderType       { SUBSCRIPTION ONE_TIME EXTRA SAMPLE }
+enum PaymentStatus   { PENDING PAID FAILED REFUNDED }
+enum PaymentMethod   { UPI CARD NETBANKING WALLET CASH }
+enum BottleEvent     { ISSUED RETURNED LOST DEPOSIT_CHARGED DEPOSIT_REFUNDED }
+enum TxnType         { CREDIT DEBIT }
+enum NotifChannel    { SMS WHATSAPP PUSH EMAIL }
+
+// ----------------------------------------------------------------
+// IDENTITY & PROFILE
+// ----------------------------------------------------------------
+model User {
+  id            String   @id @default(cuid())
+  phone         String   @unique                 // primary login (OTP)
+  email         String?  @unique
+  name          String?
+  role          Role     @default(CUSTOMER)
+  walletPaise   Int      @default(0)             // store money in paise (int, no float)
+  referralCode  String   @unique @default(cuid())
+  referredById  String?
+  referredBy    User?    @relation("Referrals", fields: [referredById], references: [id])
+  referrals     User[]   @relation("Referrals")
+  loyaltyPoints Int      @default(0)
+  notes         String?                          // admin-only notes
+  tags          String[]                         // e.g. ["premium","fragile-door"]
+  createdAt     DateTime @default(now())
+
+  addresses     Address[]
+  subscriptions Subscription[]
+  orders        Order[]
+  payments      Payment[]
+  invoices      Invoice[]
+  bottleLedger  BottleLedger[]
+  recurringMethods RecurringPaymentMethod[]
+  walletTxns    WalletTxn[]
+  reviews       Review[]
+  notifications Notification[]
+  driver        Driver?
+  // ---- RBAC / account security ----
+  status          UserStatus   @default(ACTIVE)        // active / disabled / locked
+  deletedAt       DateTime?                            // soft delete
+  forcePwReset    Boolean      @default(false)
+  twoFactorOn     Boolean      @default(false)         // enforce for ADMIN / SUPER_ADMIN
+  roleAssignments UserRoleAssignment[]                 // secondary roles (multi-role)
+  auditLogs       AuditLog[]
+  logins          LoginHistory[]
+}
+
+enum UserStatus { ACTIVE DISABLED LOCKED }
+
+/* ===== RBAC (data-driven so new departments need no code change) ===== */
+model RoleDef {                                        // role registry (source of truth for labels/home)
+  id        String   @id @default(cuid())
+  key       String   @unique                          // "accountant", "operations", … (matches enum Role lower-case)
+  label     String
+  isSystem  Boolean  @default(true)                   // system roles can't be deleted
+  perms     RolePermission[]
+}
+model Permission {
+  id      String @id @default(cuid())
+  module  String                                       // "orders", "payments", …
+  action  String                                       // view | create | edit | delete | export | refund | approve | adjust | assign
+  perms   RolePermission[]
+  @@unique([module, action])
+}
+model RolePermission {                                 // the editable matrix
+  id           String     @id @default(cuid())
+  roleId       String
+  role         RoleDef    @relation(fields: [roleId], references: [id])
+  permissionId String?
+  permission   Permission? @relation(fields: [permissionId], references: [id])
+  module       String                                  // module + level shorthand (mirrors DOODLY_RBAC)
+  level        PermLevel  @default(NONE)
+  @@unique([roleId, module])
+}
+model UserRoleAssignment {                             // users ↔ roles (multi-role)
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  roleKey   String
+  createdAt DateTime @default(now())
+  @@unique([userId, roleKey])
+}
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  actorRole String?                                    // the ACTIVE role at the time (impersonation-aware)
+  action    String                                     // "role.switch", "user.create", "permission.change", "price.change", …
+  target    String?
+  ip        String?
+  device    String?
+  browser   String?
+  createdAt DateTime @default(now())
+  @@index([userId, createdAt])
+}
+model LoginHistory {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  success   Boolean
+  ip        String?
+  device    String?
+  browser   String?
+  createdAt DateTime @default(now())
+  @@index([userId, createdAt])
+}
+
+model Address {
+  id           String  @id @default(cuid())
+  userId       String
+  user         User    @relation(fields: [userId], references: [id])
+  label        String  @default("Home")
+  line1        String
+  line2        String?
+  city         String
+  pincode      String
+  lat          Float?
+  lng          Float?
+  isDefault    Boolean @default(false)
+  deliveryNote String?                           // "leave at door", gate code, etc.
+  zoneId       String?
+  zone         DeliveryZone? @relation(fields: [zoneId], references: [id])
+  subscriptions Subscription[]
+}
+
+// ----------------------------------------------------------------
+// CATALOGUE  (admin-editable = the CMS)
+// ----------------------------------------------------------------
+model Product {
+  id           String        @id @default(cuid())
+  slug         String        @unique              // "milk","curd","paneer","kova","ghee"
+  name         String
+  category     String?
+  description  String                             // short description
+  longDesc     String?
+  story        String?
+  usage        String?
+  storage      String?
+  ingredients  String?
+  allergens    String?
+  status            ProductStatus @default(COMING_SOON) // flip to AVAILABLE to launch
+  visible           Boolean       @default(true)        // HIDDEN from listings when false
+  lowStockThreshold Int           @default(20)          // stock <= this (and > 0) => "Low Stock" badge
+  restockDate       DateTime?                           // shown on Out of Stock ("Available again …")
+  imageUrl     String?                            // featured image (Cloudinary)
+  sortOrder    Int           @default(0)
+  ratingValue  Float         @default(0)
+  ratingCount  Int           @default(0)
+  launchDate   DateTime?                            // a FUTURE date => "Coming Soon" badge
+  endDate      DateTime?
+  cities       String[]                           // available cities
+  // normalized 1:1 / 1:many detail tables — no JSON blobs
+  variants     Variant[]
+  images       ProductImage[]
+  badges       ProductBadge[]
+  pricing      Pricing?
+  nutrition    NutritionalInformation?
+  quality      QualityParameters?
+  seo          SeoMetadata?
+}
+
+model Variant {
+  id          String      @id @default(cuid())
+  productId   String
+  product     Product     @relation(fields: [productId], references: [id])
+  label       String                              // "500 ml"
+  displayName String?                             // "500 ml Daily Bottle"
+  sku         String?     @unique
+  ml          Int
+  type        VariantType @default(SUBSCRIPTION)
+  dailyPaise  Int?                                // per-delivery price (subscription)
+  fixedPaise  Int?                                // trial: total price (e.g. 20000 = ₹200)
+  fixedDays   Int?                                // trial: number of days (e.g. 3)
+  stock             Int     @default(0)
+  lowStockThreshold Int     @default(20)            // per-variant Low Stock cutoff
+  restockDate       DateTime?
+  weightG     Int?                                // grams
+  active      Boolean     @default(true)
+  subItems    SubscriptionItem[]
+}
+
+model Plan {
+  id            String  @id @default(cuid())
+  slug          String  @unique                   // "single","p7","p30","p90"
+  name          String                            // "30-Day Morning Ritual"
+  days          Int
+  discountBps   Int     @default(0)               // basis points: 500 = 5%, 800 = 8%
+  badge         String?                           // "Most popular", "Best value"
+  description   String?
+  autoRenew     Boolean @default(true)
+  active        Boolean @default(true)
+  subscriptions Subscription[]
+}
+
+// ---- normalized product-detail tables (1 row per product) -----
+model Pricing {
+  id                    String  @id @default(cuid())
+  productId             String  @unique
+  product               Product @relation(fields: [productId], references: [id])
+  mrpPaise              Int
+  sellingPaise          Int
+  costPaise             Int?
+  offerPaise            Int?
+  discountBps           Int     @default(0)
+  taxBps                Int     @default(0)
+  depositPaise          Int     @default(0)       // glass-bottle deposit
+  deliveryPaise         Int     @default(0)
+  freeDeliveryOverPaise Int     @default(0)
+}
+
+model NutritionalInformation {
+  id        String  @id @default(cuid())
+  productId String  @unique
+  product   Product @relation(fields: [productId], references: [id])
+  fat       String?  snf      String?  protein  String?
+  calcium   String?  energy   String?  carbs    String?
+  sugar     String?  minerals String?  vitamins String?
+}
+
+model QualityParameters {
+  id             String  @id @default(cuid())
+  productId      String  @unique
+  product        Product @relation(fields: [productId], references: [id])
+  fatPct         String?  snf            String?  lactometer  String?
+  collectionTemp String?  storageTemp    String?  batchNo     String?
+  milkType       String?  animalType     String?
+  collectionDate String?  expiry         String?
+}
+
+model ProductImage {
+  id         String  @id @default(cuid())
+  productId  String
+  product    Product @relation(fields: [productId], references: [id])
+  url        String                              // Cloudinary URL
+  alt        String?
+  sortOrder  Int     @default(0)
+  isFeatured Boolean @default(false)
+}
+
+model ProductBadge {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  label     String                              // "Farm Fresh"
+  icon      String?
+  enabled   Boolean @default(true)
+  sortOrder Int     @default(0)
+}
+
+model SeoMetadata {
+  id              String  @id @default(cuid())
+  productId       String  @unique
+  product         Product @relation(fields: [productId], references: [id])
+  metaTitle       String?
+  metaDescription String?
+  ogImageUrl      String?
+  canonicalUrl    String?
+  keywords        String[]
+}
+
+// ----------------------------------------------------------------
+// SUBSCRIPTION ENGINE
+// ----------------------------------------------------------------
+model Subscription {
+  id              String     @id @default(cuid())
+  userId          String
+  user            User       @relation(fields: [userId], references: [id])
+  planId          String
+  plan            Plan       @relation(fields: [planId], references: [id])
+  addressId       String
+  address         Address    @relation(fields: [addressId], references: [id])
+  status          SubStatus  @default(ACTIVE)
+  startDate       DateTime
+  endDate         DateTime?
+  deliverySlot    String     @default("06:00-08:00")
+  nextDeliveryAt  DateTime?
+  autoRenew       Boolean    @default(true)
+  pausedFrom      DateTime?
+  pausedUntil     DateTime?                        // Vacation Mode window
+  skipDates       DateTime[]                       // Emergency Skip individual days
+  createdAt       DateTime   @default(now())
+
+  items           SubscriptionItem[]
+  deliveries      Delivery[]
+  autopay         AutopaySubscription?
+}
+
+/* ===== Delivery coverage (serviceable pincodes / zones / waitlist) ===== */
+model DeliveryZone {
+  id        String   @id @default(cuid())
+  name      String
+  executive String?
+  pincodes  ServiceablePincode[]
+}
+model ServiceablePincode {
+  id        String   @id @default(cuid())
+  pincode   String   @unique
+  area      String
+  city      String
+  state     String
+  zoneId    String?
+  zone      DeliveryZone? @relation(fields: [zoneId], references: [id])
+  charge    Int      @default(0)                  // delivery charge (₹)
+  slot      String   @default("6:00–8:00 AM")
+  eta       String?
+  enabled   Boolean  @default(true)               // disable without deleting
+  createdAt DateTime @default(now())
+}
+model WaitlistRequest {
+  id        String   @id @default(cuid())
+  name      String
+  mobile    String
+  email     String?
+  address   String?
+  pincode   String                                // grouped by pincode/area/city in Admin
+  createdAt DateTime @default(now())
+}
+
+/* ===== Auto-pay (recurring) ===== */
+enum AutopayStatus { ACTIVE RETRY SUSPENDED CANCELLED INACTIVE }
+enum AttemptStatus { SUCCESS FAILED PENDING }
+
+model RecurringPaymentMethod {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String                                // "UPI AutoPay" | "Credit Card" | …
+  token     String?                               // gateway mandate / token — NEVER raw card data
+  label     String?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  autopays  AutopaySubscription[]
+}
+model AutopaySubscription {
+  id             String       @id @default(cuid())
+  gatewaySubId   String?      @unique               // Razorpay subscription id (sub_xxx)
+  subscriptionId String       @unique
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+  methodId       String?
+  method         RecurringPaymentMethod? @relation(fields: [methodId], references: [id])
+  status         AutopayStatus @default(ACTIVE)
+  nextRenewalAt  DateTime
+  amountPaise    Int
+  attempts       Int          @default(0)         // resets on success; suspend at DeliverySettings-like retryLimit
+  createdAt      DateTime     @default(now())
+  renewals       RenewalHistory[]
+}
+model RenewalHistory {
+  id          String   @id @default(cuid())
+  autopayId   String
+  autopay     AutopaySubscription @relation(fields: [autopayId], references: [id])
+  amountPaise Int
+  status      AttemptStatus
+  chargedAt   DateTime @default(now())
+  attempts    PaymentAttempt[]
+}
+model PaymentAttempt {
+  id          String   @id @default(cuid())
+  renewalId   String?
+  renewal     RenewalHistory? @relation(fields: [renewalId], references: [id])
+  status      AttemptStatus
+  gatewayRef  String?
+  error       String?                             // friendly reason; raw gateway error never shown to customer
+  attemptedAt DateTime @default(now())
+}
+
+/* Singleton delivery config — drives the start-date CUT-OFF rule everywhere
+   (web + future mobile, via the same scheduling service). Editable in Admin
+   (/admin/delivery-settings); the 8 PM default is configurable, never hardcoded.
+   Cut-off is evaluated in the CUSTOMER's local timezone. */
+model DeliverySettings {
+  id               String     @id @default("default")
+  cutoffHour       Int        @default(20)                  // 20:00 = 8 PM
+  cutoffMinute     Int        @default(0)
+  slotStart        String     @default("06:00 AM")
+  slotEnd          String     @default("08:00 AM")
+  availableDays    Int[]      @default([0,1,2,3,4,5,6])      // 0=Sun … 6=Sat
+  weekendDelivery  Boolean    @default(true)
+  holidays         DateTime[]                               // no delivery (festivals etc.)
+  blackoutDates    DateTime[]                               // maintenance / service unavailable
+  minAdvanceDays   Int        @default(1)
+  maxAdvanceDays   Int        @default(30)                  // max advance booking
+  updatedAt        DateTime   @updatedAt
+}
+
+model SubscriptionItem {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+  variantId      String
+  variant        Variant      @relation(fields: [variantId], references: [id])
+  qty            Int          @default(1)          // bottles per delivery
+}
+
+// ----------------------------------------------------------------
+// ORDERS & DELIVERY
+// ----------------------------------------------------------------
+model Order {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id])
+  type         OrderType     @default(SUBSCRIPTION)
+  subtotalPaise Int
+  discountPaise Int          @default(0)
+  depositPaise  Int          @default(0)           // bottle deposit
+  taxPaise      Int          @default(0)           // GST
+  deliveryPaise Int          @default(0)
+  totalPaise    Int
+  status        PaymentStatus @default(PENDING)
+  createdAt    DateTime      @default(now())
+  delivery     Delivery?
+  payment      Payment?
+  invoice      Invoice?
+}
+
+model Delivery {
+  id             String         @id @default(cuid())
+  subscriptionId String?
+  subscription   Subscription?  @relation(fields: [subscriptionId], references: [id])
+  orderId        String?        @unique
+  order          Order?         @relation(fields: [orderId], references: [id])
+  date           DateTime                          // the delivery date
+  status         DeliveryStatus @default(SCHEDULED)
+  routeId        String?
+  route          Route?         @relation(fields: [routeId], references: [id])
+  driverId       String?
+  driver         Driver?        @relation(fields: [driverId], references: [id])
+  sequence       Int?                              // stop order on the route
+  deliveredAt    DateTime?
+  otp            String?                           // delivery OTP
+  podPhotoUrl    String?                           // proof-of-delivery (Cloudinary)
+  customerRemark String?
+  cashCollected  Int            @default(0)        // paise, COD
+  bottlesOut     Int            @default(0)        // bottles handed over
+  bottlesIn      Int            @default(0)        // empties collected
+  bottleEvents   BottleLedger[]
+  issues         DeliveryIssue[]
+}
+
+// ----------------------------------------------------------------
+// EMPTY-BOTTLE TRACKING  (per-customer ledger)
+// ----------------------------------------------------------------
+model BottleLedger {
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id])
+  deliveryId  String?
+  delivery    Delivery?    @relation(fields: [deliveryId], references: [id])
+  event       BottleEvent
+  qty         Int
+  amountPaise Int          @default(0)             // for deposit/lost charges
+  note        String?
+  createdAt   DateTime     @default(now())
+  // Pending bottles for a user = sum(ISSUED) - sum(RETURNED) - sum(LOST)
+}
+
+// ----------------------------------------------------------------
+// WALLET / PAYMENTS / INVOICES
+// ----------------------------------------------------------------
+model WalletTxn {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  type        TxnType
+  amountPaise Int
+  reason      String                               // "referral","refund","topup","order"
+  createdAt   DateTime @default(now())
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  orderId         String        @unique
+  order           Order         @relation(fields: [orderId], references: [id])
+  method          PaymentMethod
+  amountPaise     Int
+  status          PaymentStatus @default(PENDING)
+  razorpayOrderId String?
+  razorpayPayId   String?
+  createdAt       DateTime      @default(now())
+}
+
+model Invoice {
+  id          String   @id @default(cuid())
+  number      String   @unique                     // DOODLY/2026/00001
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  orderId     String   @unique
+  order       Order    @relation(fields: [orderId], references: [id])
+  gstPaise    Int      @default(0)
+  pdfUrl      String?
+  issuedAt    DateTime @default(now())
+}
+
+// ----------------------------------------------------------------
+// FARMER PROCUREMENT & QUALITY CONTROL
+// ----------------------------------------------------------------
+model Farmer {
+  id           String        @id @default(cuid())
+  name         String
+  phone        String
+  village      String
+  ratePerLitre Int                                 // paise
+  active       Boolean       @default(true)
+  procurements Procurement[]
+}
+
+model Procurement {
+  id            String       @id @default(cuid())
+  farmerId      String
+  farmer        Farmer       @relation(fields: [farmerId], references: [id])
+  collectedAt   DateTime
+  litres        Float
+  fatPct        Float
+  snfPct        Float
+  lactometer    Float?
+  temperatureC  Float?
+  batchNo       String       @unique
+  accepted      Boolean      @default(true)
+  amountPaise   Int                                // payable to farmer
+  qualityTest   QualityTest?
+}
+
+model QualityTest {
+  id            String      @id @default(cuid())
+  procurementId String      @unique
+  procurement   Procurement @relation(fields: [procurementId], references: [id])
+  fatPct        Float
+  snfPct        Float
+  lactometer    Float
+  temperatureC  Float
+  passed        Boolean
+  rejectReason  String?
+  labReportUrl  String?
+  testedAt      DateTime    @default(now())
+}
+
+// ----------------------------------------------------------------
+// INVENTORY
+// ----------------------------------------------------------------
+model InventoryItem {
+  id          String   @id @default(cuid())
+  sku         String   @unique                     // "MILK_RAW","BOTTLE_1L","CAP","LABEL"
+  name        String
+  unit        String                               // "litre","piece"
+  quantity    Float    @default(0)
+  reorderAt   Float    @default(0)                 // stock alert threshold
+  updatedAt   DateTime @updatedAt
+}
+
+// ----------------------------------------------------------------
+// DELIVERY LOGISTICS
+// ----------------------------------------------------------------
+model DeliveryZone {
+  id        String    @id @default(cuid())
+  name      String
+  pincodes  String[]
+  addresses Address[]
+  routes    Route[]
+}
+
+model Driver {                                    // = Delivery Executive (own /delivery login & role)
+  id          String     @id @default(cuid())
+  userId      String     @unique
+  user        User       @relation(fields: [userId], references: [id])
+  employeeId  String?    @unique                   // "DRV-07" — login via employeeId+password or mobile+OTP
+  vehicleNo   String?
+  zoneId      String?                              // assigned zone (scopes which deliveries they see)
+  active      Boolean    @default(true)
+  lat         Float?                               // last known GPS (live tracking, if enabled)
+  lng         Float?
+  lastSeenAt  DateTime?
+  rating      Float      @default(5)
+  routes      Route[]
+  deliveries  Delivery[]
+  issues      DeliveryIssue[]
+}
+
+model DeliveryIssue {
+  id          String        @id @default(cuid())
+  deliveryId  String?
+  delivery    Delivery?     @relation(fields: [deliveryId], references: [id])
+  driverId    String
+  driver      Driver        @relation(fields: [driverId], references: [id])
+  type        IssueType
+  priority    IssuePriority @default(MEDIUM)
+  comments    String?
+  photoUrl    String?
+  createdAt   DateTime      @default(now())
+}
+
+model Route {
+  id         String       @id @default(cuid())
+  name       String
+  date       DateTime
+  zoneId     String?
+  zone       DeliveryZone? @relation(fields: [zoneId], references: [id])
+  driverId   String?
+  driver     Driver?      @relation(fields: [driverId], references: [id])
+  deliveries Delivery[]
+}
+
+// ----------------------------------------------------------------
+// GROWTH: referral, loyalty, coupons, reviews
+// ----------------------------------------------------------------
+model Coupon {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  description  String?
+  discountBps  Int?                                // % off
+  flatPaise    Int?                                // flat off
+  firstOrderOnly Boolean @default(false)
+  maxRedemptions Int?
+  redeemed     Int      @default(0)
+  expiresAt    DateTime?
+  active       Boolean  @default(true)
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  target    String                                 // "milk","delivery","driver"
+  rating    Int                                    // 1..5
+  comment   String?
+  createdAt DateTime @default(now())
+}
+
+// ----------------------------------------------------------------
+// NOTIFICATIONS  (SMS / WhatsApp / Push / Email)
+// ----------------------------------------------------------------
+model Notification {
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id])
+  channel   NotifChannel
+  title     String
+  body      String
+  sentAt    DateTime?
+  readAt    DateTime?
+  createdAt DateTime     @default(now())
+}
+
+// ----------------------------------------------------------------
+// CMS  (editable homepage content, banners, FAQs, testimonials)
+// ----------------------------------------------------------------
+model CmsBlock {
+  id        String   @id @default(cuid())
+  key       String   @unique                       // "hero","banner.1","faq.list"
+  type      String                                 // "hero","banner","faq","testimonial","blog"
+  data      Json                                   // flexible content payload
+  published Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+}
