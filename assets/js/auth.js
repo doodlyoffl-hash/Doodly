@@ -282,7 +282,8 @@ window.DOODLY_AUTH = (function () {
           if (/forgot-password|reset|new-password/.test(route0)) RB0.audit("auth.password_reset", "Password reset completed");
         }
       } catch (e) {}
-      if (form.dataset.loginRole) { resolveCustomerLogin(form); return; }   // customer portal → async backend-identity bridge, then navigate
+      if (form.dataset.loginRole) { resolveCustomerLogin(form); return; }   // customer portal → real backend sign-in, then navigate
+      if (form.dataset.adminLogin) { resolveAdminLogin(form); return; }     // staff portal → real backend sign-in (demo fallback on localhost)
       if (!resolveLogin(form)) return;        // sets the role + destination (and may block on a bad account)
       succeed(form);
     });
@@ -338,6 +339,30 @@ window.DOODLY_AUTH = (function () {
      portal stays explorable offline. Production replaces this with the
      real Auth.js session (middleware reads req.auth.user.id directly).
      ============================================================ */
+  function isLocalhost() { try { return /^(localhost|127\.0\.0\.1)$/.test(location.hostname); } catch (e) { return true; } }
+
+  /** Exchange email+password for the signed sign-in token; persist the identity.
+      Returns { user } on success, "invalid" on bad credentials, null when the
+      backend is unreachable / the input isn't an email (→ caller may fall back). */
+  async function tokenSignIn(email, password) {
+    if (!window.DOODLY_API || !/@/.test(email)) return null;
+    try {
+      const resolved = await window.DOODLY_API.post("/api/token", { email: email.toLowerCase(), password: password });
+      if (resolved && resolved.token && resolved.user && resolved.user.id) {
+        try {
+          localStorage.setItem("doodly-token", resolved.token);
+          localStorage.setItem("doodly-currentuser", JSON.stringify(resolved.user));
+        } catch (e) {}
+        return { user: resolved.user };
+      }
+      return null;
+    } catch (err) {
+      if (err && (err.status === 401 || err.code === "unauthorized")) return "invalid";
+      if (err && err.status === 429) return "throttled";
+      return null;   // offline / 422 (phone login) / server error
+    }
+  }
+
   async function resolveCustomerLogin(form) {
     const RB = window.DOODLY_RBAC;
     const flds = [...form.querySelectorAll(".fl-field input")];
@@ -349,20 +374,42 @@ window.DOODLY_AUTH = (function () {
     // Adopt the customer role locally first (works even if the backend is down).
     if (RB) { if (RB.setRealRole) RB.setRealRole("customer"); if (RB.returnToSelf) RB.returnToSelf(); }
 
-    let resolved = null;
-    if (window.DOODLY_API && /@/.test(email)) {
-      try {
-        resolved = await window.DOODLY_API.post("/api/dev/login", { email: email.toLowerCase(), password: password });
-      } catch (err) {
-        if (err && (err.status === 401 || err.code === "unauthorized")) return showCustomerAuthError(form, "Invalid email or password.");
-        // 422 (mobile-number login) / offline / other → fall through to demo (mock) mode
-      }
+    const res = await tokenSignIn(email, password);
+    if (res === "invalid") return showCustomerAuthError(form, "Invalid email or password.");
+    if (res === "throttled") return showCustomerAuthError(form, "Too many attempts — please try again in a minute.");
+    if (res && res.user) {
+      if (RB && RB.setRealRole) RB.setRealRole(res.user.role || "customer");
+    } else if (!isLocalhost()) {
+      // live site + backend reachable but no account matched (e.g. phone number entered)
+      return showCustomerAuthError(form, "Please sign in with your registered email and password.");
     }
-    if (resolved && resolved.id) {
-      try { localStorage.setItem("doodly-currentuser", JSON.stringify({ id: resolved.id, name: resolved.name, email: resolved.email, role: resolved.role || "customer" })); } catch (e) {}
-      if (RB && RB.setRealRole) RB.setRealRole(resolved.role || "customer");
-    }
+    // localhost with no backend match → demo (mock) portal stays explorable
     if (RB && RB.recordLogin) RB.recordLogin(true);
+    succeed(form);
+  }
+
+  /** Staff sign-in: real credentials give the real role everywhere (production
+      included). On localhost the existing demo role-picker remains the fallback. */
+  async function resolveAdminLogin(form) {
+    const RB = window.DOODLY_RBAC;
+    const flds = [...form.querySelectorAll(".fl-field input")];
+    const emailInp = form.querySelector('input[type="email"]') || flds[0] || null;
+    const pwInp = form.querySelector('input[type="password"]') || null;
+    const email = emailInp ? String(emailInp.value || "").trim() : "";
+    const password = pwInp ? String(pwInp.value || "") : "";
+
+    const res = await tokenSignIn(email, password);
+    if (res === "throttled") return showCustomerAuthError(form, "Too many attempts — please try again in a minute.");
+    if (res && res.user) {
+      if (res.user.role === "customer") return showCustomerAuthError(form, "That's a customer account — please use Customer Login.");
+      if (RB) { if (RB.setRealRole) RB.setRealRole(res.user.role); if (RB.returnToSelf) RB.returnToSelf(); if (RB.recordLogin) RB.recordLogin(true); }
+      form.dataset.dest = (RB && RB.roleOf && RB.roleOf(res.user.role).home) || "/admin/dashboard.html";
+      succeed(form);
+      return;
+    }
+    if (res === "invalid" && !isLocalhost()) return showCustomerAuthError(form, "Invalid email or password.");
+    // localhost / offline → the existing demo staff flow (role dropdown + local accounts)
+    if (!resolveLogin(form)) return;
     succeed(form);
   }
 
@@ -381,7 +428,7 @@ window.DOODLY_AUTH = (function () {
   /* ---------- session: logout + configurable idle auto-logout ---------- */
   function logout() {
     try { sessionStorage.removeItem("doodly-session-logged"); } catch (e) {}
-    try { localStorage.removeItem("doodly-currentuser"); } catch (e) {}
+    try { localStorage.removeItem("doodly-currentuser"); localStorage.removeItem("doodly-token"); } catch (e) {}
     const RB = window.DOODLY_RBAC; if (RB) { if (RB.returnToSelf) RB.returnToSelf(); RB.audit && RB.audit("auth.logout", "Signed out"); }
     window.location.href = "/login.html";
   }

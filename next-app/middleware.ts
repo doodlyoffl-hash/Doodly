@@ -17,6 +17,7 @@
    ============================================================= */
 import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
+import { jwtVerify } from "jose";
 import { authConfig } from "./auth.config";
 import { isStaff, homeFor, isValidRoleKey } from "@/lib/auth/roles";
 import type { RoleKey } from "@/lib/rbac";
@@ -37,22 +38,37 @@ function withCors(res: NextResponse, origin: string | null): NextResponse {
     res.headers.set("Access-Control-Allow-Origin", origin);
     res.headers.set("Access-Control-Allow-Credentials", "true");
     res.headers.set("Access-Control-Allow-Methods", "GET,POST,PATCH,PUT,DELETE,OPTIONS");
-    res.headers.set("Access-Control-Allow-Headers", "Content-Type, X-Doodly-Actor, X-Doodly-Actor-Id");
+    res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Doodly-Actor, X-Doodly-Actor-Id");
     res.headers.set("Vary", "Origin");
   }
   return res;
 }
 
-export default auth((req) => {
+export default auth(async (req) => {
   const path = req.nextUrl.pathname;
   const origin = allowedOrigin(req);
 
   // CORS preflight from the static app — answer before any auth work.
   if (req.method === "OPTIONS" && origin) return withCors(new NextResponse(null, { status: 204 }), origin);
 
-  // ---- resolve verified identity (session first, dev bridges) ----
+  // ---- resolve verified identity (session first, bearer token, dev bridges) ----
   let uid: string | null = req.auth?.user?.id ?? null;
   let role: RoleKey | null = (req.auth?.user?.role as RoleKey) ?? null;
+  // Production-safe bearer token issued by /api/auth/token (the standalone
+  // storefront's sign-in — the Auth.js cookie can't cross domains).
+  if (!uid) {
+    const authz = req.headers.get("authorization");
+    const secret = process.env.AUTH_SECRET;
+    if (authz && authz.startsWith("Bearer ") && secret) {
+      try {
+        const { payload } = await jwtVerify(authz.slice(7), new TextEncoder().encode(secret), { issuer: "doodly", audience: "doodly-static" });
+        if (typeof payload.sub === "string" && payload.sub) {
+          uid = payload.sub;
+          if (typeof payload.role === "string" && isValidRoleKey(payload.role)) role = payload.role;
+        }
+      } catch { /* invalid or expired token → treated as unauthenticated */ }
+    }
+  }
   if (!uid && DEV) {
     // (a) cross-origin static app: trust X-Doodly-Actor headers ONLY in dev + from an allowed origin.
     if (origin) {

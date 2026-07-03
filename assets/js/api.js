@@ -50,6 +50,9 @@ window.DOODLY_API = (function () {
 
   function headers(extra) {
     var h = { "X-Doodly-Actor": actorRole(), "X-Doodly-Actor-Id": actorId() };
+    // Signed sign-in token (from /api/auth/token) — THE identity in production;
+    // the X-Doodly-* headers above are a dev-only convenience the server ignores live.
+    try { var t = localStorage.getItem("doodly-token"); if (t) h["Authorization"] = "Bearer " + t; } catch (e) {}
     if (extra) for (var k in extra) h[k] = extra[k];
     return h;
   }
