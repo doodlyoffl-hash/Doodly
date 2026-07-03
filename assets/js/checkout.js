@@ -238,8 +238,88 @@ window.DOODLY_CHECKOUT = (function () {
     if (!serviceableOk()) { goto(1); showPinReq(); return; }             // must be a serviceable pincode
     if (!startOk()) { goto(2); showDateReq(); return; }                 // must have a start date
     if (!validateMethod()) { failure("We couldn't verify your payment details. Please check and try again."); return; }
-    processing();
+    const me = coSignedIn();
+    if (me && window.DOODLY_API) { processing(); placeRealOrder(me); return; }   // REAL order into the backend
+    if (!coIsLocalhost()) {
+      failure("Please sign in to your DOODLY account to place the order — your selections are saved.");
+      setTimeout(() => { window.location.href = "/login/customer.html"; }, 2400);
+      return;
+    }
+    processing();                                                        // localhost demo flow
     setTimeout(() => { hideProcessing(); success(); }, reduced() ? 400 : 2200);
+  }
+
+  /* ---------------- real checkout (backend order + Razorpay) ---------------- */
+  function coSignedIn() {
+    try {
+      const u = window.DOODLY_RBAC && DOODLY_RBAC.currentUser ? DOODLY_RBAC.currentUser() : null;
+      return (u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")) ? u : null;
+    } catch (e) { return null; }
+  }
+  function coIsLocalhost() { try { return /^(localhost|127\.0\.0\.1)$/.test(location.hostname); } catch (e) { return true; } }
+  function coLoadRazorpay() {
+    return new Promise((resolve, reject) => {
+      if (window.Razorpay) return resolve(window.Razorpay);
+      const s = document.createElement("script");
+      s.src = "https://checkout.razorpay.com/v1/checkout.js";
+      s.onload = () => window.Razorpay ? resolve(window.Razorpay) : reject(new Error("Payment gateway failed to load"));
+      s.onerror = () => reject(new Error("Couldn't reach the payment gateway"));
+      document.head.appendChild(s);
+    });
+  }
+  function placeRealOrder(me) {
+    const sub = subContext() || {};
+    if (!sub.variantId) {
+      hideProcessing(); failure("Please pick your bottle and plan first — taking you to the builder.");
+      setTimeout(() => { window.location.href = "/subscriptions.html#builder"; }, 2200); return;
+    }
+    const selA = mount.querySelector(".co-addr.sel[data-addr]");
+    const atxt = (sel) => { const el = selA && selA.querySelector(sel); return el ? el.textContent.trim() : ""; };
+    const line = atxt(".co-addr-line");
+    const pin = (selA && selA.dataset.pin) || "";
+    const cityM = line.match(/,\s*([A-Za-z .]+?)\s+\d{6}/);
+    const SC = window.DOODLY_SCHEDULE;
+    const payload = {
+      variantId: sub.variantId, planId: sub.planId || undefined,
+      method: state.method === "cod" ? "cod" : state.method === "card" ? "card" : state.method === "netbanking" ? "netbanking" : "upi",
+      startDate: sub.startIso || undefined,
+      slot: SC && SC.slotLabel ? SC.slotLabel() : undefined,
+      address: {
+        label: atxt(".co-addr-tag") || "Home", line1: line, city: cityM ? cityM[1] : "",
+        pincode: pin, contactName: atxt(".co-addr-name"),
+        phone: (atxt(".co-addr-phone") || "").replace(/[^\d+ ]/g, "").trim(),
+      },
+    };
+    DOODLY_API.post("/api/checkout", payload)
+      .then((res) => {
+        if (res.rzp) { hideProcessing(); openRzpCheckout(res, me); return; }
+        state.realOrder = res; hideProcessing(); success();
+      })
+      .catch((err) => {
+        // local dev without gateway keys / backend → keep the demo experience
+        if (coIsLocalhost() && err && (err.code === "offline" || err.status === 503 || err.code === "gateway_unconfigured")) {
+          setTimeout(() => { hideProcessing(); success(); }, reduced() ? 300 : 1200); return;
+        }
+        hideProcessing(); failure((err && err.message) || "Couldn't place the order. Please try again.");
+      });
+  }
+  function openRzpCheckout(res, me) {
+    coLoadRazorpay().then((Razorpay) => {
+      const rzp = new Razorpay({
+        key: res.rzp.keyId, order_id: res.rzp.orderId, amount: res.rzp.amount, currency: res.rzp.currency || "INR",
+        name: "DOODLY", description: "Order " + res.number,
+        prefill: { name: me.name || "", email: me.email || "" },
+        theme: { color: "#1FAE66" },
+        modal: { ondismiss: function () { failure("Payment cancelled — nothing was charged and your order isn't confirmed yet."); } },
+        handler: function (resp) {
+          processing();
+          DOODLY_API.post("/api/payments/verify", resp)
+            .then(() => { res.paid = true; state.realOrder = res; hideProcessing(); success(); })
+            .catch(() => { hideProcessing(); failure("Payment verification failed. If you were charged, the gateway auto-refunds — contact support with your payment id."); });
+        },
+      });
+      rzp.open();
+    }).catch((e) => { failure((e && e.message) || "Couldn't reach the payment gateway."); });
   }
 
   function processing() {
@@ -288,7 +368,9 @@ window.DOODLY_CHECKOUT = (function () {
     pane.innerHTML = `<div class="co-success">
         <div class="co-suc-badge">${icon("check", 30)}</div>
         <h2>${trialBought ? "Trial Pack confirmed!" : "Subscription confirmed!"}</h2>
-        <p class="co-suc-amt">${inr(t.total)} paid · Order #DZ${Date.now().toString().slice(-6)}</p>
+        <p class="co-suc-amt">${state.realOrder
+          ? `${inr((state.realOrder.totalPaise || 0) / 100)} ${state.realOrder.method === "cod" ? "to pay on delivery" : "paid"} · Order ${state.realOrder.number}`
+          : `${inr(t.total)} paid · Order #DZ${Date.now().toString().slice(-6)}`}</p>
         <div class="co-scene" aria-hidden="true">
           <div class="co-bottle"><span class="co-bottle-milk"></span></div>
           <div class="co-truck">${icon("truck", 30)}</div>
@@ -431,7 +513,7 @@ window.DOODLY_CHECKOUT = (function () {
     mount = scope.querySelector("#checkoutMount");
     if (!mount || mount.dataset.built) return;
     mount.dataset.built = "1";
-    state = { step: 0, slot: 0, addr: 0, method: "upi", reached: 0 };
+    state = { step: 0, slot: 0, addr: 0, method: "upi", reached: 0, realOrder: null };
     build(); wire();
     // mount the delivery start-date picker into the schedule step
     if (window.DOODLY_SCHEDULE) {
