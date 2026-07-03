@@ -27,7 +27,7 @@ window.DOODLY_MANIFEST = (function () {
       { h:"Legal", links:[["Privacy Policy","/privacy.html"],["Terms & Conditions","/terms.html"],["Refund Policy","/refund.html"],["Shipping Policy","/shipping.html"],["Referral Policy","/referral-policy.html"]] },
     ],
     account: [
-      { h:"Overview", items:[["Dashboard","/account/dashboard.html","home"]] },
+      { h:"Overview", items:[["Home","/","home"],["Dashboard","/account/dashboard.html","chart"]] },
       { h:"Orders & plans", items:[["My Orders","/account/orders.html","box"],["My Subscription","/account/subscription.html","refresh"],["Subscription History","/account/subscription-history.html","clock"]] },
       { h:"Deliveries", items:[["Deliveries","/account/deliveries.html","truck"],["Delivery Tracking","/account/tracking.html","pin"],["Calendar","/account/calendar.html","cal"]] },
       { h:"Bottles & money", items:[["Bottle Tracking","/account/bottles.html","bottle"],["Wallet","/account/wallet.html","wallet"],["Invoices","/account/invoices.html","receipt"]] },
