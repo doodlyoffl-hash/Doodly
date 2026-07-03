@@ -10,9 +10,12 @@ import { currentUserId } from "@/lib/wallet/guard";
 import { audit } from "@/lib/auth/audit";
 import { reqContext } from "@/lib/auth/request";
 import { readRole } from "@/lib/auth/identity";
+import { razorpayConfigured } from "@/lib/razorpay";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const DEV = process.env.NODE_ENV !== "production";
 
 export async function GET() {
   try {
@@ -31,6 +34,13 @@ const Body = z.object({
 export async function POST(req: NextRequest) {
   const userId = currentUserId(req);
   if (!userId) return NextResponse.json({ error: "Sign in to add money to your wallet" }, { status: 401 });
+
+  // With the real gateway configured, production credits happen ONLY via
+  // /api/wallet/recharge/confirm (signature-verified). A client must never
+  // be able to credit itself by claiming an unverified payment.
+  if (!DEV && razorpayConfigured()) {
+    return NextResponse.json({ error: "Recharges are processed through the payment gateway.", code: "use_gateway" }, { status: 409 });
+  }
 
   let json: unknown;
   try { json = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }

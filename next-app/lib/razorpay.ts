@@ -31,7 +31,7 @@ export function planIdFor(planSlug: string): string | null {
   }
 }
 
-/** One-time order (cart checkout / trial pack). `amountPaise` already in paise. */
+/** One-time order (cart checkout / trial pack / wallet recharge). `amountPaise` already in paise. */
 export async function createOrder(amountPaise: number, opts: { receipt: string; notes?: Record<string, string> }) {
   return getRazorpay().orders.create({
     amount: amountPaise,
@@ -40,6 +40,16 @@ export async function createOrder(amountPaise: number, opts: { receipt: string; 
     notes: opts.notes,
     payment_capture: true,
   });
+}
+
+/** Fetch an order back from Razorpay (server-trusted amount + notes). */
+export async function fetchOrder(orderId: string) {
+  return getRazorpay().orders.fetch(orderId);
+}
+
+/** True once gateway keys are configured — used to disable simulated money paths. */
+export function razorpayConfigured(): boolean {
+  return Boolean(KEY_ID && KEY_SECRET);
 }
 
 /** Recurring auto-pay mandate. `totalCount` = number of billing cycles. */

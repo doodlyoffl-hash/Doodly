@@ -235,14 +235,74 @@ window.DOODLY_WALLET = (function () {
       frame("Secure payment",
         '<div class="wal-pay-amt">Adding <b>' + inr(amount) + '</b> to your DOODLY Wallet</div>'
         + '<div class="wal-methods">' + ["UPI", "Card", "Net Banking"].map(function (m) { return '<button type="button" class="wal-method' + (state.method === m ? " on" : "") + '" data-m="' + m + '">' + m + '</button>'; }).join("") + '</div>'
-        + '<div class="wal-gw-note">' + LOCK_SVG + ' You\'ll complete payment on a secure gateway screen. Your balance updates the instant payment succeeds.</div>',
+        + '<div class="wal-gw-note">' + LOCK_SVG + ' You\'ll complete payment on Razorpay\'s secure screen. Your balance updates the instant payment succeeds.</div>',
         '<button class="btn btn-ghost" id="wp-back">Back</button><span style="flex:1"></span><button class="btn btn-primary" id="wp-pay">Pay ' + inr(amount) + ' securely</button>');
       ov.querySelectorAll(".wal-method").forEach(function (b) { b.addEventListener("click", function () { state.method = b.dataset.m; ov.querySelectorAll(".wal-method").forEach(function (x) { x.classList.toggle("on", x === b); }); }); });
       ov.querySelector("#wp-back").addEventListener("click", renderAmount);
-      ov.querySelector("#wp-pay").addEventListener("click", function () { renderProcessing(amount); });
+      ov.querySelector("#wp-pay").addEventListener("click", function () { startGatewayPayment(amount); });
     }
-    function renderProcessing(amount) {
-      frame("", '<div class="wal-proc"><div class="wal-loader" aria-hidden="true"><span></span><span></span><span></span></div><p>Processing your ' + inr(amount) + ' payment…</p><p class="muted-sm">Please don\'t close this window.</p></div>', "");
+    function renderProcessing(amount, msg) {
+      frame("", '<div class="wal-proc"><div class="wal-loader" aria-hidden="true"><span></span><span></span><span></span></div><p>' + (msg || ("Processing your " + inr(amount) + " payment…")) + '</p><p class="muted-sm">Please don\'t close this window.</p></div>', "");
+    }
+    // Load Razorpay Checkout once (their official embed script).
+    function loadRazorpay() {
+      return new Promise(function (resolve, reject) {
+        if (window.Razorpay) return resolve(window.Razorpay);
+        var s = document.createElement("script");
+        s.src = "https://checkout.razorpay.com/v1/checkout.js";
+        s.onload = function () { window.Razorpay ? resolve(window.Razorpay) : reject(new Error("Razorpay failed to load")); };
+        s.onerror = function () { reject(new Error("Couldn't reach the payment gateway")); };
+        document.head.appendChild(s);
+      });
+    }
+    function signedInCustomer() {
+      try {
+        var u = window.DOODLY_RBAC && DOODLY_RBAC.currentUser ? DOODLY_RBAC.currentUser() : null;
+        return (u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")) ? u : null;
+      } catch (e) { return null; }
+    }
+    function isLocalDev() { try { return /^(localhost|127\.0\.0\.1)$/.test(location.hostname); } catch (e) { return true; } }
+    /* REAL flow: server-validated Razorpay order → Checkout popup → signature-
+       verified confirm → credit. Simulated flow remains for local development
+       (and the backend refuses unverified credits in production regardless). */
+    function startGatewayPayment(amount) {
+      var me = signedInCustomer();
+      if (!me || !window.DOODLY_API) {
+        if (isLocalDev()) return simulatePayment(amount);
+        renderFailure({ reason: "signin" }, amount); return;
+      }
+      renderProcessing(amount, "Contacting the payment gateway…");
+      DOODLY_API.post("/api/wallet/recharge/order", { amountPaise: amount * 100 })
+        .then(function (o) {
+          return loadRazorpay().then(function (Razorpay) {
+            var rzp = new Razorpay({
+              key: o.keyId, order_id: o.orderId, amount: o.amount, currency: o.currency || "INR",
+              name: "DOODLY", description: "Wallet recharge",
+              prefill: { name: me.name || "", email: me.email || "" },
+              theme: { color: "#1FAE66" },
+              modal: { ondismiss: function () { renderFailure({ reason: "cancelled" }, amount); } },
+              handler: function (resp) {
+                renderProcessing(amount, "Verifying your payment…");
+                DOODLY_API.post("/api/wallet/recharge/confirm", resp)
+                  .then(function (r) {
+                    // mirror the credit into the local demo store so the panel updates instantly
+                    try { var w = meWallet(); post(w, { kind: "credit", type: "topup", amount: amount, desc: "Wallet recharge (Razorpay)" }); saveWith(w); } catch (e) {}
+                    renderSuccess({ amount: amount, balance: (r.balancePaise != null ? r.balancePaise / 100 : meWallet().balance), ref: resp.razorpay_payment_id });
+                  })
+                  .catch(function (e) { renderFailure({ reason: "verify", detail: e && e.message }, amount); });
+              },
+            });
+            rzp.open();
+          });
+        })
+        .catch(function (e) {
+          if (isLocalDev() && (e && (e.code === "offline" || e.status === 503))) return simulatePayment(amount);
+          renderFailure({ reason: "order", detail: e && e.message }, amount);
+        });
+    }
+    // Local-development simulation (kept for the demo experience on localhost).
+    function simulatePayment(amount) {
+      renderProcessing(amount);
       var reduced = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
       setTimeout(function () { var res = recharge(amount, { method: state.method }); if (res.ok) renderSuccess(res); else renderFailure(res, amount); }, reduced ? 250 : 1500);
     }
@@ -254,7 +314,7 @@ window.DOODLY_WALLET = (function () {
       ov.querySelector("#wp-done").addEventListener("click", function () { close(); refreshPanel(); });
     }
     function renderFailure(res, amount) {
-      var msg = res.reason === "frozen" ? "Your wallet is frozen." : res.reason === "disabled" ? "Recharge is currently disabled." : res.reason === "min" ? "Minimum recharge is " + inr(res.min) + "." : res.reason === "max" ? "Maximum recharge is " + inr(res.max) + "." : "Your payment could not be completed. No money was deducted.";
+      var msg = res.reason === "frozen" ? "Your wallet is frozen." : res.reason === "disabled" ? "Recharge is currently disabled." : res.reason === "min" ? "Minimum recharge is " + inr(res.min) + "." : res.reason === "max" ? "Maximum recharge is " + inr(res.max) + "." : res.reason === "cancelled" ? "Payment cancelled — no money was deducted." : res.reason === "signin" ? "Please sign in to add money to your wallet." : res.reason === "verify" ? "Payment verification failed. If you were charged, the amount is auto-refunded by the gateway — contact support with your payment id." : (res.detail ? String(res.detail) : "Your payment could not be completed. No money was deducted.");
       frame("Payment failed", '<div class="wal-fail"><div class="wal-fail-badge">!</div><p>' + esc(msg) + '</p></div>', '<button class="btn btn-ghost" id="wp-cancel">Cancel</button><span style="flex:1"></span><button class="btn btn-primary" id="wp-retry">Retry payment</button>');
       ov.querySelector("#wp-cancel").addEventListener("click", close);
       ov.querySelector("#wp-retry").addEventListener("click", function () { renderPay(amount); });
