@@ -19,7 +19,7 @@ window.DOODLY_API = (function () {
   // Deployed backend (next-app on Vercel). Update this ONE constant after the
   // backend project deploys — or override at runtime without a redeploy via:
   //   localStorage.setItem('doodly-api-base', 'https://your-backend.vercel.app')
-  var PROD_BASE = "https://doodly-backend.vercel.app";
+  var PROD_BASE = "https://doodly-backendstore.vercel.app";
   var DEFAULT_BASE = (function () {
     try { if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) return "http://localhost:3000"; } catch (e) {}
     return PROD_BASE;
