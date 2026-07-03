@@ -265,6 +265,9 @@ window.DOODLY_AUTH = (function () {
       if (otp) {
         const filled = [...otp.querySelectorAll("input")].every((i) => i.value.trim());
         if (!filled) { shake(otp); otp.querySelector("input:not([value])")?.focus(); return; }
+        // OTP delivery (SMS provider) isn't connected yet — on the live site this
+        // must not grant access. The localhost demo keeps working for development.
+        if (!isLocalhost()) { showCustomerAuthError(form, "OTP sign-in is coming soon — please log in with your email and password."); return; }
       } else {
         fields.forEach((field) => {
           const inp = field.querySelector("input"); if (!inp) return;
@@ -282,15 +285,22 @@ window.DOODLY_AUTH = (function () {
           if (/forgot-password|reset|new-password/.test(route0)) RB0.audit("auth.password_reset", "Password reset completed");
         }
       } catch (e) {}
+      const authRoute = (document.body && document.body.dataset.route) || "";
       if (form.dataset.loginRole) { resolveCustomerLogin(form); return; }   // customer portal → real backend sign-in, then navigate
       if (form.dataset.adminLogin) { resolveAdminLogin(form); return; }     // staff portal → real backend sign-in (demo fallback on localhost)
+      if (authRoute === "delivery/login") { resolveDeliveryLogin(form); return; }   // executive portal → real sign-in, role-gated
+      if (authRoute === "signup") { resolveSignup(form); return; }          // real account creation + auto sign-in
       if (!resolveLogin(form)) return;        // sets the role + destination (and may block on a bad account)
       succeed(form);
     });
 
-    // google
+    // google — no OAuth client is configured yet: the live site must not grant
+    // access from this button (the localhost demo keeps working for development)
     const g = form.querySelector(".btn-google");
-    if (g) g.addEventListener("click", () => succeed(form));
+    if (g) g.addEventListener("click", () => {
+      if (!isLocalhost()) { showCustomerAuthError(form, "Google sign-in is coming soon — please continue with your email and password."); return; }
+      succeed(form);
+    });
 
     // demo staff-email shortcuts on the admin login
     scope.querySelectorAll(".auth-demo").forEach((b) => b.addEventListener("click", () => {
@@ -413,6 +423,64 @@ window.DOODLY_AUTH = (function () {
     succeed(form);
   }
 
+  /** Delivery-executive sign-in: real credentials only on the live site, and the
+      account must actually hold the delivery_executive role. Demo on localhost. */
+  async function resolveDeliveryLogin(form) {
+    const RB = window.DOODLY_RBAC;
+    const flds = [...form.querySelectorAll(".fl-field input")];
+    const idInp = flds[0] || null;
+    const pwInp = form.querySelector('input[type="password"]') || null;
+    const idVal = idInp ? String(idInp.value || "").trim() : "";
+    const password = pwInp ? String(pwInp.value || "") : "";
+
+    const res = await tokenSignIn(idVal, password);      // executives sign in with their registered email
+    if (res === "throttled") return showCustomerAuthError(form, "Too many attempts — please try again in a minute.");
+    if (res && res.user) {
+      if (res.user.role !== "delivery_executive" && res.user.role !== "super_admin")
+        return showCustomerAuthError(form, "This portal is for delivery executives only — please use the customer or admin login.");
+      if (RB) { if (RB.setRealRole) RB.setRealRole(res.user.role); if (RB.returnToSelf) RB.returnToSelf(); if (RB.recordLogin) RB.recordLogin(true); }
+      succeed(form); return;
+    }
+    if (!isLocalhost()) {
+      return showCustomerAuthError(form, res === "invalid" ? "Invalid credentials." : "Please sign in with your registered email and password.");
+    }
+    // localhost demo executive
+    if (RB) { if (RB.setRealRole) RB.setRealRole("delivery_executive"); if (RB.returnToSelf) RB.returnToSelf(); if (RB.recordLogin) RB.recordLogin(true); }
+    succeed(form);
+  }
+
+  /** Sign-up: create a REAL account through the backend, then sign straight in.
+      Server enforces unique email/phone + password strength; errors show inline. */
+  async function resolveSignup(form) {
+    const RB = window.DOODLY_RBAC;
+    const flds = [...form.querySelectorAll(".fl-field input")];
+    const val = (i) => (flds[i] ? String(flds[i].value || "").trim() : "");
+    const name = val(0), phone = val(1);
+    const emailInp = form.querySelector('input[type="email"]');
+    const email = (emailInp ? String(emailInp.value || "").trim() : val(2)).toLowerCase();
+    const pwInp = form.querySelector('input[type="password"]');
+    const password = pwInp ? String(pwInp.value || "") : "";
+
+    if (window.DOODLY_API) {
+      try {
+        await window.DOODLY_API.post("/api/register", { name: name, email: email, phone: phone || undefined, password: password });
+        const res = await tokenSignIn(email, password);
+        if (res && res.user && RB) { if (RB.setRealRole) RB.setRealRole("customer"); if (RB.returnToSelf) RB.returnToSelf(); if (RB.recordLogin) RB.recordLogin(true); }
+        succeed(form); return;                            // account exists either way — welcome in
+      } catch (err) {
+        if (err && err.status === 409) return showCustomerAuthError(form, err.message || "An account with this email already exists — try logging in.");
+        if (err && err.status === 429) return showCustomerAuthError(form, "Too many attempts — please try again in a minute.");
+        if (err && err.details) { const first = Object.values(err.details)[0]; return showCustomerAuthError(form, String(first || err.message || "Please check the highlighted fields.")); }
+        if (!isLocalhost()) return showCustomerAuthError(form, (err && err.message) || "Couldn't create your account right now. Please try again.");
+      }
+    } else if (!isLocalhost()) {
+      return showCustomerAuthError(form, "Sign-up is temporarily unavailable. Please try again shortly.");
+    }
+    // localhost offline demo
+    if (RB) { if (RB.setRealRole) RB.setRealRole("customer"); if (RB.returnToSelf) RB.returnToSelf(); }
+    succeed(form);
+  }
+
   function showCustomerAuthError(form, msg) {
     let box = form.querySelector("#authErr");
     if (!box) {
@@ -512,6 +580,16 @@ window.DOODLY_AUTH = (function () {
     const waveEl = scope.querySelector(".auth-wave");
     if (waveEl && !waveEl.dataset.built) { waveEl.innerHTML = waveSVG(); waveEl.dataset.built = "1"; }
     ensureLoader();
+    // Live site: Google OAuth + OTP delivery aren't connected yet, so those
+    // entry points are removed until real providers exist (defence-in-depth:
+    // their handlers are also blocked). The localhost demo keeps them.
+    if (!isLocalhost()) {
+      scope.querySelectorAll(".btn-google, .auth-otp-link").forEach((el) => {
+        el.remove();
+      });
+      const div = scope.querySelector(".auth-divider");
+      if (div && !scope.querySelector(".btn-google")) div.remove();
+    }
     wireForm(scope);
     wireCursor(scope);
   }
