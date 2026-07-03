@@ -1054,3 +1054,13 @@ code { background:var(--surface-2); border:1px solid var(--line); border-radius:
 .dl-qr img { display:block; border-radius:6px; image-rendering:pixelated; }
 .dl-qr-hint { margin-top:4px; font-size:.85rem; color:rgba(255,255,255,.82); }
 .dl-qr-hint b { color:#fff; }
+
+/* ---- signed-in customer chip in the public nav ---- */
+.nav-user { display:inline-flex; align-items:center; gap:8px; padding:4px 13px 4px 5px; border-radius:999px;
+  border:1px solid var(--line, #E3EDE6); background:var(--surface, #fff); text-decoration:none;
+  font-weight:700; color:var(--forest, #0F3D2E); transition:box-shadow .18s, transform .18s, border-color .18s; }
+.nav-user:hover { transform:translateY(-1px); box-shadow:0 8px 18px rgba(15,61,46,.12); border-color:var(--leaf, #1FAE66); }
+.nav-av { width:28px; height:28px; border-radius:50%; background:var(--leaf, #1FAE66); color:#fff;
+  display:grid; place-items:center; font-size:.7rem; font-weight:800; letter-spacing:.02em; }
+.nav-un { font-size:.88rem; max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media (max-width: 720px) { .nav-un { display:none; } .nav-user { padding:4px; } }

@@ -29,6 +29,31 @@
   /* ============================================================
      PUBLIC
      ============================================================ */
+  // Signed-in session on the public surface (real backend identity + token —
+  // demo/static ids don't count). Keeps Home ↔ Account seamless: once logged
+  // in, public pages show the customer instead of asking them to log in again.
+  function publicUser() {
+    try {
+      const u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null");
+      return (u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")) ? u : null;
+    } catch (e) { return null; }
+  }
+  function accountHome(u) {
+    const r = (u && u.role) || "customer";
+    if (r === "customer") return "/account/dashboard.html";
+    if (r === "delivery_executive") return "/delivery/dashboard.html";
+    return "/admin/dashboard.html";
+  }
+  function navAccountCta() {
+    const u = publicUser();
+    if (!u) return `<a href="/login.html" class="btn btn-ghost nav-cta">Log in</a>`;
+    const name = String(u.name || "Account").trim();
+    const first = name.split(/\s+/)[0] || "Account";
+    const initials = name.split(/\s+/).map(w => w[0] || "").slice(0, 2).join("").toUpperCase() || "•";
+    return `<a href="${accountHome(u)}" class="nav-user nav-cta" aria-label="My account — ${esc(name)}">
+      <span class="nav-av">${esc(initials)}</span><span class="nav-un">${esc(first)}</span></a>`;
+  }
+
   function publicHeader() {
     const links = M.nav.public.map(l => {
       const on = isActive(l.href);
@@ -51,7 +76,7 @@
           <a href="/doodly.html" class="nav-story" aria-label="DOODLY brand story — Unfold Pure"><img src="/assets/img/logo.png" alt="" class="ns-logo"><span>Story</span></a>
           <button class="icon-btn" id="themeBtn" aria-label="Toggle dark mode">${icon("sun",18)}</button>
           <button class="icon-btn cart-btn" id="cartBtn" aria-label="Open cart" aria-haspopup="dialog">${icon("box",18)}<span class="cart-count" hidden>0</span></button>
-          <a href="/login.html" class="btn btn-ghost nav-cta">Log in</a>
+          ${navAccountCta()}
           <a href="/subscriptions.html" class="btn btn-primary nav-cta">Subscribe</a>
           <button class="icon-btn" id="navBurger" aria-label="Menu" aria-expanded="false">${icon("menu",18)}</button>
         </div>
@@ -82,7 +107,9 @@
         <div class="mm-quick"><div class="mm-quick-h">Quick actions</div><div class="mm-grid">${quick}</div></div>
         <div class="mm-cta">
           <a href="/doodly.html" class="btn btn-ghost btn-lg mm-story"><img src="/assets/img/logo.png" alt="" style="height:16px;width:auto;vertical-align:-2px;margin-right:6px">✦ Unfold Pure</a>
-          <a href="/login.html" class="btn btn-ghost btn-lg">Log in</a>
+          ${(() => { const u = publicUser(); return u
+            ? `<a href="${accountHome(u)}" class="btn btn-ghost btn-lg">${icon("user", 16)} My Account — ${esc(String(u.name || "").split(/\s+/)[0] || "Account")}</a>`
+            : `<a href="/login.html" class="btn btn-ghost btn-lg">Log in</a>`; })()}
           <a href="/subscriptions.html" class="btn btn-primary btn-lg">Subscribe</a>
         </div>
       </div>
