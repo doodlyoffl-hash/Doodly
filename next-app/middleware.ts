@@ -1,26 +1,79 @@
 /* =============================================================
-   DOODLY — Route gating (surface boundary)
-   Enforces who may reach each dashboard surface BY URL, so changing
-   the address bar can't expose a surface to the wrong audience:
-       /account -> any authenticated user (doodly-uid present)
-       /driver  -> delivery executive (or super-admin impersonation)
-       /admin   -> any staff role (NOT customer / delivery executive)
-   Fine-grained, per-module access is additionally enforced inside
-   every API route (the data layer). The `doodly-role` / `doodly-uid`
-   cookies are the dev/demo stand-in; production swaps in the signed
-   Supabase session here without changing the rules below.
+   DOODLY — Route gating + identity forwarding (the trust boundary)
+   1) Verifies the Auth.js JWT session (edge-safe config).
+   2) Gates dashboard surfaces BY URL so changing the address bar
+      can't expose a surface to the wrong audience:
+        /account -> any authenticated user
+        /driver  -> delivery executive (or super-admin impersonation)
+        /admin   -> any staff role (NOT customer / delivery executive)
+   3) Forwards the VERIFIED identity to API routes + server components
+      as x-doodly-uid / x-doodly-role headers, after stripping any
+      client-sent copies — so per-module API guards can authorize
+      synchronously and can't be spoofed.
+   In development, if there's no session we fall back to the legacy
+   doodly-uid / doodly-role demo cookies so the dashboards stay
+   explorable without signing in. Fine-grained, per-module access is
+   ALSO enforced inside every API route (the data layer).
    ============================================================= */
-import { NextResponse, type NextRequest } from "next/server";
+import NextAuth from "next-auth";
+import { NextResponse } from "next/server";
+import { authConfig } from "./auth.config";
+import { isStaff, homeFor, isValidRoleKey } from "@/lib/auth/roles";
+import type { RoleKey } from "@/lib/rbac";
 
-const STAFF = new Set([
-  "support", "operations", "procurement", "accountant",
-  "inventory", "quality", "marketing", "admin", "super_admin",
-]);
+const { auth } = NextAuth(authConfig);
+const DEV = process.env.NODE_ENV !== "production";
 
-export function middleware(req: NextRequest) {
+// Origins of the standalone static app (:4173) allowed to call the API cross-origin.
+// Override in production via STATIC_ORIGINS (comma-separated).
+const STATIC_ORIGINS = (process.env.STATIC_ORIGINS || "http://localhost:4173,http://127.0.0.1:4173")
+  .split(",").map((s) => s.trim()).filter(Boolean);
+function allowedOrigin(req: { headers: { get(n: string): string | null } }): string | null {
+  const o = req.headers.get("origin");
+  return o && STATIC_ORIGINS.indexOf(o) >= 0 ? o : null;
+}
+function withCors(res: NextResponse, origin: string | null): NextResponse {
+  if (origin) {
+    res.headers.set("Access-Control-Allow-Origin", origin);
+    res.headers.set("Access-Control-Allow-Credentials", "true");
+    res.headers.set("Access-Control-Allow-Methods", "GET,POST,PATCH,PUT,DELETE,OPTIONS");
+    res.headers.set("Access-Control-Allow-Headers", "Content-Type, X-Doodly-Actor, X-Doodly-Actor-Id");
+    res.headers.set("Vary", "Origin");
+  }
+  return res;
+}
+
+export default auth((req) => {
   const path = req.nextUrl.pathname;
-  const role = req.cookies.get("doodly-role")?.value ?? "customer";
-  const signedIn = Boolean(req.cookies.get("doodly-uid")?.value);
+  const origin = allowedOrigin(req);
+
+  // CORS preflight from the static app — answer before any auth work.
+  if (req.method === "OPTIONS" && origin) return withCors(new NextResponse(null, { status: 204 }), origin);
+
+  // ---- resolve verified identity (session first, dev bridges) ----
+  let uid: string | null = req.auth?.user?.id ?? null;
+  let role: RoleKey | null = (req.auth?.user?.role as RoleKey) ?? null;
+  if (!uid && DEV) {
+    // (a) cross-origin static app: trust X-Doodly-Actor headers ONLY in dev + from an allowed origin.
+    if (origin) {
+      const ha = req.headers.get("x-doodly-actor");
+      const hi = req.headers.get("x-doodly-actor-id");
+      if (ha && isValidRoleKey(ha)) role = ha;
+      if (hi) uid = hi;
+    }
+    // (b) legacy same-origin demo cookies.
+    if (!uid) uid = req.cookies.get("doodly-uid")?.value ?? null;
+    if (!role) { const c = req.cookies.get("doodly-role")?.value; if (c && isValidRoleKey(c)) role = c; }
+  }
+  const signedIn = Boolean(uid);
+
+  // ---- forward verified identity downstream (strip client-sent copies) ----
+  const headers = new Headers(req.headers);
+  headers.delete("x-doodly-uid");
+  headers.delete("x-doodly-role");
+  if (uid) headers.set("x-doodly-uid", uid);
+  if (role) headers.set("x-doodly-role", role);
+  const pass = () => withCors(NextResponse.next({ request: { headers } }), origin);
 
   const denyTo = (pathname: string) => {
     const url = req.nextUrl.clone();
@@ -29,16 +82,27 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   };
 
+  // ---- surface gating ----
   if (path.startsWith("/admin")) {
-    if (!STAFF.has(role)) return denyTo("/login");
+    if (!signedIn) return denyTo("/login");
+    if (!role || !isStaff(role)) return denyTo(role ? homeFor(role) : "/login");
   } else if (path.startsWith("/driver")) {
-    if (role !== "delivery_executive" && role !== "super_admin") return denyTo("/login");
+    if (!signedIn) return denyTo("/login");
+    if (role !== "delivery_executive" && role !== "super_admin") return denyTo(role ? homeFor(role) : "/login");
   } else if (path.startsWith("/account")) {
     if (!signedIn) return denyTo("/login");
   }
-  return NextResponse.next();
-}
+
+  return pass();
+});
 
 export const config = {
-  matcher: ["/account/:path*", "/driver/:path*", "/admin/:path*"],
+  // Run on the gated surfaces AND on all API routes except Auth.js's own
+  // (so verified identity headers are injected for every data endpoint).
+  matcher: [
+    "/account/:path*",
+    "/driver/:path*",
+    "/admin/:path*",
+    "/api/((?!auth/).*)",
+  ],
 };

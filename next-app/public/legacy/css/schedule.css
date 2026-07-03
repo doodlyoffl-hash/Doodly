@@ -1,0 +1,106 @@
+/* =============================================================
+   DOODLY — Delivery start-date picker (DOODLY_SCHEDULE)
+   Premium calendar + quick chips + first-delivery card. Matches
+   the design system; transform/opacity animations; reduced-motion
+   aware. Used in the builder, cart and checkout.
+   ============================================================= */
+.dz-picker { display:grid; gap:12px; }
+
+/* quick chips */
+.dz-chips { display:flex; flex-wrap:wrap; gap:8px; }
+.dz-chip { display:inline-flex; align-items:center; gap:.4rem; font:inherit; font-size:.86rem; font-weight:700;
+  color:var(--forest); background:var(--surface); border:1.5px solid var(--line); border-radius:999px;
+  padding:.5rem .9rem; cursor:pointer; transition:border-color .2s, background .2s, transform .15s, box-shadow .2s; }
+.dz-chip:hover { transform:translateY(-2px); border-color:var(--mint); box-shadow:var(--shadow-sm); }
+.dz-chip.sel { border-color:var(--leaf); background:var(--mint-soft); color:var(--leaf-600); box-shadow:0 0 0 1px var(--leaf); }
+.dz-chip.dz-more svg { color:var(--leaf-600); }
+.dz-chip.dz-more.on { background:var(--mint-soft); border-color:var(--mint); }
+.dz-chip:focus-visible { outline:none; box-shadow:var(--ring); }
+
+/* calendar */
+.dz-cal { border:1px solid var(--line); border-radius:18px; background:var(--surface); padding:14px; box-shadow:var(--shadow-sm);
+  animation:dzCalIn .28s cubic-bezier(.2,.9,.3,1) both; }
+.dz-cal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.dz-cal-title { font-weight:800; color:var(--forest); font-size:.96rem; }
+.dz-nav { width:32px; height:32px; border-radius:50%; border:1px solid var(--line); background:var(--surface); color:var(--forest);
+  font-size:1.2rem; line-height:1; cursor:pointer; display:grid; place-items:center; transition:background .2s, transform .15s; }
+.dz-nav:hover:not(:disabled) { background:var(--mint-soft); transform:translateY(-1px); }
+.dz-nav:disabled { opacity:.35; cursor:not-allowed; }
+.dz-grid { display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; }
+.dz-dow { margin-bottom:4px; }
+.dz-dowc { text-align:center; font-size:.68rem; font-weight:800; color:var(--ink-3); letter-spacing:.04em; }
+.dz-cell { aspect-ratio:1; min-height:34px; display:grid; place-items:center; border:0; border-radius:11px; background:transparent;
+  color:var(--forest); font:inherit; font-weight:600; font-size:.86rem; cursor:pointer; position:relative;
+  transition:background .15s, color .15s, transform .12s; }
+.dz-cell.pad { pointer-events:none; }
+.dz-cell:not(.off):not(.sel):hover { background:var(--mint-soft); transform:scale(1.06); }
+.dz-cell.today { box-shadow:inset 0 0 0 1.5px var(--mint); }
+.dz-cell.today::after { content:""; position:absolute; bottom:5px; left:50%; transform:translateX(-50%); width:4px; height:4px; border-radius:50%; background:var(--leaf-600); }
+.dz-cell.sel { background:var(--leaf); color:#fff; font-weight:800; box-shadow:0 6px 14px rgba(31,174,102,.35); animation:dzPop .3s cubic-bezier(.2,1.4,.4,1); }
+.dz-cell.off { color:var(--ink-3); opacity:.4; cursor:not-allowed; text-decoration:line-through; }
+.dz-cell:focus-visible { outline:none; box-shadow:var(--ring); }
+
+/* first-delivery info card */
+.dz-hint { display:flex; align-items:center; gap:.5rem; font-size:.86rem; color:var(--ink-3); padding:4px 0; }
+.dz-first { border:1px solid var(--mint); background:var(--mint-soft); border-radius:16px; padding:14px 16px; }
+.dz-first.pop { animation:dzFirstPop .4s cubic-bezier(.2,1.1,.3,1); }
+.dz-first-h { font-size:.72rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--leaf-600); margin-bottom:8px; }
+.dz-first-row { display:flex; align-items:center; gap:.5rem; color:var(--forest); margin-bottom:4px; font-size:.94rem; }
+.dz-first-row svg { color:var(--leaf-600); flex:0 0 auto; }
+.dz-first-row b { font-weight:800; }
+.dz-badge { display:inline-flex; align-items:center; gap:.35rem; margin-top:8px; font-size:.74rem; font-weight:800;
+  color:#fff; background:var(--leaf); border-radius:999px; padding:.3rem .7rem; box-shadow:0 4px 12px rgba(31,174,102,.3);
+  animation:dzBadge .5s cubic-bezier(.2,1.3,.4,1) both; }
+.dz-sched { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:10px; padding-top:10px; border-top:1px dashed var(--mint);
+  font-size:.78rem; color:var(--ink-2); font-weight:600; }
+.dz-sched span:nth-child(even) { color:var(--ink-3); }
+
+/* builder summary schedule block */
+.sum-schedule { margin-top:8px; padding-top:10px; border-top:1px dashed var(--line); display:grid; gap:6px; }
+.sum-schedule[hidden] { display:none; }
+/* gated "Continue to checkout": dim but keep clickable so it can prompt for a date */
+#builderCta.is-disabled { opacity:.6; filter:grayscale(.2); pointer-events:auto; box-shadow:none; }
+
+/* validation hint when no date chosen */
+.dz-required { display:flex; align-items:center; gap:.4rem; font-size:.8rem; font-weight:700; color:#c0392b; margin-top:6px;
+  animation:dzShake .42s cubic-bezier(.36,.07,.19,.97); }
+.dz-required[hidden] { display:none; }
+@keyframes dzShake { 10%,90%{ transform:translateX(-1px); } 30%,50%,70%{ transform:translateX(-4px); } 40%,60%{ transform:translateX(4px); } }
+
+@keyframes dzCalIn { from{ opacity:0; transform:translateY(-6px); } to{ opacity:1; transform:none; } }
+@keyframes dzPop { 0%{ transform:scale(.7); } 60%{ transform:scale(1.12); } 100%{ transform:scale(1); } }
+@keyframes dzFirstPop { 0%{ opacity:.4; transform:scale(.97); } 100%{ opacity:1; transform:none; } }
+@keyframes dzBadge { 0%{ opacity:0; transform:scale(.5); } 100%{ opacity:1; transform:scale(1); } }
+
+/* admin delivery-settings form */
+.ds-window { display:flex; align-items:center; gap:8px; }
+.ds-window input { flex:1; padding:.7rem .9rem; border-radius:12px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font:inherit; }
+.ds-days { display:flex; flex-wrap:wrap; gap:8px; }
+.ds-day { display:inline-flex; align-items:center; gap:.4rem; padding:.45rem .7rem; border:1px solid var(--line); border-radius:999px; font-weight:700; font-size:.82rem; color:var(--forest); cursor:pointer; user-select:none; }
+.ds-day input { accent-color:var(--leaf); }
+.ds-toggle { display:inline-flex; align-items:center; gap:.5rem; margin-top:12px; font-weight:600; color:var(--ink-2); }
+.ds-saved { display:inline-flex; align-items:center; gap:.4rem; color:var(--leaf-600); font-weight:700; font-size:.86rem; }
+
+/* customer active-subscription panel */
+.sub-meta { font-size:.95rem; color:var(--ink-2); margin-bottom:14px; }
+.sub-meta b { color:var(--forest); }
+.sub-rows { display:grid; gap:9px; margin-bottom:16px; }
+.sub-row { display:flex; align-items:center; justify-content:space-between; gap:1rem; font-size:.9rem; color:var(--ink-2); padding-bottom:9px; border-bottom:1px solid var(--line); }
+.sub-row:last-child { border-bottom:0; padding-bottom:0; }
+.sub-row span { display:inline-flex; align-items:center; gap:.5rem; }
+.sub-row svg { color:var(--leaf-600); }
+.sub-row b { color:var(--forest); font-weight:800; text-align:right; }
+.sub-up { background:var(--surface-2); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:14px; }
+.sub-up-h { font-size:.68rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); margin-bottom:10px; }
+.sub-up-item { display:flex; align-items:center; gap:.5rem; font-size:.88rem; color:var(--forest); padding:5px 0; }
+.sub-up-item svg { color:var(--leaf-600); flex:0 0 auto; }
+.sub-up-item small { color:var(--ink-3); margin-left:auto; font-size:.74rem; }
+.sub-up-item.skipped { opacity:.5; text-decoration:line-through; }
+.sub-pick { margin-bottom:14px; }
+.sub-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.sub-actions .btn { font-size:.84rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dz-cal, .dz-cell.sel, .dz-first.pop, .dz-badge, .dz-chip { animation:none !important; transition:none !important; }
+  .dz-cell:not(.off):hover { transform:none; }
+}

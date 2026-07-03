@@ -172,6 +172,13 @@ window.DOODLY_DELIVERY = (function () {
       m.querySelector(".dl-confirm").addEventListener("click", () => {
         setBottles(id, bottles); setStatus(id, "delivered");
         st[id].deliveredAt = new Date().toISOString(); st[id].notes = m.querySelector("#dlNotes").value.trim(); save(st);
+        // automatic late-delivery monitoring: detect lateness vs the 7:00 AM promise, apologise + record if late
+        try {
+          if (window.DOODLY_LATE) {
+            const res = window.DOODLY_LATE.onDeliveryCompleted({ id: "LIVE-" + id + "-" + Date.now().toString(36), customer: s2.name, customerId: s2.id, area: s2.area, route: "RT-LIVE", exec: "Ramesh K.", deliveredAt: st[id].deliveredAt });
+            if (res && res.late) toast(`⚠ Late by ${res.delayMin} min — apology sent to ${s2.name}`);
+          }
+        } catch (e) {}
         close(); toast(`Delivered to ${s2.name} ✓`); render();
       });
     }

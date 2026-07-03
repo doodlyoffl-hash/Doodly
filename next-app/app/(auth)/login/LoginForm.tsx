@@ -4,10 +4,18 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { signIn, getSession } from "next-auth/react";
+
+/* Where each role lands after signing in (mirrors lib/auth/roles.ts#homeFor). */
+function landingFor(role?: string): string {
+  if (role === "delivery_executive") return "/driver/dashboard";
+  if (role && role !== "customer") return "/admin/dashboard";
+  return "/account/dashboard";
+}
 
 /* Accessible, validated login form: labelled inputs, inline errors,
-   loading state, and double-submit prevention. (Auth backend — Supabase —
-   plugs into onSubmit; this keeps the premium split-screen design.) */
+   loading state, and double-submit prevention. onSubmit calls Auth.js
+   (Credentials) and routes the user to their role's dashboard. */
 export function LoginForm() {
   const router = useRouter();
   const [identifier, setIdentifier] = useState("");
@@ -22,8 +30,16 @@ export function LoginForm() {
     setError(null);
     setBusy(true);
     try {
-      // await signIn(identifier, password)            // ← wire Supabase Auth here
-      router.push("/account/dashboard");
+      const res = await signIn("credentials", { identifier: identifier.trim(), password, redirect: false });
+      if (!res || res.error) {
+        setError("We couldn't sign you in. Please check your details and try again.");
+        setBusy(false);
+        return;
+      }
+      const session = await getSession();
+      const from = new URLSearchParams(window.location.search).get("from");
+      router.push(from && from.startsWith("/") ? from : landingFor(session?.user?.role));
+      router.refresh();
     } catch {
       setError("We couldn't sign you in. Please check your details and try again.");
       setBusy(false);

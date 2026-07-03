@@ -17,31 +17,34 @@ window.DOODLY_MANIFEST = (function () {
       { label:"Bottle Return", href:"/bottle-return.html" },
       { label:"Quality", href:"/quality.html" },
       { label:"Blog", href:"/blog.html" },
+      { label:"Careers", href:"/careers.html" },
       { label:"Contact", href:"/contact.html" },
     ],
     footer: [
       { h:"Products", links:[["A2 Buffalo Milk","/products/milk.html"],["Buffalo Pot Curd","/products/curd.html","Soon"],["Malai Paneer","/products/paneer.html","Soon"],["Buffalo Ghee","/products/ghee.html","Soon"],["Palkova","/products/kova.html","Soon"]] },
-      { h:"Customer", links:[["My Account","/account/dashboard.html"],["Orders","/account/orders.html"],["Subscription","/account/subscription.html"],["Delivery Tracking","/account/tracking.html"],["Bottle Returns","/bottle-return.html"]] },
-      { h:"Company", links:[["About","/about.html"],["Farmers","/farmers.html"],["Contact","/contact.html"],["FAQs","/faq.html"],["Careers","/about.html"]] },
-      { h:"Legal", links:[["Privacy Policy","/privacy.html"],["Terms & Conditions","/terms.html"],["Refund Policy","/refund.html"],["Shipping Policy","/shipping.html"]] },
+      { h:"Customer", links:[["My Account","/account/dashboard.html"],["Orders","/account/orders.html"],["Subscription","/account/subscription.html"],["Delivery Tracking","/account/tracking.html"],["Bottle Returns","/bottle-return.html"],["Puzzle Challenge","/puzzle.html"]] },
+      { h:"Company", links:[["About","/about.html"],["Farmers","/farmers.html"],["Contact","/contact.html"],["Help Center","/help.html"],["FAQs","/faq.html"],["Careers","/careers.html"]] },
+      { h:"Legal", links:[["Privacy Policy","/privacy.html"],["Terms & Conditions","/terms.html"],["Refund Policy","/refund.html"],["Shipping Policy","/shipping.html"],["Referral Policy","/referral-policy.html"]] },
     ],
     account: [
       { h:"Overview", items:[["Dashboard","/account/dashboard.html","home"]] },
       { h:"Orders & plans", items:[["My Orders","/account/orders.html","box"],["My Subscription","/account/subscription.html","refresh"],["Subscription History","/account/subscription-history.html","clock"]] },
       { h:"Deliveries", items:[["Deliveries","/account/deliveries.html","truck"],["Delivery Tracking","/account/tracking.html","pin"],["Calendar","/account/calendar.html","cal"]] },
       { h:"Bottles & money", items:[["Bottle Tracking","/account/bottles.html","bottle"],["Wallet","/account/wallet.html","wallet"],["Invoices","/account/invoices.html","receipt"]] },
-      { h:"Rewards", items:[["Referrals","/account/referrals.html","gift"],["Rewards","/account/rewards.html","award"],["Support","/account/support.html","msg"]] },
+      { h:"Rewards", items:[["Referrals","/account/referrals.html","gift"],["Rewards","/account/rewards.html","award"],["Support","/account/support.html","msg"],["Help Center","/help.html","help"]] },
       { h:"Account", items:[["Addresses","/account/addresses.html","pin"],["Notifications","/account/notifications.html","bell"],["Profile","/account/profile.html","user"],["Settings","/account/settings.html","settings"]] },
     ],
     admin: [
       { h:"Overview", items:[["Dashboard","/admin/dashboard.html","chart"]] },
-      { h:"Commerce", items:[["Orders","/admin/orders.html","box"],["Subscriptions","/admin/subscriptions.html","refresh"],["Subscription Billing","/admin/billing.html","card"],["Customers","/admin/customers.html","users"],["Payments","/admin/payments.html","card"]] },
+      { h:"Commerce", items:[["Orders","/admin/orders.html","box"],["B2B Orders","/admin/b2b.html","factory"],["B2B Pricing","/admin/b2b-pricing.html","tag"],["Business Invoices","/admin/invoice-b2b.html","receipt"],["Subscriptions","/admin/subscriptions.html","refresh"],["Subscription Billing","/admin/billing.html","card"],["Customers","/admin/customers.html","users"],["Payments","/admin/payments.html","card"]] },
       { h:"Catalogue", items:[["Products","/admin/products.html","tag"],["Categories","/admin/categories.html","clipboard"],["Inventory","/admin/inventory.html","pkg"],["Bottle Inventory","/admin/bottle-inventory.html","bottle"],["Delivery Settings","/admin/delivery-settings.html","clock"]] },
-      { h:"Operations", items:[["Delivery Mgmt","/admin/deliveries.html","truck"],["Serviceable Areas","/admin/serviceable-areas.html","pin"],["Drivers","/admin/drivers.html","user"],["Routes","/admin/routes.html","route"]] },
+      { h:"Operations", items:[["Delivery Mgmt","/admin/deliveries.html","truck"],["Auto Assignment","/admin/assignment.html","route"],["Late Deliveries","/admin/late-deliveries.html","clock"],["Serviceable Areas","/admin/serviceable-areas.html","pin"],["Drivers","/admin/drivers.html","user"],["Routes","/admin/routes.html","route"]] },
       { h:"Supply", items:[["Farmers","/admin/farmers.html","sprout"],["Procurement","/admin/procurement.html","factory"],["Quality Testing","/admin/quality.html","beaker"]] },
-      { h:"Growth", items:[["Reports","/admin/reports.html","file"],["Revenue","/admin/revenue.html","coins"],["Coupons","/admin/coupons.html","percent"],["Offers","/admin/offers.html","gift"]] },
-      { h:"Content", items:[["Blogs","/admin/blogs.html","edit"],["CMS","/admin/cms.html","clipboard"],["Notifications","/admin/notifications.html","bell"]] },
-      { h:"System", items:[["Support Tickets","/admin/support.html","msg"],["User Management","/admin/users.html","users"],["Roles & Permissions","/admin/roles.html","lock"],["Permissions","/admin/permissions.html","lock"],["Audit Logs","/admin/audit-logs.html","eye"],["Settings","/admin/settings.html","settings"]] },
+      { h:"Finance", items:[["Daily Expenses","/admin/expenses.html","coins"],["Wallet Management","/admin/wallet.html","wallet"]] },
+      { h:"Growth", items:[["Reports","/admin/reports.html","file"],["Revenue","/admin/revenue.html","coins"],["Search Insights","/admin/search-insights.html","search"],["Referrals","/admin/referrals.html","gift"],["Coupons","/admin/coupons.html","percent"],["Offers","/admin/offers.html","gift"],["Puzzle Challenge","/admin/puzzles.html","award"]] },
+      { h:"Content", items:[["Blogs","/admin/blogs.html","edit"],["CMS","/admin/cms.html","clipboard"],["Brand Story","/admin/brand-story.html","edit"],["Help Center","/admin/help-center.html","help"],["Notifications","/admin/notifications.html","bell"]] },
+      { h:"System", items:[["Support Tickets","/admin/support.html","msg"],["Chat Support","/admin/chat-support.html","msg"],["User Management","/admin/users.html","users"],["Roles & Permissions","/admin/roles.html","lock"],["Permissions","/admin/permissions.html","lock"],["Audit Logs","/admin/audit-logs.html","eye"],["GST Management","/admin/gst.html","percent"],["Settings","/admin/settings.html","settings"]] },
+      { h:"People", items:[["Careers","/admin/careers.html","users"]] },
     ],
     driver: [
       { h:"Today", items:[["Dashboard","/driver/dashboard.html","home"],["Today's Route","/driver/route.html","route"],["Deliveries","/driver/deliveries.html","truck"]] },
@@ -58,6 +61,7 @@ window.DOODLY_MANIFEST = (function () {
   /* shorthand builders for compact recipes */
   const head = (title, sub, actions) => ({ type:"pageHead", title, sub, actions });
   const tbl = (dataset, opts={}) => Object.assign({ type:"table", dataset }, opts);
+  const formHTML = (o) => (window.DOODLY_BLOCKS && window.DOODLY_BLOCKS.R ? window.DOODLY_BLOCKS.R.form(o) : "");  // build a functional form HTML string at recipe-build time
 
   /* ---------------- Routes ---------------- */
   const routes = {
@@ -65,17 +69,13 @@ window.DOODLY_MANIFEST = (function () {
     /* ===== PUBLIC ===== */
     "home": { surface:"public", title:"Home", full:true, blocks:[
       { type:"storeHero" }, { type:"whyGrid" }, { type:"stepsRow" },
+      { type:"puzzleHighlight" },
       { type:"productGrid" }, { type:"builderSection" }, { type:"plansCompare" },
       { type:"testimonialGrid" }, { type:"faqSection" }, { type:"downloadApp" }, { type:"ctaBand" },
     ]},
 
-    "about": { surface:"public", title:"About Us", hero:{ eyebrow:"Our story", title:"Fresh milk, the way it used to be.", text:"DOODLY began with a simple frustration — good, honest milk had become impossible to find in the city. So we went back to the source." }, blocks:[
-      { type:"prose", lede:"We are a small team obsessed with one thing: getting genuinely fresh A2 buffalo milk from trusted local farms to your door, in glass, before breakfast.", sections:[
-        { h:"Our mission", p:["Make farm-fresh, chemical-free milk the default for every family — delivered daily, priced fairly, and packaged without plastic."] },
-        { h:"Our vision", p:["A short, transparent supply chain where you know the farm your milk came from, and farmers earn a fair, predictable income."] },
-      ]},
-      { type:"kpis", items:[{n:"12+",l:"Partner farms"},{n:"100%",l:"Glass bottles"},{n:"0",l:"Preservatives"},{n:"4.8★",l:"Customer rating"}] },
-      { type:"split", eyebrow:"Our journey", title:"From one farm to a daily ritual.", p:["What started as a weekend experiment with a single buffalo farm now reaches thousands of mornings across the city — still single-source, still same-day."], bullets:["2024 — first farm partnership","2025 — glass-bottle cold chain","2026 — daily subscriptions city-wide"], media:"🌅", mediaLabel:"Built fresh, like the milk" },
+    "about": { surface:"public", title:"About Us", hero:{ eyebrow:"Our story", title:"Fresh milk, the way it used to be.", text:"DOODLY began with a simple frustration — good, honest milk had become impossible to find in the city. So we went back to the source, and rebuilt the chain in glass, delivered before breakfast." }, blocks:[
+      { type:"aboutPage" },
       { type:"cardGrid", cols:3, cards:[
         { ic:"factory", title:"Our dairy", text:"Infrastructure, chilling and quality standards.", link:"Explore", href:"/dairy.html" },
         { ic:"sprout", title:"Our farmers", text:"The families behind every bottle.", link:"Meet them", href:"/farmers.html" },
@@ -104,15 +104,20 @@ window.DOODLY_MANIFEST = (function () {
       { type:"prose", sections:[{ h:"Want to join?", p:["We're always looking for people who care about food, farmers and craft. Write to careers@doodly.in."] }] },
     ]},
 
+    "careers": { surface:"public", title:"Careers", hero:{ eyebrow:"Careers at DOODLY", title:"Build the future of fresh dairy.", text:"Every bottle we deliver represents trust, quality, and the dedication of local farmers. We're building a team of people who want to make a meaningful impact through honest work. If you believe great products begin with great people, we'd love to hear from you." }, blocks:[
+      { type:"careers" },
+      { type:"ctaBand", title:"Build your career with DOODLY. Deliver freshness. Create impact." },
+    ]},
+
+    "puzzle": { surface:"public", title:"Monthly Puzzle Challenge", blocks:[
+      { type:"puzzlePage" },
+    ]},
+    "puzzle-terms": { surface:"public", title:"Puzzle Challenge — Terms", blocks:[
+      { type:"puzzleTerms" },
+    ]},
+
     "farmers": { surface:"public", title:"Our Farmers", hero:{ eyebrow:"Our farmers", title:"We know every farm by name.", text:"DOODLY works with a small circle of family-run buffalo farms — no middlemen, no pooled milk from a hundred herds." }, blocks:[
-      { type:"split", eyebrow:"Farmer stories", title:"Three generations, one herd.", p:["The Lakshmaiah family has farmed buffalo on the edge of Shamirpet for over forty years. Today their milk reaches your door within hours of the morning milking.","We visit, we test, and we pay fairly — on time, every time."], media:"🌾", mediaLabel:"Single-source. Same-day." },
-      { type:"kpis", items:[{n:"12+",l:"Partner farms"},{n:"₹62/L",l:"Fair avg rate"},{n:"Daily",l:"Collection"},{n:"100%",l:"Tested"}] },
-      { type:"cardGrid", cols:3, cards:[
-        { ic:"sprout", title:"Procurement process", text:"How we collect, test and price milk each morning." },
-        { ic:"award", title:"Farmer benefits", text:"Fair rates, on-time pay, and steady demand." },
-        { ic:"factory", title:"Milk collection", text:"From farm cans to chilled bulk coolers." },
-      ]},
-      { type:"split", rev:true, eyebrow:"Farmer gallery", title:"A look at the farms.", p:["Open pastures, healthy herds, and clean milking — the conditions that make A2 buffalo milk taste the way it should."], media:"📸" },
+      { type:"farmersPage" },
       { type:"ctaBand", title:"Taste the work of real farmers." },
     ]},
 
@@ -144,17 +149,12 @@ window.DOODLY_MANIFEST = (function () {
     ]},
 
     "bottle-return": { surface:"public", title:"Bottle Return Program", hero:{ eyebrow:"Reusable glass", title:"The bottle comes back. So does your deposit.", text:"DOODLY runs a closed glass loop — sterilise, fill, deliver, collect, repeat. Better for your milk and the planet." }, blocks:[
-      { type:"kpis", items:[{n:"Glass",l:"100% packaging"},{n:"₹120",l:"Refundable deposit"},{n:"Next-day",l:"Collection"},{n:"∞",l:"Reuse cycle"}] },
-      { type:"split", eyebrow:"How the deposit works", title:"Pay once, get it back.", p:["A small refundable deposit is added per bottle on your first order. Return the empties and the deposit stays in your wallet — track every bottle issued and returned in your dashboard."], bullets:["Bottle tracking ledger","Return request in one tap","Lost-bottle charges only if not returned"], media:"♻️" },
-      { type:"faq", items:[
-        { q:"How do I return empties?", a:"Just leave them out on your next delivery — our executive collects them and updates your ledger automatically." },
-        { q:"When is my deposit refunded?", a:"As soon as a bottle is marked returned, the deposit is credited back to your DOODLY wallet." },
-        { q:"What if a bottle breaks?", a:"Accidents happen. A small replacement charge applies only for bottles not returned over time." },
-      ]},
+      { type:"bottleReturnPage" },
+      { type:"ctaBand", title:"Fresh milk, zero plastic. Start your glass loop." },
     ]},
 
     "quality": { surface:"public", title:"Quality & Safety", hero:{ eyebrow:"Quality & safety", title:"Tested before it's trusted.", text:"Every batch is screened for fat, SNF, temperature and adulteration. If it doesn't pass, it doesn't ship." }, blocks:[
-      { type:"kpis", items:[{n:"7.5%",l:"Avg fat"},{n:"9.1",l:"Avg SNF"},{n:"4°C",l:"Cold chain"},{n:"100%",l:"Batch tested"}] },
+      { type:"kpis", items:[{n:"6%",l:"Min fat"},{n:"9%",l:"Min SNF"},{n:"4°C",l:"Cold chain"},{n:"100%",l:"Batch tested"}] },
       { type:"split", eyebrow:"Testing", title:"What we check, every morning.", p:["Lactometer reading, fat and SNF percentage, temperature at collection and dispatch, and adulteration screening — recorded per batch."], bullets:["Fat & SNF on every batch","Temperature logged end-to-end","Adulteration screening"], media:"🧪" },
       { type:"split", rev:true, eyebrow:"Cold chain", title:"Cold from farm to door.", p:["Milk never warms up between the farm and your fridge — bulk coolers, insulated transport, and chilled delivery."], bullets:["<30 min to 4°C","Insulated transport","Chilled handover"], media:"❄️" },
       { type:"notice", icon:"shield", text:"<b>Certifications & reports:</b> FSSAI compliant. Monthly quality reports are published to your account." },
@@ -199,10 +199,25 @@ window.DOODLY_MANIFEST = (function () {
       { type:"html", html:`<div class="pincard mt-3"><div class="pincard-h">Check if we deliver to you</div><p class="pincard-p">Enter your pincode to see if DOODLY is live in your area.</p><div id="pincodeCheckerMount"></div></div>` },
     ]},
 
-    "faq": { surface:"public", title:"FAQ", hero:{ eyebrow:"Help centre", title:"Frequently asked questions", text:"Search common questions about milk, delivery, bottles and billing." }, blocks:[
-      { type:"html", html:`<div class="search-box" style="max-width:520px;margin:0 auto 24px">${window.DOODLY_BLOCKS?window.DOODLY_BLOCKS.icon("search"):""}<input class="input" placeholder="Search the FAQ…" style="width:100%"></div>` },
-      { type:"html", html:`<div class="chips-row" style="justify-content:center"><span class="chip-f active">All</span><span class="chip-f">Milk</span><span class="chip-f">Delivery</span><span class="chip-f">Bottles</span><span class="chip-f">Billing</span><span class="chip-f">Account</span></div>` },
-      { type:"faq" },
+    "faq": { surface:"public", title:"FAQ", hero:{ eyebrow:"Help centre", title:"Frequently asked questions", text:"Search common questions about milk, delivery, bottles and billing — answers update the moment our team edits them." }, blocks:[
+      { type:"faqHub" },
+      { type:"ctaBand", title:"Question answered? Start your fresh-milk morning." },
+    ]},
+
+    "help": { surface:"public", title:"Help Center", blocks:[
+      { type:"helpCenter" },
+    ]},
+
+    "search": { surface:"public", title:"Search", blocks:[
+      { type:"searchResults" },
+    ]},
+
+    "referral-policy": { surface:"public", title:"Referral Policy", hero:{ eyebrow:"Legal", title:"Doodly Referral Program — Terms & Conditions", text:"How referral codes, eligibility and the ₹100 reward work." }, blocks:[
+      { type:"referralPolicy" },
+    ]},
+
+    "invoice": { surface:"public", title:"Invoice", full:true, blocks:[
+      { type:"invoiceB2C" },
     ]},
 
     "privacy":  { surface:"public", title:"Privacy Policy", hero:{ eyebrow:"Legal", title:"Privacy Policy", text:"Your information, protected — here's exactly how." }, blocks:[
@@ -304,9 +319,17 @@ window.DOODLY_MANIFEST = (function () {
 
     /* ===== AUTH ===== */
     "login": { surface:"auth", title:"Log in", auth:{
-      title:"Welcome back", sub:"Log in to manage your milk, deliveries and bottles.",
-      fields:[{ label:"Phone or email", placeholder:"+91 98480 11234" },{ label:"Password", type:"password", placeholder:"••••••••" }],
-      submit:"Log in", otpLink:true, forgot:true, alt:["New to DOODLY?","Create an account","/signup.html"] }},
+      chooser:true, title:"Welcome to DOODLY", sub:"Choose how you'd like to sign in." }},
+    "login/customer": { surface:"auth", title:"Customer Login", auth:{
+      title:"Customer login", sub:"Manage your subscriptions, orders, deliveries, invoices and account.",
+      fields:[{ label:"Mobile number or email", placeholder:"+91 98480 11234" },{ label:"Password", type:"password", placeholder:"••••••••" }],
+      submit:"Login as Customer", otpLink:true, forgot:true, guest:true, loginRole:"customer", dest:"/account/dashboard.html",
+      back:["/login.html","Back to login options"], alt:["New to DOODLY?","Create an account","/signup.html"] }},
+    "login/admin": { surface:"auth", title:"Admin / Staff Login", auth:{
+      title:"Admin & staff login", sub:"Authorized staff only — you'll be routed to your dashboard automatically.",
+      fields:[{ label:"Username or email", type:"email", placeholder:"you@doodly.in" },{ label:"Password", type:"password", placeholder:"••••••••" }],
+      submit:"Login as Admin", forgot:true, adminLogin:true, twofa:true, dest:"/admin/dashboard.html",
+      back:["/login.html","Back to login options"] }},
     "signup": { surface:"auth", title:"Create account", auth:{
       title:"Start tomorrow morning", sub:"Create your account and set up your first delivery.",
       fields:[{ label:"Full name", placeholder:"Your name" },{ label:"Phone", type:"tel", placeholder:"+91 …" },{ label:"Email", type:"email", placeholder:"you@email.com" },{ label:"Password", type:"password", placeholder:"Create a password" }],
@@ -326,16 +349,15 @@ window.DOODLY_MANIFEST = (function () {
     /* ===== CUSTOMER ===== */
     "account/dashboard": { surface:"account", title:"Dashboard", blocks:[
       head("Good morning, Ananya 👋","Here's everything about your milk today."),
-      { type:"kpis", items:[
-        { n:"Tomorrow 6:40 AM", l:"Next delivery" }, { n:"₹480", l:"Wallet balance" },
-        { n:"2", l:"Bottles pending" }, { n:"1,240", l:"Reward points" } ]},
+      { type:"customerKpis", page:"dashboard" },
       { type:"quickActions", items:[
         { ic:"pause", t:"Pause plan", s:"Going away?", href:"/account/vacation.html" },
         { ic:"plus", t:"Extra milk", s:"Guests over?", href:"/account/extra-milk.html" },
-        { ic:"bottle", t:"Return bottles", s:"2 pending", href:"/account/bottles.html" },
+        { ic:"bottle", t:"Return bottles", s:"Manage empties", href:"/account/bottles.html" },
         { ic:"pin", t:"Track delivery", s:"Live now", href:"/account/tracking.html" } ]},
+      { type:"puzzleCard" },
       { type:"columns", cols:2, items:[
-        { type:"panel", title:"Current subscription", link:{label:"Manage",href:"/account/subscription.html"}, html:`<div class="deflist"><div class="row"><span class="k">Plan</span><span class="v">30-Day Morning Ritual</span></div><div class="row"><span class="k">Bottle</span><span class="v">1000 ml Family</span></div><div class="row"><span class="k">Daily price</span><span class="v">₹130 (8% off)</span></div><div class="row"><span class="k">Renews</span><span class="v">26 Jul 2026</span></div></div>` },
+        { type:"customerSub" },
         { type:"timeline", dataset:"trackTimeline" } ]},
       { type:"table", dataset:"orders", toolbar:false, pager:false },
     ]},
@@ -353,7 +375,7 @@ window.DOODLY_MANIFEST = (function () {
       { t:"Upgraded 500 ml → 1000 ml", s:"01 Jun 2026", state:"done" },
       { t:"Started — 30-Day Morning Ritual", s:"02 May 2026 · ₹1,932", state:"done" },
       { t:"Completed trial pack", s:"12 Apr 2026 · ₹200", state:"done" } ]} ]},
-    "account/deliveries": { surface:"account", title:"Deliveries", blocks:[ head("Deliveries","Upcoming and past deliveries.",[{label:"Track live",kind:"btn-primary",href:"/account/tracking.html",icon:"pin"}]), tbl("deliveries",{filters:["All","Scheduled","Delivered","Skipped"]}) ]},
+    "account/deliveries": { surface:"account", title:"Deliveries", blocks:[ head("Deliveries","Upcoming and past deliveries.",[{label:"Track live",kind:"btn-primary",href:"/account/tracking.html",icon:"pin"}]), { type:"lateCustomerStats" }, tbl("deliveries",{filters:["All","Scheduled","Delivered","Skipped"]}) ]},
     "account/tracking": { surface:"account", title:"Delivery Tracking", blocks:[
       head("Delivery Tracking","Your 1000 ml bottle is on the way — ETA 6:40 AM."),
       { type:"columns", cols:2, items:[
@@ -362,15 +384,14 @@ window.DOODLY_MANIFEST = (function () {
     ]},
     "account/calendar": { surface:"account", title:"Delivery Calendar", blocks:[ head("Delivery Calendar","See your deliveries, skips and pauses at a glance."), { type:"calendar" } ]},
     "account/bottles": { surface:"account", title:"Bottle Tracking", blocks:[
-      head("Bottle Tracking","Every glass bottle issued, returned and pending.",[{label:"Request collection",kind:"btn-primary",icon:"bottle"}]),
-      { type:"kpis", items:[{n:"42",l:"Total issued"},{n:"40",l:"Returned"},{n:"2",l:"Pending"},{n:"₹120",l:"Deposit held"}] },
-      { type:"notice", warn:true, text:"You have <b>2 empties</b> pending collection. Leave them out on your next delivery and we'll pick them up." },
+      head("Bottle Tracking","Every glass bottle issued, returned and pending.",[{label:"Request collection",kind:"btn-primary",icon:"bottle",href:"/bottle-return.html"}]),
+      { type:"customerKpis", page:"bottles" },
+      { type:"notice", warn:true, text:"You have empties pending collection. Leave them out on your next delivery and we'll pick them up." },
       tbl("bottleLedger",{toolbar:false}),
     ]},
     "account/wallet": { surface:"account", title:"Wallet", blocks:[
-      head("Wallet","Your DOODLY balance, top-ups and refunds.",[{label:"Add money",kind:"btn-primary",icon:"plus"}]),
-      { type:"kpis", items:[{n:"₹480",l:"Balance"},{n:"₹100",l:"Rewards credited"},{n:"₹120",l:"Deposit held"},{n:"4",l:"Transactions"}] },
-      tbl("wallet",{toolbar:false,pager:false}),
+      head("DOODLY Wallet","Your balance, Trial Pack cashback, rewards and full transaction history."),
+      { type:"walletPanel" },
     ]},
     "account/invoices": { surface:"account", title:"Invoices", blocks:[ head("Invoices","Download GST invoices for every payment."), tbl("invoices",{filters:["All","Paid"]}) ]},
     "account/addresses": { surface:"account", title:"Addresses", blocks:[
@@ -383,12 +404,22 @@ window.DOODLY_MANIFEST = (function () {
       { label:"Email", type:"email", placeholder:"ananya.r@example.com" },{ label:"Area", placeholder:"Jubilee Hills" } ], submit:"Save profile" } ]},
     "account/settings": { surface:"account", title:"Settings", blocks:[
       head("Settings","Preferences, notifications and account."),
-      { type:"tabs", items:["General","Notifications","Security","Billing"] },
-      { type:"form", cols:2, fields:[
-        { label:"Default delivery time", type:"select", options:["6:00 – 6:30 AM","6:30 – 7:00 AM","7:00 – 7:30 AM"] },
-        { label:"Language", type:"select", options:["English","తెలుగు","हिन्दी"] },
-        { label:"Contactless delivery OTP", type:"select", options:["On","Off"] },
-        { label:"WhatsApp updates", type:"select", options:["On","Off"] } ], submit:"Save settings" },
+      { type:"tabs", items:["General","Notifications","Security","Billing"], panels:[
+        formHTML({ key:"settings-general", cols:2, submit:"Save settings", fields:[
+          { label:"Default delivery time", type:"select", options:["6:00 – 6:30 AM","6:30 – 7:00 AM","7:00 – 7:30 AM"] },
+          { label:"Language", type:"select", options:["English","తెలుగు","हिन्दी"] },
+          { label:"Contactless delivery OTP", type:"select", options:["On","Off"] },
+          { label:"WhatsApp updates", type:"select", options:["On","Off"] } ] }),
+        formHTML({ key:"settings-notif", cols:2, submit:"Save notifications", sub:"Choose how you'd like to hear from us.", fields:[
+          { label:"Order updates", type:"select", options:["WhatsApp + SMS","WhatsApp only","SMS only","Off"] },
+          { label:"Delivery alerts", type:"select", options:["On","Off"] },
+          { label:"Promotions & offers", type:"select", options:["On","Off"] },
+          { label:"Payment reminders", type:"select", options:["On","Off"] } ] }),
+        formHTML({ key:"settings-security", cols:2, submit:"Save security", sub:"Need to change your password? <a href='/forgot-password.html' style='color:var(--leaf-600);font-weight:700'>Reset it here →</a>", fields:[
+          { label:"Two-factor authentication", type:"select", options:["Off","SMS OTP","Authenticator app"] },
+          { label:"Login alerts", type:"select", options:["On","Off"] } ] }),
+        `<div class="panel panel-pad reveal"><h3 style="font-family:'Fraunces',serif;color:var(--forest);font-size:1.2rem;margin-bottom:6px">Billing</h3><p class="muted-sm" style="margin-bottom:14px">Manage your plan, payment method and invoices.</p><div class="qa-row" style="grid-template-columns:repeat(3,1fr)"><a class="qa-tile" href="/account/subscription.html"><div class="ic">${ic("refresh")}</div><div class="t">Subscription</div></a><a class="qa-tile" href="/account/wallet.html"><div class="ic">${ic("card")}</div><div class="t">Wallet</div></a><a class="qa-tile" href="/account/invoices.html"><div class="ic">${ic("receipt")}</div><div class="t">Invoices</div></a></div></div>`
+      ] },
     ]},
     "account/vacation": { surface:"account", title:"Pause / Vacation", blocks:[
       head("Pause & Vacation Mode","Going away? Pause deliveries and resume in one tap."),
@@ -404,77 +435,73 @@ window.DOODLY_MANIFEST = (function () {
         { label:"Delivery date", type:"date", full:true } ], submit:"Add to next delivery", note:true },
     ]},
     "account/referrals": { surface:"account", title:"Referrals", blocks:[
-      head("Referral Program","Give ₹100, get ₹100 for every friend who subscribes."),
-      { type:"columns", cols:2, items:[
-        { type:"panel", title:"Your code", html:`<div class="big-num" style="font-size:2rem;letter-spacing:.1em">ANANYA100</div><p class="muted-sm mt-1">Share this code. When a friend's first plan starts, you both get ₹100.</p><div class="mt-2"><button class="btn btn-primary">${ic("msg")} Share on WhatsApp</button></div>` },
-        { type:"deflist", title:"Your impact", rows:[["Friends invited","3"],["Joined","2"],["Earned","₹200"],["Pending","₹100"]] } ]},
-      tbl("referrals",{toolbar:false,pager:false}),
+      head("Referral Program","Refer a friend — earn ₹100 when they subscribe to a 30-day or longer plan."),
+      { type:"referralPanel" },
     ]},
     "account/rewards": { surface:"account", title:"Rewards", blocks:[
       head("Rewards","Earn points on every delivery and unlock perks."),
-      { type:"kpis", items:[{n:"1,240",l:"Points"},{n:"Gold",l:"Tier"},{n:"3",l:"Badges"},{n:"₹124",l:"Redeemable"}] },
-      { type:"panel", title:"Progress to Platinum", html:`<p class="muted-sm">760 points to go</p><div class="meter mt-1"><span style="width:62%"></span></div>` },
+      { type:"customerKpis", page:"rewards" },
+      { type:"puzzleCard" },
+      { type:"rewardsPanel" },
       { type:"cardGrid", cols:3, cards:[
         { ic:"award", title:"Early Bird", text:"30 deliveries before 7 AM." },
         { ic:"bottle", title:"Eco Hero", text:"Returned 40 glass bottles." },
         { ic:"gift", title:"Connector", text:"Referred 2 friends." } ]},
     ]},
     "account/support": { surface:"account", title:"Support", blocks:[
-      head("Support","Raise a ticket or browse help.",[{label:"New ticket",kind:"btn-primary",icon:"plus"}]),
+      head("Support","Raise a ticket or browse help."),
+      { type:"form", title:"Raise a ticket", cols:2, key:"support-ticket", submit:"Submit ticket", fields:[
+        { label:"Subject", req:true, placeholder:"Brief summary of your issue" },
+        { label:"Category", type:"select", options:["Delivery issue","Billing & payments","Bottle return","Subscription","Product quality","Other"] },
+        { label:"Message", type:"textarea", full:true, req:true, placeholder:"Describe your issue in detail…" } ] },
       tbl("tickets",{toolbar:false,pager:false}),
       { type:"cardGrid", cols:3, cards:[
-        { ic:"msg", title:"Live chat", text:"Fastest way to reach us." },
-        { ic:"phone", title:"Call us", text:((window.DOODLY&&window.DOODLY.brand&&window.DOODLY.brand.support&&window.DOODLY.brand.support.phone)||"+91 91177 99143") },
-        { ic:"file", title:"Help articles", text:"Delivery, bottles, billing." } ]},
+        { ic:"msg", title:"Live chat", text:"Fastest way to reach us.", link:"Start chat", href:"https://wa.me/919117799143" },
+        { ic:"phone", title:"Call us", text:((window.DOODLY&&window.DOODLY.brand&&window.DOODLY.brand.support&&window.DOODLY.brand.support.phone)||"+91 91177 99143"), link:"Call now", href:"tel:+919117799143" },
+        { ic:"file", title:"Help articles", text:"Delivery, bottles, billing.", link:"Browse", href:"/help.html" } ]},
     ]},
 
     /* ===== ADMIN ===== */
     "admin/dashboard": { surface:"admin", title:"Dashboard", blocks:[
-      head("Dashboard","Live overview of operations and revenue.",[{label:"Export report",kind:"btn-ghost",icon:"download"},{label:"Generate tomorrow",kind:"btn-primary",icon:"refresh"}]),
-      { type:"kpis", dataset:"adminKpis" },
-      { type:"columns", cols:2, items:[ { type:"bars", dataset:"revenueBars", title:"Revenue — last 7 days" }, { type:"donut", title:"Subscription mix", pct:62, center:"62%", label:"30-day" } ]},
-      { type:"table", dataset:"adminOrders", toolbar:false, pager:false },
+      head("Dashboard","Live operations & revenue command center — real-time KPIs, drill-downs, charts and alerts."),
+      { type:"opsDashboard" },
     ]},
     "admin/customers": { surface:"admin", title:"Customers", blocks:[ head("Customers","All DOODLY customers.",[{label:"Add customer",kind:"btn-primary",icon:"plus"}]), tbl("customers",{filters:["All","Active","Paused","Trial","Churned"]}) ]},
     "admin/subscriptions": { surface:"admin", title:"Subscriptions", blocks:[ head("Subscriptions","Active and lapsed subscriptions."), { type:"kpis", items:[{n:"1,284",l:"Active"},{n:"96",l:"Paused"},{n:"38",l:"New (wk)"},{n:"2.1%",l:"Churn"}] }, tbl("adminOrders",{filters:["All","Active","Paused","On hold"]}) ]},
     "admin/orders": { surface:"admin", title:"Orders", blocks:[ head("Orders","Every order across the platform."), tbl("adminOrders",{filters:["All","Active","Processing","On hold"]}) ]},
     "admin/products": { surface:"admin", title:"Products", blocks:[
-      head("Products","Manage the catalogue. Flip status to launch a product.",[{label:"Add product",kind:"btn-primary",icon:"plus"}]),
+      head("Products","Manage the catalogue. Flip status to launch a product.",[{label:"Recommendations",kind:"btn-ghost",icon:"award"},{label:"Add product",kind:"btn-primary",icon:"plus"}]),
       { type:"notice", icon:"tag", text:"<b>Zero-code launch:</b> set a product's status to <code>AVAILABLE</code> and it becomes orderable on the storefront instantly." },
       { type:"productAdmin" },
     ]},
     "admin/categories": { surface:"admin", title:"Categories", blocks:[ head("Categories","Organise products into categories.",[{label:"Add category",kind:"btn-primary",icon:"plus"}]), { type:"cardGrid", cols:3, cards:[
       { ic:"drop", title:"Milk", text:"1 product · live" },{ ic:"box", title:"Dairy products", text:"4 products · coming soon" },{ ic:"gift", title:"Bundles", text:"0 products" } ]} ]},
     "admin/inventory": { surface:"admin", title:"Inventory", blocks:[ head("Inventory","Stock levels and reorder alerts.",[{label:"Adjust stock",kind:"btn-primary",icon:"plus"}]), { type:"kpis", items:[{n:"640",l:"1000 ml ready"},{n:"410",l:"500 ml ready"},{n:"2",l:"Low SKUs"},{n:"1",l:"Reorder now"}] }, tbl("inventory",{filters:["All","Low","Reorder"]}) ]},
-    "admin/bottle-inventory": { surface:"admin", title:"Bottle Inventory", blocks:[ head("Bottle Inventory","The glass bottle fleet and deposits."), { type:"kpis", dataset:"bottleInv" }, { type:"notice", warn:true, text:"<b>418 bottles</b> pending return (24 above target). Consider a collection reminder campaign." } ]},
+    "admin/bottle-inventory": { surface:"admin", title:"Bottle Inventory", blocks:[ head("Bottle Inventory","The glass bottle fleet and deposits.",[{label:"Record movement",kind:"btn-primary",icon:"refresh"}]), { type:"kpis", dataset:"bottleInv" }, { type:"notice", warn:true, text:"<b>418 bottles</b> pending return (24 above target). Consider a collection reminder campaign." }, tbl("bottleMoves",{filters:["All"]}) ]},
     "admin/deliveries": { surface:"admin", title:"Delivery Management", blocks:[
       head("Delivery Management","Tomorrow's deliveries, zones, dispatch and executive performance.",[{label:"Generate deliveries",kind:"btn-primary",icon:"refresh"}]),
       { type:"kpis", items:[{n:"312",l:"Scheduled"},{n:"4",l:"Zones"},{n:"236 L",l:"Milk required"},{n:"4",l:"Drivers"}] },
       { type:"deliveryAnalytics" },
+      tbl("adminDeliveries",{filters:["All","Scheduled","Assigned","Out for delivery","Delivered","Failed"]}),
       tbl("routes",{toolbar:false,pager:false}),
     ]},
+    "admin/assignment": { surface:"admin", title:"Auto Assignment", blocks:[ head("Auto Delivery Assignment","Capacity-based auto-assignment (45 bottles/executive), pending queue, return-trip re-assignment, drag-and-drop manual override and live capacity dashboard."), { type:"assignment" } ]},
+    "admin/late-deliveries": { surface:"admin", title:"Late Delivery Monitoring", blocks:[ head("Late Delivery Monitoring","Protects the 7:00 AM morning promise — auto-detects late deliveries, sends customer apologies, scores executives, escalates and reports."), { type:"lateDeliveries" } ]},
+    "admin/invoice-b2b": { surface:"admin", title:"Business Invoices", blocks:[ head("Business Partner Statement","Premium B2B statement — supply analytics, financial summary, outstanding tracker, payment history and credit insights. Print, PDF, Excel, email or WhatsApp."), { type:"invoiceB2B" } ]},
     "admin/drivers": { surface:"admin", title:"Drivers", blocks:[ head("Delivery Executives","Manage drivers and assignments.",[{label:"Add driver",kind:"btn-primary",icon:"plus"}]), tbl("drivers",{filters:["All","On route","Completed","Idle"]}) ]},
     "admin/routes": { surface:"admin", title:"Routes", blocks:[ head("Routes","Delivery routes by zone.",[{label:"Plan route",kind:"btn-primary",icon:"route"}]), tbl("routes",{toolbar:false,pager:false}), { type:"html", html:`<div class="media-card mt-3" style="min-height:240px"><div><div class="big">🗺️</div><div class="muted-sm" style="color:rgba(255,255,255,.8);margin-top:6px">Route map placeholder — Google Maps in production</div></div></div>` } ]},
     "admin/farmers": { surface:"admin", title:"Farmers", blocks:[ head("Farmers","Partner farms and supply.",[{label:"Add farmer",kind:"btn-primary",icon:"plus"}]), tbl("farmers",{filters:["All","Verified","Review"]}) ]},
-    "admin/procurement": { surface:"admin", title:"Milk Procurement", blocks:[ head("Milk Procurement","Daily collection, testing and payments."), { type:"kpis", items:[{n:"660 L",l:"Collected today"},{n:"₹41,040",l:"Payable"},{n:"7.8%",l:"Avg fat"},{n:"3/4",l:"QC passed"}] }, tbl("procurement",{toolbar:false,pager:false}) ]},
-    "admin/quality": { surface:"admin", title:"Quality Testing", blocks:[ head("Quality Testing","Batch test results and cold-chain logs."), { type:"kpis", items:[{n:"100%",l:"Batches tested"},{n:"1",l:"Flagged"},{n:"4.0°C",l:"Avg temp"},{n:"9.1",l:"Avg SNF"}] }, tbl("quality",{toolbar:false,pager:false}) ]},
+    "admin/procurement": { surface:"admin", title:"Milk Procurement", blocks:[ head("Milk Procurement","Daily collection, testing and payments.",[{label:"New procurement",kind:"btn-primary",icon:"plus"}]), { type:"kpis", items:[{n:"660 L",l:"Collected today"},{n:"₹41,040",l:"Payable"},{n:"7.8%",l:"Avg fat"},{n:"3/4",l:"QC passed"}] }, tbl("procurement",{toolbar:false,pager:false}) ]},
+    "admin/quality": { surface:"admin", title:"Quality Testing", blocks:[ head("Quality Testing","Batch test results and cold-chain logs.",[{label:"Record test",kind:"btn-primary",icon:"plus"},{label:"Quality rules",kind:"btn-ghost",icon:"clipboard"}]), { type:"kpis", items:[{n:"100%",l:"Batches tested"},{n:"1",l:"Flagged"},{n:"4.0°C",l:"Avg temp"},{n:"9.1",l:"Avg SNF"}] }, tbl("quality",{toolbar:false,pager:false}) ]},
     "admin/reports": { surface:"admin", title:"Reports", blocks:[
-      head("Reports","Export sales, GST, bottle-loss and driver performance.",[{label:"Export CSV",kind:"btn-primary",icon:"download"}]),
-      { type:"cardGrid", cols:3, cards:[
-        { ic:"coins", title:"Sales report", text:"Revenue by plan, product, zone." },
-        { ic:"receipt", title:"GST report", text:"Tax summary for filing." },
-        { ic:"bottle", title:"Bottle-loss report", text:"Issued vs returned by customer." },
-        { ic:"truck", title:"Driver performance", text:"Stops, on-time %, ratings." },
-        { ic:"users", title:"Customer growth", text:"New, churned, retention." },
-        { ic:"sprout", title:"Procurement report", text:"Litres and spend by farm." } ]},
-      { type:"bars", dataset:"revenueBars", title:"Revenue trend" },
+      head("Reports","Live business intelligence — sales, customers, subscriptions, finance, operations, procurement & marketing."),
+      { type:"reportsBoard" },
     ]},
-    "admin/revenue": { surface:"admin", title:"Revenue", blocks:[ head("Revenue","Financial overview."), { type:"kpis", items:[{n:"₹1.84L",l:"Today"},{n:"₹2.1Cr",l:"This month"},{n:"+18%",l:"MoM growth"},{n:"₹1,640",l:"Avg order"}] }, { type:"columns", cols:2, items:[{ type:"bars", dataset:"revenueBars", title:"Daily revenue" },{ type:"donut", title:"Revenue by plan", pct:58, center:"58%", label:"30-day" }] } ]},
+    "admin/revenue": { surface:"admin", title:"Revenue", blocks:[ head("Revenue","Live revenue analytics & recognition — by source, product, payment method, with a full transaction ledger."), { type:"revenueBoard" } ]},
     "admin/payments": { surface:"admin", title:"Payments", blocks:[ head("Payments","Razorpay transactions and settlements."), { type:"kpis", items:[{n:"₹1.7L",l:"Captured today"},{n:"2",l:"Failed"},{n:"1",l:"Refunding"},{n:"₹0",l:"Disputed"}] }, tbl("payments",{filters:["All","Captured","Failed","Refunding"]}) ]},
     "admin/coupons": { surface:"admin", title:"Coupons", blocks:[ head("Coupons","Discount codes and usage.",[{label:"Create coupon",kind:"btn-primary",icon:"plus"}]), tbl("coupons",{filters:["All","Active","Scheduled","Paused"]}) ]},
-    "admin/offers": { surface:"admin", title:"Offers", blocks:[ head("Offers","Campaigns and promotional banners.",[{label:"New offer",kind:"btn-primary",icon:"plus"}]), { type:"cardGrid", cols:3, cards:[
-      { ic:"fire", title:"Festive 15% off", text:"90-day plan · scheduled" },{ ic:"gift", title:"Refer & earn", text:"₹100 each · live" },{ ic:"percent", title:"First-order 10%", text:"FRESH10 · live" } ]} ]},
-    "admin/blogs": { surface:"admin", title:"Blogs", blocks:[ head("Blog Manager","Write and publish journal posts.",[{label:"New post",kind:"btn-primary",icon:"plus"}]), { type:"blogList" } ]},
+    "admin/offers": { surface:"admin", title:"Offers", blocks:[ head("Offers","Campaign-driven promotions — typed, prioritised, scheduled. Create, schedule, pause & track live.",[{label:"New offer",kind:"btn-primary",icon:"plus"}]), { type:"offersBoard" } ]},
+    "admin/blogs": { surface:"admin", title:"Blogs", blocks:[ head("Blog Manager","Write, schedule and publish journal posts — full lifecycle, SEO, reading-time & views, backed by the DOODLY database.",[{label:"New post",kind:"btn-primary",icon:"plus"}]), { type:"blogBoard" } ]},
     "admin/cms": { surface:"admin", title:"CMS", blocks:[
       head("CMS","Edit storefront content — pages, FAQs, banners, products."),
       { type:"cardGrid", cols:3, cards:[
@@ -484,24 +511,32 @@ window.DOODLY_MANIFEST = (function () {
         { ic:"gift", title:"Banners", text:"Homepage hero & promos." },
         { ic:"star", title:"Testimonials", text:"Manage reviews shown publicly." },
         { ic:"file", title:"Legal", text:"Privacy, terms, refund, shipping." } ]},
+      { type:"cmsBoard" },
     ]},
-    "admin/notifications": { surface:"admin", title:"Notifications", blocks:[ head("Notifications","Send WhatsApp, SMS and push campaigns.",[{label:"New campaign",kind:"btn-primary",icon:"plus"}]), { type:"form", title:"Compose", cols:2, fields:[
-      { label:"Audience", type:"select", options:["All customers","Active subscribers","Paused","Trial users"] },
-      { label:"Channel", type:"select", options:["WhatsApp","SMS","Push","Email"] },
-      { label:"Message", type:"textarea", placeholder:"Your message…", full:true } ], submit:"Send campaign" } ]},
-    "admin/support": { surface:"admin", title:"Support Tickets", blocks:[ head("Support Tickets","Customer issues and resolutions."), { type:"kpis", items:[{n:"12",l:"Open"},{n:"3",l:"High priority"},{n:"1.2h",l:"Avg response"},{n:"94%",l:"Resolved"}] }, tbl("adminTickets",{filters:["All","Open","Resolved"]}) ]},
-    "admin/roles": { surface:"admin", title:"Roles & Permissions", blocks:[ head("Roles & Permissions","Control who can do what.",[{label:"Add role",kind:"btn-primary",icon:"plus"}]), { type:"cardGrid", cols:4, cards:[
-      { ic:"lock", title:"Super Admin", text:"Full access" },{ ic:"settings", title:"Admin", text:"Operations & catalogue" },{ ic:"truck", title:"Ops", text:"Deliveries & routes" },{ ic:"coins", title:"Finance", text:"Payments & reports" } ]} ]},
+    "admin/notifications": { surface:"admin", title:"Notifications", blocks:[ head("Notifications","Compose and send WhatsApp, SMS, push and email campaigns to a live audience — recorded and delivered from the DOODLY database.",[{label:"New campaign",kind:"btn-primary",icon:"plus"}]), { type:"notificationsBoard" } ]},
+    "admin/support": { surface:"admin", title:"Support Tickets", blocks:[ head("Support Tickets","Customer issues and resolutions — full ticket desk with SLA, assignment, internal notes, customer replies and lifecycle, backed by the DOODLY database.",[{label:"New ticket",kind:"btn-primary",icon:"plus"}]), { type:"supportBoard" } ]},
+    "admin/roles": { surface:"admin", title:"Roles & Permissions", blocks:[ head("Roles & Permissions","Enterprise access control — role defaults plus per-user permission overrides. Super Admin only."), { type:"rolesAdmin" } ]},
     "admin/audit-logs": { surface:"admin", title:"Audit Logs", blocks:[ head("Audit Logs","A live record of every sensitive action — logins, role switches, user & permission changes."), { type:"auditLog" } ]},
-    "admin/users": { surface:"admin", title:"User Management", blocks:[ head("User Management","Create staff, assign roles, lock or disable accounts. Deletes are soft."), { type:"userManagement" } ]},
+    "admin/chat-support": { surface:"admin", title:"Chat Support", blocks:[ head("AI Chat Support","Manage Doodly Assistant conversations — active, resolved and escalated chats, satisfaction, response time, canned responses and the knowledge base."), { type:"chatSupport" } ]},
+    "admin/users": { surface:"admin", title:"User Management", blocks:[ head("User Management","Create staff, assign roles, lock or disable accounts. Deletes are soft."), { type:"userStats" }, { type:"userManagement" } ]},
     "admin/permissions": { surface:"admin", title:"Permissions", blocks:[ head("Permissions","Fine-grained, per-module access for every role. Changes apply instantly."), { type:"permissionMatrix" } ]},
-    "admin/settings": { surface:"admin", title:"Settings", blocks:[ head("Settings","Platform configuration."), { type:"tabs", items:["General","Payments","Delivery","Integrations","Tax"] }, { type:"form", cols:2, fields:[
-      { label:"Brand name", placeholder:"DOODLY" },{ label:"Support phone", placeholder:"+91 90000 00000" },
-      { label:"Razorpay key", placeholder:"rzp_live_…" },{ label:"GST number", placeholder:"36ABCDE1234F1Z5" },
-      { label:"Default delivery window", type:"select", options:["6–7 AM","7–8 AM"] },{ label:"Currency", type:"select", options:["INR ₹"] } ], submit:"Save settings" } ]},
+    "admin/settings": { surface:"admin", title:"Settings", blocks:[ head("Settings","Platform configuration — general, notifications and security. Saved to the DOODLY database and applied where used. Super Admin edits; others view."), { type:"settingsBoard" } ]},
+    "admin/careers": { surface:"admin", title:"Careers", blocks:[ head("Careers — Applications","Every job application submitted from the website — review, rate, move through the hiring pipeline and download resumes.",[{label:"Export",kind:"btn-ghost",icon:"download"}]), { type:"careersBoard" } ]},
+    "admin/puzzles": { surface:"admin", title:"Puzzle Challenge", blocks:[ head("Monthly Puzzle Challenge","One puzzle every month — schedule, participants, winners and prizes, with the option to extend the campaign month by month. The winner is decided automatically: fewest moves, then fastest time, earliest finish, secure random."), { type:"puzzleAdmin" } ]},
+    "admin/gst": { surface:"admin", title:"GST Management", blocks:[ head("GST Management","Centralised, Super-Admin-controlled tax rates — create, assign to products, auto-calculate, and keep historical invoices accurate. View-only for other roles."), { type:"gstAdmin" } ]},
     "admin/delivery-settings": { surface:"admin", title:"Delivery Settings", blocks:[ head("Delivery Settings","Configure the order cut-off, delivery window and availability. Changes apply to the storefront instantly."), { type:"deliverySettings" } ]},
     "admin/serviceable-areas": { surface:"admin", title:"Serviceable Areas", blocks:[ head("Serviceable Areas","Manage delivery pincodes and the waitlist. Add a pincode and the storefront accepts it instantly — launch new cities with no code change."), { type:"serviceableAreas" } ]},
     "admin/billing": { surface:"admin", title:"Subscription Billing", blocks:[ head("Subscription Billing","Auto-pay customers, upcoming renewals, failures and revenue forecast."), { type:"autopayBilling" } ]},
+    "admin/b2b": { surface:"admin", title:"B2B Order Management", blocks:[ head("B2B Order Management","Register commercial customers, create bulk orders, track delivery, payments and invoices — Admin & Super Admin only."), { type:"b2b" } ]},
+    "admin/b2b-pricing": { surface:"admin", title:"B2B Pricing Management", blocks:[ head("Dynamic B2B Pricing","Give every business its own negotiated product prices, quantity slabs and effective dates. Authorized users can override a price for a single order without ever changing the default. Full history, bulk tools, reports and audit — Super Admin manages."), { type:"b2bPricing" } ]},
+    "admin/expenses": { surface:"admin", title:"Daily Expenses", blocks:[ head("Daily Expenses","Record, approve, track and report all business expenses — Admin, Accountant & Super Admin only."), { type:"expenses" } ]},
+    "admin/wallet": { surface:"admin", title:"Wallet Management", blocks:[ head("Wallet Management","Customer wallet balances, manual credit/debit, reversals, Trial-Pack cashback reports and configuration."), { type:"walletAdmin" } ]},
+    "admin/brand-story": { surface:"admin", title:"Brand Story", blocks:[ head("Brand Story — Unfold Pure","Edit the /doodly story hero & CTAs and download the packaging QR. Changes go live instantly — no code change."), { type:"brandStoryAdmin" } ]},
+    "admin/help-center": { surface:"admin", title:"Help Center", blocks:[ head("Help Center","Manage FAQs, categories, video guides and illustrations, and review help analytics. Changes publish instantly — no code change."), { type:"helpCenterAdmin" } ]},
+    "admin/search-insights": { surface:"admin", title:"Search Insights", blocks:[ head("Search Insights","Live global-search analytics — volume, keywords, zero-result queries, device & conversion, a full event ledger, and trending management."), { type:"searchInsightsBoard" } ]},
+    "admin/referrals": { surface:"admin", title:"Referrals", blocks:[ head("Referral Management","Codes, relationships, one-time ₹100 rewards, fraud alerts and reports. Approve, reject or reverse — Super Admin controls."), { type:"referralAdmin" } ]},
+    "doodly": { surface:"public", title:"DOODLY — Unfold Pure", blocks:[ { type:"unfoldPure" } ]},
+    "unfold-pure": { surface:"public", title:"DOODLY — Unfold Pure", blocks:[ { type:"unfoldPure" } ]},
 
     /* ===== DRIVER ===== */
     "driver/dashboard": { surface:"driver", title:"Dashboard", blocks:[

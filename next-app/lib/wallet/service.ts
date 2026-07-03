@@ -81,6 +81,59 @@ async function notifyUser(tx: Tx, userId: string, title: string, body: string) {
   await tx.notification.create({ data: { userId, channel: "PUSH", title, body, sentAt: new Date() } });
 }
 
+// ---------- wallet recharge / "Add Money" ----------
+
+const RECHARGE_KEY = "wallet.recharge";
+export type RechargeConfig = { enabled: boolean; minPaise: number; maxPaise: number; presetsPaise: number[] };
+const DEFAULT_RECHARGE: RechargeConfig = { enabled: true, minPaise: 10000, maxPaise: 10000000, presetsPaise: [10000, 25000, 50000, 100000, 200000, 500000] };
+
+export async function getRechargeConfig(): Promise<RechargeConfig> {
+  try {
+    const s = await db.appSetting.findUnique({ where: { key: RECHARGE_KEY } });
+    return s ? { ...DEFAULT_RECHARGE, ...(s.value as Partial<RechargeConfig>) } : DEFAULT_RECHARGE;
+  } catch { return DEFAULT_RECHARGE; }
+}
+export async function setRechargeConfig(patch: Partial<RechargeConfig>) {
+  const next = { ...(await getRechargeConfig()), ...patch };
+  await db.appSetting.upsert({ where: { key: RECHARGE_KEY }, create: { key: RECHARGE_KEY, value: next as object }, update: { value: next as object } });
+  return next;
+}
+
+/**
+ * Credit a wallet top-up after a successful gateway payment. Idempotent on the
+ * caller-supplied `reference` (the gateway/payment id) — a repeated call with the
+ * same reference returns the original credit instead of double-crediting.
+ * Validates the amount against the admin recharge config; runs Serializable.
+ */
+export async function rechargeWallet(args: { userId: string; amountPaise: number; reference?: string; method?: string } & Actor) {
+  const amt = Math.round(args.amountPaise);
+  if (!Number.isFinite(amt) || amt <= 0) return { ok: false as const, reason: "invalid_amount" };
+  const cfg = await getRechargeConfig();
+  if (!cfg.enabled) return { ok: false as const, reason: "disabled" };
+  if (amt < cfg.minPaise) return { ok: false as const, reason: "below_min", minPaise: cfg.minPaise };
+  if (amt > cfg.maxPaise) return { ok: false as const, reason: "above_max", maxPaise: cfg.maxPaise };
+
+  if (args.reference) {
+    const existing = await db.walletTxn.findUnique({ where: { reference: args.reference } });
+    if (existing) return { ok: true as const, idempotent: true, balancePaise: existing.balanceAfterPaise, txnId: existing.id, reference: existing.reference };
+  }
+  return withRetry(() => db.$transaction(async (tx) => {
+    const user = await tx.user.update({ where: { id: args.userId }, data: { walletPaise: { increment: amt } }, select: { walletPaise: true } });
+    try {
+      const txn = await tx.walletTxn.create({
+        data: { userId: args.userId, type: "CREDIT", kind: "topup", amountPaise: amt, balanceAfterPaise: user.walletPaise, reference: args.reference || generateReference(), description: `Wallet recharge${args.method ? " (" + args.method + ")" : ""}`, reason: "recharge", createdById: args.actorId ?? null },
+      });
+      return { ok: true as const, idempotent: false, balancePaise: user.walletPaise, txnId: txn.id, reference: txn.reference };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && args.reference) {
+        const ex = await db.walletTxn.findUnique({ where: { reference: args.reference } });
+        if (ex) return { ok: true as const, idempotent: true, balancePaise: ex.balanceAfterPaise, txnId: ex.id, reference: ex.reference };
+      }
+      throw e;
+    }
+  }, TX));
+}
+
 // ---------- Trial Pack cashback (the business rule) ----------
 
 /**
@@ -202,18 +255,71 @@ export async function applyWalletAtCheckout(args: { userId: string; orderId: str
 
 // ---------- Admin ----------
 
-export async function adminCredit(args: { userId: string; amountPaise: number; reason: string } & Actor) {
+export async function adminCredit(args: { userId: string; amountPaise: number; reason: string; kind?: string } & Actor) {
   if (args.amountPaise <= 0) throw new Error("Amount must be positive");
-  return db.$transaction((tx) => postTxn(tx, { userId: args.userId, type: "CREDIT", kind: "adjustment", amountPaise: args.amountPaise, reason: args.reason || "manual_credit", description: args.reason, createdById: args.actorId }), TX);
+  return db.$transaction((tx) => postTxn(tx, { userId: args.userId, type: "CREDIT", kind: args.kind ?? "adjustment", amountPaise: args.amountPaise, reason: args.reason || "manual_credit", description: args.reason, createdById: args.actorId }), TX);
 }
 
-export async function adminDebit(args: { userId: string; amountPaise: number; reason: string } & Actor) {
+export async function adminDebit(args: { userId: string; amountPaise: number; reason: string; allowNegative?: boolean } & Actor) {
   if (args.amountPaise <= 0) throw new Error("Amount must be positive");
   return db.$transaction(async (tx) => {
     const user = await tx.user.findUnique({ where: { id: args.userId }, select: { walletPaise: true } });
-    if ((user?.walletPaise ?? 0) < args.amountPaise) throw new Error("Insufficient wallet balance");
+    if (!args.allowNegative && (user?.walletPaise ?? 0) < args.amountPaise) throw new Error("Insufficient wallet balance");
     return postTxn(tx, { userId: args.userId, type: "DEBIT", kind: "adjustment", amountPaise: args.amountPaise, reason: args.reason || "manual_debit", description: args.reason, createdById: args.actorId });
   }, TX);
+}
+
+/** Bulk manual credit — reuses adminCredit per user; never throws for one bad id. */
+export async function bulkCredit(args: { userIds: string[]; amountPaise: number; reason: string } & Actor) {
+  let count = 0; const failed: string[] = [];
+  for (const userId of args.userIds) {
+    try { await adminCredit({ userId, amountPaise: args.amountPaise, reason: args.reason, actorId: args.actorId, actorRole: args.actorRole }); count++; }
+    catch { failed.push(userId); }
+  }
+  return { count, failed: failed.length };
+}
+
+/** Bulk manual debit — skips (does not fail) wallets with insufficient balance. */
+export async function bulkDebit(args: { userIds: string[]; amountPaise: number; reason: string } & Actor) {
+  let count = 0; const failed: string[] = [];
+  for (const userId of args.userIds) {
+    try { await adminDebit({ userId, amountPaise: args.amountPaise, reason: args.reason, actorId: args.actorId, actorRole: args.actorRole }); count++; }
+    catch { failed.push(userId); }
+  }
+  return { count, failed: failed.length };
+}
+
+// ---------- Referral reward (₹100, once per referred customer) ----------
+
+const DEFAULT_REFERRAL_PAISE = 10000; // ₹100
+
+/**
+ * Credit the referral reward to the referrer once the referred customer subscribes.
+ * Idempotent — ReferralReward.refereeId is UNIQUE, so a referrer is rewarded at
+ * most once per referred customer even under concurrent triggers.
+ */
+export async function creditReferralReward(args: { referrerId: string; refereeId: string; amountPaise?: number; triggerOrderId?: string; triggerSubscriptionId?: string } & Actor) {
+  const amountPaise = args.amountPaise && args.amountPaise > 0 ? args.amountPaise : DEFAULT_REFERRAL_PAISE;
+  if (!args.referrerId || !args.refereeId) throw new Error("referrerId and refereeId are required");
+  if (args.referrerId === args.refereeId) throw new Error("A customer cannot refer themselves.");
+  return withRetry(() =>
+    db.$transaction(async (tx) => {
+      const existing = await tx.referralReward.findUnique({ where: { refereeId: args.refereeId } });
+      if (existing?.status === "CREDITED") return { credited: false, reason: "already_rewarded" as const };
+      const referrer = await tx.user.findUnique({ where: { id: args.referrerId }, select: { id: true } });
+      if (!referrer) throw new Error("Referrer not found");
+      try {
+        await tx.referralReward.create({ data: { referrerId: args.referrerId, refereeId: args.refereeId, amountPaise, status: "CREDITED", triggerOrderId: args.triggerOrderId, triggerSubscriptionId: args.triggerSubscriptionId } });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") return { credited: false, reason: "already_rewarded" as const };
+        throw e;
+      }
+      const { txn, balancePaise } = await postTxn(tx, { userId: args.referrerId, type: "CREDIT", kind: "referral", amountPaise, reason: "referral", description: "Referral reward — a friend subscribed", subscriptionId: args.triggerSubscriptionId, orderId: args.triggerOrderId, createdById: args.actorId });
+      await tx.referralReward.update({ where: { refereeId: args.refereeId }, data: { walletTxnId: txn.id } });
+      await notifyUser(tx, args.referrerId, `₹${Math.round(amountPaise / 100)} referral reward added!`, "Thanks for referring a friend to DOODLY — the reward is in your wallet.");
+      return { credited: true, amountPaise, balancePaise, reference: txn.reference };
+    }, TX),
+  );
 }
 
 /** Reverse a previous txn (creates the opposite entry). Guarded against double-reversal. */
@@ -236,13 +342,82 @@ export async function reverseTxn(args: { txnId: string } & Actor) {
   );
 }
 
+/** Admin wallet list — every customer with a balance OR any wallet history,
+ *  enriched with per-wallet credit/debit/cashback/referral totals + trial status. */
 export async function listWallets(args: { q?: string; limit?: number } = {}) {
-  const where: Prisma.UserWhereInput = { walletPaise: { gt: 0 } };
+  const where: Prisma.UserWhereInput = { OR: [{ walletPaise: { gt: 0 } }, { walletTxns: { some: {} } }] };
   if (args.q?.trim()) {
     const q = args.q.trim();
-    where.OR = [{ name: { contains: q, mode: "insensitive" } }, { phone: { contains: q } }, { email: { contains: q, mode: "insensitive" } }];
+    where.AND = [{ OR: [{ name: { contains: q, mode: "insensitive" } }, { phone: { contains: q } }, { email: { contains: q, mode: "insensitive" } }] }];
   }
-  return db.user.findMany({ where, orderBy: { walletPaise: "desc" }, take: args.limit ?? 200, select: { id: true, name: true, phone: true, email: true, walletPaise: true, _count: { select: { walletTxns: true } } } });
+  const users = await db.user.findMany({
+    where, orderBy: { walletPaise: "desc" }, take: args.limit ?? 300,
+    select: { id: true, name: true, phone: true, email: true, walletPaise: true, createdAt: true },
+  });
+  const ids = users.map((u) => u.id);
+  if (!ids.length) return [];
+  const [byKind, perUser, trials, samples] = await Promise.all([
+    db.walletTxn.groupBy({ by: ["userId", "kind", "type"], where: { userId: { in: ids } }, _sum: { amountPaise: true } }),
+    db.walletTxn.groupBy({ by: ["userId"], where: { userId: { in: ids } }, _max: { createdAt: true }, _count: true }),
+    db.trialCashback.findMany({ where: { userId: { in: ids }, status: "CREDITED" }, select: { userId: true } }),
+    db.order.findMany({ where: { userId: { in: ids }, type: "SAMPLE", status: "PAID" }, select: { userId: true }, distinct: ["userId"] }),
+  ]);
+  const trialSet = new Set(trials.map((t) => t.userId));
+  const sampleSet = new Set(samples.map((s) => s.userId));
+  const kindSum = (uid: string, kind: string, type: "CREDIT" | "DEBIT") => byKind.filter((g) => g.userId === uid && g.kind === kind && g.type === type).reduce((s, g) => s + (g._sum.amountPaise ?? 0), 0);
+  const typeSum = (uid: string, type: "CREDIT" | "DEBIT") => byKind.filter((g) => g.userId === uid && g.type === type).reduce((s, g) => s + (g._sum.amountPaise ?? 0), 0);
+  return users.map((u) => {
+    const row = perUser.find((p) => p.userId === u.id);
+    return {
+      id: u.id, name: u.name, phone: u.phone, email: u.email, walletPaise: u.walletPaise, createdAt: u.createdAt,
+      txnCount: row?._count ?? 0, lastTxnAt: row?._max.createdAt ?? null,
+      creditsPaise: typeSum(u.id, "CREDIT"), debitsPaise: typeSum(u.id, "DEBIT"),
+      cashbackPaise: kindSum(u.id, "cashback", "CREDIT"), referralPaise: kindSum(u.id, "referral", "CREDIT"),
+      promoPaise: kindSum(u.id, "promo", "CREDIT"), refundPaise: kindSum(u.id, "refund", "CREDIT"),
+      usedPaise: kindSum(u.id, "usage", "DEBIT"),
+      trialStatus: trialSet.has(u.id) ? "redeemed" : sampleSet.has(u.id) ? "eligible" : "none",
+    };
+  });
+}
+
+/** Admin transaction ledger across all wallets — search/filter/sort + reversed flag. */
+export async function listAllTransactions(args: { from?: string | Date; to?: string | Date; kind?: string; type?: "CREDIT" | "DEBIT"; q?: string; userId?: string; limit?: number } = {}) {
+  const where: Prisma.WalletTxnWhereInput = {};
+  if (args.userId) where.userId = args.userId;
+  if (args.kind) where.kind = args.kind;
+  if (args.type) where.type = args.type;
+  if (args.from || args.to) { const r: Prisma.DateTimeFilter = {}; if (args.from) r.gte = new Date(args.from); if (args.to) r.lte = new Date(args.to); where.createdAt = r; }
+  if (args.q?.trim()) {
+    const q = args.q.trim();
+    where.OR = [
+      { reference: { contains: q, mode: "insensitive" } }, { description: { contains: q, mode: "insensitive" } },
+      { orderId: { contains: q } }, { subscriptionId: { contains: q } },
+      { user: { name: { contains: q, mode: "insensitive" } } }, { user: { phone: { contains: q } } },
+    ];
+  }
+  const rows = await db.walletTxn.findMany({
+    where, orderBy: { createdAt: "desc" }, take: args.limit ?? 500,
+    select: {
+      id: true, userId: true, type: true, kind: true, amountPaise: true, balanceAfterPaise: true, reference: true,
+      description: true, reason: true, subscriptionId: true, orderId: true, reversedTxnId: true, createdById: true, createdAt: true,
+      user: { select: { name: true, phone: true } },
+    },
+  });
+  const reversedIds = new Set(rows.filter((r) => r.reversedTxnId).map((r) => r.reversedTxnId as string));
+  return rows.map((r) => ({ ...r, reversed: reversedIds.has(r.id) }));
+}
+
+/** Full admin view of one customer's wallet: profile + balance + history + referral + trial. */
+export async function walletDetail(userId: string) {
+  const [profile, wallet, refInfo, referralsCount, trial] = await Promise.all([
+    db.user.findUnique({ where: { id: userId }, select: { id: true, name: true, phone: true, email: true, walletPaise: true, createdAt: true } }),
+    getWallet({ userId, limit: 300 }),
+    db.user.findUnique({ where: { id: userId }, select: { referredBy: { select: { id: true, name: true } } } }),
+    db.user.count({ where: { referredById: userId } }),
+    db.trialCashback.findUnique({ where: { userId }, select: { status: true, amountPaise: true, creditedAt: true } }),
+  ]);
+  if (!profile) throw new Error("Wallet not found");
+  return { user: profile, ...wallet, referral: { referredBy: refInfo?.referredBy ?? null, referralsCount }, trial };
 }
 
 export async function walletReports(args: { from?: Date | string; to?: Date | string } = {}) {
@@ -251,24 +426,42 @@ export async function walletReports(args: { from?: Date | string; to?: Date | st
   if (args.to) range.lte = new Date(args.to);
   const where: Prisma.WalletTxnWhereInput = args.from || args.to ? { createdAt: range } : {};
 
-  const [byKind, outstanding, trialAgg] = await Promise.all([
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  const [byKind, outstanding, trialAgg, activeWallets, todayByType, referralAgg] = await Promise.all([
     db.walletTxn.groupBy({ by: ["kind", "type"], where, _sum: { amountPaise: true }, _count: true }),
     db.user.aggregate({ _sum: { walletPaise: true } }),
     db.trialCashback.aggregate({ where: { status: "CREDITED" }, _count: true, _sum: { amountPaise: true } }),
+    db.user.count({ where: { walletPaise: { gt: 0 } } }),
+    db.walletTxn.groupBy({ by: ["type"], where: { createdAt: { gte: todayStart } }, _sum: { amountPaise: true } }),
+    db.referralReward.aggregate({ where: { status: "CREDITED" }, _count: true, _sum: { amountPaise: true } }),
   ]);
   const sum = (kind: string, type: "CREDIT" | "DEBIT") => byKind.filter((g) => g.kind === kind && g.type === type).reduce((s, g) => s + (g._sum.amountPaise ?? 0), 0);
   const totalCredited = byKind.filter((g) => g.type === "CREDIT").reduce((s, g) => s + (g._sum.amountPaise ?? 0), 0);
   const totalPaidTrials = await db.order.count({ where: { type: "SAMPLE", status: "PAID" } });
+  const today = (t: "CREDIT" | "DEBIT") => todayByType.find((g) => g.type === t)?._sum.amountPaise ?? 0;
 
   return {
+    // range-aware totals (respect ?from/?to)
     totalCashbackIssuedPaise: sum("cashback", "CREDIT"),
     trialCashbackRedeemed: trialAgg._count,
     trialCashbackRedeemedPaise: trialAgg._sum.amountPaise ?? 0,
+    referralRewardsIssuedPaise: sum("referral", "CREDIT"),
+    promoIssuedPaise: sum("promo", "CREDIT"),
+    refundCreditsPaise: sum("refund", "CREDIT"),
+    adjustmentCreditsPaise: sum("adjustment", "CREDIT"),
     walletUsedPaise: byKind.filter((g) => g.type === "DEBIT").reduce((s, g) => s + (g._sum.amountPaise ?? 0), 0),
-    outstandingBalancePaise: outstanding._sum.walletPaise ?? 0,
     totalCreditedPaise: totalCredited,
-    // % of paid trials that converted into a cashback (i.e. upgraded to p30/p90).
     cashbackConversionRate: totalPaidTrials ? Math.round((trialAgg._count / totalPaidTrials) * 1000) / 10 : 0,
+    // live dashboard fields (not range-filtered)
+    totalBalancePaise: outstanding._sum.walletPaise ?? 0,
+    outstandingBalancePaise: outstanding._sum.walletPaise ?? 0,
+    activeWallets,
+    creditsTodayPaise: today("CREDIT"),
+    debitsTodayPaise: today("DEBIT"),
+    referralRewardsCount: referralAgg._count,
+    referralRewardsAllTimePaise: referralAgg._sum.amountPaise ?? 0,
+    pendingAdjustments: 0, // future-ready (no approval queue for wallet adjustments yet)
+    expiredCreditsPaise: 0, // future-ready (wallet-credit expiry policy not yet enabled)
   };
 }
 

@@ -3,7 +3,7 @@
    PATCH { action: "status"|"cancel"|"reorder"|"pay"|"invoice", ... } */
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getOrder, updateOrderStatus, cancelOrder, reorder, recordPayment, generateInvoice,
+  getOrder, updateOrderStatus, cancelOrder, reorder, recordPayment, generateInvoice, updateOrder, addOrderNote,
 } from "@/lib/b2b/service";
 import { actorRole, actorId, canUseB2B } from "@/lib/b2b/guard";
 import type { B2BOrderStatus } from "@/lib/b2b/engine";
@@ -38,6 +38,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         return NextResponse.json({ ok: true, order: await cancelOrder({ id: params.id, ...a }) });
       case "reorder":
         return NextResponse.json({ ok: true, order: await reorder({ id: params.id, ...a }) }, { status: 201 });
+      case "update":
+        return NextResponse.json({ ok: true, order: await updateOrder(params.id, body.order, a) });
+      case "note":
+        return NextResponse.json({ ok: true, result: await addOrderNote({ id: params.id, note: String(body.note ?? ""), ...a }) });
       case "pay":
         return NextResponse.json({ ok: true, order: await recordPayment({
           orderId: params.id, amountPaise: Number(body.amountPaise), method: String(body.method ?? "Cash"),

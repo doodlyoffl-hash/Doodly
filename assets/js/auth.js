@@ -274,12 +274,126 @@ window.DOODLY_AUTH = (function () {
         });
         if (firstBad) { shake(firstBad); firstBad.querySelector("input").focus(); return; }
       }
+      // audit OTP verification + password reset where applicable
+      try {
+        const RB0 = window.DOODLY_RBAC, route0 = (document.body && document.body.dataset.route) || "";
+        if (RB0 && RB0.audit) {
+          if (otp) RB0.audit("auth.otp_verified", "OTP verified");
+          if (/forgot-password|reset|new-password/.test(route0)) RB0.audit("auth.password_reset", "Password reset completed");
+        }
+      } catch (e) {}
+      if (form.dataset.loginRole) { resolveCustomerLogin(form); return; }   // customer portal → async backend-identity bridge, then navigate
+      if (!resolveLogin(form)) return;        // sets the role + destination (and may block on a bad account)
       succeed(form);
     });
 
     // google
     const g = form.querySelector(".btn-google");
     if (g) g.addEventListener("click", () => succeed(form));
+
+    // demo staff-email shortcuts on the admin login
+    scope.querySelectorAll(".auth-demo").forEach((b) => b.addEventListener("click", () => {
+      const inp = form.querySelector(".fl-field input"); if (inp) { inp.value = b.dataset.email; inp.dispatchEvent(new Event("input", { bubbles: true })); inp.dispatchEvent(new Event("blur")); }
+    }));
+  }
+
+  /* ============================================================
+     Role-based redirect — resolves the destination + sets the
+     active identity so RBAC routes/nav reflect the role on landing.
+     Customer login → customer; Admin login → looked-up or selected
+     staff role → that role's dashboard. Blocks disabled/locked.
+     ============================================================ */
+  function resolveLogin(form) {
+    const RB = window.DOODLY_RBAC; if (!RB) return true;
+    const showErr = (msg) => { try { if (RB.audit) RB.audit("auth.login_failed", "Blocked sign-in: " + msg, { status: "Failed", entityType: "Session" }); } catch (e) {} const e = form.querySelector("#authErr"); if (e) { e.hidden = false; e.textContent = msg; } shake(form.querySelector(".btn-auth") || form); return false; };
+    if (form.dataset.loginRole) {                         // customer portal
+      RB.setRealRole(form.dataset.loginRole); if (RB.returnToSelf) RB.returnToSelf(); if (RB.recordLogin) RB.recordLogin(true);
+      return true;
+    }
+    if (form.dataset.adminLogin) {                         // admin / staff portal
+      const emailInp = form.querySelector(".fl-field input");
+      const email = emailInp ? emailInp.value.trim().toLowerCase() : "";
+      const sel = form.querySelector("#adminRole");
+      let role = sel ? sel.value : "super_admin", user = null;
+      if (email) { try { user = RB.users().find((u) => !u.deleted && (u.email || "").toLowerCase() === email); } catch (e) {} }
+      if (user) {
+        if (user.status === "disabled") return showErr("This account is disabled. Contact your Super Admin.");
+        if (user.status === "locked") return showErr("This account is locked after failed attempts. Contact your Super Admin.");
+        if (user.role === "customer") return showErr("That's a customer account — please use Customer Login.");
+        role = user.role;                                  // retrieve the assigned role from the account
+      }
+      RB.setRealRole(role); if (RB.returnToSelf) RB.returnToSelf(); if (RB.recordLogin) RB.recordLogin(true);
+      form.dataset.dest = (RB.roleOf(role).home) || "/admin/dashboard.html";   // → correct dashboard for the role
+      return true;
+    }
+    return true;
+  }
+
+  /* ============================================================
+     Customer login → resolve the REAL backend customer id via the dev
+     resolver (POST /api/dev/login), then store it as the current user
+     so the static app forwards X-Doodly-Actor-Id and account pages load
+     per-customer data. Graceful: wrong credentials block with an inline
+     error; an unreachable backend falls back to demo/mock mode so the
+     portal stays explorable offline. Production replaces this with the
+     real Auth.js session (middleware reads req.auth.user.id directly).
+     ============================================================ */
+  async function resolveCustomerLogin(form) {
+    const RB = window.DOODLY_RBAC;
+    const flds = [...form.querySelectorAll(".fl-field input")];
+    const emailInp = form.querySelector('input[type="email"]') || flds[0] || null;
+    const pwInp = form.querySelector('input[type="password"]') || null;
+    const email = emailInp ? String(emailInp.value || "").trim() : "";
+    const password = pwInp ? String(pwInp.value || "") : "";
+
+    // Adopt the customer role locally first (works even if the backend is down).
+    if (RB) { if (RB.setRealRole) RB.setRealRole("customer"); if (RB.returnToSelf) RB.returnToSelf(); }
+
+    let resolved = null;
+    if (window.DOODLY_API && /@/.test(email)) {
+      try {
+        resolved = await window.DOODLY_API.post("/api/dev/login", { email: email.toLowerCase(), password: password });
+      } catch (err) {
+        if (err && (err.status === 401 || err.code === "unauthorized")) return showCustomerAuthError(form, "Invalid email or password.");
+        // 422 (mobile-number login) / offline / other → fall through to demo (mock) mode
+      }
+    }
+    if (resolved && resolved.id) {
+      try { localStorage.setItem("doodly-currentuser", JSON.stringify({ id: resolved.id, name: resolved.name, email: resolved.email, role: resolved.role || "customer" })); } catch (e) {}
+      if (RB && RB.setRealRole) RB.setRealRole(resolved.role || "customer");
+    }
+    if (RB && RB.recordLogin) RB.recordLogin(true);
+    succeed(form);
+  }
+
+  function showCustomerAuthError(form, msg) {
+    let box = form.querySelector("#authErr");
+    if (!box) {
+      box = document.createElement("div");
+      box.className = "auth-err"; box.id = "authErr"; box.setAttribute("role", "alert"); box.setAttribute("aria-live", "assertive");
+      const btn = form.querySelector(".btn-auth");
+      if (btn) form.insertBefore(box, btn); else form.appendChild(box);
+    }
+    box.hidden = false; box.textContent = msg;
+    shake(form.querySelector(".btn-auth") || form);
+  }
+
+  /* ---------- session: logout + configurable idle auto-logout ---------- */
+  function logout() {
+    try { sessionStorage.removeItem("doodly-session-logged"); } catch (e) {}
+    try { localStorage.removeItem("doodly-currentuser"); } catch (e) {}
+    const RB = window.DOODLY_RBAC; if (RB) { if (RB.returnToSelf) RB.returnToSelf(); RB.audit && RB.audit("auth.logout", "Signed out"); }
+    window.location.href = "/login.html";
+  }
+  let idleTimer = null;
+  function setIdleTimeout(min) { try { localStorage.setItem("doodly-idle-min", String(min)); } catch (e) {} initIdle(); }
+  function initIdle() {
+    let min = 0; try { min = parseInt(localStorage.getItem("doodly-idle-min") || "0", 10) || 0; } catch (e) {}
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+    if (!min) return;                                      // 0 = disabled (configurable; off by default)
+    const reset = () => { clearTimeout(idleTimer); idleTimer = setTimeout(() => { try { if (window.DOODLY_RBAC && window.DOODLY_RBAC.audit) window.DOODLY_RBAC.audit("auth.session_timeout", "Auto sign-out after inactivity", { status: "Success", entityType: "Session" }); } catch (e) {} if (window.DOODLY_PINCODE) DOODLY_PINCODE.toast("Signed out due to inactivity"); logout(); }, min * 60000); };
+    ["click", "keydown", "mousemove", "scroll", "touchstart"].forEach((ev) => document.addEventListener(ev, reset, { passive: true }));
+    reset();
   }
 
   function ripple(btn, e) {
@@ -355,5 +469,5 @@ window.DOODLY_AUTH = (function () {
     wireCursor(scope);
   }
 
-  return { init };
+  return { init, logout, initIdle, setIdleTimeout };
 })();

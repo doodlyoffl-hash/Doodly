@@ -6,6 +6,7 @@ import { z } from "zod";
 import { verifyPaymentSignature } from "@/lib/razorpay";
 import { db } from "@/lib/db";
 import { creditTrialCashback } from "@/lib/wallet/service";
+import { syncFromOrderPayment } from "@/lib/payments/service";
 
 export const runtime = "nodejs";
 
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
 
   // Mark the pre-created Payment row (made at order time) as PAID. Idempotent;
   // the webhook is the source of truth, this is just for instant UX.
-  const payment = await db.payment.findFirst({ where: { razorpayOrderId: razorpay_order_id }, select: { userId: true, orderId: true } });
+  const payment = await db.payment.findFirst({ where: { razorpayOrderId: razorpay_order_id }, select: { id: true, userId: true, orderId: true } });
   await db.payment.updateMany({
     where: { razorpayOrderId: razorpay_order_id },
     data: { status: "PAID", razorpayPayId: razorpay_payment_id },
@@ -36,6 +37,8 @@ export async function POST(req: NextRequest) {
   let cashback: { credited: boolean; amountPaise?: number; balancePaise?: number; reference?: string } | null = null;
   if (payment) {
     await db.order.update({ where: { id: payment.orderId }, data: { status: "PAID" } }).catch(() => {});
+    // Sync this gateway payment into the unified Payments ledger (best-effort).
+    await syncFromOrderPayment(payment.id).catch((e) => console.error("payment.ledgerSync", (e as Error)?.message));
     try { cashback = await creditTrialCashback({ userId: payment.userId }); }
     catch (e) { console.error("payment.cashback", (e as Error)?.message); }
   }

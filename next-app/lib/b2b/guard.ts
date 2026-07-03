@@ -6,20 +6,14 @@
 import "server-only";
 import type { NextRequest } from "next/server";
 import type { RoleKey } from "@/lib/rbac";
-
-const ROLES: RoleKey[] = [
-  "customer", "delivery_executive", "support", "operations", "procurement",
-  "accountant", "inventory", "quality", "marketing", "admin", "super_admin",
-];
+import { readUserId, readRole } from "@/lib/auth/identity";
 
 export function actorRole(req: NextRequest): RoleKey {
-  const cookieRole = req.cookies.get("doodly-role")?.value as RoleKey | undefined;
-  const fallback: RoleKey = process.env.NODE_ENV === "production" ? "customer" : "super_admin";
-  return cookieRole && ROLES.includes(cookieRole) ? cookieRole : fallback;
+  return readRole(req);
 }
 
 export function actorId(req: NextRequest): string | undefined {
-  return req.cookies.get("doodly-uid")?.value ?? undefined;
+  return readUserId(req) ?? undefined;
 }
 
 /** Admin + Super-Admin may use the B2B module. Nobody else. */

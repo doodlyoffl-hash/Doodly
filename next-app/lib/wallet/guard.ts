@@ -5,20 +5,19 @@
 import "server-only";
 import type { NextRequest } from "next/server";
 import { can, type RoleKey } from "@/lib/rbac";
-
-const ROLES: RoleKey[] = [
-  "customer", "delivery_executive", "support", "operations", "procurement",
-  "accountant", "inventory", "quality", "marketing", "admin", "super_admin",
-];
+import { readUserId, readRole } from "@/lib/auth/identity";
 
 export function currentUserId(req: NextRequest): string | null {
-  return req.cookies.get("doodly-uid")?.value ?? null;
+  return readUserId(req);
 }
 
 export function actorRole(req: NextRequest): RoleKey {
-  const cookieRole = req.cookies.get("doodly-role")?.value as RoleKey | undefined;
-  const fallback: RoleKey = process.env.NODE_ENV === "production" ? "customer" : "super_admin";
-  return cookieRole && ROLES.includes(cookieRole) ? cookieRole : fallback;
+  return readRole(req);
+}
+
+/** The acting admin's id (for WalletTxn.createdById — a plain label column, not a User FK). */
+export function actorId(req: NextRequest): string | null {
+  return readUserId(req);
 }
 
 export const canViewWallets = (role: RoleKey) => can(role, "payments", "view") || can(role, "billing", "view");

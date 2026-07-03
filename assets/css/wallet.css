@@ -1,0 +1,151 @@
+/* =============================================================
+   DOODLY — Premium Wallet (DOODLY_WALLET). Fintech-style, glassmorphism,
+   brand gradients, animated. Scoped .wal / .wal-pay. Reduced-motion aware.
+   ============================================================= */
+.wal { display: grid; gap: 18px; }
+
+/* ---- balance hero ---- */
+.wal-hero { position: relative; overflow: hidden; border-radius: 24px; padding: 26px 28px; color: #fff;
+  background: linear-gradient(140deg, #0f5137 0%, #12402f 45%, #0a2e22 100%);
+  box-shadow: 0 26px 60px -30px rgba(10,46,34,.7), inset 0 1px 0 rgba(255,255,255,.08); }
+.wal-hero-fx { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.wal-hero-glow { position: absolute; top: -60%; right: -20%; width: 60%; height: 200%; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(31,174,102,.55), transparent 70%); filter: blur(10px); animation: walGlow 6s ease-in-out infinite; }
+.wal-rupee { position: absolute; font-weight: 800; color: rgba(255,255,255,.10); font-size: 46px; animation: walFloat 7s ease-in-out infinite; }
+.wal-rupee.r1 { left: 8%; top: 60%; font-size: 38px; animation-delay: .2s; }
+.wal-rupee.r2 { right: 14%; top: 22%; font-size: 62px; animation-delay: 1.4s; }
+.wal-rupee.r3 { right: 34%; bottom: -8%; font-size: 30px; animation-delay: 2.6s; }
+.wal-hero-top { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; }
+.wal-hero-label { font-size: .82rem; opacity: .82; letter-spacing: .03em; text-transform: uppercase; }
+.wal-hero-chip { display: inline-flex; align-items: center; gap: 5px; font-size: .72rem; font-weight: 700; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.2); padding: 4px 10px; border-radius: 999px; }
+.wal-bal { position: relative; z-index: 1; margin: 12px 0 2px; font-family: var(--font-display, "Fraunces", serif); font-size: clamp(2.3rem, 6vw, 3.2rem); font-weight: 800; line-height: 1; letter-spacing: -.01em; }
+.wal-hero-sub { position: relative; z-index: 1; font-size: .86rem; opacity: .85; }
+.wal-hero-sub b { color: var(--gold, #E8B864); opacity: 1; }
+.wal-hero-cta { position: relative; z-index: 1; display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+.wal-add { border: none; cursor: pointer; font: inherit; font-weight: 800; font-size: .95rem; color: var(--forest, #0F3D2E); background: #fff; padding: 12px 22px; border-radius: 999px; box-shadow: 0 10px 24px -10px rgba(0,0,0,.5); transition: transform .2s, box-shadow .2s; }
+.wal-add:hover { transform: translateY(-2px); box-shadow: 0 16px 30px -12px rgba(0,0,0,.55); }
+.wal-add:active { transform: translateY(0) scale(.98); }
+.wal-use { display: inline-flex; align-items: center; text-decoration: none; font-weight: 700; font-size: .95rem; color: #fff; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.28); padding: 12px 20px; border-radius: 999px; transition: background .2s; }
+.wal-use:hover { background: rgba(255,255,255,.2); }
+
+/* ---- quick actions ---- */
+.wal-qas { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: none; }
+.wal-qas::-webkit-scrollbar { display: none; }
+.wal-qa { flex: 0 0 auto; display: inline-flex; flex-direction: column; align-items: center; gap: 6px; width: 84px; padding: 12px 8px; border: 1px solid var(--line, #e7ece8); background: var(--surface, #fff); border-radius: 16px; cursor: pointer; font: inherit; font-size: .72rem; font-weight: 600; color: var(--ink-2, #37463d); box-shadow: 0 10px 24px -22px rgba(11,31,23,.4); transition: transform .2s, border-color .2s, box-shadow .2s; }
+.wal-qa:hover { transform: translateY(-3px); border-color: var(--leaf, #1FAE66); box-shadow: 0 16px 30px -20px rgba(11,31,23,.4); }
+.wal-qa-ic { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--mint-soft, #eef6ef); color: var(--leaf-600, #169A57); font-size: 1.1rem; }
+
+/* ---- metric cards ---- */
+.wal-metrics { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 720px) { .wal-metrics { grid-template-columns: repeat(4, 1fr); } }
+.wal-m { display: flex; align-items: center; gap: 12px; border: 1px solid var(--line, #e7ece8); background: var(--surface, #fff); border-radius: 16px; padding: 14px 16px; box-shadow: 0 12px 28px -24px rgba(11,31,23,.3); }
+.wal-m.primary { background: linear-gradient(135deg, var(--mint-soft, #eef6ef), #fff); border-color: var(--mint, #cfead8); }
+.wal-m.save { background: linear-gradient(135deg, #fff8ea, #eefaf0); border-color: var(--gold-soft, #f3e2bd); }
+.wal-m.warn { border-color: var(--gold, #E8B864); }
+.wal-m-ic { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: var(--mint-soft, #eef6ef); font-size: 1.2rem; flex: none; }
+.wal-m-v { margin: 0; font-family: var(--font-display, "Fraunces", serif); font-size: 1.28rem; font-weight: 800; color: var(--forest, #0F3D2E); line-height: 1; }
+.wal-m-l { margin: 4px 0 0; font-size: .76rem; color: var(--ink-3, #6b7c72); }
+.wal-m-s { margin: 2px 0 0; font-size: .68rem; color: var(--leaf-600, #169A57); font-weight: 600; }
+
+/* ---- info cards ---- */
+.wal-info { display: grid; gap: 14px; grid-template-columns: 1fr; }
+@media (min-width: 860px) { .wal-info { grid-template-columns: repeat(3, 1fr); align-items: start; } }
+.wal-ic-card { border: 1px solid var(--line, #e7ece8); background: var(--surface, #fff); border-radius: 18px; padding: 16px 18px; box-shadow: 0 12px 30px -26px rgba(11,31,23,.3); }
+.wal-ic-h { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.wal-ic-h b { font: 700 1rem/1 var(--font-display, "Fraunces", serif); color: var(--forest, #0F3D2E); }
+.wal-ic-h span { font-size: 1.2rem; }
+.wal-ic-rows { display: grid; gap: 9px; }
+.wal-ic-rows > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: .88rem; color: var(--ink-2, #37463d); }
+.wal-ic-rows a { color: var(--leaf-600, #169A57); font-weight: 700; text-decoration: none; }
+.wal-ic-rows a:hover { text-decoration: underline; }
+
+/* ---- insights ---- */
+.wal-insights { display: grid; gap: 14px; grid-template-columns: 1fr; }
+@media (min-width: 760px) { .wal-insights { grid-template-columns: 1.1fr 1fr; } }
+.wal-ins-card { border: 1px solid var(--line, #e7ece8); background: var(--surface, #fff); border-radius: 18px; padding: 18px; box-shadow: 0 12px 30px -26px rgba(11,31,23,.3); }
+.wal-ins-card h4 { margin: 0 0 4px; font: 600 1rem/1.2 var(--font-display, "Fraunces", serif); color: var(--forest, #0F3D2E); }
+.wal-legend { display: flex; gap: 14px; margin-bottom: 12px; font-size: .74rem; color: var(--ink-3, #6b7c72); }
+.wal-lg { display: inline-flex; align-items: center; gap: 6px; }
+.wal-lg::before { content: ""; width: 10px; height: 10px; border-radius: 3px; }
+.wal-lg.cr::before { background: var(--leaf, #1FAE66); } .wal-lg.db::before { background: #cdd8ce; }
+.wal-bars { display: flex; align-items: flex-end; gap: 12px; height: 130px; padding-top: 6px; }
+.wal-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
+.wal-bar-pair { display: flex; align-items: flex-end; gap: 3px; height: 100%; width: 100%; justify-content: center; }
+.wal-bar { width: 12px; border-radius: 5px 5px 0 0; transition: height .7s cubic-bezier(.2,.8,.2,1); min-height: 2px; }
+.wal-bar.cr { background: linear-gradient(180deg, #2fd07f, var(--leaf-600, #169A57)); }
+.wal-bar.db { background: #d3ddd5; }
+.wal-bar-lbl { font-size: .68rem; color: var(--ink-3, #6b7c72); }
+.wal-break { display: grid; gap: 12px; }
+.wal-brk-h { display: flex; justify-content: space-between; font-size: .82rem; color: var(--ink-2, #37463d); margin-bottom: 5px; }
+.wal-brk-h b { color: var(--forest, #0F3D2E); }
+.wal-brk-bar { height: 8px; border-radius: 999px; background: var(--mint-soft, #eef6ef); overflow: hidden; }
+.wal-brk-bar span { display: block; height: 100%; border-radius: 999px; width: 0; transition: width .8s cubic-bezier(.2,.8,.2,1); }
+
+/* ---- transaction history ---- */
+.wal-history { border-radius: 18px; }
+.wal-hist-tools { display: flex; gap: 10px; padding: 0 18px 8px; flex-wrap: wrap; }
+.wal-hist-search { flex: 1; min-width: 180px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line, #e7ece8); border-radius: 12px; padding: 8px 12px; color: var(--ink-3, #6b7c72); }
+.wal-hist-search input { flex: 1; border: none; outline: none; background: none; font: inherit; font-size: .9rem; color: var(--ink, #0B1F17); }
+.wal-hist-tools .input { max-width: 190px; }
+.wal-hist-tbl td { vertical-align: middle; }
+.wal-srcpill { display: inline-block; font-size: .72rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
+.wal-srcpill.cr { background: var(--mint-soft, #eef6ef); color: var(--leaf-600, #169A57); }
+.wal-srcpill.db { background: #f0f2f4; color: var(--ink-2, #37463d); }
+.wal-src-desc { margin-top: 3px; }
+.wal-cr { color: var(--leaf-600, #169A57); font-weight: 800; } .wal-db { color: var(--ink-2, #37463d); font-weight: 800; }
+.wal-rev { opacity: .5; }
+.wal-hist-pager { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 14px 0 4px; }
+.wal-pg { font-size: .84rem; color: var(--ink-3, #6b7c72); }
+.wal-frozen-row { background: rgba(216,58,58,.05); }
+
+/* ---- Add Money modal ---- */
+.wal-pay { position: relative; }
+.wal-pay-x { position: absolute; top: 12px; right: 12px; z-index: 2; background: none; border: none; font-size: 1.6rem; line-height: 1; color: var(--ink-3, #6b7c72); cursor: pointer; }
+.wal-bal-mini { font-size: .86rem; color: var(--ink-3, #6b7c72); margin-bottom: 4px; } .wal-bal-mini b { color: var(--forest, #0F3D2E); }
+.wal-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 4px 0 6px; }
+.wal-preset { border: 1px solid var(--line, #e7ece8); background: var(--surface, #fff); border-radius: 12px; padding: 12px 6px; font: inherit; font-weight: 800; font-size: 1rem; color: var(--forest, #0F3D2E); cursor: pointer; transition: transform .15s, border-color .15s, background .15s; }
+.wal-preset:hover { transform: translateY(-2px); border-color: var(--leaf, #1FAE66); }
+.wal-preset.on { background: var(--leaf-600, #169A57); border-color: var(--leaf-600, #169A57); color: #fff; }
+.wal-custom { display: grid; gap: 5px; margin-top: 6px; } .wal-custom > span { font-size: .78rem; font-weight: 600; color: var(--ink-3, #6b7c72); }
+.wal-custom-in { display: flex; align-items: center; gap: 4px; border: 1px solid var(--line, #e7ece8); border-radius: 12px; padding: 10px 14px; }
+.wal-custom-in i { font-style: normal; font-weight: 800; color: var(--forest, #0F3D2E); } .wal-custom-in input { flex: 1; border: none; outline: none; font: inherit; font-size: 1.05rem; font-weight: 700; }
+.wal-pay-err { color: #d83a3a; font-size: .8rem; font-weight: 600; margin: 6px 0 0; }
+.wal-pay-note, .wal-gw-note { display: flex; align-items: center; gap: 7px; margin-top: 12px; font-size: .76rem; color: var(--ink-3, #6b7c72); }
+.wal-pay-msg { color: var(--ink-2, #37463d); line-height: 1.5; margin: 4px 0; }
+.wal-pay-amt { font-size: 1rem; color: var(--ink-2, #37463d); margin-bottom: 12px; } .wal-pay-amt b { color: var(--forest, #0F3D2E); font-size: 1.2rem; }
+.wal-methods { display: flex; gap: 10px; }
+.wal-method { flex: 1; border: 1px solid var(--line, #e7ece8); background: var(--surface, #fff); border-radius: 12px; padding: 12px; font: inherit; font-weight: 700; font-size: .88rem; color: var(--ink-2, #37463d); cursor: pointer; transition: border-color .15s, background .15s; }
+.wal-method.on { border-color: var(--leaf-600, #169A57); background: var(--mint-soft, #eef6ef); color: var(--leaf-600, #169A57); }
+/* processing */
+.wal-proc { text-align: center; padding: 14px 0; } .wal-proc p { margin: 14px 0 0; color: var(--ink-2, #37463d); }
+.wal-loader { display: inline-flex; gap: 8px; }
+.wal-loader span { width: 14px; height: 14px; border-radius: 50%; background: var(--leaf, #1FAE66); animation: walBounce 1s ease-in-out infinite; }
+.wal-loader span:nth-child(2) { animation-delay: .15s; } .wal-loader span:nth-child(3) { animation-delay: .3s; }
+/* success */
+.wal-success { position: relative; text-align: center; padding: 18px 0 6px; overflow: hidden; }
+.wal-suc-badge { width: 66px; height: 66px; margin: 0 auto 12px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: var(--grad-leaf, linear-gradient(135deg, #1FAE66, #169A57)); box-shadow: 0 12px 26px -10px rgba(31,174,102,.6); animation: walSucPop .5s cubic-bezier(.2,1.4,.4,1); }
+.wal-success h3 { margin: 0; font: 800 1.4rem/1.1 var(--font-display, "Fraunces", serif); color: var(--forest, #0F3D2E); }
+.wal-success p { margin: 6px 0 0; color: var(--ink-2, #37463d); } .wal-success b { color: var(--forest, #0F3D2E); }
+.wal-coin { position: absolute; top: -20px; font-size: 1.5rem; animation: walDrop 1.1s ease-in forwards; }
+.wal-coin.c1 { left: 26%; animation-delay: .05s; } .wal-coin.c2 { left: 50%; font-size: 1.9rem; animation-delay: .2s; } .wal-coin.c3 { left: 72%; animation-delay: .35s; }
+/* failure */
+.wal-fail { text-align: center; padding: 14px 0; } .wal-fail p { margin: 12px 0 0; color: var(--ink-2, #37463d); }
+.wal-fail-badge { width: 60px; height: 60px; margin: 0 auto; border-radius: 50%; display: grid; place-items: center; font-size: 2rem; font-weight: 800; color: #fff; background: linear-gradient(135deg, #e8705a, #d83a3a); }
+
+@keyframes walGlow { 0%,100% { opacity: .7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.12); } }
+@keyframes walFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+@keyframes walBounce { 0%,100% { transform: translateY(0); opacity: .5; } 50% { transform: translateY(-10px); opacity: 1; } }
+@keyframes walSucPop { from { transform: scale(0); } to { transform: scale(1); } }
+@keyframes walDrop { 0% { transform: translateY(0) rotate(0); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateY(150px) rotate(220deg); opacity: 0; } }
+
+/* checkout: pre-payment eligibility note + success cashback banner (reused) */
+.co-cashback, .wal-eligible { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--leaf); background: var(--mint-soft); border-radius: var(--r-sm); padding: 14px 16px; margin: 14px 0; text-align: left; }
+.co-cashback b, .wal-eligible b { color: var(--forest); font-size: 1rem; }
+.co-cashback span, .wal-eligible span { color: var(--ink-2); font-size: .84rem; }
+.wal-eligible { animation: walpop .4s cubic-bezier(.2,1.2,.3,1); }
+@keyframes walpop { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .wal-hero-glow, .wal-rupee, .wal-loader span, .wal-coin, .wal-suc-badge { animation: none !important; }
+  .wal-coin { display: none; } .wal-bar, .wal-brk-bar span, .wal-add, .wal-qa, .wal-preset { transition: none !important; }
+}

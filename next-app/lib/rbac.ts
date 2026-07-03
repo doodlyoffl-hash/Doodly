@@ -19,7 +19,7 @@ const LEVEL_ACTIONS: Record<string, string[]> = {
 const SPECIALS: Record<string, string[]> = { payments: ["refund", "approve"], billing: ["approve"], inventory: ["adjust"], bottleInventory: ["adjust"], deliveries: ["assign"] };
 
 const ADMIN_FULL: Record<string, Level> = {};
-["dashboard", "orders", "subscriptions", "billing", "customers", "payments", "revenue", "coupons", "offers", "products", "categories", "inventory", "bottleInventory", "deliverySettings", "deliveries", "serviceableAreas", "drivers", "routes", "farmers", "procurement", "quality", "reports", "blogs", "cms", "notifications", "support", "users", "roles", "auditLogs", "settings"].forEach((m) => (ADMIN_FULL[m] = "full"));
+["dashboard", "orders", "subscriptions", "billing", "customers", "payments", "revenue", "coupons", "offers", "products", "categories", "inventory", "bottleInventory", "deliverySettings", "deliveries", "serviceableAreas", "drivers", "routes", "farmers", "procurement", "quality", "reports", "blogs", "cms", "notifications", "support", "users", "roles", "auditLogs", "settings", "careers"].forEach((m) => (ADMIN_FULL[m] = "full"));
 Object.assign(ADMIN_FULL, { permissions: "", settings: "view", roles: "view", auditLogs: "view" });
 
 export const DEFAULT_MATRIX: Record<RoleKey, "*" | Record<string, Level>> = {

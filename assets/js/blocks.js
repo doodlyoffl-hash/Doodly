@@ -118,7 +118,7 @@ window.DOODLY_BLOCKS = (function () {
     wallet: { title:"Transactions", cols:["Date","Description","Amount"],
       row:(r)=>[r.date, r.desc, `<span class="strong" style="color:${r.credit?'var(--leaf-600)':'var(--ink)'}">${r.amount}</span>`] },
     invoices: { title:"Invoices", cols:["Invoice","Date","Amount","Tax","Status",""],
-      row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.date, `<span class="strong">${inr(r.amount)}</span>`, r.gst, badge(r.status), `<button class="link js-invoice-dl" data-inv="${r.id}" data-date="${r.date}" data-amt="${r.amount}" data-gst="${r.gst}" aria-label="Download invoice ${r.id}">${icon("download",16)}</button>`] },
+      row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.date, `<span class="strong">${inr(r.amount)}</span>`, r.gst, badge(r.status), `<a class="link" href="/invoice.html?id=${encodeURIComponent(r.id)}" aria-label="View invoice ${r.id}">${icon("eye",16)} View</a> <button class="link js-invoice-dl" data-inv="${r.id}" data-date="${r.date}" data-amt="${r.amount}" data-gst="${r.gst}" aria-label="Download invoice ${r.id}">${icon("download",16)}</button>`] },
     referrals: { title:"Your referrals", cols:["Friend","Date","Status","Reward"],
       row:(r)=>[r.name, r.date, badge(r.status), `<span class="strong">${r.reward}</span>`] },
     tickets: { title:"Support tickets", cols:["Ticket","Subject","Date","Status"],
@@ -127,22 +127,26 @@ window.DOODLY_BLOCKS = (function () {
       row:(r)=>[`<span class="cell-id">${r.id}</span>`, userCell(r.initials,r.name), r.area, r.plan, r.since, badge(r.status)] },
     adminOrders: { title:"Orders", cols:["Order","Customer","Items","Amount","Payment","Status"],
       row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.cust, r.item, `<span class="strong">${inr(r.amount)}</span>`, badge(r.pay), badge(r.status)] },
-    drivers: { title:"Delivery executives", cols:["ID","Driver","Zone","Progress","Rating","Status"],
-      row:(r)=>[`<span class="cell-id">${r.id}</span>`, userCell(r.initials,r.name), r.zone, `${r.done}/${r.stops} stops`, `${r.rating}★`, badge(r.status)] },
-    routes: { title:"Routes", cols:["Route","Zone","Driver","Stops","Milk","Status"],
-      row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.zone, r.driver, r.stops, r.litres, badge(r.status)] },
-    farmers: { title:"Farmers", cols:["ID","Farm","Owner","Village","Supply","Fat","Status"],
-      row:(r)=>[`<span class="cell-id">${r.id}</span>`, `<span class="strong">${r.name}</span>`, r.owner, r.village, r.litres, r.fat, badge(r.status)] },
-    procurement: { title:"Milk procurement (today)", cols:["Date","Farm","Litres","Fat","SNF","Rate","Amount","QC"],
-      row:(r)=>[r.date, r.farm, r.litres, r.fat, r.snf, r.rate, `<span class="strong">${inr(r.amount)}</span>`, badge(r.qc)] },
-    quality: { title:"Quality tests", cols:["Batch","Farm","Fat","SNF","Temp","Result"],
-      row:(r)=>[`<span class="cell-id">${r.batch}</span>`, r.farm, r.fat, r.snf, r.temp, badge(r.result)] },
+    drivers: { title:"Delivery executives", cols:["ID","Driver","Zone","Progress","Rating","Status","Manage"],
+      row:(r)=>[`<span class="cell-id">${r.id}</span>`, userCell(r.initials,r.name), r.zone, `${r.done}/${r.stops} stops`, `${r.rating}★`, badge(r.status), r._id?`<button class="link js-driver-manage" data-driver="${r._id}">Manage</button>`:""] },
+    routes: { title:"Routes", cols:["Route","Zone","Driver","Stops","Distance","Status","Manage"],
+      row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.zone, r.driver, r.stops, r.litres, badge(r.status), r._id?`<button class="link js-route-manage" data-route="${r._id}">Manage</button>`:""] },
+    farmers: { title:"Farmers", cols:["ID","Farm","Owner","Village","Supply","Fat","Status","Manage"],
+      row:(r)=>[`<span class="cell-id">${r.id}</span>`, `<span class="strong">${r.name}</span>`, r.owner, r.village, r.litres, r.fat, badge(r.status), r._id?`<button class="link js-farmer-manage" data-farmer="${r._id}">Manage</button>`:""] },
+    procurement: { title:"Milk procurement (today)", cols:["Date","Farm","Litres","Fat","SNF","Rate","Amount","QC","Manage"],
+      row:(r)=>[r.date, r.farm, r.litres, r.fat, r.snf, r.rate, `<span class="strong">${inr(r.amount)}</span>`, badge(r.qc), r._id?`<button class="link js-proc-manage" data-proc="${r._id}">Manage</button>`:""] },
+    quality: { title:"Quality tests", cols:["Batch","Farm","Fat","SNF","Temp","Result","Manage"],
+      row:(r)=>[`<span class="cell-id">${r.batch}</span>`, r.farm, r.fat, r.snf, r.temp, badge(r.result), r._id?`<button class="link js-quality-manage" data-quality="${r._id}">Manage</button>`:""] },
     inventory: { title:"Inventory", cols:["SKU","Item","Stock","Reorder at","Status"],
       row:(r)=>[`<span class="cell-id">${r.sku}</span>`, r.item, `<span class="strong">${r.stock}</span>`, r.reorder, badge(r.status)] },
+    bottleMoves: { title:"Bottle movements", cols:["Time","Capacity","Movement","Qty","Reason","By"],
+      row:(r)=>[r.time, `<span class="strong">${r.cap}</span>`, `<span class="muted-sm">${r.from} →</span> ${badge(r.to)}`, `<span class="strong">${r.qty}</span>`, r.reason, r.by] },
+    adminDeliveries: { title:"Deliveries", cols:["Delivery","Customer","Zone / area","Driver","Slot","Bottles","Status","Manage"],
+      row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.customer, r.area, r.driver, r.slot, `<span class="strong">${r.bottles}</span>`, badge(r.status), `<button class="link js-delivery-manage" data-delivery="${r._id}">Manage</button>`] },
     payments: { title:"Payments", cols:["Payment ID","Customer","Method","Amount","Status","Date"],
       row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.cust, r.method, `<span class="strong">${inr(r.amount)}</span>`, badge(r.status), r.date] },
     coupons: { title:"Coupons", cols:["Code","Description","Usage","Status",""],
-      row:(r)=>[`<span class="cell-id">${r.code}</span>`, r.desc, r.uses, badge(r.status), `<a class="link" href="/admin/coupons.html" aria-label="Edit coupon ${r.code}">${icon("edit",16)}</a>`] },
+      row:(r)=>[`<span class="cell-id">${r.code}</span>`, r.desc, r.uses, badge(r.status), r._id?`<button class="link js-coupon-manage" data-id="${r._id}">Manage</button>`:`<a class="link" href="/admin/coupons.html" aria-label="Edit coupon ${r.code}">${icon("edit",16)}</a>`] },
     adminTickets: { title:"Support tickets", cols:["Ticket","Customer","Subject","Priority","Status"],
       row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.cust, r.subject, badge(r.pri), badge(r.status)] },
     audit: { title:"Audit log", cols:["User","Action","Time","IP"],
@@ -283,12 +287,14 @@ window.DOODLY_BLOCKS = (function () {
   };
 
   R.cardGrid = (s) => `
-    <div class="grid-cards cols-${s.cols||3} reveal">${s.cards.map(c=>`
-      <a class="tile" href="${c.href||"#"}" style="display:block">
-        ${c.ic?`<div class="qa-tile" style="all:unset"><div class="feature" style="padding:0;box-shadow:none;border:none;background:none"><div class="ic">${icon(c.ic)}</div></div></div>`:""}
+    <div class="grid-cards cols-${s.cols||3} reveal">${s.cards.map(c=>{
+      const inner = `${c.ic?`<div class="qa-tile" style="all:unset"><div class="feature" style="padding:0;box-shadow:none;border:none;background:none"><div class="ic">${icon(c.ic)}</div></div></div>`:""}
         <h4>${c.title}</h4><p>${c.text||""}</p>
-        ${c.link?`<div class="mt-1 hl" style="font-size:.85rem;font-weight:700">${c.link} →</div>`:""}
-      </a>`).join("")}</div>`;
+        ${(c.link&&c.href)?`<div class="mt-1 hl" style="font-size:.85rem;font-weight:700">${c.link} →</div>`:""}`;
+      return c.href
+        ? `<a class="tile" href="${c.href}" style="display:block">${inner}</a>`
+        : `<div class="tile tile-static" style="display:block">${inner}</div>`;
+    }).join("")}</div>`;
 
   R.quickActions = (s) => `
     <div class="qa-row reveal">${s.items.map(a=>`
@@ -296,21 +302,14 @@ window.DOODLY_BLOCKS = (function () {
 
   R.table = (s) => {
     const cfg = TABLES[s.dataset]; if (!cfg) return "";
+    // Host for the unified DataTable engine (datatable.js) — search · sort · facet filters ·
+    // date range · saved views · favorites · export · pagination. Falls back to a static
+    // render below if the engine hasn't loaded, so the data is never invisible.
     const rows = M()[s.dataset] || [];
     const head = `<tr>${cfg.cols.map(c=>`<th>${c}</th>`).join("")}</tr>`;
     const body = rows.map(r=>`<tr>${cfg.row(r).map(c=>`<td>${c}</td>`).join("")}</tr>`).join("");
-    return `
-      <div class="reveal">
-        ${s.toolbar!==false?`<div class="toolbar">
-          <div class="search-box grow">${icon("search")}<input class="input" placeholder="Search ${cfg.title.toLowerCase()}…"></div>
-          ${(s.filters||["All"]).length?`<div class="seg">${(s.filters||["All","Active","Archived"]).map((f,i)=>`<button class="${i===0?"active":""}">${f}</button>`).join("")}</div>`:""}
-          <select class="select"><option>Sort: Newest</option><option>Oldest</option><option>A–Z</option></select>
-        </div>`:""}
-        <div class="table-wrap">
-          <table class="tbl"><thead>${head}</thead><tbody>${body}</tbody></table>
-        </div>
-        ${s.pager!==false?`<div class="pager"><span class="meta">Showing ${rows.length} of ${rows.length*4}</span>
-          <div class="pages"><span class="pg">‹</span><span class="pg active">1</span><span class="pg">2</span><span class="pg">3</span><span class="pg">›</span></div></div>`:""}
+    return `<div class="reveal dt-host" data-dataset="${s.dataset}" data-toolbar="${s.toolbar!==false}" data-pager="${s.pager!==false}">
+        <div class="table-wrap"><table class="tbl"><thead>${head}</thead><tbody>${body}</tbody></table></div>
       </div>`;
   };
 
@@ -321,7 +320,7 @@ window.DOODLY_BLOCKS = (function () {
       <div class="tl-t">${i.t}</div><div class="tl-s">${i.s||""}</div></div>`).join("")}</div></div>`;
   };
 
-  R.tabs = (s) => `<div class="tabs reveal">${s.items.map((t,i)=>`<button class="${i===0?"active":""}">${t}</button>`).join("")}</div>`;
+  R.tabs = (s) => `<div class="tabs reveal js-tabs">${s.items.map((t,i)=>`<button type="button" class="${i===0?"active":""}" data-tab="${i}" role="tab" aria-selected="${i===0?"true":"false"}">${t}</button>`).join("")}</div>${s.panels?`<div class="tab-panels reveal">${s.panels.map((p,i)=>`<div class="tab-panel" data-panel="${i}"${i?" hidden":""}>${p}</div>`).join("")}</div>`:""}`;
 
   R.faq = (s) => {
     const items = s.items || D().faqs;
@@ -342,21 +341,27 @@ window.DOODLY_BLOCKS = (function () {
 
   R.skeleton = () => `<div class="panel panel-pad reveal"><div class="sk-line skeleton w40"></div><div class="sk-line skeleton w80"></div><div class="sk-line skeleton"></div><div class="sk-line skeleton w60"></div></div>`;
 
-  R.form = (s) => `
-    <div class="panel panel-pad reveal" style="max-width:${s.width||"720px"}">
-      ${s.title?`<h3 style="font-family:'Fraunces',serif;color:var(--forest);font-size:1.2rem;margin-bottom:6px">${s.title}</h3>`:""}
-      ${s.sub?`<p class="muted-sm" style="margin-bottom:18px">${s.sub}</p>`:""}
-      <div class="form-grid ${s.cols===2?"two":""}">${s.fields.map(f=>`
-        <div class="field ${f.full?"full":""}">
-          <label>${f.label}</label>
-          ${f.type==="textarea"?`<textarea placeholder="${f.placeholder||""}"></textarea>`
-            :f.type==="select"?`<select>${(f.options||[]).map(o=>`<option>${o}</option>`).join("")}</select>`
-            :`<input type="${f.type||"text"}" placeholder="${f.placeholder||""}">`}
-          ${f.hint?`<span class="hint">${f.hint}</span>`:""}
-        </div>`).join("")}</div>
-      ${s.check?`<label class="check mt-2"><input type="checkbox"> ${s.check}</label>`:""}
-      <div class="mt-2"><button class="btn btn-primary">${s.submit||"Save changes"}</button>${s.cancel?`<button class="btn btn-ghost" style="margin-left:8px">Cancel</button>`:""}</div>
-    </div>`;
+  const slugify = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  R.form = (s) => {
+    const fields = s.fields.map(f => {
+      const name = f.name || slugify(f.label);
+      const req = f.req ? " required" : "";
+      const star = f.req ? ` <span class="req" aria-hidden="true">*</span>` : "";
+      const ctrl = f.type === "textarea" ? `<textarea name="${name}" placeholder="${f.placeholder || ""}"${req}>${f.value || ""}</textarea>`
+        : f.type === "select" ? `<select name="${name}"${req}>${(f.options || []).map(o => `<option${f.value === o ? " selected" : ""}>${o}</option>`).join("")}</select>`
+        : `<input name="${name}" type="${f.type || "text"}" placeholder="${f.placeholder || ""}" value="${f.value || ""}"${req}>`;
+      return `<div class="field ${f.full ? "full" : ""}"><label>${f.label}${star}</label>${ctrl}${f.hint ? `<span class="hint">${f.hint}</span>` : ""}</div>`;
+    }).join("");
+    return `
+    <form class="panel panel-pad reveal js-form" data-form="${s.key || slugify(s.title || s.submit || "form")}" novalidate style="max-width:${s.width || "720px"}">
+      ${s.title ? `<h3 style="font-family:'Fraunces',serif;color:var(--forest);font-size:1.2rem;margin-bottom:6px">${s.title}</h3>` : ""}
+      ${s.sub ? `<p class="muted-sm" style="margin-bottom:18px">${s.sub}</p>` : ""}
+      <div class="form-grid ${s.cols === 2 ? "two" : ""}">${fields}</div>
+      ${s.check ? `<label class="check mt-2"><input type="checkbox" name="${slugify(s.check)}"> ${s.check}</label>` : ""}
+      <div class="form-msg" role="status" aria-live="polite" hidden></div>
+      <div class="mt-2"><button type="submit" class="btn btn-primary">${s.submit || "Save changes"}</button><button type="reset" class="btn btn-ghost js-formreset" style="margin-left:8px">${s.cancelLabel || "Reset"}</button></div>
+    </form>`;
+  };
 
   R.feed = (s) => {
     const items = s.items || (M()[s.dataset] || []);
@@ -419,7 +424,24 @@ window.DOODLY_BLOCKS = (function () {
     const milk = (d.products || []).find(p => p.id === "milk") || {};
     const trial = (d.variants || []).find(x => x.type === "trial") || {};
     const mq = milk.quality || {};
-    const chips = [["leaf","No preservatives"],["bottle","Glass bottles"],["drop","A2 buffalo milk"],["clock","Delivered by 7 AM"]];
+    // Trial-Pack cashback benefit — amount + eligible plans read from the admin-editable
+    // wallet config (never hardcoded); the callout only shows while the promo is enabled.
+    const wcfg = (window.DOODLY_WALLET && DOODLY_WALLET.config) ? DOODLY_WALLET.config() : { enabled: true, amount: (trial.fixedPrice || 200), eligiblePlans: ["p30", "p90"] };
+    const planDays = { single: 1, p7: 7, p30: 30, p90: 90 };
+    const cbMinDays = Math.min.apply(null, (wcfg.eligiblePlans && wcfg.eligiblePlans.length ? wcfg.eligiblePlans : ["p30"]).map(p => planDays[p] || 30));
+    const cbAmount = wcfg.amount != null ? wcfg.amount : (trial.fixedPrice || 200);
+    const cbOn = (window.DOODLY_WALLET && DOODLY_WALLET.promoActive) ? DOODLY_WALLET.promoActive() : (wcfg.enabled !== false);
+    const tpBenefit = cbOn ? `
+            <div class="tp-benefit reveal" role="note" aria-label="Trial Pack wallet cashback benefit">
+              <span class="tp-glow" aria-hidden="true"></span>
+              <div class="tp-b-head"><span class="tp-b-emoji" aria-hidden="true">🎁</span><b>Trial Pack Benefit</b><span class="tp-chip one">One-time</span></div>
+              <p class="tp-b-txt">Love it? Upgrade to a <b>${cbMinDays}-day or longer</b> plan and we credit your full <b>${inr(cbAmount)}</b> straight back to your DOODLY Wallet.</p>
+              <div class="tp-b-foot"><span class="tp-chip wallet">${icon("wallet",13)} ${inr(cbAmount)} Wallet Credit</span><button type="button" class="tp-how js-tp-how">${icon("info",13)} How it works</button></div>
+            </div>` : "";
+    // premium trust marquee — quality promises, infinite right-to-left ticker (styles in marquee.css).
+    // Each promise is a button that opens an educational explainer (wired by wireTrustMarquee in layout.js).
+    const trustItems = [["preservatives","🥛","No Preservatives"],["adulterants","✅","No Adulterants"],["antibiotics","🌿","No Antibiotics"],["hormones","🐃","No Induced Hormones"]];
+    const mqGroup = (clone) => trustItems.map(([k,e,t])=>`<button type="button" class="dq-item js-dq" data-dq="${k}" aria-label="${t} — learn more"${clone?' tabindex="-1"':''}><span class="dq-emoji" aria-hidden="true">${e}</span>${t}</button><span class="dq-sep" aria-hidden="true">✦</span>`).join("");
     return `
     <header class="hero">
       <div class="wrap">
@@ -432,7 +454,12 @@ window.DOODLY_BLOCKS = (function () {
             <a href="/subscriptions.html" class="btn btn-primary btn-lg">Subscribe now</a>
             <a href="/products.html" class="btn btn-ghost btn-lg">Explore products</a>
           </div>
-          <div class="trust-row">${chips.map(([ic,t])=>`<span class="chip">${icon(ic,15)}${t}</span>`).join("")}</div>
+          <div class="dq-marquee" role="marquee">
+            <div class="dq-marquee-track">
+              <div class="dq-marquee-group">${mqGroup(false)}</div>
+              <div class="dq-marquee-group" aria-hidden="true">${mqGroup(true)}</div>
+            </div>
+          </div>
         </div>
         <div class="hero-visual reveal">
           <div class="glass hero-card float">
@@ -442,6 +469,7 @@ window.DOODLY_BLOCKS = (function () {
             <h3>${trial.label||"300 ml"} ${trial.sub||"Sample Pack"} ${statusBadge(trial,{product:milk})}</h3>
             <div class="price">${inr(trial.fixedPrice||200)} <span>/ ${trial.fixedDays||3} mornings</span></div>
             <div class="stat-strip"><div><div class="n">${mq.storageTemp||"4°C"}</div><div class="l">Chilled fast</div></div><div><div class="n">7 AM</div><div class="l">At your door</div></div><div><div class="n">${mq.milkType||"A2"}</div><div class="l">Buffalo milk</div></div></div>
+            ${tpBenefit}
             <div class="hero-card-cta">
               <button type="button" class="btn btn-primary js-qorder">Order Trial Pack</button>
               <a class="hero-card-link" href="/products/milk.html?variant=v300">View details</a>
@@ -476,6 +504,23 @@ window.DOODLY_BLOCKS = (function () {
           ${s.orderable?`<a class="plink" href="${href}">View product ${icon("arrow",16)}</a>`:`<a class="plink muted" href="${href}">${s.key==="soon"?"Notify me":"Notify me when available"} ${icon("arrow",16)}</a>`}</article>`;
       }).join("")}</div>
     </div></section>`;
+
+  /* ---------- Related products rail (backend-driven; hydrated by wireRelatedProducts) ---------- */
+  R.relatedProducts = (s) => {
+    const skel = Array.from({ length: 4 }, () => `<div class="rel-card rel-skel" aria-hidden="true"><div class="rel-shot skeleton"></div><div class="rel-body"><div class="sk-line skeleton w60"></div><div class="sk-line skeleton"></div><div class="sk-line skeleton w40"></div></div></div>`).join("");
+    return `<section class="rel-wrap reveal" data-related="${s.product || "milk"}" aria-labelledby="relHead">
+      <div class="wrap">
+        <div class="rel-head">
+          <div class="rel-head-txt"><span class="eyebrow">Discover more</span><h2 class="display" id="relHead">You may also like</h2></div>
+          <div class="rel-nav" hidden>
+            <button class="rel-arrow rel-prev" type="button" aria-label="Scroll to previous products" disabled>${icon("arrow", 18)}</button>
+            <button class="rel-arrow rel-next" type="button" aria-label="Scroll to next products">${icon("arrow", 18)}</button>
+          </div>
+        </div>
+        <div class="rel-viewport"><div class="rel-track" role="list">${skel}</div></div>
+      </div>
+    </section>`;
+  };
 
   R.builderSection = (s) => `
     <section id="builder"><div class="wrap">
@@ -542,7 +587,11 @@ window.DOODLY_BLOCKS = (function () {
       <div><span class="eyebrow">DOODLY app</span><h2 class="display" style="font-size:2rem;margin-top:10px">Manage every morning from your phone.</h2>
         <p class="lead mt-2">Track deliveries live, pause for a trip, return bottles, top up your wallet and collect rewards — all in one tap.</p>
         <div class="hero-cta"><a class="btn btn-dark btn-lg" href="/download.html">${icon("download",18)} App Store</a><a class="btn btn-dark btn-lg" href="/download.html">${icon("download",18)} Google Play</a></div></div>
-      <div class="media-card"><div><div class="big">📱</div><div class="display" style="font-size:1.3rem;margin-top:8px">Your daily milk, in your pocket</div></div></div>
+      <div class="media-card"><div class="dl-qr-wrap" style="text-align:center">
+        <div class="dl-qr"><img src="/assets/img/qr-doodly.png" alt="QR code — scan to open doodly.in" width="164" height="164" loading="lazy" decoding="async"></div>
+        <div class="display" style="font-size:1.2rem;margin-top:12px">Scan to get DOODLY</div>
+        <p class="dl-qr-hint">Point your phone camera here — it opens <b>doodly.in</b> instantly.</p>
+      </div></div>
     </div></div></section>`;
 
   /* ---------- Product detail (flagship) ---------- */
@@ -572,7 +621,7 @@ window.DOODLY_BLOCKS = (function () {
           ${gal.length ? `
           <div class="pd-stage">
             ${statusBadge(p,{pos:"tl",size:"md"})}
-            <div class="pd-figure"><img class="pd-main" src="${gal[0]}" alt="${p.name}" width="700" height="700" fetchpriority="high"></div>
+            <div class="pd-figure"><img class="pd-main" src="${gal[0]}" alt="${p.name}" width="540" height="1031" fetchpriority="high"></div>
             <button class="pd-zoom" type="button" aria-label="Open full image">${icon("eye",18)}</button>
           </div>
           <div class="pd-thumbs">
@@ -620,7 +669,7 @@ window.DOODLY_BLOCKS = (function () {
     <section><div class="wrap"><div class="section-head reveal"><span class="eyebrow">Benefits</span><h2 class="display">Why this milk is different.</h2></div>
       <div class="grid why-grid">${D().why.map(w=>`<article class="feature reveal"><div class="ic">${icon(w.icon)}</div><h3>${w.title}</h3><p>${w.text}</p></article>`).join("")}</div></div></section>
     ${R.faqSection({})}
-    ${R.productGrid({bg:true})}
+    ${R.relatedProducts({ product: p.id })}
     <div class="pd-buybar" role="region" aria-label="Quick purchase">
       <div class="pd-buybar-price"><span>From</span><b>${minDaily!=null?inr(minDaily):(p.from||"")}<small> / day</small></b></div>
       <span class="pd-bb-status">${badgeObj(statusOf(defVar||p,{product:p}))}</span>
@@ -644,7 +693,7 @@ window.DOODLY_BLOCKS = (function () {
         <p class="muted-sm mt-2">Admins flip one field — <code>status: available</code> — and this page becomes fully orderable. Zero code change.</p>
       </div>
     </div></section>
-    ${R.productGrid({bg:true,head:false})}`;
+    ${R.relatedProducts({ product: p.id })}`;
   };
 
   /* ---------- checkout (built by checkout.js) ---------- */
@@ -658,6 +707,412 @@ window.DOODLY_BLOCKS = (function () {
   R.serviceableAreas = () => `<div class="reveal" id="serviceableAreasMount"></div>`;
   R.autopayBilling = () => `<div class="reveal" id="autopayBillingMount"></div>`;
   R.autopaySettings = () => `<div class="reveal" id="autopaySettingsMount"></div>`;
+
+  /* ---------- daily expense management (built by expenses.js) ---------- */
+  R.expenses = () => `<div class="reveal" id="expensesMount"></div>`;
+
+  /* ---------- B2B order management (built by b2b.js) ---------- */
+  R.b2b = () => `<div class="reveal" id="b2bMount"></div>`;
+  /* ---------- B2B dynamic pricing (built by b2b-pricing.js) ---------- */
+  R.b2bPricing = () => `<div class="reveal" id="b2bPricingMount"></div>`;
+  /* ---------- Live operations & revenue dashboard (built by dashboard.js) ---------- */
+  R.opsDashboard = () => `<div id="opsDashboardMount"></div>`;
+  /* ---------- Late delivery monitoring (built by late.js) ---------- */
+  R.lateDeliveries = () => `<div class="reveal" id="lateMount"></div>`;
+  /* ---------- AI chat support management (built by assistant.js) ---------- */
+  R.chatSupport = () => `<div class="reveal" id="chatSupportMount"></div>`;
+  /* ---------- Customer & User live cards (built by customer.js) ---------- */
+  R.customerKpis = (s) => `<div class="cu-kpimount reveal" data-page="${s.page || "dashboard"}"></div>`;
+  R.customerSub = () => `<div class="reveal" id="custSubMount"></div>`;
+  R.rewardsPanel = () => `<div class="reveal" id="rewardsPanelMount"></div>`;
+  R.userStats = () => `<div class="reveal" id="userStatsMount"></div>`;
+  R.lateCustomerStats = () => `<div id="lateCustomerMount"></div>`;
+
+  /* ---------- Monthly Puzzle Challenge (built by puzzle.js) ---------- */
+  R.puzzleHighlight = () => `<div id="puzzleHighlightMount"></div>`;
+  R.puzzlePage = () => `<div id="puzzleGameMount"></div>`;
+  R.puzzleCard = () => `<div id="puzzleCardMount"></div>`;
+  R.puzzleAdmin = () => `<div id="puzzleAdminMount"></div>`;
+  R.puzzleTerms = () => `
+    <section class="pzt reveal" aria-label="Puzzle Challenge terms and conditions">
+      <div class="pzt-hero">
+        <span class="pzt-eyebrow">🏆 DOODLY Monthly Puzzle Challenge</span>
+        <h1>Terms &amp; Conditions</h1>
+        <p>The official rules of the DOODLY Monthly Puzzle Challenge. By playing, you agree to everything below — it's short, fair and honest, like our milk.</p>
+      </div>
+      <div class="pzt-grid">
+        <article class="pzt-card">
+          <h2>${icon("user", 20)} Eligibility</h2>
+          <ul>
+            <li>One participation per customer per monthly puzzle.</li>
+            <li>You must have a valid DOODLY account to play.</li>
+            <li>DOODLY staff may play for fun, but are not eligible for the prize.</li>
+          </ul>
+        </article>
+        <article class="pzt-card">
+          <h2>${icon("clipboard", 20)} Competition rules</h2>
+          <ul>
+            <li>Each month's puzzle unlocks on the <b>5th</b> and the competition runs until the <b>end of that month</b>.</li>
+            <li>Only fully completed puzzles qualify.</li>
+            <li>The winner is determined primarily by the <b>fewest moves</b>.</li>
+            <li>If tied, tie-breakers apply automatically in this order:
+              <ol>
+                <li>Fastest completion time</li>
+                <li>Earliest successful completion timestamp</li>
+                <li>Secure random selection performed by the backend</li>
+              </ol>
+            </li>
+            <li>Exactly <b>one winner</b> is selected every month, announced on the <b>4th of the following month</b>.</li>
+          </ul>
+        </article>
+        <article class="pzt-card">
+          <h2>${icon("gift", 20)} Prize</h2>
+          <ul>
+            <li>One winner every month.</li>
+            <li>Prize: a <b>FREE 7-Day Fresh Start Subscription</b> of DOODLY A2 buffalo milk.</li>
+            <li>The prize is applied automatically to the winner's DOODLY account and appears in the dashboard, rewards, notifications and subscription history.</li>
+            <li>The prize is non-transferable and cannot be exchanged for cash.</li>
+            <li>New customers, existing subscribers and future subscribers are all supported — if you have no delivery address yet, we'll hold the prize until you add one.</li>
+          </ul>
+        </article>
+        <article class="pzt-card">
+          <h2>${icon("shield", 20)} Fair play</h2>
+          <ul>
+            <li>Automated tools, scripts, bots or any form of manipulation are strictly prohibited.</li>
+            <li>Results are validated on DOODLY's servers; implausible entries are automatically flagged and disqualified.</li>
+            <li>DOODLY reserves the right to disqualify fraudulent entries and to suspend accounts that attempt to cheat.</li>
+          </ul>
+        </article>
+        <article class="pzt-card pzt-wide">
+          <h2>${icon("help", 20)} General</h2>
+          <ul>
+            <li>The challenge runs in monthly rounds — initially six months — and DOODLY may extend it with new puzzles, modify dates, artwork or rules, or cancel it if necessary; changes are announced in-app.</li>
+            <li>All decisions made by DOODLY regarding the winner are final.</li>
+            <li>Questions? We're happy to help at <a href="/contact.html">Contact</a> or the <a href="/help.html">Help Center</a>.</li>
+          </ul>
+        </article>
+      </div>
+      <div class="pzt-cta">
+        <a class="btn btn-primary" href="/puzzle.html">${icon("award", 18)} Back to the puzzle</a>
+      </div>
+    </section>`;
+
+  /* ---------- Help Center & FAQ knowledge base (built by help.js) ---------- */
+  R.helpCenter = () => `<div id="helpMount"></div>`;
+  R.helpCenterAdmin = () => `<div class="reveal" id="helpAdminMount"></div>`;
+
+  /* ---------- Global Smart Search (built by search.js) ---------- */
+  R.searchResults = () => `<div id="searchResultsMount"></div>`;
+  R.searchAdmin = () => `<div class="reveal" id="searchAdminMount"></div>`;
+
+  /* ---------- Auto Delivery Assignment (built by assign.js) ---------- */
+  R.assignment = () => `<div class="reveal" id="assignMount"></div>`;
+
+  /* ---------- GST Management (built by gst.js) ---------- */
+  R.gstAdmin = () => `<div class="reveal" id="gstAdminMount"></div>`;
+
+  /* ---------- Premium invoices (built by invoice.js) ---------- */
+  R.invoiceB2C = () => `<section><div class="wrap"><div id="invoiceB2CMount"></div></div></section>`;
+  R.invoiceB2B = () => `<div class="reveal" id="invoiceB2BMount"></div>`;
+
+  /* ---------- Referral & Rewards (built by referral.js) ---------- */
+  R.referralPanel = () => `<div class="reveal" id="referralPanelMount"></div>`;
+  R.referralAdmin = () => `<div class="reveal" id="referralAdminMount"></div>`;
+  R.referralPolicy = () => `<div class="reveal" id="referralPolicyMount"></div>`;
+
+  /* ---------- brand story "Unfold Pure" (built by unfold.js) ---------- */
+  R.unfoldPure = () => `<div id="unfoldMount"></div>`;
+  R.brandStoryAdmin = () => `<div class="reveal" id="brandStoryMount"></div>`;
+
+  /* ---------- Careers page (content + Apply Now form; wired by layout.js) ---------- */
+  R.careers = () => {
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const roles = ["Delivery Executive","Operations Executive","Dairy Production Staff","Quality Assurance & Testing","Procurement & Farmer Relations","Customer Support Executive","Sales & Business Development","Marketing & Social Media","Graphic Designer","Content Creator","Software Developer","UI/UX Designer","Finance & Accounts","Human Resources","Warehouse & Inventory Executive"];
+    const why = [
+      ["target","Make an impact","Your work delivers fresh, high-quality dairy to thousands of families while supporting local farming communities."],
+      ["sprout","Grow with us","As DOODLY expands, so do the opportunities for learning, leadership and career development."],
+      ["award","A culture of trust","We value integrity, accountability, teamwork and continuous improvement. Every contribution matters."],
+      ["star","Innovation every day","From technology-driven deliveries to modern dairy operations, we keep improving how fresh dairy is made and delivered."],
+    ];
+    const values = ["Take ownership of their work","Put customers first","Believe in honesty and transparency","Work well as a team","Respect farmers, colleagues and customers","Continuously learn and improve","Solve problems with a positive attitude"];
+    const steps = ["Submit your application","Initial profile review","Interview with the relevant team","Role-specific assessment (if required)","Final discussion","Offer and onboarding"];
+    const benefits = ["Competitive Salary","Performance Incentives","Career Growth","Professional Development","Supportive Team","Recognition Programs","Paid Leave","Health & Safety Focus"];
+    const roleOpts = roles.concat(["Other"]).map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
+    const ic2 = (typeof icon === "function") ? icon : () => "";
+    return `<section class="reveal"><div class="wrap careers">
+      <div class="cr-grid">${why.map((w) => `<div class="cr-card"><div class="cr-ic">${ic2(w[0],20)}</div><h3>${w[1]}</h3><p>${w[2]}</p></div>`).join("")}</div>
+
+      <div class="cr-block"><h2 class="cr-h">Who we're looking for</h2>
+        <p class="cr-lede">We're always excited to connect with talented people across many areas. Even if your role isn't listed, we'd still love to hear from you.</p>
+        <div class="cr-chips">${roles.map((r) => `<span class="cr-chip">${esc(r)}</span>`).join("")}</div></div>
+
+      <div class="cr-two">
+        <div class="cr-panel"><h2 class="cr-h">What we value</h2><ul class="cr-list">${values.map((v) => `<li>${esc(v)}</li>`).join("")}</ul>
+          <p class="cr-note">Experience is valuable, but passion, integrity and the willingness to learn matter just as much.</p></div>
+        <div class="cr-panel cr-life"><h2 class="cr-h">Life at DOODLY</h2>
+          <p>Every day begins with a shared purpose: delivering fresh dairy with care and consistency. Whether you're in operations, technology, support or production, you'll be part of a team committed to excellence.</p>
+          <p>We celebrate collaboration, encourage new ideas, and create an environment where people grow professionally while making a meaningful contribution.</p></div>
+      </div>
+
+      <div class="cr-two">
+        <div class="cr-panel"><h2 class="cr-h">Our hiring process</h2><ol class="cr-steps">${steps.map((s) => `<li><span class="cr-step-n"></span>${esc(s)}</li>`).join("")}</ol></div>
+        <div class="cr-panel"><h2 class="cr-h">Employee benefits</h2><div class="cr-chips">${benefits.map((b) => `<span class="cr-chip cr-benefit">${esc(b)}</span>`).join("")}</div>
+          <p class="cr-note">Benefits may vary depending on your role.</p></div>
+      </div>
+
+      <div class="cr-apply" id="apply">
+        <div class="cr-apply-head"><h2 class="cr-h">Apply now</h2><p class="cr-lede">Submit your application directly — our team reviews every profile.</p></div>
+        <form class="cr-form" id="careersApplyForm" autocomplete="on" novalidate>
+          <label class="cr-f"><span>Full name <i>*</i></span><input class="input" id="cr-name" name="name" required maxlength="120" placeholder="Your full name"></label>
+          <label class="cr-f"><span>Mobile number <i>*</i></span><input class="input" id="cr-phone" name="phone" required inputmode="tel" maxlength="20" placeholder="+91 …"></label>
+          <label class="cr-f"><span>Email <i>*</i></span><input class="input" id="cr-email" name="email" type="email" required maxlength="160" placeholder="you@example.com"></label>
+          <label class="cr-f"><span>City</span><input class="input" id="cr-city" name="city" maxlength="80" placeholder="City"></label>
+          <label class="cr-f"><span>Position applying for <i>*</i></span><select class="input" id="cr-position" name="position" required><option value="">Select a position…</option>${roleOpts}</select></label>
+          <label class="cr-f"><span>Experience</span><input class="input" id="cr-exp" name="experience" maxlength="200" placeholder="e.g. 3 years, or Fresher"></label>
+          <label class="cr-f cr-full"><span>Resume <small>(PDF/DOC, up to 2 MB)</small></span><input class="input" id="cr-resume" name="resume" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword"></label>
+          <label class="cr-f cr-full"><span>…or paste a resume link</span><input class="input" id="cr-resumeurl" name="resumeUrl" type="url" placeholder="https://drive.google.com/…"></label>
+          <label class="cr-f cr-full"><span>Cover letter</span><textarea class="input" id="cr-cover" name="coverLetter" rows="5" maxlength="8000" placeholder="Tell us why you'd love to join DOODLY…"></textarea></label>
+          <div class="cr-submit-row"><button class="btn btn-primary" id="cr-submit" type="submit">Submit application</button><p class="cr-status" id="cr-status" role="status" aria-live="polite"></p></div>
+        </form>
+      </div>
+    </div></section>`;
+  };
+  R.careersBoard = () => `<div class="reveal" id="careersMount"></div>`;
+
+  /* ---------- Farm-to-home journey timeline (reused by About + others) ---------- */
+  R.journeyTimeline = (s) => {
+    const esc = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const steps = (s && s.steps) || [
+      ["🐃", "Healthy Buffaloes", "Grass-fed herds on family farms we know by name."],
+      ["🪣", "Milk Collection", "Hand-collected fresh at the evening milking."],
+      ["🔬", "Quality Testing", "Every batch screened for fat, SNF and purity."],
+      ["❄️", "4°C Chilling", "Snap-cooled within minutes to lock in freshness."],
+      ["🍶", "Glass Bottling", "Filled into sterilised reusable glass — never plastic."],
+      ["🚚", "Morning Delivery", "Chilled transport to your doorstep before 7 AM."],
+      ["🏠", "At Your Home", "Fresh within 12 hours of milking. Every single day."],
+    ];
+    const kicker = (s && s.kicker) || "The journey";
+    const title = (s && s.title) || "From the farm to your morning";
+    const aria = (s && s.aria) || "Farm to home journey";
+    return `<section class="jt-wrap reveal" aria-label="${esc(aria)}"><div class="wrap">
+      <div class="jt-head"><p class="kicker">${esc(kicker)}</p><h2>${esc(title)}</h2></div>
+      <ol class="jt-track">${steps.map((st, i) => `<li class="jt-step reveal" style="--i:${i}"><span class="jt-dot" aria-hidden="true">${st[0]}</span><div class="jt-body"><b>${esc(st[1])}</b><p>${esc(st[2])}</p></div></li>`).join("")}</ol>
+    </div></section>`;
+  };
+
+  /* ---------- About DOODLY (rich, CMS-hydratable via data-cms) ---------- */
+  R.aboutPage = () => {
+    const esc = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const ic = (typeof icon === "function") ? icon : () => "";
+    const sec = (key, cls, inner) => `<div class="ab-sec ${cls || ""}" data-cms="${key}">${inner}</div>`;
+    const card = (i, h, p) => `<div class="ab-card reveal"><div class="ab-ic">${ic(i, 20)}</div><h3>${h}</h3><p>${p}</p></div>`;
+    const why = [["sprout", "Single-source", "One farm's herd per batch — never pooled from a hundred anonymous suppliers."], ["clock", "Fresh within 12 hours", "Collected at night, chilled, bottled and delivered before your morning."], ["bottle", "Glass, not plastic", "Sterilised reusable glass keeps milk pure and keeps plastic out of your home."], ["beaker", "Tested, not trusted blindly", "Every batch is screened for fat, SNF, temperature and adulteration."]];
+    const values = [["heart", "Honesty", "We tell you the farm, the date, and the truth — no fine print."], ["award", "Quality first", "If a batch doesn't pass, it doesn't ship. No exceptions."], ["users", "Fair to farmers", "Transparent rates, paid on time, every time."], ["leaf", "Kind to the planet", "A closed glass loop and a short, local supply chain."]];
+    return `<div class="ab-page">
+      <section class="reveal"><div class="wrap ab-narrow">
+        ${sec("about.story", "", `<p class="kicker" data-cms-field="eyebrow">Our story</p><h2 class="ab-h" data-cms-field="heading">Good milk, the way it used to be.</h2><div class="ab-rich" data-cms-field="html"><p>DOODLY began with a simple frustration: genuinely fresh, honest milk had become impossible to find in the city. Cartons sat for weeks. Labels made promises the milk couldn't keep. So we went back to the source — to family-run buffalo farms on the edge of the city — and rebuilt the chain from scratch, in glass, delivered before breakfast.</p></div>`)}
+        <div class="ab-two">
+          ${sec("about.mission", "ab-panel", `<div class="ab-ic">${ic("target", 20)}</div><h3 data-cms-field="heading">Our mission</h3><div data-cms-field="html"><p>Make farm-fresh, chemical-free milk the default for every family — delivered daily, priced fairly, and packaged without plastic.</p></div>`)}
+          ${sec("about.vision", "ab-panel", `<div class="ab-ic">${ic("eye", 20)}</div><h3 data-cms-field="heading">Our vision</h3><div data-cms-field="html"><p>A short, transparent supply chain where you know the farm your milk came from — and farmers earn a fair, predictable income.</p></div>`)}
+        </div>
+      </div></section>
+
+      <section class="reveal ab-band"><div class="wrap">
+        ${sec("about.why", "", `<div class="ab-band-head"><p class="kicker" data-cms-field="eyebrow">Why DOODLY?</p><h2 class="ab-h" data-cms-field="heading">Four promises we don't break.</h2></div>`)}
+        <div class="ab-grid">${why.map((w) => card(w[0], w[1], w[2])).join("")}</div>
+      </div></section>
+
+      ${R.journeyTimeline({})}
+
+      <section class="reveal"><div class="wrap ab-split-wrap">
+        ${sec("about.quality", "ab-split", `<div class="ab-split-media" aria-hidden="true">🧪</div><div class="ab-split-body"><p class="kicker" data-cms-field="eyebrow">Our quality commitment</p><h2 class="ab-h" data-cms-field="heading">Tested before it's trusted.</h2><div class="ab-rich" data-cms-field="html"><p>Every batch is checked for fat, SNF, temperature and adulteration before it's ever bottled. If it doesn't pass, it doesn't ship — it goes back.</p><ul><li>Lactometer + fat/SNF on each batch</li><li>Adulteration screening</li><li>Cold-chain held at 4°C end to end</li></ul></div></div>`)}
+        ${sec("about.twelve", "ab-split ab-rev", `<div class="ab-split-media" aria-hidden="true">🌅</div><div class="ab-split-body"><p class="kicker" data-cms-field="eyebrow">Fresh within 12 hours</p><h2 class="ab-h" data-cms-field="heading">Collected at night. On your doorstep by morning.</h2><div class="ab-rich" data-cms-field="html"><p>Our herds are milked in the evening. The milk is chilled within minutes, bottled overnight, and loaded onto chilled routes that reach you before 7 AM — under twelve hours from udder to doorstep.</p></div></div>`)}
+      </div></section>
+
+      <section class="reveal ab-band"><div class="wrap ab-split-wrap">
+        ${sec("about.glass", "ab-split", `<div class="ab-split-media" aria-hidden="true">🍶</div><div class="ab-split-body"><p class="kicker" data-cms-field="eyebrow">Why glass bottles?</p><h2 class="ab-h" data-cms-field="heading">Glass keeps milk honest.</h2><div class="ab-rich" data-cms-field="html"><p>Glass doesn't leach, doesn't hold odours, and keeps milk tasting exactly as it should. Every bottle is sterilised, filled, delivered, collected and reused — a closed loop with your deposit protected in your wallet.</p></div></div>`)}
+        ${sec("about.sustain", "ab-split ab-rev", `<div class="ab-split-media" aria-hidden="true">🌱</div><div class="ab-split-body"><p class="kicker" data-cms-field="eyebrow">Sustainability &amp; environment</p><h2 class="ab-h" data-cms-field="heading">Local, low-waste, by design.</h2><div class="ab-rich" data-cms-field="html"><p>A short local supply chain means fewer miles and fresher milk. Reusable glass means almost no single-use plastic. Fair farmer rates mean a supply that lasts.</p></div></div>`)}
+      </div></section>
+
+      <section class="reveal"><div class="wrap">
+        ${sec("about.values", "", `<div class="ab-band-head"><p class="kicker" data-cms-field="eyebrow">Our values</p><h2 class="ab-h" data-cms-field="heading">What we stand for.</h2></div>`)}
+        <div class="ab-grid">${values.map((v) => card(v[0], v[1], v[2])).join("")}</div>
+      </div></section>
+
+      <section class="reveal ab-band ab-trust"><div class="wrap">
+        ${sec("about.trust", "", `<p class="kicker" data-cms-field="eyebrow">Customer trust</p><h2 class="ab-h" data-cms-field="heading">Thousands of mornings, earned one bottle at a time.</h2>`)}
+        <div class="ab-kpis">${[["12+", "Partner farms"], ["100%", "Glass bottles"], ["0", "Preservatives"], ["4.8★", "Customer rating"], ["<12h", "Farm to home"], ["4°C", "Cold chain"]].map((k) => `<div class="ab-kpi reveal"><div class="n">${k[0]}</div><div class="l">${k[1]}</div></div>`).join("")}</div>
+      </div></section>
+
+      <section class="reveal"><div class="wrap ab-narrow">
+        ${sec("about.future", "", `<p class="kicker" data-cms-field="eyebrow">Future goals</p><h2 class="ab-h" data-cms-field="heading">More products, same single-source promise.</h2><div class="ab-rich" data-cms-field="html"><p>Curd, paneer, kova and ghee — all from the same A2 buffalo milk — are on the way, each launched only when it meets the DOODLY bar. As we grow, the promise stays the same: single-source, same-day, in glass.</p></div>`)}
+      </div></section>
+    </div>`;
+  };
+
+  /* ---------- Our Farmers (rich, CMS-hydratable via data-cms) ---------- */
+  // Interactive farmer profile cards — click / Enter to reveal the farm's story & numbers.
+  R.farmerCards = (s) => {
+    const esc = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const farms = (s && s.farms) || [
+      { em: "🌾", name: "Lakshmaiah Farm", place: "Shamirpet", herd: "24 buffaloes", years: "Partner since 2021", fat: "7.2% fat", rate: "₹64 / L", quote: "“Three generations have milked this herd. DOODLY was the first to test our milk and pay us what it's actually worth.”", who: "Ramulu Lakshmaiah, 2nd-generation farmer" },
+      { em: "🐃", name: "Yadamma Dairy", place: "Medchal", herd: "31 buffaloes", years: "Partner since 2020", fat: "7.4% fat", rate: "₹65 / L", quote: "“We used to sell to whoever showed up. Now we have a fixed morning pickup and money in the bank the same week.”", who: "Yadamma & family" },
+      { em: "🌱", name: "Narsimha Farm", place: "Shamirpet", herd: "18 buffaloes", years: "Partner since 2022", fat: "7.0% fat", rate: "₹63 / L", quote: "“They helped me improve my cattle feed. My milk quality went up and so did my rate.”", who: "Narsimha Reddy" },
+      { em: "🥛", name: "Ellamma Collective", place: "Toopran", herd: "27 buffaloes", years: "Partner since 2021", fat: "7.3% fat", rate: "₹64 / L", quote: "“Fair weighing, no deductions, no excuses. That's why we stayed.”", who: "Ellamma, women-led collective" },
+      { em: "🍃", name: "Bhoomaiah Farm", place: "Gundlapochampally", herd: "22 buffaloes", years: "Partner since 2023", fat: "7.1% fat", rate: "₹63 / L", quote: "“The quality report comes to my phone every morning. I know exactly what I delivered.”", who: "Bhoomaiah G." },
+      { em: "🐄", name: "Saraswati Dairy", place: "Medchal", herd: "29 buffaloes", years: "Partner since 2020", fat: "7.5% fat", rate: "₹66 / L", quote: "“Steady demand means I can plan for my family. That peace of mind is everything.”", who: "Saraswati Devi" },
+    ];
+    const card = (f, i) => `<article class="fm-card reveal" style="--i:${i}">
+      <button type="button" class="fm-card-btn" aria-expanded="false">
+        <span class="fm-av" aria-hidden="true">${f.em}</span>
+        <span class="fm-hd"><b>${esc(f.name)}</b><small>${icon("pin", 13)} ${esc(f.place)}</small></span>
+        <span class="fm-chev" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
+      </button>
+      <div class="fm-meta"><span>${esc(f.herd)}</span><span>${esc(f.fat)}</span><span>${esc(f.rate)}</span></div>
+      <div class="fm-detail" hidden>
+        <blockquote>${esc(f.quote)}</blockquote>
+        <div class="fm-who">${esc(f.who)} · <span class="muted">${esc(f.years)}</span></div>
+      </div>
+    </article>`;
+    return `<section class="reveal"><div class="wrap">
+      <div class="ab-band-head" data-cms="farmers.meet"><p class="kicker" data-cms-field="eyebrow">Meet the farms</p><h2 class="ab-h" data-cms-field="heading">The families behind every bottle.</h2><p class="fm-sub" data-cms-field="text">We work with a small circle of family-run buffalo farms — every one visited, tested and known by name. Tap a farm to hear their story.</p></div>
+      <div class="fm-grid">${farms.map(card).join("")}</div>
+    </div></section>`;
+  };
+
+  R.farmersPage = () => {
+    const esc = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const ic = (typeof icon === "function") ? icon : () => "";
+    const sec = (key, cls, inner) => `<div class="ab-sec ${cls || ""}" data-cms="${key}">${inner}</div>`;
+    const card = (i, h, p) => `<div class="ab-card reveal"><div class="ab-ic">${ic(i, 20)}</div><h3>${h}</h3><p>${p}</p></div>`;
+    const benefits = [
+      ["coins", "Fair, transparent rates", "Priced on real fat &amp; SNF — never a flat, take-it-or-leave-it number. Farmers see the same numbers we do."],
+      ["clock", "Paid on time, every time", "Weekly settlements, straight to the bank. No middlemen skimming, no month-long waits."],
+      ["refresh", "Steady, predictable demand", "A daily standing order means farmers can plan feed, herd and family income with confidence."],
+      ["sprout", "Support that grows yields", "Guidance on feed, hygiene and herd health — better milk for you, a better rate for them."],
+    ];
+    return `<div class="ab-page fm-page">
+      <section class="reveal"><div class="wrap ab-narrow">
+        ${sec("farmers.intro", "", `<p class="kicker" data-cms-field="eyebrow">Our farmers</p><h2 class="ab-h" data-cms-field="heading">We know every farm by name.</h2><div class="ab-rich" data-cms-field="html"><p>DOODLY doesn't buy from a faceless collection network. We work directly with a small circle of family-run buffalo farms on the edge of the city — no middlemen, no milk pooled from a hundred anonymous herds. We visit them, we test every batch, and we pay them fairly and on time. When the supply chain is short and honest, everyone wins: the farmer earns more, and you drink milk that's fresher and cleaner.</p></div>`)}
+      </div></section>
+
+      <section class="reveal ab-band"><div class="wrap">
+        ${sec("farmers.promise", "", `<div class="ab-band-head"><p class="kicker" data-cms-field="eyebrow">Our promise to farmers</p><h2 class="ab-h" data-cms-field="heading">A fairer deal, by design.</h2></div>`)}
+        <div class="ab-grid">${benefits.map((b) => card(b[0], b[1], b[2])).join("")}</div>
+      </div></section>
+
+      ${R.farmerCards({})}
+
+      ${R.journeyTimeline({ kicker: "Every morning", title: "How your milk is collected", aria: "Milk collection process", steps: [
+        ["🌙", "Evening milking", "Herds are milked in the cool of the evening, when milk is richest and freshest."],
+        ["🪣", "Farm-gate collection", "Our team collects milk directly at the farm — weighed fairly, no deductions."],
+        ["🔬", "On-the-spot testing", "Fat, SNF, temperature and purity are checked before the milk ever leaves the farm."],
+        ["❄️", "Instant chilling", "Accepted milk is snap-cooled to 4°C within minutes at the collection centre."],
+        ["🧾", "Same-day record", "The farmer gets a digital slip — quantity, quality and rate — on their phone."],
+        ["🏦", "Weekly settlement", "Payments land in the farmer's bank account every week, like clockwork."],
+      ] })}
+
+      <section class="reveal"><div class="wrap ab-split-wrap">
+        ${sec("farmers.pricing", "ab-split", `<div class="ab-split-media" aria-hidden="true">💰</div><div class="ab-split-body"><p class="kicker" data-cms-field="eyebrow">Fair pricing</p><h2 class="ab-h" data-cms-field="heading">The price follows the quality.</h2><div class="ab-rich" data-cms-field="html"><p>We don't offer one flat rate and call it fair. Every farmer is paid on the measured fat and SNF of their milk, so better care earns a better rate — and the numbers are shared openly, every single day.</p><ul><li>Rate tied to real fat &amp; SNF readings</li><li>No silent deductions or hidden cuts</li><li>Digital slip for every collection</li></ul></div></div>`)}
+        ${sec("farmers.quality", "ab-split ab-rev", `<div class="ab-split-media" aria-hidden="true">🔬</div><div class="ab-split-body"><p class="kicker" data-cms-field="eyebrow">Quality at the source</p><h2 class="ab-h" data-cms-field="heading">Tested before it leaves the farm.</h2><div class="ab-rich" data-cms-field="html"><p>Quality isn't checked once at a factory gate — it starts at the farm. Milk is screened on collection, and any batch that doesn't meet the DOODLY bar is turned away, protecting both you and the farmers who do it right.</p></div></div>`)}
+      </div></section>
+
+      <section class="reveal ab-band"><div class="wrap ab-narrow">
+        ${sec("farmers.community", "", `<p class="kicker" data-cms-field="eyebrow">Community &amp; impact</p><h2 class="ab-h" data-cms-field="heading">When farmers thrive, so does the milk.</h2><div class="ab-rich" data-cms-field="html"><p>A short, local supply chain keeps money in the hands of the families who actually raise the herds. Steady demand lets them invest in better feed and healthier cattle, and women-led collectives get the same fair rate as anyone else. Good milk and good livelihoods aren't a trade-off — they're the same thing.</p></div>`)}
+      </div></section>
+
+      <section class="reveal ab-trust"><div class="wrap">
+        ${sec("farmers.trust", "", `<p class="kicker" data-cms-field="eyebrow">By the numbers</p><h2 class="ab-h" data-cms-field="heading">A small circle, deeply looked after.</h2>`)}
+        <div class="ab-kpis">${[["12+", "Partner farms"], ["₹64/L", "Fair avg rate"], ["Daily", "Farm-gate pickup"], ["100%", "Batches tested"], ["Weekly", "Bank settlement"], ["4°C", "Chilled on-site"]].map((k) => `<div class="ab-kpi reveal"><div class="n">${k[0]}</div><div class="l">${k[1]}</div></div>`).join("")}</div>
+      </div></section>
+
+      <section class="reveal"><div class="wrap ab-narrow">
+        ${sec("farmers.join", "fm-join", `<p class="kicker" data-cms-field="eyebrow">Become a partner farm</p><h2 class="ab-h" data-cms-field="heading">Run a buffalo farm near Hyderabad?</h2><div class="ab-rich" data-cms-field="html"><p>If you keep a healthy buffalo herd and care about clean, honest milk, we'd love to talk. Fair rates, on-time weekly payments and steady demand — no middlemen in between.</p></div><div class="fm-join-cta"><a class="btn btn-primary" href="/contact.html">${ic("phone", 16)} Talk to our procurement team</a></div>`)}
+      </div></section>
+    </div>`;
+  };
+
+  /* ---------- Bottle Return Program (rich, CMS-hydratable via data-cms) ---------- */
+  R.bottleReturnPage = () => {
+    const esc = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const ic = (typeof icon === "function") ? icon : () => "";
+    const sec = (key, cls, inner) => `<div class="ab-sec ${cls || ""}" data-cms="${key}">${inner}</div>`;
+    const card = (i, h, p) => `<div class="ab-card reveal"><div class="ab-ic">${ic(i, 20)}</div><h3>${h}</h3><p>${p}</p></div>`;
+    const promises = [
+      ["refresh", "Endlessly reusable", "Each bottle is sterilised and refilled again and again — a true closed loop, not a one-way carton."],
+      ["wallet", "Fully refundable deposit", "₹120 per bottle, held safely in your DOODLY wallet and returned the moment empties come back."],
+      ["truck", "Zero-effort returns", "No drop-off points, no app scans. Just leave the empties out and your executive does the rest."],
+      ["leaf", "Kind to the planet", "Glass replaces single-use plastic entirely, and a short local loop keeps the footprint tiny."],
+    ];
+    const faqs = [
+      ["How do I return my empty bottles?", "Just rinse them and leave them at your door on your next delivery day. Your delivery executive collects the empties automatically — there's nothing to schedule or scan."],
+      ["When is my deposit refunded?", "The moment a bottle is marked returned, its ₹120 deposit is credited straight back to your DOODLY wallet, ready to use on any future order."],
+      ["Where can I see my bottles?", "Open Bottle Tracking in your dashboard to see every bottle issued, returned and pending, along with your live deposit balance."],
+      ["What if a bottle breaks or goes missing?", "Accidents happen and occasional breakage is fine. A small replacement charge applies only for bottles that stay unreturned over a long period — never for normal use."],
+      ["Do I need to clean the bottles?", "A quick rinse is all we ask so nothing dries on. We then deep-clean and sterilise every returned bottle to food-grade standard before it's refilled."],
+    ];
+    return `<div class="ab-page">
+      <section class="reveal"><div class="wrap ab-narrow">
+        ${sec("bottlereturn.intro", "", `<p class="kicker" data-cms-field="eyebrow">Reusable glass</p><h2 class="ab-h" data-cms-field="heading">Every bottle is born to come back.</h2><div class="ab-rich" data-cms-field="html"><p>DOODLY doesn't ship milk in throwaway plastic. Every drop arrives in sterilised, reusable glass — and every empty comes home to be cleaned and refilled. It's a closed loop: sterilise, fill, deliver, collect, repeat. Better for the milk, better for the planet, and your deposit stays safe the whole way round.</p></div>`)}
+      </div></section>
+
+      <section class="reveal ab-band"><div class="wrap">
+        ${sec("bottlereturn.promise", "", `<div class="ab-band-head"><p class="kicker" data-cms-field="eyebrow">Why the loop works</p><h2 class="ab-h" data-cms-field="heading">Reuse that's easy — and rewarding.</h2></div>`)}
+        <div class="ab-grid">${promises.map((p) => card(p[0], p[1], p[2])).join("")}</div>
+      </div></section>
+
+      ${R.journeyTimeline({ kicker: "The glass loop", title: "How the bottle comes back", aria: "Bottle return loop", steps: [
+        ["🥛", "Delivered full", "Your milk arrives in a sterilised glass bottle — the refundable deposit is added just once."],
+        ["🍽️", "Enjoy every drop", "Pour, sip and cook. Glass keeps the milk tasting clean, with zero plastic aftertaste."],
+        ["🚪", "Leave it out", "Give the empty a quick rinse and set it at your door on your next delivery day."],
+        ["🚚", "We collect", "Your delivery executive picks up the empties automatically — no app, no drop-off."],
+        ["🧾", "Ledger updates", "Your bottle ledger and deposit balance update in your dashboard, instantly."],
+        ["🧼", "Sterilised", "Each returned bottle is deep-cleaned and sterilised to food-grade standard."],
+        ["🔁", "Refilled", "Back on the line with tomorrow's fresh milk. The loop closes — and starts again."],
+      ] })}
+
+      <section class="reveal"><div class="wrap ab-split-wrap">
+        ${sec("bottlereturn.deposit", "ab-split", `<div class="ab-split-media" aria-hidden="true">💰</div><div class="ab-split-body"><p class="kicker" data-cms-field="eyebrow">How the deposit works</p><h2 class="ab-h" data-cms-field="heading">Pay once, get it back.</h2><div class="ab-rich" data-cms-field="html"><p>A small refundable deposit is added per bottle on your first order — it isn't a fee, it's a placeholder that comes straight back when the empties do.</p><ul><li>₹120 per bottle, held in your wallet</li><li>Credited back the moment a bottle returns</li><li>Every issue &amp; return tracked in your ledger</li></ul></div></div>`)}
+        ${sec("bottlereturn.tracking", "ab-split ab-rev", `<div class="ab-split-media" aria-hidden="true">📊</div><div class="ab-split-body"><p class="kicker" data-cms-field="eyebrow">Full transparency</p><h2 class="ab-h" data-cms-field="heading">Every bottle, accounted for.</h2><div class="ab-rich" data-cms-field="html"><p>Open Bottle Tracking in your dashboard to see exactly how many bottles are with you, how many you've returned, and your live deposit balance. No guesswork, no surprises.</p></div></div>`)}
+      </div></section>
+
+      <section class="reveal ab-band"><div class="wrap ab-narrow">
+        ${sec("bottlereturn.impact", "", `<p class="kicker" data-cms-field="eyebrow">Sustainability &amp; environment</p><h2 class="ab-h" data-cms-field="heading">One glass bottle replaces hundreds of plastic ones.</h2><div class="ab-rich" data-cms-field="html"><p>A single DOODLY bottle is filled, returned and refilled over and over — quietly keeping stacks of single-use plastic out of your home and out of landfills. Pair that with a short, local supply chain and the footprint of your morning milk stays remarkably small. Good milk shouldn't cost the earth, and here it doesn't.</p></div>`)}
+      </div></section>
+
+      <section class="reveal ab-trust"><div class="wrap">
+        ${sec("bottlereturn.trust", "", `<p class="kicker" data-cms-field="eyebrow">The loop, by the numbers</p><h2 class="ab-h" data-cms-field="heading">Built to go round, and round.</h2>`)}
+        <div class="ab-kpis">${[["100%", "Glass packaging"], ["₹120", "Refundable deposit"], ["Next-day", "Empty collection"], ["∞", "Reuse cycle"], ["0", "Single-use plastic"], ["Food-grade", "Sterilised"]].map((k) => `<div class="ab-kpi reveal"><div class="n">${k[0]}</div><div class="l">${k[1]}</div></div>`).join("")}</div>
+      </div></section>
+
+      <section class="reveal"><div class="wrap ab-narrow">
+        <div class="ab-band-head" style="text-align:left;margin-bottom:14px"><p class="kicker">Common questions</p><h2 class="ab-h">Bottle returns, explained.</h2></div>
+        <div class="faq reveal" id="bottleReturnFaq">${faqs.map((f) => `<div class="qa"><button aria-expanded="false">${esc(f[0])}<span class="plus">+</span></button><div class="ans"><p>${esc(f[1])}</p></div></div>`).join("")}</div>
+      </div></section>
+    </div>`;
+  };
+
+  /* ---------- FAQ hub (searchable + category-tabbed; hydrated from /api/help/public by wireFaqHub) ---------- */
+  R.faqHub = () => `<div class="faqhub reveal" id="faqHub">
+    <div class="faqhub-search">${icon("search", 18)}<input type="search" id="faqhubSearch" placeholder="Search questions — delivery, wallet, bottle return…" aria-label="Search frequently asked questions" autocomplete="off"><button type="button" class="faqhub-clear" id="faqhubClear" aria-label="Clear search" hidden>&times;</button></div>
+    <div class="faqhub-tabs" id="faqhubTabs" role="tablist" aria-label="FAQ categories"></div>
+    <div class="faqhub-list" id="faqhubList"></div>
+    <div class="faqhub-empty" id="faqhubEmpty" hidden>${icon("search", 26)}<p>No answers matched your search.</p><span>Try different words, or reach us from the Help Center.</span></div>
+    <div class="faqhub-foot">Still stuck? <a href="/help.html">Browse the Help Center</a> or <a href="/contact.html">contact our team</a>.</div>
+  </div>`;
+
+  /* ---------- wallet + trial cashback (built by wallet.js) ---------- */
+  R.walletPanel = () => `<div class="reveal" id="walletPanelMount"></div>`;
+  R.walletAdmin = () => `<div class="reveal" id="walletAdminMount"></div>`;
+  R.reportsBoard = () => `<div class="reveal" id="reportsMount"></div>`;
+  R.revenueBoard = () => `<div class="reveal" id="revenueMount"></div>`;
+  R.searchInsightsBoard = () => `<div class="reveal" id="searchInsightsMount"></div>`;
+  R.offersBoard = () => `<div class="reveal" id="offersMount"></div>`;
+  R.blogBoard = () => `<div class="reveal" id="blogMount"></div>`;
+  R.cmsBoard = () => `<div class="reveal" id="cmsMount"></div>`;
+  R.supportBoard = () => `<div class="reveal" id="supportMount"></div>`;
+  R.settingsBoard = () => `<div class="reveal" id="settingsMount"></div>`;
+  R.notificationsBoard = () => `<div class="reveal" id="notificationsMount"></div>`;
   R.pincodeChecker = (s) => `<section class="${s&&s.bare?"":"reveal"}"><div class="${s&&s.bare?"":"wrap"}">
     <div class="pincard"><div class="pincard-h">${icon("pin",18)} Check delivery availability</div>
     <p class="pincard-p">Enter your pincode to see if DOODLY delivers fresh milk to your area.</p>
@@ -667,6 +1122,7 @@ window.DOODLY_BLOCKS = (function () {
   R.userManagement = () => `<div class="reveal" id="userManagementMount"></div>`;
   R.permissionMatrix = () => `<div class="reveal" id="permissionMatrixMount"></div>`;
   R.auditLog = () => `<div class="reveal" id="auditLogMount"></div>`;
+  R.rolesAdmin = () => `<div class="reveal" id="rolesAdminMount"></div>`;
 
   /* ---------- maps + delivery (built by maps.js / delivery.js) ---------- */
   R.addressManager = () => `<div class="reveal" id="addressManagerMount"></div>`;

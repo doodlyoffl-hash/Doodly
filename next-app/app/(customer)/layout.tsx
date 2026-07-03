@@ -2,7 +2,10 @@ import Shell, { NavGroup } from "@/components/dashboard/Shell";
 import { LiveOrderBanner } from "@/components/order-status/LiveOrderBanner";
 
 const nav: NavGroup[] = [
-  { heading: "Overview", items: [{ label: "Dashboard", href: "/account/dashboard" }] },
+  { heading: "Overview", items: [
+    { label: "Dashboard", href: "/account/dashboard" },
+    { label: "Notifications", href: "/account/notifications" },
+  ]},
   { heading: "Orders & plans", items: [
     { label: "My Orders", href: "/account/orders" },
     { label: "My Subscription", href: "/account/subscription" },
@@ -16,6 +19,10 @@ const nav: NavGroup[] = [
     { label: "Bottle Tracking", href: "/account/bottles" },
     { label: "Wallet", href: "/account/wallet" },
     { label: "Invoices", href: "/account/invoices" },
+  ]},
+  { heading: "Rewards", items: [
+    { label: "Rewards", href: "/account/rewards" },
+    { label: "Refer & Earn", href: "/account/referrals" },
   ]},
   { heading: "Account", items: [
     { label: "Profile", href: "/account/profile" },

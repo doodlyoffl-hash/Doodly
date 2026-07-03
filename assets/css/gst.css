@@ -1,0 +1,37 @@
+/* =============================================================
+   DOODLY — GST Management (DOODLY_GST)  ·  token-themed
+   Reuses .exp-tabs/.exp-card/.panel/.tbl/.badge/.rbac-modal/.dt-*.
+   ============================================================= */
+.gst { display: flex; flex-direction: column; gap: 14px; }
+.gst-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.gst-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 999px; padding: 0 14px; background: var(--surface); min-width: 220px; }
+.gst-search svg { color: var(--ink-3); flex: 0 0 auto; }
+.gst-search .input { border: none; background: transparent; padding: 10px 4px; width: 100%; }
+
+.gst-pct { font-weight: 800; color: var(--forest); font-family: var(--font-display); }
+.gst-th { cursor: pointer; user-select: none; white-space: nowrap; }
+.gst-th:hover { color: var(--leaf-600); }
+.gst-acts { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.gst-del { color: var(--danger, #c0392b); }
+
+.gst-test { font-size: 12.5px; font-weight: 700; padding: 5px 11px; border-radius: 8px; cursor: help; margin-left: 8px; }
+.gst-test.ok { background: var(--mint-soft); color: var(--leaf-600); }
+.gst-test.fail { background: color-mix(in srgb, var(--danger, #c0392b) 14%, transparent); color: var(--danger, #c0392b); }
+
+/* reports filter bar */
+.gst-repbar { align-items: flex-end; }
+.gst-f { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.gst-f .input { width: auto; }
+.gst-export { position: relative; }
+.gst-export .dt-export-menu { right: 0; top: 40px; }
+
+/* settings */
+.gst-settings { display: flex; flex-direction: column; gap: 14px; max-width: 560px; }
+.gst-settings .rbac-check { display: flex; align-items: center; gap: 9px; font-size: 14px; color: var(--ink); }
+
+/* modal extras */
+.gst-frow { display: flex; gap: 12px; flex-wrap: wrap; }
+.gst-frow .rbac-f { flex: 1; min-width: 130px; }
+.gst-err { background: color-mix(in srgb, var(--danger, #c0392b) 12%, transparent); color: var(--danger, #c0392b); border-radius: 8px; padding: 8px 11px; font-size: 12.5px; }
+
+@media (max-width: 640px) { .gst-search { min-width: 100%; } }

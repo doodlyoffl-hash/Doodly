@@ -1,0 +1,51 @@
+/* =============================================================
+   DOODLY — Referral & Rewards (DOODLY_REFERRAL)  ·  token-themed
+   ============================================================= */
+.rf { display: flex; flex-direction: column; gap: 16px; }
+.rf-top { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; align-items: stretch; }
+@media (max-width: 860px) { .rf-top { grid-template-columns: 1fr; } }
+
+.rf-codecard { border: 1px solid var(--line); border-radius: var(--r, 18px); padding: 20px; background: radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--mint-soft, #E4F6EC) 70%, transparent), transparent 55%), var(--surface, #fff); }
+.rf-codelbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-3, #8a958f); }
+.rf-code { font-family: var(--font-display, "Fraunces", serif); font-weight: 600; font-size: clamp(1.7rem, 4vw, 2.3rem); letter-spacing: .08em; color: var(--forest, #0F3D2E); margin: 4px 0 12px; }
+.rf-link { display: flex; gap: 8px; flex-wrap: wrap; }
+.rf-link input { flex: 1; min-width: 180px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 11px; font: inherit; font-size: 12.5px; color: var(--ink-2, #5a6b63); background: var(--surface-2, #f6faf6); }
+.rf-share { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.rf-sbtn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface, #fff); border-radius: 10px; padding: 8px 12px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink, #122); cursor: pointer; text-decoration: none; transition: transform .12s, border-color .15s; }
+.rf-sbtn:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--leaf, #1FAE66) 40%, var(--line)); }
+.rf-sbtn.wa { background: #25D366; border-color: #25D366; color: #062b16; }
+.rf-policy { font-size: 12px; color: var(--ink-3, #8a958f); margin-top: 12px; }
+
+.rf-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.rf-stat { border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: var(--surface, #fff); text-align: center; }
+.rf-stat-v { font-family: var(--font-display, "Fraunces", serif); font-weight: 700; font-size: 22px; color: var(--forest, #0F3D2E); }
+.rf-stat.green .rf-stat-v { color: var(--leaf-600, #169A57); }
+.rf-stat.amber .rf-stat-v { color: #b8860b; }
+.rf-stat.red .rf-stat-v { color: var(--danger, #c0392b); }
+.rf-stat-l { font-size: 11px; color: var(--ink-3, #8a958f); text-transform: uppercase; letter-spacing: .4px; margin-top: 3px; }
+
+.rf-demo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px; border: 1px dashed var(--line); border-radius: 12px; }
+.rf-demo > span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-3, #8a958f); }
+
+/* admin */
+.rf-admin { display: flex; flex-direction: column; gap: 14px; }
+.rf-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.rf-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 999px; padding: 0 14px; background: var(--surface, #fff); min-width: 220px; }
+.rf-search svg { color: var(--ink-3, #9aa4a0); flex: 0 0 auto; }
+.rf-search .input { border: none; background: transparent; padding: 10px 4px; width: 100%; }
+.rf-acts { display: flex; gap: 10px; flex-wrap: wrap; }
+.rf-rej { color: var(--danger, #c0392b); }
+.rf-export { position: relative; }
+.rf-export .dt-export-menu { right: 0; top: 40px; }
+.rf-settings { display: flex; flex-direction: column; gap: 14px; max-width: 460px; }
+.rf-settings .rbac-check { display: flex; align-items: center; gap: 9px; font-size: 14px; color: var(--ink, #122); }
+.rf-test { font-size: 12.5px; font-weight: 700; padding: 5px 11px; border-radius: 8px; cursor: help; margin-left: 8px; }
+.rf-test.ok { background: var(--mint-soft, #E4F6EC); color: var(--leaf-600, #169A57); }
+.rf-test.fail { background: color-mix(in srgb, var(--danger, #c0392b) 14%, transparent); color: var(--danger, #c0392b); }
+
+/* policy doc */
+.rf-policy-doc ol { padding-left: 22px; display: flex; flex-direction: column; gap: 10px; }
+.rf-policy-doc li { font-size: 14.5px; line-height: 1.6; color: var(--ink-2, #5a6b63); }
+.rf-policy-doc li::marker { color: var(--leaf-600, #169A57); font-weight: 700; }
+
+@media (prefers-reduced-motion: reduce) { .rf-sbtn { transition: none; } }

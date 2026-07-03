@@ -1,0 +1,218 @@
+/* =============================================================
+   DOODLY — Typography System  (load right after styles.css)
+   -------------------------------------------------------------
+   A centralised, token-driven type scale for a premium, warm,
+   editorial dairy identity. Display face is Fraunces (a warm,
+   high-contrast variable serif — organic curves, optical sizing:
+   "farm-to-home" craftsmanship). Body/UI face is Hanken Grotesk
+   (a warm humanist grotesque — highly legible, calm, modern).
+   Together: editorial elegance (Aesop-like) + fresh, trustworthy
+   clarity — distinctly Doodly, not a default SaaS/AI template.
+
+   Every value is a CSS variable so the whole site stays
+   consistent and is themeable in one place. Sizes are fluid via
+   clamp() (no oversized mobile headings, no tiny desktop text).
+
+   ── SCALE ──────────────────────────────────────────────────
+   Role          Family    Weight  Size (min → max)      LH    Tracking
+   Display XL     Fraunces   600    40 → 68px (fluid)     1.04  -0.025em
+   Display Large  Fraunces   600    33 → 52px             1.06  -0.022em
+   H1             Fraunces   600    30 → 43px             1.10  -0.018em
+   H2             Fraunces   600    24 → 34px             1.14  -0.015em
+   H3             Fraunces   600    20 → 26px             1.20  -0.010em
+   H4             Fraunces   600    18 → 21px             1.26  -0.005em
+   H5             Hanken     700    16px                  1.30   0
+   H6             Hanken     700    14px                  1.30   0.01em
+   Body Large     Hanken     400    17 → 18px             1.62   0.003em
+   Body Medium    Hanken     400    16px                  1.62   0.004em
+   Body Small     Hanken     400    14px                  1.55   0.005em
+   Caption        Hanken     500    12.5px                1.40   0.01em
+   Label/Eyebrow  Hanken     600    11.5px UPPERCASE      1.20   0.14em
+   Button         Hanken     600    15px                  1.00   0.01em
+   Navigation     Hanken     500    15px                  1.00   0.005em
+   Footer         Hanken     400    14.5px                1.60   0.004em
+   ────────────────────────────────────────────────────────────
+   Notes: body ≥ 16px (WCAG); prose capped at ~68ch for readable
+   line length; reduced-motion respected elsewhere; font loading
+   is non-blocking (print-media swap) with display=swap to keep
+   CLS low — the next/font equivalent for this static build.
+   ============================================================= */
+
+:root {
+  /* families */
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-body: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* fluid sizes (min, fluid, max) */
+  --fs-display-xl: clamp(2.5rem, 1.55rem + 4.1vw, 4.25rem);
+  --fs-display-lg: clamp(2.05rem, 1.45rem + 2.7vw, 3.25rem);
+  --fs-h1: clamp(1.85rem, 1.42rem + 1.95vw, 2.7rem);
+  --fs-h2: clamp(1.5rem, 1.25rem + 1.15vw, 2.125rem);
+  --fs-h3: clamp(1.25rem, 1.13rem + 0.55vw, 1.625rem);
+  --fs-h4: clamp(1.125rem, 1.06rem + 0.3vw, 1.3125rem);
+  --fs-h5: 1rem;
+  --fs-h6: 0.875rem;
+  --fs-body-lg: clamp(1.0625rem, 1.02rem + 0.18vw, 1.125rem);
+  --fs-body: 1rem;
+  --fs-body-sm: 0.875rem;
+  --fs-caption: 0.78rem;
+  --fs-label: 0.72rem;
+  --fs-button: 0.9375rem;
+  --fs-nav: 0.9375rem;
+  --fs-footer: 0.90625rem;
+
+  /* line heights */
+  --lh-display: 1.04;
+  --lh-display-lg: 1.06;
+  --lh-h1: 1.1;
+  --lh-h2: 1.14;
+  --lh-h3: 1.2;
+  --lh-h4: 1.26;
+  --lh-snug: 1.3;
+  --lh-body: 1.62;
+  --lh-tight: 1.08;
+
+  /* tracking */
+  --ls-display: -0.025em;
+  --ls-display-lg: -0.022em;
+  --ls-h1: -0.018em;
+  --ls-h2: -0.015em;
+  --ls-h3: -0.01em;
+  --ls-h4: -0.005em;
+  --ls-body: 0.003em;
+  --ls-label: 0.14em;
+
+  /* weights */
+  --fw-display: 600;
+  --fw-heading: 600;
+  --fw-body: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* rhythm */
+  --measure: 68ch;
+  --paragraph-gap: 1.05em;
+}
+
+/* ---------- base ---------- */
+html { font-size: 100%; }
+body {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-body);
+  line-height: var(--lh-body);
+  letter-spacing: var(--ls-body);
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+}
+
+/* headings — H1–H4 use the Fraunces display face; H5–H6 are Hanken UI subheads */
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: var(--fw-display);
+  color: var(--forest);
+  text-wrap: balance;
+}
+h5, h6 { font-family: var(--font-body); font-weight: var(--fw-bold); color: var(--forest); line-height: var(--lh-snug); }
+h1 { font-size: var(--fs-h1); line-height: var(--lh-h1); letter-spacing: var(--ls-h1); }
+h2 { font-size: var(--fs-h2); line-height: var(--lh-h2); letter-spacing: var(--ls-h2); }
+h3 { font-size: var(--fs-h3); line-height: var(--lh-h3); letter-spacing: var(--ls-h3); }
+h4 { font-size: var(--fs-h4); line-height: var(--lh-h4); letter-spacing: var(--ls-h4); }
+h5 { font-size: var(--fs-h5); }
+h6 { font-size: var(--fs-h6); letter-spacing: 0.01em; }
+
+p { line-height: var(--lh-body); }
+p + p { margin-top: var(--paragraph-gap); }
+strong, b { font-weight: var(--fw-bold); }
+small { font-size: var(--fs-body-sm); }
+
+/* links — refined underline that grows on hover */
+a { color: inherit; text-decoration: none; }
+a.link, .prose a, .link {
+  color: var(--leaf-600);
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--leaf-600) 35%, transparent);
+  transition: text-decoration-color .18s ease, color .18s ease;
+}
+a.link:hover, .prose a:hover, .link:hover { text-decoration-color: var(--leaf-600); }
+
+::selection { background: color-mix(in srgb, var(--leaf) 28%, transparent); color: var(--forest); }
+
+/* ---------- refined existing utility classes ---------- */
+.display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: var(--fw-display);
+  line-height: var(--lh-display);
+  letter-spacing: var(--ls-display);
+  color: var(--forest);
+  text-wrap: balance;
+}
+.display em, h1 em, h2 em { font-style: italic; font-weight: var(--fw-display); }
+
+.eyebrow, .t-label {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--leaf-600);
+  line-height: var(--lh-snug);
+}
+
+.lead, .t-body-lg {
+  font-family: var(--font-body);
+  font-size: var(--fs-body-lg);
+  line-height: var(--lh-body);
+  letter-spacing: var(--ls-body);
+  color: var(--ink-2);
+}
+.lead { max-width: var(--measure); }
+.muted { color: var(--ink-3); }
+
+/* readable line length for long-form copy */
+.prose p, .prose li, .ps-body p { max-width: var(--measure); }
+
+/* ---------- refine the home hero (premium, not oversized) ---------- */
+.hero h1 { font-size: var(--fs-display-xl); line-height: var(--lh-display); letter-spacing: var(--ls-display); margin-top: 16px; }
+.hero .lead { font-size: var(--fs-body-lg); }
+.section-head .display { font-size: var(--fs-display-lg); line-height: var(--lh-display-lg); letter-spacing: var(--ls-display-lg); }
+
+/* ---------- component type: buttons · nav · footer ---------- */
+.btn { font-family: var(--font-body); font-weight: var(--fw-semibold); font-size: var(--fs-button); letter-spacing: 0.01em; }
+.nav-links a, .mm-links a { font-family: var(--font-body); font-weight: var(--fw-medium); font-size: var(--fs-nav); letter-spacing: 0.005em; }
+.sidebar a, .sb-link, .topbar { font-family: var(--font-body); }
+footer, .footer, .footer-bottom, .foot-col a { font-family: var(--font-body); }
+.foot-col a { font-size: var(--fs-footer); }
+.foot-col h4 { font-family: var(--font-body); font-weight: var(--fw-bold); font-size: 0.82rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); }
+
+/* ---------- explicit utility classes (the documented scale) ---------- */
+.t-display-xl { font-family: var(--font-display); font-weight: var(--fw-display); font-size: var(--fs-display-xl); line-height: var(--lh-display); letter-spacing: var(--ls-display); color: var(--forest); }
+.t-display-lg { font-family: var(--font-display); font-weight: var(--fw-display); font-size: var(--fs-display-lg); line-height: var(--lh-display-lg); letter-spacing: var(--ls-display-lg); color: var(--forest); }
+.t-h1 { font-family: var(--font-display); font-weight: var(--fw-display); font-size: var(--fs-h1); line-height: var(--lh-h1); letter-spacing: var(--ls-h1); color: var(--forest); }
+.t-h2 { font-family: var(--font-display); font-weight: var(--fw-display); font-size: var(--fs-h2); line-height: var(--lh-h2); letter-spacing: var(--ls-h2); color: var(--forest); }
+.t-h3 { font-family: var(--font-display); font-weight: var(--fw-display); font-size: var(--fs-h3); line-height: var(--lh-h3); letter-spacing: var(--ls-h3); color: var(--forest); }
+.t-h4 { font-family: var(--font-display); font-weight: var(--fw-display); font-size: var(--fs-h4); line-height: var(--lh-h4); letter-spacing: var(--ls-h4); color: var(--forest); }
+.t-h5 { font-family: var(--font-body); font-weight: var(--fw-bold); font-size: var(--fs-h5); line-height: var(--lh-snug); color: var(--forest); }
+.t-h6 { font-family: var(--font-body); font-weight: var(--fw-bold); font-size: var(--fs-h6); line-height: var(--lh-snug); letter-spacing: 0.01em; color: var(--forest); }
+.t-body-md { font-family: var(--font-body); font-size: var(--fs-body); line-height: var(--lh-body); letter-spacing: var(--ls-body); }
+.t-body-sm { font-family: var(--font-body); font-size: var(--fs-body-sm); line-height: var(--lh-snug); }
+.t-caption { font-family: var(--font-body); font-weight: var(--fw-medium); font-size: var(--fs-caption); line-height: var(--lh-snug); color: var(--ink-3); letter-spacing: 0.01em; }
+.t-button { font-family: var(--font-body); font-weight: var(--fw-semibold); font-size: var(--fs-button); letter-spacing: 0.01em; }
+.t-nav { font-family: var(--font-body); font-weight: var(--fw-medium); font-size: var(--fs-nav); letter-spacing: 0.005em; }
+.t-footer { font-family: var(--font-body); font-size: var(--fs-footer); line-height: var(--lh-body); }
+.t-mono { font-family: var(--font-mono); }
+
+/* ---------- responsive nudge: calm the hero a touch on the smallest phones ---------- */
+@media (max-width: 380px) {
+  :root { --fs-display-xl: clamp(2.2rem, 8vw, 2.6rem); }
+}

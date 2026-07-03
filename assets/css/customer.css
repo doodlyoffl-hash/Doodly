@@ -1,0 +1,30 @@
+/* =============================================================
+   DOODLY — Customer & User live cards (customer.css). Prefix: .cu-
+   ============================================================= */
+.cu-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.cu-kpi { position: relative; display: block; text-align: left; border: 1px solid var(--line, #e7ece9); background: var(--surface, #fff); border-radius: 16px; padding: 14px 15px; color: inherit; text-decoration: none; transition: transform .14s, box-shadow .14s, border-color .14s; }
+a.cu-kpi:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(15, 61, 46, .1); border-color: var(--leaf, #1FAE66); }
+a.cu-kpi:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(31, 174, 102, .3); }
+.cu-kpi-static { cursor: default; }
+.cu-k-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cu-k-l { font-size: .76rem; font-weight: 600; color: var(--ink-3, #6b7b73); }
+.cu-k-ic { color: var(--leaf-600, #178a52); display: inline-flex; opacity: .9; }
+.cu-k-v { font-family: var(--font-display, "Fraunces", serif); font-size: 1.45rem; font-weight: 600; color: var(--forest, #0F3D2E); line-height: 1.15; margin-top: 8px; word-break: break-word; }
+.cu-k-sub { font-size: .74rem; color: var(--ink-3, #6b7b73); margin-top: 3px; }
+.cu-k-go { position: absolute; right: 12px; bottom: 12px; color: var(--leaf, #1FAE66); opacity: 0; transform: translateX(-4px); transition: opacity .15s, transform .15s; }
+a.cu-kpi:hover .cu-k-go { opacity: 1; transform: translateX(0); }
+
+/* subscription card actions */
+.cu-subactions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+
+/* rewards redeem + history */
+.cu-redeem { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cu-redeem b { font-family: var(--font-display, "Fraunces", serif); font-size: 1.5rem; color: var(--forest, #0F3D2E); }
+.cu-msg { margin-top: 12px; font-size: .85rem; padding: 9px 13px; border-radius: 10px; }
+.cu-msg.ok { background: var(--mint-soft, #E4F6EC); color: var(--leaf-600, #178a52); border: 1px solid var(--leaf, #1FAE66); }
+.cu-rhist { display: flex; flex-direction: column; gap: 4px; }
+.cu-rrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--line, #e7ece9); font-size: .85rem; }
+.cu-cred { color: var(--leaf-600, #178a52); } .cu-deb { color: #c0392b; }
+
+@media (max-width: 560px) { .cu-kpis { grid-template-columns: 1fr 1fr; gap: 9px; } .cu-k-v { font-size: 1.2rem; } }
+@media (max-width: 360px) { .cu-kpis { grid-template-columns: 1fr 1fr; } }

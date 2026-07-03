@@ -1,0 +1,7 @@
+# Static storefront deployment (Vercel project with Root Directory = repo root).
+# The Next.js backend deploys as its own Vercel project (Root Directory = next-app),
+# so none of this belongs in the static upload.
+next-app
+tools
+*.ps1
+.claude

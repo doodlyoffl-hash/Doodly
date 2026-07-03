@@ -31,6 +31,7 @@ window.DOODLY_MOTION = (function () {
 
   /* ---------- count-up for stat numbers ---------- */
   function countEl(el) {
+    if (el.dataset.live != null) { el.textContent = el.dataset.live; return; } // live backend value — never animate over it
     const raw = el.textContent.trim();
     const m = raw.match(/^(\D*)([0-9][0-9.,]*)(.*)$/s);
     if (!m || reduced() || document.hidden) return; // hidden tab: keep real value (rAF is paused)
@@ -47,6 +48,7 @@ window.DOODLY_MOTION = (function () {
     const dur = 1100, t0 = performance.now();
     el.textContent = fmt(0);
     (function tick(t) {
+      if (el.dataset.live != null) { el.textContent = el.dataset.live; return; } // live value arrived mid-animation — yield to it
       const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
       el.textContent = fmt(target * e);
       if (k < 1) raf(tick); else el.textContent = pre + numStr + suf;

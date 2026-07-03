@@ -5,7 +5,7 @@
 
 export const SITE = {
   name: "DOODLY",
-  legalName: "Doodly Dairy Pvt. Ltd.",
+  legalName: "SUBADHAAM MILK DAIRY Pvt. Ltd.",
   tagline: "Fresh A2 Buffalo Milk, delivered daily.",
   url: process.env.NEXT_PUBLIC_SITE_URL || "https://yourdomain.com",
   description:

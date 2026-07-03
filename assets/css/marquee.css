@@ -1,0 +1,84 @@
+/* =============================================================
+   DOODLY — Premium trust marquee (.dq-marquee)
+   Infinite right-to-left ticker of quality promises. Pure-CSS
+   translateX loop (GPU-friendly, 60fps), seamless via duplicated
+   group, edge fade mask, hover-pause on desktop, reduced-motion
+   safe. Replaces the static hero trust row.
+   ============================================================= */
+.dq-marquee {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  margin-top: 24px;
+  /* subtle left/right fade so items glide in and out of view */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
+          mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
+}
+
+.dq-marquee-track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: dq-marquee 30s linear infinite;
+}
+/* one group is exactly half the track → translating by -50% is a seamless wrap */
+@keyframes dq-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* pause on hover — desktop / pointer devices only */
+@media (hover: hover) and (pointer: fine) {
+  .dq-marquee:hover .dq-marquee-track { animation-play-state: paused; }
+}
+
+.dq-marquee-group {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.dq-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  font-family: var(--font-body, "Hanken Grotesk", system-ui, sans-serif);
+  font-weight: 600;
+  font-size: 13.5px;
+  letter-spacing: .3px;
+  color: var(--forest, #0F3D2E);
+  /* interactive: each promise opens an educational explainer */
+  border: 0; background: none; margin: 0; padding: 4px 8px; cursor: pointer;
+  border-radius: 999px; transition: background .2s ease, color .2s ease, transform .2s ease;
+}
+.dq-item:hover, .dq-item:focus-visible { background: var(--mint-soft, #eef6ef); color: var(--leaf-600, #169A57); transform: translateY(-1px); outline: none; }
+.dq-item:focus-visible { box-shadow: 0 0 0 2px var(--leaf, #1FAE66); }
+[data-theme="dark"] .dq-item:hover, [data-theme="dark"] .dq-item:focus-visible { background: rgba(31,174,102,.16); }
+.dq-emoji { font-size: 15px; line-height: 1; }
+
+.dq-sep {
+  margin: 0 20px;
+  font-size: 11px;
+  color: var(--gold, #E8B864);
+  opacity: .7;
+  transform: translateY(-1px);
+}
+
+[data-theme="dark"] .dq-item { color: var(--ink, #e8f0ec); }
+
+/* ---- responsive: tighten spacing on small screens (speed stays constant) ---- */
+@media (max-width: 767px) {
+  .dq-marquee { margin-top: 18px; }
+  .dq-item { font-size: 12.5px; }
+  .dq-sep { margin: 0 14px; }
+}
+
+/* ---- accessibility: no motion → static, centred, wrapping row ---- */
+@media (prefers-reduced-motion: reduce) {
+  .dq-marquee { -webkit-mask-image: none; mask-image: none; }
+  .dq-marquee-track { animation: none; transform: none; width: 100%; flex-wrap: wrap; justify-content: center; gap: 4px 0; }
+  .dq-marquee-group { flex-wrap: wrap; justify-content: center; }
+  .dq-marquee-group[aria-hidden="true"] { display: none; }
+}

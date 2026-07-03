@@ -4,7 +4,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  listAllArticles, helpAnalytics, createArticle, updateArticle, deleteArticle, setPublished, reorderArticles,
+  helpAdminData, helpAnalytics, createArticle, updateArticle, deleteArticle, setPublished, reorderArticles,
+  createCategory, renameCategory, deleteCategory, reorderCategories, createVideo, updateVideo, deleteVideo,
 } from "@/lib/help/service";
 import { actorRole, canManageHelp } from "@/lib/help/guard";
 
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
   try {
     const view = req.nextUrl.searchParams.get("view") ?? "articles";
     if (view === "analytics") return NextResponse.json(await helpAnalytics(), { headers: { "Cache-Control": "no-store" } });
-    return NextResponse.json({ articles: await listAllArticles() }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(await helpAdminData(), { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     console.error("help.admin.get", (e as Error)?.message);
     return NextResponse.json({ error: "Could not load help data." }, { status: 500 });
@@ -29,6 +30,15 @@ const Body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("delete"), id: z.string().min(1) }),
   z.object({ action: z.literal("publish"), id: z.string().min(1), published: z.boolean() }),
   z.object({ action: z.literal("reorder"), items: z.array(z.object({ id: z.string(), sortOrder: z.number().int() })) }),
+  // categories
+  z.object({ action: z.literal("catCreate"), title: z.string().min(1), icon: z.string().optional() }),
+  z.object({ action: z.literal("catRename"), id: z.string().min(1), title: z.string().min(1) }),
+  z.object({ action: z.literal("catDelete"), id: z.string().min(1) }),
+  z.object({ action: z.literal("catReorder"), items: z.array(z.object({ id: z.string(), sortOrder: z.number().int() })) }),
+  // videos
+  z.object({ action: z.literal("vidCreate"), title: z.string().min(1), url: z.string().optional() }),
+  z.object({ action: z.literal("vidUpdate"), id: z.string().min(1), title: z.string().optional(), url: z.string().optional() }),
+  z.object({ action: z.literal("vidDelete"), id: z.string().min(1) }),
 ]);
 
 export async function POST(req: NextRequest) {
@@ -40,12 +50,22 @@ export async function POST(req: NextRequest) {
 
   try {
     const d = parsed.data;
-    const result =
-      d.action === "create" ? await createArticle(d)
-      : d.action === "update" ? await updateArticle(d.id, d)
-      : d.action === "delete" ? await deleteArticle(d.id)
-      : d.action === "publish" ? await setPublished(d.id, d.published)
-      : await reorderArticles(d.items);
+    let result: unknown;
+    switch (d.action) {
+      case "create": result = await createArticle(d); break;
+      case "update": result = await updateArticle(d.id, d); break;
+      case "delete": result = await deleteArticle(d.id); break;
+      case "publish": result = await setPublished(d.id, d.published); break;
+      case "reorder": result = await reorderArticles(d.items); break;
+      case "catCreate": result = await createCategory(d.title, d.icon); break;
+      case "catRename": result = await renameCategory(d.id, d.title); break;
+      case "catDelete": result = await deleteCategory(d.id); break;
+      case "catReorder": result = await reorderCategories(d.items); break;
+      case "vidCreate": result = await createVideo(d.title, d.url); break;
+      case "vidUpdate": result = await updateVideo(d.id, d); break;
+      case "vidDelete": result = await deleteVideo(d.id); break;
+      default: result = null;
+    }
     return NextResponse.json({ ok: true, result });
   } catch (e) {
     return NextResponse.json({ error: (e as Error)?.message ?? "Action failed" }, { status: 409 });

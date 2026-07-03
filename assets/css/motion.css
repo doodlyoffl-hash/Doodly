@@ -18,7 +18,9 @@
 .logo-img { animation: logoIn .7s cubic-bezier(.2,.8,.2,1) both; }
 @keyframes logoIn { from { opacity: 0; transform: translateY(-5px) scale(.95); } }
 
-.nav { animation: navDrop .6s cubic-bezier(.2,.8,.2,1) both; }
+/* `backwards` (not `both`): the entrance holds its transform only BEFORE it plays,
+   so after load the scroll-driven auto-hide transform on .nav isn't overridden. */
+.nav { animation: navDrop .6s cubic-bezier(.2,.8,.2,1) backwards; }
 @keyframes navDrop { from { opacity: 0; transform: translateY(-8px); } }
 
 /* ---------- Nav: animated underline ---------- */
@@ -41,7 +43,8 @@
 /* =============================================================
    Premium header: animated glass fx, logo, badge, scroll, CTA
    ============================================================= */
-.nav { transition: height .32s cubic-bezier(.2,.8,.2,1), box-shadow .32s ease, background .3s ease, -webkit-backdrop-filter .3s ease, backdrop-filter .3s ease; }
+/* NB: no `will-change: transform` here — it establishes a containing block that breaks the nav's own position:sticky. */
+.nav { transition: transform .45s cubic-bezier(.22,.61,.36,1), height .32s cubic-bezier(.2,.8,.2,1), box-shadow .32s ease, background .3s ease, border-color .3s ease, -webkit-backdrop-filter .3s ease, backdrop-filter .3s ease; }
 .nav .wrap { position: relative; z-index: 2; }
 
 /* animated glass fx layer (decorative, behind content) */
@@ -90,12 +93,19 @@
 .nav-fresh { display: none; align-items: center; gap: .45rem; margin-left: 14px; flex-shrink: 0; white-space: nowrap;
   font-size: .74rem; font-weight: 700; color: var(--forest-700); background: var(--mint-soft); border: 1px solid var(--mint); border-radius: 999px; padding: .32rem .7rem; }
 .nav-fresh .nf-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--leaf); box-shadow: 0 0 0 0 rgba(31,174,102,.5); animation: fsPing 2s ease-out infinite; }
-@media (min-width: 1440px) { .nav-fresh { display: inline-flex; } .nav-links { gap: 20px; } }
+/* The "fresh today" badge is intentionally not shown in the bar — with 9 links it
+   can't fit the centred wrap without pushing the action cluster off-screen. Link
+   spacing stays a consistent 14px at every full-nav width for a balanced header. */
 
-/* scrolled state: shrink + stronger blur/shadow + smaller logo */
-.nav.scrolled { height: 56px; box-shadow: 0 6px 22px rgba(15,61,46,.12);
+/* scrolled state: shrink + stronger blur/shadow + smaller logo + crisper edge */
+.nav.scrolled { height: 56px; box-shadow: 0 6px 22px rgba(15,61,46,.12); border-bottom-color: rgba(31,174,102,.22);
   -webkit-backdrop-filter: saturate(180%) blur(24px); backdrop-filter: saturate(180%) blur(24px); }
 .nav.scrolled .logo-img { height: 24px; }
+
+/* directional auto-hide: slide the bar out of the way on scroll-down, reveal on
+   scroll-up (JS toggles .nav-hidden). Gives back reading space, feels premium. */
+.nav.nav-hidden { transform: translateY(-100%); box-shadow: none; }
+@media (prefers-reduced-motion: reduce) { .nav.nav-hidden { transform: none; } }   /* never yank the header away for reduced-motion users */
 
 /* Subscribe CTA: periodic glow pulse (hover lift + ripple already handled) */
 .nav-cta.btn-primary { animation: navCtaPulse 13s ease-in-out infinite; }

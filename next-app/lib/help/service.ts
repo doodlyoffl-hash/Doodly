@@ -76,6 +76,105 @@ export async function reorderArticles(items: { id: string; sortOrder: number }[]
   return { ok: true };
 }
 
+// ---------- categories + video guides (persist what DOODLY_HELP kept in localStorage) ----------
+export async function listCategories() {
+  return db.helpCategory.findMany({ where: { deletedAt: null }, orderBy: { sortOrder: "asc" } });
+}
+export async function createCategory(title: string, icon?: string) {
+  const t = (title || "").trim(); if (!t) throw new Error("Category name required.");
+  const max = await db.helpCategory.aggregate({ where: { deletedAt: null }, _max: { sortOrder: true } });
+  return db.helpCategory.create({ data: { title: t, icon: icon || "info", sortOrder: (max._max.sortOrder ?? 0) + 1 } });
+}
+export async function renameCategory(id: string, title: string) {
+  const t = (title || "").trim(); if (!t) throw new Error("Category name required.");
+  return db.helpCategory.update({ where: { id }, data: { title: t } });
+}
+export async function deleteCategory(id: string) { return db.helpCategory.update({ where: { id }, data: { deletedAt: new Date() } }); }
+export async function reorderCategories(items: { id: string; sortOrder: number }[]) {
+  await db.$transaction(items.map((i) => db.helpCategory.update({ where: { id: i.id }, data: { sortOrder: i.sortOrder } })));
+  return { ok: true };
+}
+
+export async function listVideos() {
+  return db.helpVideo.findMany({ where: { deletedAt: null }, orderBy: { sortOrder: "asc" } });
+}
+export async function createVideo(title: string, url?: string) {
+  const t = (title || "").trim(); if (!t) throw new Error("Video title required.");
+  const max = await db.helpVideo.aggregate({ where: { deletedAt: null }, _max: { sortOrder: true } });
+  return db.helpVideo.create({ data: { title: t, url: (url || "").trim(), sortOrder: (max._max.sortOrder ?? 0) + 1 } });
+}
+export async function updateVideo(id: string, patch: { title?: string; url?: string }) {
+  return db.helpVideo.update({ where: { id }, data: { ...(patch.title != null ? { title: patch.title.trim() } : {}), ...(patch.url != null ? { url: patch.url.trim() } : {}) } });
+}
+export async function deleteVideo(id: string) { return db.helpVideo.update({ where: { id }, data: { deletedAt: new Date() } }); }
+
+/** Everything the admin Help UI mirrors in one call: articles + categories + videos. */
+export async function helpAdminData() {
+  const [articles, categories, videos] = await Promise.all([listAllArticles(), listCategories(), listVideos()]);
+  return { articles, categories, videos };
+}
+
+// ---------- public knowledge base (powers the storefront Help Center) ----------
+// Canonical category metadata: maps a category slug → display title + a storefront
+// icon NAME (matches the SVG set in assets/js/help.js), so the public page renders
+// the right icon even when a HelpCategory row stores only the generic "info".
+const CAT_META: Record<string, { title: string; icon: string }> = {
+  "getting-started": { title: "Getting Started", icon: "box" },
+  "products": { title: "Products", icon: "bottle" },
+  "delivery": { title: "Delivery", icon: "truck" },
+  "subscription": { title: "Subscription", icon: "refresh" },
+  "wallet": { title: "Wallet", icon: "wallet" },
+  "payments": { title: "Payments", icon: "card" },
+  "bottle-returns": { title: "Bottle Returns", icon: "bottle" },
+  "b2b": { title: "B2B Orders", icon: "factory" },
+  "account": { title: "Account", icon: "info" },
+};
+const catSlug = (s: string) => (s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "general";
+
+/** Public: the published knowledge base in the shape the storefront Help Center
+    renders — { cats:[{id,icon,title,faqs:[{q,a,published}]}], videos:[{id,title,url}] }.
+    Groups published FAQs by category slug, orders by HelpCategory then the canonical
+    order, and is failure-tolerant (DB down → config defaults via listPublishedFaqs). */
+export async function helpPublicData() {
+  const [articles, categories, videos] = await Promise.all([
+    listPublishedFaqs(),
+    listCategories().catch(() => [] as Awaited<ReturnType<typeof listCategories>>),
+    listVideos().catch(() => [] as Awaited<ReturnType<typeof listVideos>>),
+  ]);
+  const byCat: Record<string, { q: string; a: string; published: boolean }[]> = {};
+  const nameOf: Record<string, string> = {};
+  const iconOf: Record<string, string> = {};
+  const ordered: string[] = [];
+  for (const c of categories) {
+    const id = catSlug(c.title);
+    nameOf[id] = c.title;
+    iconOf[id] = c.icon && c.icon !== "info" ? c.icon : CAT_META[id]?.icon || "info";
+    byCat[id] = byCat[id] || [];
+    if (ordered.indexOf(id) < 0) ordered.push(id);
+  }
+  for (const a of articles) {
+    const id = catSlug(a.category);
+    if (nameOf[id] == null) nameOf[id] = CAT_META[id]?.title || a.category;
+    if (iconOf[id] == null) iconOf[id] = CAT_META[id]?.icon || "info";
+    (byCat[id] = byCat[id] || []).push({ q: a.question, a: a.answer, published: true });
+    if (ordered.indexOf(id) < 0) ordered.push(id);
+  }
+  // stable order: known canonical slugs first (in CAT_META order), then any extras
+  const known = Object.keys(CAT_META);
+  ordered.sort((x, y) => {
+    const ix = known.indexOf(x), iy = known.indexOf(y);
+    if (ix < 0 && iy < 0) return 0;
+    if (ix < 0) return 1;
+    if (iy < 0) return -1;
+    return ix - iy;
+  });
+  const cats = ordered
+    .filter((id) => (byCat[id] || []).length)
+    .map((id) => ({ id, icon: iconOf[id] || "info", title: nameOf[id] || id, faqs: byCat[id] }));
+  const vids = videos.map((v) => ({ id: v.id, title: v.title, url: v.url || "" }));
+  return { cats, videos: vids };
+}
+
 // ---------- analytics ----------
 
 export async function logSearch(rawTerm: string, resultCount: number) {

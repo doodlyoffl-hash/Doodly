@@ -8,19 +8,13 @@
 import "server-only";
 import type { NextRequest } from "next/server";
 import { can, type RoleKey } from "@/lib/rbac";
-
-const ROLES: RoleKey[] = [
-  "customer", "delivery_executive", "support", "operations", "procurement",
-  "accountant", "inventory", "quality", "marketing", "admin", "super_admin",
-];
+import { readUserId, readRole } from "@/lib/auth/identity";
 
 export interface ActorContext { role: RoleKey; actorId?: string; actorRole: string }
 
 export function actorFrom(req: NextRequest): ActorContext {
-  const cookieRole = req.cookies.get("doodly-role")?.value as RoleKey | undefined;
-  const fallback: RoleKey = process.env.NODE_ENV === "production" ? "customer" : "super_admin";
-  const role = cookieRole && ROLES.includes(cookieRole) ? cookieRole : fallback;
-  return { role, actorId: req.cookies.get("doodly-uid")?.value, actorRole: role };
+  const role = readRole(req);
+  return { role, actorId: readUserId(req) ?? undefined, actorRole: role };
 }
 
 export const canViewDeliveries = (role: RoleKey) => can(role, "deliveries", "view");

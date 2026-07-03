@@ -123,13 +123,8 @@ window.DOODLY_BUILDER = (function () {
     sizeRow.addEventListener("click", e => { const b = e.target.closest("[data-variant]"); if (b) { state.variantId = b.dataset.variant; compute(); } });
     $("#planRow").addEventListener("click", e => { const b = e.target.closest("[data-planopt]"); if (b) { state.planId = b.dataset.planopt; compute(); } });
 
-    // "Choose plan" buttons in the compare grid jump to the builder
-    $$("[data-plan]").forEach(b => b.addEventListener("click", () => {
-      state.planId = b.dataset.plan;
-      if (getVariant().type === "trial") state.variantId = "v500";
-      compute();
-      const target = $("#builder"); if (target) target.scrollIntoView({ behavior: "smooth" });
-    }));
+    // "Choose plan" cards are wired globally via the delegated listener below
+    // (works on every page, survives re-renders, and confirms the selection).
 
     // delivery start-date picker (DOODLY_SCHEDULE) — feeds the schedule summary
     if (window.DOODLY_SCHEDULE) {
@@ -157,6 +152,37 @@ window.DOODLY_BUILDER = (function () {
     };
     compute();
   }
+
+  /* ============================================================
+     "Choose plan" — global delegated handler (production-safe).
+     Works on any page and survives re-renders:
+       • builder on this page  → select the plan, scroll to it (clear of
+         the sticky nav) and confirm with a highlight pulse + toast;
+       • no builder on page    → carry the choice to the subscriptions
+         builder via ?plan= (it preselects from the query string).
+     ============================================================ */
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-plan]");
+    if (!b) return;
+    const pid = b.dataset.plan;
+    const target = document.getElementById("builder");
+    if (!target || !_api) {
+      e.preventDefault();
+      window.location.href = "/subscriptions.html?plan=" + encodeURIComponent(pid) + "#builder";
+      return;
+    }
+    e.preventDefault();
+    _api(null, pid);
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    target.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+    // visible confirmation: pulse the selected plan card + toast the plan name
+    const sel = document.querySelector("#planRow .opt.active");
+    if (sel && !reduced) { sel.classList.remove("opt-flash"); void sel.offsetWidth; sel.classList.add("opt-flash"); }
+    try {
+      const p = (D().plans || []).find(x => x.id === pid);
+      if (p && window.DOODLY_PINCODE && DOODLY_PINCODE.toast) DOODLY_PINCODE.toast(p.name + " selected ✓ — pick your bottle and start date");
+    } catch (err) {}
+  });
 
   return {
     mount,

@@ -67,6 +67,47 @@ export interface BusinessProfileResponse {
   orders: (Omit<OrderRow, "business" | "deliveryTime"> & { remarks: string | null; invoice: { number: string } | null })[];
 }
 
+export interface OrdersListResponse {
+  orders: OrderRow[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface OrderEventRow {
+  id: string;
+  type: "CREATED" | "STATUS" | "PAYMENT" | "INVOICE" | "NOTE" | "EDIT";
+  fromStatus: B2BOrderStatus | null;
+  toStatus: B2BOrderStatus | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface OrderDetailResponse {
+  order: {
+    id: string;
+    code: string;
+    status: B2BOrderStatus;
+    deliveryDate: string;
+    deliveryTime: string;
+    deliveryNotes: string | null;
+    subtotalPaise: number;
+    discountPaise: number;
+    taxPaise: number;
+    totalPaise: number;
+    paidPaise: number;
+    paymentTerm: PaymentTerm;
+    paymentStatus: B2BPaymentStatus;
+    remarks: string | null;
+    createdAt: string;
+    items: { id: string; productSlug: string; productName: string; quantity: number; unit: string; unitPricePaise: number; lineTotalPaise: number }[];
+    business: BusinessRow;
+    payments: { id: string; amountPaise: number; method: string; reference: string | null; note: string | null; createdAt: string }[];
+    invoice: { number: string; issuedAt: string } | null;
+    events: OrderEventRow[];
+  };
+}
+
 export interface B2BReportsResponse {
   totalOrders: number;
   totalRevenuePaise: number;

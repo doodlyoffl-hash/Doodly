@@ -91,7 +91,12 @@ function toExecutiveInput(dr: DriverWithStatus): ExecutiveInput {
 // ---------- AUTO ASSIGNMENT ----------
 
 export async function runAutoAssignment(args: SlotArgs) {
-  const { slot, actorId, actorRole } = args;
+  const { slot, actorRole } = args;
+  // AssignmentLog.actorId is a User FK — a cross-origin/dev-bridge actor id may not be a
+  // real User row, so resolve it to null rather than violate the constraint (attribution
+  // still rides on actorRole). Mirrors the AuditLog userId handling elsewhere.
+  let actorId = args.actorId;
+  if (actorId && !(await db.user.findUnique({ where: { id: actorId }, select: { id: true } }))) actorId = undefined;
   const range = dayRange(args.date);
   const date = range.gte;
 

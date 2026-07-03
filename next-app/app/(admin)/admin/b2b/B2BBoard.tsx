@@ -8,11 +8,17 @@ import {
 import { B2B_PRODUCTS } from "@/lib/b2b/catalog";
 import type {
   BusinessRow, OrderRow, BusinessProfileResponse, B2BReportsResponse,
+  OrdersListResponse, OrderDetailResponse, OrderEventRow,
 } from "@/lib/b2b/dashboard-types";
 
 const inr = (p: number) => `₹${(p / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtDate = (s: string) => new Date(s).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+const fmtDateTime = (s: string) => new Date(s).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 const todayISO = () => new Date().toISOString().slice(0, 10);
+const mapsUrl = (b: { lat: number | null; lng: number | null; line1: string; city: string; pincode: string }) =>
+  b.lat != null && b.lng != null
+    ? `https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}`
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${b.line1}, ${b.city} ${b.pincode}`)}`;
 
 type Tab = "businesses" | "register" | "create" | "orders" | "reports";
 const TABS: { key: Tab; label: string }[] = [
@@ -146,6 +152,7 @@ function BusinessRowView({ b, open, onToggle, flash, isSuperAdmin, onChanged }: 
           <div className="grid gap-5 lg:grid-cols-2">
             <div className="space-y-1.5 text-sm text-ink-2">
               <Detail k="Address" v={`${b.line1}${b.landmark ? ", " + b.landmark : ""}, ${b.area ? b.area + ", " : ""}${b.city}, ${b.state} ${b.pincode}`} />
+              <p><span className="font-semibold text-forest">Location:</span> <a href={mapsUrl(b)} target="_blank" rel="noopener" className="font-semibold text-leaf-600 underline">View on Google Maps ↗</a></p>
               <Detail k="Email" v={b.email ?? "—"} />
               <Detail k="Alt mobile" v={b.altMobile ?? "—"} />
               <Detail k="GST / PAN" v={`${b.gst ?? "—"} / ${b.pan ?? "—"}`} />
@@ -432,9 +439,15 @@ function CreateOrderTab({ flash, onDone }: { flash: (m: string) => void; onDone:
 const ORDER_FILTERS: (B2BOrderStatus | "all")[] = ["all", "PENDING", "CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY", "DELIVERED", "COMPLETED", "CANCELLED"];
 
 function OrdersTab({ flash }: { flash: (m: string) => void }) {
+  const PAGE_SIZE = 25;
   const [filter, setFilter] = useState<B2BOrderStatus | "all">("all");
+  const [payStatus, setPayStatus] = useState("");
   const [q, setQ] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [page, setPage] = useState(0);
   const [rows, setRows] = useState<OrderRow[]>([]);
+  const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -442,21 +455,40 @@ function OrdersTab({ flash }: { flash: (m: string) => void }) {
     try {
       const qs = new URLSearchParams();
       if (filter !== "all") qs.set("status", filter);
+      if (payStatus) qs.set("paymentStatus", payStatus);
       if (q.trim()) qs.set("q", q.trim());
-      const j = await api(`/api/b2b/orders?${qs}`); setRows(j.orders); setError(null);
+      if (from) qs.set("from", from);
+      if (to) qs.set("to", to);
+      qs.set("limit", String(PAGE_SIZE));
+      qs.set("offset", String(page * PAGE_SIZE));
+      const j: OrdersListResponse = await api(`/api/b2b/orders?${qs}`);
+      setRows(j.orders); setTotal(j.total); setError(null);
     } catch (e) { setError((e as Error).message); }
-  }, [filter, q]);
+  }, [filter, payStatus, q, from, to, page]);
   useEffect(() => { load(); }, [load]);
+  // any filter change resets to the first page
+  const reset = () => setPage(0);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         {ORDER_FILTERS.map((s) => (
-          <button key={s} onClick={() => setFilter(s)} className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${filter === s ? "bg-leaf text-white" : "border border-mint-soft text-forest hover:border-leaf"}`}>
+          <button key={s} onClick={() => { setFilter(s); reset(); }} className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${filter === s ? "bg-leaf text-white" : "border border-mint-soft text-forest hover:border-leaf"}`}>
             {s === "all" ? "All" : B2B_STATUS_LABEL[s]}
           </button>
         ))}
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search order / business…" className="ml-auto min-w-[200px] rounded-lg border border-mint-soft px-3 py-2 text-sm" />
+        <input value={q} onChange={(e) => { setQ(e.target.value); reset(); }} placeholder="Search order / business / product…" className="ml-auto min-w-[200px] rounded-lg border border-mint-soft px-3 py-2 text-sm" />
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-ink-3">
+        <span className="font-semibold uppercase tracking-wide">Payment</span>
+        <select value={payStatus} onChange={(e) => { setPayStatus(e.target.value); reset(); }} className="rounded-lg border border-mint-soft px-2 py-1.5 text-sm text-forest">
+          {["", "PENDING", "PARTIAL", "PAID", "CREDIT"].map((p) => <option key={p} value={p}>{p ? p[0] + p.slice(1).toLowerCase() : "All"}</option>)}
+        </select>
+        <span className="ml-2 font-semibold uppercase tracking-wide">Delivery</span>
+        <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); reset(); }} className="rounded-lg border border-mint-soft px-2 py-1.5 text-sm text-forest" />
+        <span>→</span>
+        <input type="date" value={to} onChange={(e) => { setTo(e.target.value); reset(); }} className="rounded-lg border border-mint-soft px-2 py-1.5 text-sm text-forest" />
+        {(payStatus || from || to) && <button onClick={() => { setPayStatus(""); setFrom(""); setTo(""); reset(); }} className="text-leaf-600 underline">Clear</button>}
       </div>
       {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
@@ -471,6 +503,16 @@ function OrdersTab({ flash }: { flash: (m: string) => void }) {
           </tbody>
         </table>
       </div>
+
+      {total > 0 && (
+        <div className="flex items-center justify-between text-sm text-ink-3">
+          <span>Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total.toLocaleString("en-IN")}</span>
+          <div className="flex gap-2">
+            <button disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))} className="rounded-full border border-mint-soft px-4 py-1.5 text-xs font-semibold text-forest disabled:opacity-40">← Prev</button>
+            <button disabled={(page + 1) * PAGE_SIZE >= total} onClick={() => setPage((p) => p + 1)} className="rounded-full border border-mint-soft px-4 py-1.5 text-xs font-semibold text-forest disabled:opacity-40">Next →</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -480,18 +522,48 @@ function OrderStatusBadge({ s }: { s: B2BOrderStatus }) {
   return <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${tone}`}>{B2B_STATUS_LABEL[s]}</span>;
 }
 
+const EVENT_LABEL: Record<OrderEventRow["type"], string> = { CREATED: "Created", STATUS: "Status changed", PAYMENT: "Payment", INVOICE: "Invoice", NOTE: "Note", EDIT: "Edited" };
+
 function OrderRowView({ o, open, onToggle, flash, onChanged }: { o: OrderRow; open: boolean; onToggle: () => void; flash: (m: string) => void; onChanged: () => void; }) {
   const [busy, setBusy] = useState(false);
   const [payAmt, setPayAmt] = useState("");
   const [payMethod, setPayMethod] = useState("Cash");
+  const [note, setNote] = useState("");
+  const [detail, setDetail] = useState<OrderDetailResponse["order"] | null>(null);
+  const [editing, setEditing] = useState(false);
   const next = allowedNextStatus(o.status);
+
+  const loadDetail = useCallback(async () => {
+    try { const j: OrderDetailResponse = await api(`/api/b2b/orders/${o.id}`); setDetail(j.order); }
+    catch (e) { flash((e as Error).message); }
+  }, [o.id, flash]);
+  useEffect(() => { if (open) loadDetail(); else { setDetail(null); setEditing(false); } }, [open, loadDetail]);
 
   async function patch(body: Record<string, unknown>, ok: string) {
     setBusy(true);
-    try { await api(`/api/b2b/orders/${o.id}`, { method: "PATCH", body: JSON.stringify(body) }); flash(ok); onChanged(); }
+    try { await api(`/api/b2b/orders/${o.id}`, { method: "PATCH", body: JSON.stringify(body) }); flash(ok); await loadDetail(); onChanged(); }
     catch (e) { flash((e as Error).message); }
     finally { setBusy(false); }
   }
+
+  async function saveEdit(orderPayload: unknown) {
+    setBusy(true);
+    try { await api(`/api/b2b/orders/${o.id}`, { method: "PATCH", body: JSON.stringify({ action: "update", order: orderPayload }) }); flash("Order updated"); setEditing(false); await loadDetail(); onChanged(); }
+    catch (e) { flash((e as Error).message); }
+    finally { setBusy(false); }
+  }
+
+  async function printInvoice() {
+    setBusy(true);
+    try {
+      let j: OrderDetailResponse = await api(`/api/b2b/orders/${o.id}`);
+      if (!j.order.invoice) { await api(`/api/b2b/orders/${o.id}`, { method: "PATCH", body: JSON.stringify({ action: "invoice" }) }); j = await api(`/api/b2b/orders/${o.id}`); }
+      openInvoicePrint(j.order); setDetail(j.order); onChanged();
+    } catch (e) { flash((e as Error).message); }
+    finally { setBusy(false); }
+  }
+
+  const editable = o.status === "PENDING" || o.status === "CONFIRMED";
 
   return (
     <>
@@ -508,39 +580,192 @@ function OrderRowView({ o, open, onToggle, flash, onChanged }: { o: OrderRow; op
       </tr>
       {open && (
         <tr className="border-b border-mint-soft bg-[#F6FAF6]"><td colSpan={9} className="px-4 py-5">
-          <div className="grid gap-5 lg:grid-cols-3">
-            <div>
-              <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-ink-3">Change status</p>
-              <div className="flex flex-wrap gap-2">
-                {next.length ? next.map((s) => (
-                  <button key={s} disabled={busy} onClick={() => patch({ action: s === "CANCELLED" ? "cancel" : "status", status: s }, `Moved to ${B2B_STATUS_LABEL[s]}`)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${s === "CANCELLED" ? "border border-red-200 text-red-600" : "bg-leaf text-white"}`}>{B2B_STATUS_LABEL[s]} →</button>
-                )) : <span className="text-xs text-ink-3">Terminal status.</span>}
-              </div>
-            </div>
+          {editing && detail ? (
+            <EditOrderForm order={detail} busy={busy} onCancel={() => setEditing(false)} onSave={saveEdit} />
+          ) : (
+            <div className="grid gap-5 lg:grid-cols-3">
+              <div>
+                <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-ink-3">Change status</p>
+                <div className="flex flex-wrap gap-2">
+                  {next.length ? next.map((s) => (
+                    <button key={s} disabled={busy} onClick={() => patch({ action: s === "CANCELLED" ? "cancel" : "status", status: s }, `Moved to ${B2B_STATUS_LABEL[s]}`)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${s === "CANCELLED" ? "border border-red-200 text-red-600" : "bg-leaf text-white"}`}>{B2B_STATUS_LABEL[s]} →</button>
+                  )) : <span className="text-xs text-ink-3">Terminal status.</span>}
+                </div>
 
-            <div>
-              <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-ink-3">Record payment</p>
-              <div className="flex flex-wrap items-center gap-2">
-                <input value={payAmt} onChange={(e) => setPayAmt(e.target.value)} placeholder="Amount ₹" inputMode="decimal" className="w-28 rounded-lg border border-mint-soft px-2 py-1.5 text-sm" />
-                <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className="rounded-lg border border-mint-soft px-2 py-1.5 text-sm">{["Cash", "UPI", "Bank Transfer", "Cheque", "Card"].map((m) => <option key={m}>{m}</option>)}</select>
-                <button disabled={busy || !payAmt} onClick={() => { patch({ action: "pay", amountPaise: Math.round((Number(payAmt) || 0) * 100), method: payMethod }, "Payment recorded"); setPayAmt(""); }} className="rounded-full bg-leaf px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Add</button>
-              </div>
-              <p className="mt-1 text-xs text-ink-3">Outstanding: {inr(o.totalPaise - o.paidPaise)}</p>
-            </div>
+                <p className="mb-1.5 mt-4 text-xs font-bold uppercase tracking-wide text-ink-3">Record payment</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input value={payAmt} onChange={(e) => setPayAmt(e.target.value)} placeholder="Amount ₹" inputMode="decimal" className="w-28 rounded-lg border border-mint-soft px-2 py-1.5 text-sm" />
+                  <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className="rounded-lg border border-mint-soft px-2 py-1.5 text-sm">{["Cash", "UPI", "Bank Transfer", "Cheque", "Card"].map((m) => <option key={m}>{m}</option>)}</select>
+                  <button disabled={busy || !payAmt} onClick={() => { patch({ action: "pay", amountPaise: Math.round((Number(payAmt) || 0) * 100), method: payMethod }, "Payment recorded"); setPayAmt(""); }} className="rounded-full bg-leaf px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Add</button>
+                </div>
+                <p className="mt-1 text-xs text-ink-3">Outstanding: {inr(o.totalPaise - o.paidPaise)}</p>
 
-            <div className="space-y-2">
-              <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-ink-3">Actions</p>
-              <div className="flex flex-wrap gap-2">
-                <button disabled={busy} onClick={() => patch({ action: "invoice" }, "Invoice generated")} className="rounded-full border border-mint-soft px-3 py-1.5 text-xs font-semibold text-forest disabled:opacity-50">Generate invoice</button>
-                <button disabled={busy} onClick={() => patch({ action: "reorder" }, "Order duplicated")} className="rounded-full border border-mint-soft px-3 py-1.5 text-xs font-semibold text-forest disabled:opacity-50">Reorder / Duplicate</button>
-                <button disabled={busy} onClick={() => window.print()} className="rounded-full border border-mint-soft px-3 py-1.5 text-xs font-semibold text-forest disabled:opacity-50">Print</button>
+                <p className="mb-1.5 mt-4 text-xs font-bold uppercase tracking-wide text-ink-3">Actions</p>
+                <div className="flex flex-wrap gap-2">
+                  {editable && <button disabled={busy} onClick={() => setEditing(true)} className="rounded-full border border-mint-soft px-3 py-1.5 text-xs font-semibold text-forest disabled:opacity-50">Edit order</button>}
+                  <button disabled={busy} onClick={() => patch({ action: "invoice" }, "Invoice generated")} className="rounded-full border border-mint-soft px-3 py-1.5 text-xs font-semibold text-forest disabled:opacity-50">Generate invoice</button>
+                  <button disabled={busy} onClick={printInvoice} className="rounded-full border border-mint-soft px-3 py-1.5 text-xs font-semibold text-forest disabled:opacity-50">Print / Download invoice</button>
+                  <button disabled={busy} onClick={() => patch({ action: "reorder" }, "Order duplicated")} className="rounded-full border border-mint-soft px-3 py-1.5 text-xs font-semibold text-forest disabled:opacity-50">Reorder / Duplicate</button>
+                </div>
+
+                <p className="mb-1.5 mt-4 text-xs font-bold uppercase tracking-wide text-ink-3">Add note</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Internal note…" className="min-w-[180px] flex-1 rounded-lg border border-mint-soft px-2 py-1.5 text-sm" />
+                  <button disabled={busy || !note.trim()} onClick={() => { patch({ action: "note", note: note.trim() }, "Note added"); setNote(""); }} className="rounded-full bg-leaf px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Add note</button>
+                </div>
+              </div>
+
+              {/* order detail */}
+              <div className="text-sm text-ink-2">
+                <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-ink-3">Order detail</p>
+                {detail ? (
+                  <div className="space-y-1.5">
+                    <p className="font-semibold text-forest">{detail.business.code} · {detail.business.name}</p>
+                    <p>{detail.business.contactPerson} · {detail.business.mobile} · {PAYMENT_TERM_LABEL[detail.paymentTerm]}</p>
+                    <div className="mt-2 rounded-xl border border-mint-soft bg-white p-3">
+                      {detail.items.map((i) => <div key={i.id} className="flex justify-between"><span>{i.quantity} {i.unit} {i.productName}</span><span className="font-semibold">{inr(i.lineTotalPaise)}</span></div>)}
+                      <div className="mt-2 border-t border-mint-soft pt-2 text-xs">
+                        <div className="flex justify-between"><span>Subtotal</span><span>{inr(detail.subtotalPaise)}</span></div>
+                        <div className="flex justify-between"><span>Discount</span><span>– {inr(detail.discountPaise)}</span></div>
+                        <div className="flex justify-between"><span>Tax</span><span>{inr(detail.taxPaise)}</span></div>
+                        <div className="flex justify-between font-bold text-forest"><span>Total</span><span>{inr(detail.totalPaise)}</span></div>
+                      </div>
+                    </div>
+                    {detail.invoice && <p className="text-xs">Invoice: <span className="font-mono font-semibold text-forest">{detail.invoice.number}</span></p>}
+                    {detail.remarks && <p className="text-xs italic text-ink-3">“{detail.remarks}”</p>}
+                  </div>
+                ) : <p className="text-xs text-ink-3">Loading…</p>}
+              </div>
+
+              {/* timeline */}
+              <div>
+                <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-ink-3">Order timeline</p>
+                {detail ? (
+                  <ol className="max-h-72 space-y-2 overflow-y-auto">
+                    {detail.events.map((ev) => (
+                      <li key={ev.id} className="rounded-lg border border-mint-soft bg-white px-3 py-2 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-forest">{EVENT_LABEL[ev.type]}{ev.toStatus ? `: ${B2B_STATUS_LABEL[ev.toStatus]}` : ""}</span>
+                          <span className="text-ink-3">{fmtDateTime(ev.createdAt)}</span>
+                        </div>
+                        {ev.note && <p className="mt-0.5 text-ink-2">{ev.note}</p>}
+                      </li>
+                    ))}
+                    {!detail.events.length && <p className="text-xs text-ink-3">No events.</p>}
+                  </ol>
+                ) : <p className="text-xs text-ink-3">Loading…</p>}
               </div>
             </div>
-          </div>
+          )}
         </td></tr>
       )}
     </>
+  );
+}
+
+/* clean printable / downloadable (Save as PDF) B2B invoice */
+function openInvoicePrint(order: OrderDetailResponse["order"]) {
+  const w = window.open("", "_blank", "width=840,height=920");
+  if (!w) return;
+  const b = order.business;
+  const itemRows = order.items.map((i) =>
+    `<tr><td>${i.productName}</td><td>${i.quantity} ${i.unit}</td><td class="r">${inr(i.unitPricePaise)}</td><td class="r">${inr(i.lineTotalPaise)}</td></tr>`).join("");
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${order.invoice?.number ?? order.code}</title>
+  <style>
+    *{box-sizing:border-box} body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1c2722;margin:32px;}
+    h1{color:#0F3D2E;margin:0 0 2px} .muted{color:#6b7b73;font-size:12px}
+    .row{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px}
+    table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13px}
+    th,td{padding:8px 10px;border-bottom:1px solid #e7ece9;text-align:left} th{background:#F6FAF6;font-size:11px;text-transform:uppercase;color:#6b7b73}
+    .r{text-align:right} .totals{margin-top:14px;margin-left:auto;width:280px;font-size:13px}
+    .totals div{display:flex;justify-content:space-between;padding:3px 0} .totals .tot{font-weight:800;color:#0F3D2E;border-top:1px solid #e7ece9;margin-top:4px;padding-top:8px}
+    .badge{display:inline-block;background:#E4F6EC;color:#178a52;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700}
+  </style></head><body>
+    <div class="row">
+      <div><h1>DOODLY</h1><div class="muted">Fresh A2 Buffalo Milk · Vijayawada</div></div>
+      <div style="text-align:right"><div style="font-weight:800;color:#0F3D2E">TAX INVOICE</div><div class="muted">${order.invoice?.number ?? "(draft)"}</div><div class="muted">${order.invoice ? fmtDate(order.invoice.issuedAt) : fmtDate(order.createdAt)}</div></div>
+    </div>
+    <div class="row">
+      <div><div class="muted">Billed to</div><b>${b.name}</b><div>${b.contactPerson} · ${b.mobile}</div><div>${b.line1}, ${b.city} ${b.pincode}</div>${b.gst ? `<div class="muted">GST: ${b.gst}</div>` : ""}</div>
+      <div style="text-align:right"><div class="muted">Order</div><b>${order.code}</b><div class="muted">Delivery: ${fmtDate(order.deliveryDate)} · ${order.deliveryTime}</div><div><span class="badge">${order.paymentStatus}</span></div></div>
+    </div>
+    <table><thead><tr><th>Product</th><th>Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead><tbody>${itemRows}</tbody></table>
+    <div class="totals">
+      <div><span>Subtotal</span><span>${inr(order.subtotalPaise)}</span></div>
+      <div><span>Discount</span><span>– ${inr(order.discountPaise)}</span></div>
+      <div><span>Tax / GST</span><span>${inr(order.taxPaise)}</span></div>
+      <div class="tot"><span>Total</span><span>${inr(order.totalPaise)}</span></div>
+      <div><span>Paid</span><span>${inr(order.paidPaise)}</span></div>
+      <div><span>Outstanding</span><span>${inr(order.totalPaise - order.paidPaise)}</span></div>
+    </div>
+    <p class="muted" style="margin-top:30px">Thank you for your business. This is a computer-generated invoice.</p>
+  </body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 350);
+}
+
+/* ---- edit an existing (Pending/Confirmed) order ---- */
+function EditOrderForm({ order, busy, onCancel, onSave }: { order: OrderDetailResponse["order"]; busy: boolean; onCancel: () => void; onSave: (payload: unknown) => void }) {
+  const [items, setItems] = useState<LineItem[]>(order.items.map((i) => ({ productSlug: i.productSlug, productName: i.productName, quantity: String(i.quantity), unit: i.unit, unitPriceRupees: (i.unitPricePaise / 100).toString() })));
+  const [deliveryDate, setDeliveryDate] = useState(order.deliveryDate.slice(0, 10));
+  const [deliveryTime, setDeliveryTime] = useState(order.deliveryTime);
+  const [deliveryNotes, setDeliveryNotes] = useState(order.deliveryNotes ?? "");
+  const [remarks, setRemarks] = useState(order.remarks ?? "");
+  const taxable = order.subtotalPaise - order.discountPaise;
+  const [taxPct, setTaxPct] = useState(taxable > 0 ? String(Math.round((order.taxPaise / taxable) * 10000) / 100) : "0");
+
+  function updItem(i: number, patch: Partial<LineItem>) {
+    setItems((s) => s.map((it, idx) => {
+      if (idx !== i) return it;
+      const nx = { ...it, ...patch };
+      if (patch.productSlug) { const p = B2B_PRODUCTS.find((x) => x.slug === patch.productSlug)!; nx.productName = p.name; nx.unit = p.primaryUnit; nx.unitPriceRupees = (p.defaultPricePaise / 100).toString(); }
+      return nx;
+    }));
+  }
+  const addItem = () => { const p = B2B_PRODUCTS[0]; setItems((s) => [...s, { productSlug: p.slug, productName: p.name, quantity: "1", unit: p.primaryUnit, unitPriceRupees: (p.defaultPricePaise / 100).toString() }]); };
+  const removeItem = (i: number) => setItems((s) => s.filter((_, idx) => idx !== i));
+  const subtotal = items.reduce((s, it) => s + Math.round((Number(it.unitPriceRupees) || 0) * 100 * (Number(it.quantity) || 0)), 0);
+
+  function save() {
+    if (!items.length) return;
+    onSave({
+      businessId: order.business.id, deliveryDate, deliveryTime, deliveryNotes,
+      items: items.map((it) => ({ productSlug: it.productSlug, productName: it.productName, quantity: Number(it.quantity) || 0, unit: it.unit, unitPricePaise: Math.round((Number(it.unitPriceRupees) || 0) * 100) })),
+      taxBps: Math.round((Number(taxPct) || 0) * 100), remarks,
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs font-bold uppercase tracking-wide text-ink-3">Edit order {order.code}</p>
+      <div className="space-y-2">
+        {items.map((it, i) => (
+          <div key={i} className="flex flex-wrap items-end gap-2 rounded-xl border border-mint-soft bg-white p-3">
+            <label className="text-xs text-ink-3">Product<select value={it.productSlug} onChange={(e) => updItem(i, { productSlug: e.target.value })} className={`${inp} mt-1`}>{B2B_PRODUCTS.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}</select></label>
+            <label className="text-xs text-ink-3">Qty<input value={it.quantity} onChange={(e) => updItem(i, { quantity: e.target.value })} inputMode="decimal" className={`${inp} mt-1 w-20`} /></label>
+            <label className="text-xs text-ink-3">Unit<select value={it.unit} onChange={(e) => updItem(i, { unit: e.target.value })} className={`${inp} mt-1 w-24`}>{(B2B_PRODUCTS.find((p) => p.slug === it.productSlug)?.units ?? []).map((u) => <option key={u} value={u}>{u}</option>)}</select></label>
+            <label className="text-xs text-ink-3">Unit price (₹)<input value={it.unitPriceRupees} onChange={(e) => updItem(i, { unitPriceRupees: e.target.value })} inputMode="decimal" className={`${inp} mt-1 w-28`} /></label>
+            <span className="ml-auto text-sm font-semibold text-forest">{inr(Math.round((Number(it.unitPriceRupees) || 0) * 100 * (Number(it.quantity) || 0)))}</span>
+            <button onClick={() => removeItem(i)} className="text-xs font-semibold text-red-600 underline">Remove</button>
+          </div>
+        ))}
+        <button onClick={addItem} className="rounded-full border border-mint-soft px-4 py-2 text-sm font-semibold text-forest hover:border-leaf">+ Add product</button>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="text-xs font-semibold text-ink-3"><span className="mb-1 block">Delivery date</span><input type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} className={inp} /></label>
+        <label className="text-xs font-semibold text-ink-3"><span className="mb-1 block">Delivery time</span><input value={deliveryTime} onChange={(e) => setDeliveryTime(e.target.value)} className={inp} /></label>
+        <label className="text-xs font-semibold text-ink-3"><span className="mb-1 block">Tax %</span><input value={taxPct} onChange={(e) => setTaxPct(e.target.value)} inputMode="decimal" className={inp} /></label>
+        <label className="text-xs font-semibold text-ink-3"><span className="mb-1 block">Delivery notes</span><input value={deliveryNotes} onChange={(e) => setDeliveryNotes(e.target.value)} className={inp} /></label>
+        <label className="text-xs font-semibold text-ink-3 sm:col-span-2"><span className="mb-1 block">Remarks</span><input value={remarks} onChange={(e) => setRemarks(e.target.value)} className={inp} /></label>
+      </div>
+      <p className="text-sm text-ink-2">New subtotal: <span className="font-semibold text-forest">{inr(subtotal)}</span> <span className="text-xs text-ink-3">(discount + tax applied on save)</span></p>
+      <div className="flex gap-2">
+        <button disabled={busy || !items.length} onClick={save} className="rounded-full bg-leaf px-6 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Saving…" : "Save changes"}</button>
+        <button onClick={onCancel} className="rounded-full border border-mint-soft px-6 py-2 text-sm font-semibold text-forest">Cancel</button>
+      </div>
+    </div>
   );
 }
 

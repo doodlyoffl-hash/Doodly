@@ -6,8 +6,9 @@ import { z } from "zod";
 import {
   listWallets, walletReports, getCashbackConfig, setCashbackConfig,
   adminCredit, adminDebit, reverseTxn, creditTrialCashback,
+  walletDetail, listAllTransactions, creditReferralReward, bulkCredit, bulkDebit,
 } from "@/lib/wallet/service";
-import { actorRole, canViewWallets, canManageWallets } from "@/lib/wallet/guard";
+import { actorRole, actorId, canViewWallets, canManageWallets } from "@/lib/wallet/guard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,16 +16,29 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const role = actorRole(req);
   if (!canViewWallets(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const view = req.nextUrl.searchParams.get("view") ?? "list";
+  const sp = req.nextUrl.searchParams;
+  const view = sp.get("view") ?? "list";
   try {
-    if (view === "reports") {
-      return NextResponse.json(await walletReports({
-        from: req.nextUrl.searchParams.get("from") ?? undefined,
-        to: req.nextUrl.searchParams.get("to") ?? undefined,
-      }), { headers: { "Cache-Control": "no-store" } });
+    if (view === "reports" || view === "dashboard") {
+      return NextResponse.json(await walletReports({ from: sp.get("from") ?? undefined, to: sp.get("to") ?? undefined }), { headers: { "Cache-Control": "no-store" } });
     }
     if (view === "config") return NextResponse.json(await getCashbackConfig());
-    return NextResponse.json({ wallets: await listWallets({ q: req.nextUrl.searchParams.get("q") ?? undefined }) }, { headers: { "Cache-Control": "no-store" } });
+    if (view === "detail") {
+      const userId = sp.get("userId");
+      if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
+      return NextResponse.json(await walletDetail(userId), { headers: { "Cache-Control": "no-store" } });
+    }
+    if (view === "transactions") {
+      return NextResponse.json({
+        transactions: await listAllTransactions({
+          from: sp.get("from") ?? undefined, to: sp.get("to") ?? undefined,
+          kind: sp.get("kind") ?? undefined, type: (sp.get("type") as "CREDIT" | "DEBIT") ?? undefined,
+          q: sp.get("q") ?? undefined, userId: sp.get("userId") ?? undefined,
+          limit: sp.get("limit") ? Number(sp.get("limit")) : undefined,
+        }),
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
+    return NextResponse.json({ wallets: await listWallets({ q: sp.get("q") ?? undefined }) }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     console.error("wallet.admin.get", (e as Error)?.message);
     return NextResponse.json({ error: "Could not load wallet data." }, { status: 500 });
@@ -36,6 +50,9 @@ const Body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("debit"), userId: z.string().min(1), amountPaise: z.number().int().positive(), reason: z.string().min(1) }),
   z.object({ action: z.literal("reverse"), txnId: z.string().min(1) }),
   z.object({ action: z.literal("cashback"), userId: z.string().min(1), subscriptionId: z.string().optional() }),
+  z.object({ action: z.literal("referral"), referrerId: z.string().min(1), refereeId: z.string().min(1), amountPaise: z.number().int().positive().optional() }),
+  z.object({ action: z.literal("bulkCredit"), userIds: z.array(z.string().min(1)).min(1).max(500), amountPaise: z.number().int().positive(), reason: z.string().min(1) }),
+  z.object({ action: z.literal("bulkDebit"), userIds: z.array(z.string().min(1)).min(1).max(500), amountPaise: z.number().int().positive(), reason: z.string().min(1) }),
   z.object({
     action: z.literal("config"),
     enabled: z.boolean().optional(),
@@ -54,7 +71,7 @@ export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(json);
   if (!parsed.success) return NextResponse.json({ error: "Validation failed", issues: parsed.error.flatten() }, { status: 422 });
 
-  const a = { actorRole: role };
+  const a = { actorRole: role, actorId: actorId(req) ?? undefined };
   try {
     const d = parsed.data;
     const result =
@@ -62,6 +79,9 @@ export async function POST(req: NextRequest) {
       : d.action === "debit" ? await adminDebit({ userId: d.userId, amountPaise: d.amountPaise, reason: d.reason, ...a })
       : d.action === "reverse" ? await reverseTxn({ txnId: d.txnId, ...a })
       : d.action === "cashback" ? await creditTrialCashback({ userId: d.userId, subscriptionId: d.subscriptionId, ...a })
+      : d.action === "referral" ? await creditReferralReward({ referrerId: d.referrerId, refereeId: d.refereeId, amountPaise: d.amountPaise, ...a })
+      : d.action === "bulkCredit" ? await bulkCredit({ userIds: d.userIds, amountPaise: d.amountPaise, reason: d.reason, ...a })
+      : d.action === "bulkDebit" ? await bulkDebit({ userIds: d.userIds, amountPaise: d.amountPaise, reason: d.reason, ...a })
       : await setCashbackConfig({ enabled: d.enabled, amountPaise: d.amountPaise, eligiblePlanSlugs: d.eligiblePlanSlugs, expiryDays: d.expiryDays, ...a });
     return NextResponse.json({ ok: true, result });
   } catch (e) {

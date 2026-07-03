@@ -1,0 +1,99 @@
+/* =============================================================
+   DOODLY — AI Customer Support Assistant (assistant.css). Prefix: .da
+   ============================================================= */
+.da { position: fixed; right: 20px; bottom: 20px; z-index: 1250; }
+/* stack the existing help launcher above the assistant FAB so they don't overlap */
+.help-launch { bottom: 88px !important; }
+
+/* ---- FAB ---- */
+.da-fab { position: relative; width: 60px; height: 60px; border-radius: 50%; border: none; cursor: pointer; color: #fff; display: grid; place-items: center; background: linear-gradient(135deg, var(--leaf, #1FAE66), var(--forest, #0F3D2E)); box-shadow: 0 12px 32px rgba(15, 61, 46, .36); transition: transform .18s, box-shadow .18s; }
+.da-fab:hover { transform: scale(1.07); box-shadow: 0 16px 40px rgba(15, 61, 46, .44); }
+.da-fab:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(31, 174, 102, .35); }
+.da-open .da-fab { transform: scale(.9); opacity: .96; }
+.da-fab-badge { position: absolute; top: -3px; right: -3px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: var(--gold, #C99A2E); color: #3a2c06; font-size: .7rem; font-weight: 800; display: grid; place-items: center; box-shadow: 0 2px 8px rgba(0, 0, 0, .25); }
+.da-fab::after { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 0 rgba(31, 174, 102, .5); animation: da-pulse 2.6s infinite; }
+@keyframes da-pulse { 0% { box-shadow: 0 0 0 0 rgba(31, 174, 102, .45); } 70% { box-shadow: 0 0 0 14px rgba(31, 174, 102, 0); } 100% { box-shadow: 0 0 0 0 rgba(31, 174, 102, 0); } }
+
+/* ---- window ---- */
+.da-win { position: absolute; right: 0; bottom: 74px; width: min(380px, calc(100vw - 32px)); height: min(560px, calc(100vh - 120px)); background: var(--surface, #fff); border: 1px solid var(--line, #e7ece9); border-radius: 20px; box-shadow: 0 26px 60px rgba(15, 61, 46, .28); display: flex; flex-direction: column; overflow: hidden; transform-origin: bottom right; animation: da-in .22s cubic-bezier(.2, .9, .3, 1.1) both; }
+.da-win[hidden] { display: none; }   /* the hidden attribute must win over display:flex (close/minimize) */
+@keyframes da-in { from { transform: translateY(14px) scale(.96); opacity: 0; } }
+.da-maxed .da-win { width: min(440px, calc(100vw - 32px)); height: calc(100vh - 110px); }
+[data-theme="dark"] .da-win { background: rgba(16, 32, 24, .96); }
+
+.da-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 14px; background: linear-gradient(135deg, var(--forest, #0F3D2E), var(--leaf-600, #178a52)); color: #fff; }
+.da-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.da-av { width: 38px; height: 38px; border-radius: 50%; background: rgba(255, 255, 255, .18); display: grid; place-items: center; font-weight: 800; font-size: .85rem; flex: none; }
+.da-idtx { display: flex; flex-direction: column; min-width: 0; }
+.da-idtx b { font-size: .95rem; }
+.da-status { font-size: .72rem; opacity: .9; display: flex; align-items: center; gap: 5px; }
+.da-online { width: 8px; height: 8px; border-radius: 50%; background: #7CF0A8; box-shadow: 0 0 0 0 rgba(124, 240, 168, .7); animation: da-blink 2s infinite; }
+@keyframes da-blink { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+.da-hbtns { display: flex; gap: 2px; }
+.da-hbtn { width: 30px; height: 30px; border-radius: 8px; border: none; background: rgba(255, 255, 255, .12); color: #fff; cursor: pointer; display: grid; place-items: center; }
+.da-hbtn:hover { background: rgba(255, 255, 255, .24); }
+
+/* ---- messages ---- */
+.da-body { flex: 1; overflow-y: auto; padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; background: var(--milk, #fbfdfb); -webkit-overflow-scrolling: touch; }
+[data-theme="dark"] .da-body { background: rgba(10, 22, 16, .4); }
+.da-msg { display: flex; flex-direction: column; max-width: 86%; }
+.da-msg.user { align-self: flex-end; align-items: flex-end; }
+.da-msg.bot { align-self: flex-start; }
+.da-bubble { padding: 10px 13px; border-radius: 16px; font-size: .88rem; line-height: 1.5; }
+.da-msg.bot .da-bubble { background: var(--surface, #fff); border: 1px solid var(--line, #e7ece9); border-bottom-left-radius: 5px; color: var(--ink, #1c2722); }
+.da-msg.user .da-bubble { background: var(--forest, #0F3D2E); color: #fff; border-bottom-right-radius: 5px; }
+.da-ts { font-size: .64rem; color: var(--ink-3, #8a978f); margin: 3px 4px 0; }
+.da-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.da-act { border: 1px solid var(--leaf, #1FAE66); background: var(--mint-soft, #E4F6EC); color: var(--leaf-600, #178a52); border-radius: 999px; padding: 6px 12px; font-size: .8rem; font-weight: 600; cursor: pointer; transition: background .15s; }
+.da-act:hover { background: var(--leaf, #1FAE66); color: #fff; }
+
+/* typing */
+.da-dots { display: inline-flex; gap: 4px; align-items: center; height: 12px; }
+.da-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--leaf, #1FAE66); opacity: .5; animation: da-typing 1.1s infinite; }
+.da-dots i:nth-child(2) { animation-delay: .15s; } .da-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes da-typing { 0%, 60%, 100% { transform: translateY(0); opacity: .4; } 30% { transform: translateY(-4px); opacity: 1; } }
+
+/* callback mini-form */
+.da-cb { display: flex; flex-direction: column; gap: 8px; }
+.da-cbin { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line, #e7ece9); font: inherit; font-size: .85rem; }
+
+/* ---- suggestions ---- */
+.da-suggest { display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px; border-top: 1px solid var(--line, #e7ece9); scrollbar-width: none; }
+.da-suggest::-webkit-scrollbar { display: none; }
+.da-chip { white-space: nowrap; border: 1px solid var(--line, #e7ece9); background: var(--surface, #fff); border-radius: 999px; padding: 6px 12px; font-size: .78rem; font-weight: 600; color: var(--ink-2, #3c4a43); cursor: pointer; flex: none; }
+.da-chip:hover { border-color: var(--leaf, #1FAE66); color: var(--leaf-600, #178a52); }
+
+/* ---- input ---- */
+.da-input { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line, #e7ece9); align-items: center; }
+.da-input input { flex: 1; padding: 10px 14px; border-radius: 999px; border: 1px solid var(--line, #e7ece9); background: var(--milk, #fbfdfb); font: inherit; font-size: .88rem; }
+.da-input input:focus { outline: none; border-color: var(--leaf, #1FAE66); box-shadow: 0 0 0 3px rgba(31, 174, 102, .14); }
+.da-send { width: 40px; height: 40px; flex: none; border-radius: 50%; border: none; background: var(--leaf, #1FAE66); color: #fff; cursor: pointer; display: grid; place-items: center; transition: transform .15s; }
+.da-send:hover { transform: scale(1.08); background: var(--leaf-600, #178a52); }
+.da-foot { font-size: .68rem; color: var(--ink-3, #8a978f); text-align: center; padding: 0 12px 9px; }
+.da-link { border: none; background: none; color: var(--leaf-600, #178a52); font-weight: 700; cursor: pointer; font: inherit; font-size: .68rem; }
+
+/* ---- mobile ---- */
+@media (max-width: 480px) {
+  .da { right: 14px; bottom: 14px; }
+  .da-win { width: calc(100vw - 24px); height: calc(100vh - 92px); bottom: 72px; }
+  .da-fab { width: 54px; height: 54px; }
+  .help-launch { bottom: 80px !important; }
+}
+@media print { .da, .help-launch { display: none !important; } }
+@media (prefers-reduced-motion: reduce) { .da-fab::after, .da-online, .da-win, .da-dots i { animation: none !important; } }
+
+/* ---- admin chat management ---- */
+.da-admin .da-faqrow { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px dashed var(--line, #e7ece9); font-size: .86rem; }
+.da-admin .da-faqrow b { color: var(--forest, #0F3D2E); }
+.da-crow { cursor: pointer; }
+.da-crow:hover td { background: var(--mint-soft, #E4F6EC); }
+.da-transcript { display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow-y: auto; }
+.da-tmsg { display: flex; flex-direction: column; max-width: 80%; }
+.da-tmsg.u { align-self: flex-end; align-items: flex-end; }
+.da-trole { font-size: .68rem; color: var(--ink-3, #6b7b73); margin-bottom: 2px; }
+.da-tbubble { padding: 8px 12px; border-radius: 12px; font-size: .85rem; }
+.da-tmsg.b .da-tbubble { background: var(--mint-soft, #E4F6EC); color: var(--ink, #1c2722); }
+.da-tmsg.u .da-tbubble { background: var(--forest, #0F3D2E); color: #fff; }
+.da-tt { font-size: .64rem; color: var(--ink-3, #8a978f); margin-top: 2px; }
+.da-canrow { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+.da-canrow textarea { flex: 1; }

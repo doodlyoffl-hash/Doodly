@@ -8,10 +8,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createSubscription, cancelSubscription } from "@/lib/razorpay";
 import { db } from "@/lib/db";
+import { readUserId } from "@/lib/auth/identity";
 
 export const runtime = "nodejs";
 
-const uid = (req: NextRequest) => req.cookies.get("doodly-uid")?.value ?? null;
+const uid = (req: NextRequest) => readUserId(req);
 
 const Enable = z.object({ subscriptionId: z.string(), planSlug: z.string(), totalCount: z.number().int().positive().max(120) });
 

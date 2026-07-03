@@ -41,7 +41,7 @@ export async function dynamicSearch(args: { query: string; scope: SearchScope; u
         db.user.findMany({ where: { role: "CUSTOMER", deletedAt: null, OR: [{ name: { contains: args.query, mode: "insensitive" } }, { phone: { contains: args.query } }] }, take: 6, select: { id: true, name: true, phone: true } }),
       ]);
       for (const b of biz) out.push({ id: `biz-${b.id}`, type: "business", title: b.name, subtitle: `${b.code} · ${b.mobile}`, href: "/admin/b2b", icon: "🏢", category: "Admin", action: { label: "Open B2B", href: "/admin/b2b" } });
-      for (const c of customers) out.push({ id: `cust-${c.id}`, type: "customer", title: c.name ?? c.phone, subtitle: c.phone, href: "/admin/customers", icon: "👤", category: "Admin", action: { label: "View customer", href: "/admin/customers" } });
+      for (const c of customers) out.push({ id: `cust-${c.id}`, type: "customer", title: c.name ?? c.phone ?? "Customer", subtitle: c.phone ?? undefined, href: "/admin/customers", icon: "👤", category: "Admin", action: { label: "View customer", href: "/admin/customers" } });
     } catch { /* ignore */ }
   }
   return out.slice(0, 12);
@@ -49,10 +49,148 @@ export async function dynamicSearch(args: { query: string; scope: SearchScope; u
 
 // ---------- analytics ----------
 
-export async function logSearchEvent(kind: "query" | "click" | "noresult", term: string, target?: string, scope?: string) {
+export interface SearchEventExtra { resultCount?: number; userId?: string; sessionId?: string; device?: string; platform?: string; durationMs?: number }
+
+export async function logSearchEvent(kind: "query" | "click" | "noresult", term: string, target?: string, scope?: string, extra?: SearchEventExtra) {
   const t = normalize(term);
   if (!t || t.length < 2) return;
-  try { await db.searchEvent.create({ data: { kind, term: t, target: target ?? null, scope: scope ?? null } }); } catch { /* best-effort */ }
+  try {
+    await db.searchEvent.create({ data: {
+      kind, term: t, target: target ?? null, scope: scope ?? null,
+      resultCount: extra?.resultCount ?? null, userId: extra?.userId ?? null, sessionId: extra?.sessionId ?? null,
+      device: extra?.device ?? null, platform: extra?.platform ?? null, durationMs: extra?.durationMs ?? null,
+    } });
+  } catch { /* best-effort */ }
+}
+
+// ---------- Search Insights dashboard (Growth → Search Insights) ----------
+
+const soD = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+const eoD = (d: Date) => { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; };
+const dKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const mKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+function bucketDaily(rows: Date[], from: Date, to: Date) {
+  const map: Record<string, number> = {};
+  for (let d = soD(from); d <= to; d = new Date(d.getTime() + 864e5)) map[dKey(d)] = 0;
+  for (const r of rows) { const k = dKey(r); if (k in map) map[k] += 1; }
+  return Object.keys(map).sort().map((k) => ({ label: k.slice(5), v: map[k] }));
+}
+function bucketMonthly(rows: Date[], months: number, now = new Date()) {
+  const keys: { key: string; label: string }[] = [];
+  for (let i = months - 1; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); keys.push({ key: mKey(d), label: d.toLocaleDateString("en-IN", { month: "short" }) }); }
+  const map: Record<string, number> = {}; keys.forEach((k) => (map[k.key] = 0));
+  for (const r of rows) { const k = mKey(r); if (k in map) map[k]++; }
+  return keys.map((k) => ({ label: k.label, v: map[k.key] }));
+}
+
+export interface InsightRange { from?: string | Date; to?: string | Date }
+
+export async function searchInsights(rangeIn: InsightRange = {}) {
+  const now = new Date();
+  const to = rangeIn.to ? eoD(new Date(rangeIn.to)) : now;
+  const from = rangeIn.from ? soD(new Date(rangeIn.from)) : soD(new Date(now.getTime() - 29 * 864e5));
+  const spanDays = Math.max(1, Math.round((to.getTime() - from.getTime()) / 864e5));
+  const daily = spanDays <= 45;
+  const todayStart = soD(now);
+  const inRange = { createdAt: { gte: from, lte: to } };
+
+  const [
+    totalQueries, queriesToday, queriesRange, noResultTotal, noResultRange, clicksTotal,
+    topSearches, noResults, topClicked, byDevice, byScope, trendingCount,
+    durationAgg, uniqueSessions, uniqueUsers, queryDates,
+  ] = await Promise.all([
+    db.searchEvent.count({ where: { kind: "query" } }),
+    db.searchEvent.count({ where: { kind: "query", createdAt: { gte: todayStart } } }),
+    db.searchEvent.count({ where: { kind: "query", ...inRange } }),
+    db.searchEvent.count({ where: { kind: "noresult" } }),
+    db.searchEvent.count({ where: { kind: "noresult", ...inRange } }),
+    db.searchEvent.count({ where: { kind: "click" } }),
+    db.searchEvent.groupBy({ by: ["term"], where: { kind: "query" }, _count: { term: true }, orderBy: { _count: { term: "desc" } }, take: 12 }),
+    db.searchEvent.groupBy({ by: ["term"], where: { kind: "noresult" }, _count: { term: true }, orderBy: { _count: { term: "desc" } }, take: 12 }),
+    db.searchEvent.groupBy({ by: ["target"], where: { kind: "click", target: { not: null } }, _count: { target: true }, orderBy: { _count: { target: "desc" } }, take: 12 }),
+    db.searchEvent.groupBy({ by: ["device"], where: { kind: "query", device: { not: null } }, _count: { _all: true } }),
+    db.searchEvent.groupBy({ by: ["scope"], where: { kind: "query" }, _count: { _all: true } }),
+    db.trendingSearch.count({ where: { active: true } }),
+    db.searchEvent.aggregate({ where: { kind: "query", durationMs: { not: null } }, _avg: { durationMs: true } }),
+    db.searchEvent.findMany({ where: { kind: "query", sessionId: { not: null } }, distinct: ["sessionId"], select: { sessionId: true } }),
+    db.searchEvent.findMany({ where: { kind: "query", userId: { not: null } }, distinct: ["userId"], select: { userId: true } }),
+    db.searchEvent.findMany({ where: { kind: "query", ...inRange }, select: { createdAt: true } }),
+  ]);
+
+  // product vs category keyword classification (best-effort, from the live catalogue)
+  const [products, categories] = await Promise.all([
+    db.product.findMany({ select: { slug: true, name: true } }),
+    db.category.findMany({ select: { slug: true, name: true } }).catch(() => [] as { slug: string; name: string }[]),
+  ]);
+  const prodTerms = new Set<string>(); products.forEach((p) => { prodTerms.add(normalize(p.slug)); prodTerms.add(normalize(p.name)); });
+  const catTerms = new Set<string>(); categories.forEach((c) => { catTerms.add(normalize(c.slug)); catTerms.add(normalize(c.name)); });
+  const classify = (rows: { term: string; _count: { term: number } }[], set: Set<string>) =>
+    rows.reduce((s, r) => s + (Array.from(set).some((t) => t && (r.term.includes(t) || t.includes(r.term))) ? r._count.term : 0), 0);
+  const productSearches = classify(topSearches as never, prodTerms);
+  const categorySearches = classify(topSearches as never, catTerms);
+
+  const successRate = totalQueries ? Math.round(((totalQueries - noResultTotal) / totalQueries) * 1000) / 10 : 0;
+  const conversionRate = totalQueries ? Math.round((clicksTotal / totalQueries) * 1000) / 10 : 0;
+
+  const kpis = {
+    totalSearches: totalQueries,
+    searchesToday: queriesToday,
+    searchesRange: queriesRange,
+    uniqueUsers: uniqueUsers.length || uniqueSessions.length,
+    successRate,
+    noResultSearches: noResultTotal,
+    noResultRate: totalQueries ? Math.round((noResultTotal / totalQueries) * 1000) / 10 : 0,
+    avgSearchTimeMs: Math.round(durationAgg._avg.durationMs ?? 0),
+    productSearches, categorySearches,
+    trendingCount,
+    mostClicked: (topClicked as never as { target: string | null }[])[0]?.target ?? null,
+    conversionRate,
+    searchExitRate: totalQueries ? Math.round((noResultTotal / totalQueries) * 1000) / 10 : 0,
+    totalClicks: clicksTotal,
+  };
+
+  const charts = {
+    granularity: daily ? "day" : "month",
+    searchTrend: daily ? bucketDaily(queryDates.map((r) => r.createdAt), from, to) : bucketMonthly(queryDates.map((r) => r.createdAt), 6, now),
+    byDevice: (byDevice as never as { device: string; _count: { _all: number } }[]).map((r) => ({ label: r.device || "unknown", v: r._count._all })),
+    byScope: (byScope as never as { scope: string | null; _count: { _all: number } }[]).map((r) => ({ label: r.scope || "public", v: r._count._all })),
+  };
+
+  return {
+    meta: { from: dKey(from), to: dKey(to), spanDays, granularity: charts.granularity, generatedAt: now.toISOString() },
+    kpis, charts,
+    topSearches: (topSearches as never as { term: string; _count: { term: number } }[]).map((r) => ({ term: r.term, count: r._count.term })),
+    noResults: (noResults as never as { term: string; _count: { term: number } }[]).map((r) => ({ term: r.term, count: r._count.term })),
+    topClicked: (topClicked as never as { target: string | null; _count: { target: number } }[]).map((r) => ({ target: r.target ?? "", count: r._count.target })),
+    rangeSummary: { queries: queriesRange, noResults: noResultRange },
+  };
+}
+
+// ---------- Search records ledger ----------
+export interface SearchRecordFilters extends InsightRange { kind?: string; scope?: string; device?: string; q?: string; sort?: string; page?: number; pageSize?: number }
+
+export async function listSearchRecords(f: SearchRecordFilters = {}) {
+  const page = Math.max(1, f.page ?? 1);
+  const pageSize = Math.min(200, Math.max(1, f.pageSize ?? 50));
+  const where: Record<string, unknown> = {};
+  if (f.kind) where.kind = f.kind;
+  if (f.scope) where.scope = f.scope;
+  if (f.device) where.device = f.device;
+  if (f.q?.trim()) where.OR = [{ term: { contains: normalize(f.q) } }, { target: { contains: f.q.trim() } }, { userId: { contains: f.q.trim() } }, { sessionId: { contains: f.q.trim() } }];
+  if (f.from || f.to) { const r: { gte?: Date; lte?: Date } = {}; if (f.from) r.gte = soD(new Date(f.from)); if (f.to) r.lte = eoD(new Date(f.to)); where.createdAt = r; }
+  const orderBy = f.sort === "oldest" ? { createdAt: "asc" as const } : { createdAt: "desc" as const };
+  const [total, rows] = await Promise.all([
+    db.searchEvent.count({ where }),
+    db.searchEvent.findMany({ where, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+  ]);
+  return {
+    records: rows.map((r) => ({
+      id: r.id, kind: r.kind, term: r.term, target: r.target, scope: r.scope || "public",
+      resultCount: r.resultCount, userId: r.userId, sessionId: r.sessionId, device: r.device, platform: r.platform,
+      durationMs: r.durationMs, createdAt: r.createdAt,
+    })),
+    total, page, pageSize, pages: Math.ceil(total / pageSize),
+  };
 }
 
 export async function searchAnalytics() {

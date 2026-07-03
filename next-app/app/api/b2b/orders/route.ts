@@ -13,14 +13,17 @@ export async function GET(req: NextRequest) {
   if (!canUseB2B(actorRole(req))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   try {
     const sp = req.nextUrl.searchParams;
-    const orders = await listOrders({
+    const result = await listOrders({
       status: (sp.get("status") as B2BOrderStatus) ?? undefined,
       businessId: sp.get("businessId") ?? undefined,
       q: sp.get("q") ?? undefined,
       from: sp.get("from") ?? undefined,
       to: sp.get("to") ?? undefined,
+      paymentStatus: (sp.get("paymentStatus") as "PENDING" | "PARTIAL" | "PAID" | "CREDIT") ?? undefined,
+      limit: sp.get("limit") ? Number(sp.get("limit")) : undefined,
+      offset: sp.get("offset") ? Number(sp.get("offset")) : undefined,
     });
-    return NextResponse.json({ orders }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     console.error("b2b.orders.get", (e as Error)?.message);
     return NextResponse.json({ error: "Could not load orders." }, { status: 500 });

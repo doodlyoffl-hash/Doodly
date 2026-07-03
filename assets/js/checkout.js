@@ -151,16 +151,26 @@ window.DOODLY_CHECKOUT = (function () {
   }
   function summaryHTML() {
     const t = CART() ? CART().getTotals() : { subtotal: 0, savings: 0, deposit: 0, delivery: 0, gst: 0, total: 0, bottles: 0 };
+    // Trial-Pack cashback reminder — shown when a Trial Pack is being purchased and the
+    // promo is enabled. Amount + min eligible plan length come from the admin wallet config.
+    const trialInCart = !!(CART() && CART().lines && CART().lines().some(l => (l.variant && l.variant.type === "trial") || l.type === "trial"));
+    const wc = (window.DOODLY_WALLET && DOODLY_WALLET.config) ? DOODLY_WALLET.config() : { enabled: true, amount: 200, eligiblePlans: ["p30", "p90"] };
+    const pdays = { single: 1, p7: 7, p30: 30, p90: 90 };
+    const minDays = Math.min.apply(null, (wc.eligiblePlans && wc.eligiblePlans.length ? wc.eligiblePlans : ["p30"]).map(p => pdays[p] || 30));
+    const promoOn = (window.DOODLY_WALLET && DOODLY_WALLET.promoActive) ? DOODLY_WALLET.promoActive() : (wc.enabled !== false);
+    const trialNote = (trialInCart && promoOn)
+      ? `<div class="tp-note co-tp-note"><span class="tp-note-ic" aria-hidden="true">🎁</span><div><b>Good news!</b> If you upgrade to a ${minDays}-day or longer subscription later, your ${inr(wc.amount)} Trial Pack amount will be credited back to your DOODLY Wallet. One-time benefit per customer.</div></div>` : "";
     return `<div class="co-summary">
       <h3>${icon("box", 17)} Order summary</h3>
       <div class="co-sum">
         <div class="row"><span>Subtotal (${t.bottles})</span><b>${inr(t.subtotal)}</b></div>
         ${t.savings > 0 ? `<div class="row save"><span>Savings</span><b>− ${inr(t.savings)}</b></div>` : ""}
-        <div class="row"><span>Bottle deposit</span><b>${inr(t.deposit)}</b></div>
+        <div class="row"><span>Refundable Bottle Deposit</span><b>${inr(t.deposit)}</b></div>
         <div class="row ${t.delivery > 0 ? "" : "free"}"><span>Delivery</span><b>${t.delivery > 0 ? inr(t.delivery) : "Free"}</b></div>
         ${t.gst > 0 ? `<div class="row"><span>GST</span><b>${inr(t.gst)}</b></div>` : ""}
         <div class="row total"><span>Total</span><b>${inr(t.total)}</b></div>
       </div>
+      ${trialNote}
       <div class="co-trust"><span>${icon("lock", 13)} Secure</span><span>${icon("bottle", 13)} Refundable deposit</span><span>${icon("refresh", 13)} Cancel anytime</span></div>
     </div>`;
   }
@@ -252,10 +262,32 @@ window.DOODLY_CHECKOUT = (function () {
     const SC = window.DOODLY_SCHEDULE, sel = SC && SC.validSelection(), sub = subContext();
     const sch = (SC && sel && sub && sub.days) ? SC.schedule(sel, sub.days) : null;
     const firstLine = sel ? SC.fmtLong(sel) : "Tomorrow morning";
+    // Is this a Trial Pack purchase? (records trial completion so the customer becomes
+    // eligible for the ₹200 wallet cashback when they later buy a 30-day+ plan.)
+    const trialBought = !!(CART() && CART().lines && CART().lines().some(l => (l.variant && l.variant.type === "trial") || l.type === "trial"));
+    if (trialBought) { try { localStorage.setItem("doodly-trial-purchased", "1"); } catch (e) {} }
+    // Trial Pack Cashback — credit ₹200 if this paid plan is eligible (idempotent, once per customer)
+    let cashbackHtml = "", walletCta = "";
+    if (window.DOODLY_WALLET && sub && sub.planId) {
+      const cb = window.DOODLY_WALLET.creditTrialCashback(sub.planId);
+      if (cb && cb.credited) {
+        cashbackHtml = `<div class="co-cashback">🎁 <b>${inr(cb.amount)} Trial Pack Cashback Added</b><span>Your Trial Pack amount has been credited to your DOODLY Wallet and can be used for future purchases or renewals.</span></div>`;
+        walletCta = `<a class="btn btn-ghost btn-lg" href="/account/wallet.html">${icon("wallet", 16)} View Wallet</a>`;
+      }
+    }
+    // After a Trial Pack purchase, tell the customer how to earn their ₹200 back.
+    let trialNote = "";
+    if (trialBought) {
+      const wc = (window.DOODLY_WALLET && DOODLY_WALLET.config) ? DOODLY_WALLET.config() : { enabled: true, amount: 200, eligiblePlans: ["p30", "p90"] };
+      const pd = { single: 1, p7: 7, p30: 30, p90: 90 };
+      const minD = Math.min.apply(null, (wc.eligiblePlans && wc.eligiblePlans.length ? wc.eligiblePlans : ["p30"]).map(p => pd[p] || 30));
+      const pOn = (window.DOODLY_WALLET && DOODLY_WALLET.promoActive) ? DOODLY_WALLET.promoActive() : (wc.enabled !== false);
+      if (pOn) trialNote = `<div class="tp-note" style="text-align:left;margin:14px 0 0"><span class="tp-note-ic" aria-hidden="true">🎁</span><div><b>Your Trial Pack order is confirmed!</b> Upgrade to a ${minD}-day or longer subscription anytime to receive your ${inr(wc.amount)} back as DOODLY Wallet credit. This benefit is available once per customer.</div></div>`;
+    }
     const pane = paneEl("confirm");
     pane.innerHTML = `<div class="co-success">
         <div class="co-suc-badge">${icon("check", 30)}</div>
-        <h2>Subscription confirmed!</h2>
+        <h2>${trialBought ? "Trial Pack confirmed!" : "Subscription confirmed!"}</h2>
         <p class="co-suc-amt">${inr(t.total)} paid · Order #DZ${Date.now().toString().slice(-6)}</p>
         <div class="co-scene" aria-hidden="true">
           <div class="co-bottle"><span class="co-bottle-milk"></span></div>
@@ -268,10 +300,13 @@ window.DOODLY_CHECKOUT = (function () {
           ${sch ? `<div class="co-sched-row"><span>${icon("refresh", 15)} Estimated end date</span><b>${SC.fmtLong(sch.end)}</b></div>
           <div class="co-sched-row"><span>${icon("truck", 15)} Deliveries</span><b>${sch.deliveries} · ${sch.duration}</b></div>` : ""}
         </div>
+        ${cashbackHtml}
+        ${trialNote}
         <h3 class="co-suc-line">Your fresh milk is on its way 🥛</h3>
         <p class="co-suc-sub">${icon("msg", 13)} We'll message you: "Your first DOODLY delivery is scheduled for ${sel ? SC.fmtShort(sel) : "tomorrow"}." We'll remind you again the day before.</p>
         <div class="co-suc-cta">
           <a class="btn btn-primary btn-lg" href="/account/orders.html">${icon("box", 16)} Track order</a>
+          ${walletCta}
           <a class="btn btn-ghost btn-lg" href="/products.html">Continue shopping</a>
           <a class="btn btn-ghost btn-lg" href="/account/subscription.html">View subscription</a>
         </div></div>`;

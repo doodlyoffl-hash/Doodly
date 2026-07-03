@@ -9,7 +9,7 @@
 @media (min-width:680px){ .dl-kpis { grid-template-columns:repeat(6,1fr); } }
 .dl-kpi { border:1px solid var(--line); border-radius:14px; background:var(--surface); padding:12px; box-shadow:var(--shadow-sm); }
 .dl-kpi .n { font-family:"Fraunces",serif; font-weight:600; color:var(--forest); font-size:1.4rem; line-height:1; }
-.dl-kpi .n small { font-size:.7rem; color:var(--ink-3); font-family:"Plus Jakarta Sans",sans-serif; }
+.dl-kpi .n small { font-size:.7rem; color:var(--ink-3); font-family:var(--font-body); }
 .dl-kpi .l { font-size:.7rem; color:var(--ink-3); font-weight:600; margin-top:5px; }
 
 .dl-card { border:1px solid var(--line); border-radius:18px; background:var(--surface); box-shadow:var(--shadow-sm); overflow:hidden; margin-bottom:16px; }

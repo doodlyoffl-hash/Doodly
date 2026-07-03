@@ -130,7 +130,7 @@
 .fl-field label { position:absolute; left:2.5rem; top:50%; transform:translateY(-50%); transform-origin:left center;
   color:var(--ink-3); font-size:.95rem; pointer-events:none; transition:transform .18s cubic-bezier(.2,.8,.2,1), color .18s; }
 .fl-field input:focus + label,
-.fl-field input:not(:placeholder-shown) + label { transform:translateY(-1.05rem) scale(.74); color:var(--leaf-600); font-weight:700; }
+.fl-field input:not(:placeholder-shown) + label { transform:translateY(calc(-50% - 1.1rem)) scale(.74); color:var(--leaf-600); font-weight:700; }
 .fl-field input:focus { outline:none; border-color:var(--leaf); box-shadow:var(--ring); background:var(--surface); }
 .fl-field input:focus ~ .fl-ic, .fl-field input:focus + label + .fl-ic { color:var(--leaf-600); }
 .fl-field:focus-within .fl-ic { color:var(--leaf-600); }
@@ -145,9 +145,9 @@
 .fl-field.is-error input { border-color:#e5533c; box-shadow:0 0 0 4px rgba(229,83,60,.14); }
 .fl-field.is-error label { color:#e5533c; }
 .fl-field.shake { animation:authShake .42s cubic-bezier(.36,.07,.19,.97); }
-.fl-err { display:block; min-height:0; font-size:.76rem; color:#e5533c; margin:.3rem 0 0 .5rem; font-weight:600;
+.fl-err { display:block; min-height:0; font-size:.76rem; color:#e5533c; margin:0 0 0 .5rem; font-weight:600;
   max-height:0; opacity:0; overflow:hidden; transition:max-height .2s, opacity .2s, margin .2s; }
-.fl-field.is-error .fl-err { max-height:24px; opacity:1; }
+.fl-field.is-error .fl-err { max-height:24px; opacity:1; margin-top:.3rem; }
 /* password reveal */
 .fl-eye { position:absolute; right:11px; top:50%; transform:translateY(-50%); width:30px; height:30px; border-radius:8px;
   display:grid; place-items:center; color:var(--ink-3); background:transparent; border:0; cursor:pointer; transition:color .2s, background .2s; }

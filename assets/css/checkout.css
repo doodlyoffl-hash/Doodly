@@ -28,6 +28,14 @@
 .co-line { flex:1; height:2px; background:var(--line); margin:0 4px 18px; border-radius:2px; position:relative; overflow:hidden; min-width:20px; }
 .co-line::after { content:""; position:absolute; inset:0; background:var(--leaf); transform:scaleX(0); transform-origin:left; transition:transform .4s ease; }
 .co-line.done::after { transform:scaleX(1); }
+/* compact the stepper on very small phones so it never clips */
+@media (max-width:400px){
+  .co-steps { gap:0; overflow-x:auto; scrollbar-width:none; }
+  .co-steps::-webkit-scrollbar { display:none; }
+  .co-steplbl { font-size:.55rem; }
+  .co-dot { width:26px; height:26px; }
+  .co-line { min-width:4px; margin:0 2px 18px; }
+}
 
 /* ---- grid ---- */
 .co-grid { display:grid; grid-template-columns:1fr; gap:24px; }

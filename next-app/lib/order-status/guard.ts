@@ -3,7 +3,8 @@
    session). No active user → no banner. */
 import "server-only";
 import type { NextRequest } from "next/server";
+import { readUserId } from "@/lib/auth/identity";
 
 export function currentUserId(req: NextRequest): string | null {
-  return req.cookies.get("doodly-uid")?.value ?? null;
+  return readUserId(req);
 }

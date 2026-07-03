@@ -37,6 +37,18 @@ async function nextSeq(tx: Prisma.TransactionClient, key: string): Promise<numbe
   return row.value;
 }
 
+/** Append an Order Status History / timeline event (in the caller's transaction). */
+type EventType = "CREATED" | "STATUS" | "PAYMENT" | "INVOICE" | "NOTE" | "EDIT";
+async function logEvent(
+  tx: Prisma.TransactionClient, orderId: string, type: EventType,
+  extra: { fromStatus?: B2BOrderStatus; toStatus?: B2BOrderStatus; note?: string | null; byId?: string } = {},
+) {
+  await tx.businessOrderEvent.create({
+    data: { orderId, type, fromStatus: extra.fromStatus ?? null, toStatus: extra.toStatus ?? null, note: extra.note ?? null, byId: extra.byId ?? null },
+  });
+}
+const rupees = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 const clean = (v?: string | null) => (v && v.trim() ? v.trim() : null);
 
 function mapBusiness(d: Prisma.JsonObject | Record<string, unknown>) {
@@ -150,7 +162,7 @@ export async function createOrder(raw: unknown, actor: Actor) {
       const year = new Date(data.deliveryDate).getFullYear() || new Date().getFullYear();
       const code = formatOrderCode(year, await nextSeq(tx, `b2border:${year}`));
 
-      return tx.businessOrder.create({
+      const order = await tx.businessOrder.create({
         data: {
           code, businessId: data.businessId, deliveryDate: new Date(data.deliveryDate), deliveryTime: data.deliveryTime,
           deliveryNotes: clean(data.deliveryNotes), ...totals, paymentTerm: biz.paymentTerm,
@@ -159,20 +171,79 @@ export async function createOrder(raw: unknown, actor: Actor) {
         },
         include: { items: true, business: { select: { code: true, name: true } } },
       });
+      await logEvent(tx, order.id, "CREATED", { toStatus: "PENDING", byId: actor.actorId, note: `Order created · ${data.items.length} item(s) · ${rupees(totals.totalPaise)}` });
+      return order;
     }, TX),
   );
 }
 
-export async function listOrders(args: { status?: B2BOrderStatus; businessId?: string; q?: string; from?: string; to?: string } = {}) {
+type PaymentStatus = "PENDING" | "PARTIAL" | "PAID" | "CREDIT";
+export async function listOrders(args: { status?: B2BOrderStatus; businessId?: string; q?: string; from?: string; to?: string; paymentStatus?: PaymentStatus; limit?: number; offset?: number } = {}) {
   const where: Prisma.BusinessOrderWhereInput = {};
   if (args.status) where.status = args.status;
   if (args.businessId) where.businessId = args.businessId;
+  if (args.paymentStatus) where.paymentStatus = args.paymentStatus;
   if (args.from || args.to) where.deliveryDate = { ...(args.from ? { gte: new Date(args.from) } : {}), ...(args.to ? { lte: new Date(args.to) } : {}) };
-  if (args.q?.trim()) where.OR = [{ code: { contains: args.q.trim(), mode: "insensitive" } }, { business: { name: { contains: args.q.trim(), mode: "insensitive" } } }];
-  return db.businessOrder.findMany({
-    where, orderBy: { createdAt: "desc" }, take: 200,
-    select: { id: true, code: true, status: true, deliveryDate: true, deliveryTime: true, totalPaise: true, paidPaise: true, paymentStatus: true, createdAt: true, business: { select: { code: true, name: true } }, items: { select: { productName: true, quantity: true, unit: true } } },
-  });
+  if (args.q?.trim()) {
+    const s = args.q.trim();
+    where.OR = [
+      { code: { contains: s, mode: "insensitive" } },
+      { business: { name: { contains: s, mode: "insensitive" } } },
+      { business: { code: { contains: s, mode: "insensitive" } } },
+      { items: { some: { productName: { contains: s, mode: "insensitive" } } } }, // search by product
+    ];
+  }
+  const limit = Math.min(Math.max(args.limit ?? 25, 1), 100);
+  const offset = Math.max(args.offset ?? 0, 0);
+  const [orders, total] = await Promise.all([
+    db.businessOrder.findMany({
+      where, orderBy: { createdAt: "desc" }, take: limit, skip: offset,
+      select: { id: true, code: true, status: true, deliveryDate: true, deliveryTime: true, totalPaise: true, paidPaise: true, paymentStatus: true, createdAt: true, business: { select: { code: true, name: true } }, items: { select: { productName: true, quantity: true, unit: true } } },
+    }),
+    db.businessOrder.count({ where }),
+  ]);
+  return { orders, total, limit, offset };
+}
+
+/** Edit a Pending/Confirmed order — replace items, recompute totals, reset paymentStatus. */
+export async function updateOrder(id: string, raw: unknown, actor: Actor) {
+  const data = OrderSchema.parse(raw);
+  return withRetry(() =>
+    db.$transaction(async (tx) => {
+      const cur = await tx.businessOrder.findUnique({ where: { id }, select: { status: true, paidPaise: true, paymentTerm: true, businessId: true } });
+      if (!cur) throw new Error("Order not found");
+      if (cur.status !== "PENDING" && cur.status !== "CONFIRMED") throw new Error("Only Pending or Confirmed orders can be edited");
+      const biz = await tx.business.findUnique({ where: { id: cur.businessId }, select: { discountBps: true } });
+      const discountBps = data.discountBps ?? biz?.discountBps ?? 0;
+      const taxBps = data.taxBps ?? 0;
+      const totals = computeOrderTotals(data.items.map((i) => ({ unitPricePaise: i.unitPricePaise, quantity: i.quantity })), { discountBps, taxBps });
+      await tx.businessOrderItem.deleteMany({ where: { orderId: id } });
+      const updated = await tx.businessOrder.update({
+        where: { id },
+        data: {
+          deliveryDate: new Date(data.deliveryDate), deliveryTime: data.deliveryTime, deliveryNotes: clean(data.deliveryNotes),
+          ...totals, paymentStatus: derivePaymentStatus(totals.totalPaise, cur.paidPaise, cur.paymentTerm), remarks: clean(data.remarks),
+          items: { create: data.items.map((i) => ({ productSlug: i.productSlug, productName: i.productName, quantity: i.quantity, unit: i.unit, unitPricePaise: i.unitPricePaise, lineTotalPaise: lineTotalPaise(i.unitPricePaise, i.quantity) })) },
+        },
+        include: { items: true },
+      });
+      await logEvent(tx, id, "EDIT", { byId: actor.actorId, note: `Order edited · ${data.items.length} item(s) · ${rupees(totals.totalPaise)}` });
+      return updated;
+    }, TX),
+  );
+}
+
+/** Append a free-text internal note to the order timeline. */
+export async function addOrderNote(args: { id: string; note: string } & Actor) {
+  const note = args.note.trim();
+  if (!note) throw new Error("Note is empty");
+  if (note.length > 500) throw new Error("Note is too long");
+  return db.$transaction(async (tx) => {
+    const order = await tx.businessOrder.findUnique({ where: { id: args.id }, select: { id: true } });
+    if (!order) throw new Error("Order not found");
+    await logEvent(tx, args.id, "NOTE", { byId: args.actorId, note });
+    return { ok: true };
+  }, TX);
 }
 
 export async function updateOrderStatus(args: { id: string; status: B2BOrderStatus } & Actor) {
@@ -182,12 +253,20 @@ export async function updateOrderStatus(args: { id: string; status: B2BOrderStat
     if (cur.status !== args.status && !canTransitionStatus(cur.status as B2BOrderStatus, args.status)) {
       throw new Error(`Cannot move from ${B2B_STATUS_LABEL[cur.status as B2BOrderStatus]} to ${B2B_STATUS_LABEL[args.status]}`);
     }
-    return tx.businessOrder.update({ where: { id: args.id }, data: { status: args.status } });
+    const updated = await tx.businessOrder.update({ where: { id: args.id }, data: { status: args.status } });
+    await logEvent(tx, args.id, "STATUS", { fromStatus: cur.status as B2BOrderStatus, toStatus: args.status, byId: args.actorId });
+    return updated;
   }, TX);
 }
 
 export async function cancelOrder(args: { id: string } & Actor) {
-  return db.businessOrder.update({ where: { id: args.id }, data: { status: "CANCELLED" } });
+  return db.$transaction(async (tx) => {
+    const cur = await tx.businessOrder.findUnique({ where: { id: args.id }, select: { status: true } });
+    if (!cur) throw new Error("Order not found");
+    const updated = await tx.businessOrder.update({ where: { id: args.id }, data: { status: "CANCELLED" } });
+    await logEvent(tx, args.id, "STATUS", { fromStatus: cur.status as B2BOrderStatus, toStatus: "CANCELLED", byId: args.actorId, note: "Cancelled" });
+    return updated;
+  }, TX);
 }
 
 /** Duplicate an order as a fresh PENDING order (delivery date = tomorrow). */
@@ -213,7 +292,7 @@ export async function reorder(args: { id: string } & Actor) {
 }
 
 export async function getOrder(id: string) {
-  return db.businessOrder.findUnique({ where: { id }, include: { items: true, business: true, payments: { orderBy: { createdAt: "desc" } }, invoice: true } });
+  return db.businessOrder.findUnique({ where: { id }, include: { items: true, business: true, payments: { orderBy: { createdAt: "desc" } }, invoice: true, events: { orderBy: { createdAt: "asc" } } } });
 }
 
 // ---------- payments + invoices ----------
@@ -225,7 +304,9 @@ export async function recordPayment(args: { orderId: string; amountPaise: number
     if (!order) throw new Error("Order not found");
     await tx.businessPayment.create({ data: { businessId: order.businessId, orderId: args.orderId, amountPaise: args.amountPaise, method: args.method, reference: clean(args.reference), note: clean(args.note), recordedById: args.actorId } });
     const paidPaise = order.paidPaise + args.amountPaise;
-    return tx.businessOrder.update({ where: { id: args.orderId }, data: { paidPaise, paymentStatus: derivePaymentStatus(order.totalPaise, paidPaise, order.paymentTerm) } });
+    const updated = await tx.businessOrder.update({ where: { id: args.orderId }, data: { paidPaise, paymentStatus: derivePaymentStatus(order.totalPaise, paidPaise, order.paymentTerm) } });
+    await logEvent(tx, args.orderId, "PAYMENT", { byId: args.actorId, note: `${rupees(args.amountPaise)} via ${args.method}${args.reference ? ` (${args.reference})` : ""}` });
+    return updated;
   }, TX);
 }
 
@@ -234,11 +315,16 @@ export async function generateInvoice(args: { orderId: string } & Actor) {
     db.$transaction(async (tx) => {
       const existing = await tx.businessInvoice.findUnique({ where: { orderId: args.orderId } });
       if (existing) return existing;
-      const order = await tx.businessOrder.findUnique({ where: { id: args.orderId }, select: { businessId: true, taxPaise: true } });
+      const order = await tx.businessOrder.findUnique({ where: { id: args.orderId }, select: { businessId: true, taxPaise: true, paymentTerm: true } });
       if (!order) throw new Error("Order not found");
       const year = new Date().getFullYear();
       const number = formatInvoiceNumber(year, await nextSeq(tx, `b2binvoice:${year}`));
-      return tx.businessInvoice.create({ data: { number, orderId: args.orderId, businessId: order.businessId, gstPaise: order.taxPaise } });
+      const due = new Date();
+      due.setDate(due.getDate() + (order.paymentTerm === "WEEKLY" ? 7 : order.paymentTerm === "MONTHLY" ? 30 : order.paymentTerm === "CREDIT" ? 15 : 0));
+      const inv = await tx.businessInvoice.create({ data: { number, orderId: args.orderId, businessId: order.businessId, gstPaise: order.taxPaise, status: "ISSUED", dueDate: due, createdById: args.actorId } });
+      await logEvent(tx, args.orderId, "INVOICE", { byId: args.actorId, note: `Invoice ${inv.number}` });
+      await tx.businessInvoiceEvent.create({ data: { invoiceId: inv.id, type: "created", note: `Invoice ${inv.number} issued`, byId: args.actorId, byRole: args.actorRole } });
+      return inv;
     }, TX),
   );
 }

@@ -164,6 +164,31 @@ window.DOODLY_AUTOPAY = (function () {
       return { name: n, plan: pl.name || "30-Day", planId: pl.id, amount: amt, status: statuses[i], next, method: cfg().methods[i % cfg().methods.length], pincode: pin.pincode || "—", zone: pin.zone || "—" };
     });
   }
+  // Map a real subscription (next-app API) → an auto-pay billing row.
+  function mapSub(s) {
+    var status = s.status === "CANCELLED" ? "cancelled"
+      : s.autopayStatus === "RETRY" ? "retry"
+      : s.autopayStatus === "SUSPENDED" ? "suspended"
+      : "active";
+    return {
+      name: (s.customer && s.customer.name) || "—",
+      plan: (s.plan && s.plan.name) || "—",
+      planId: (s.plan && s.plan.slug) || "",
+      amount: Math.round((s.planTotalPaise || 0) / 100),
+      status: status,
+      next: (s.nextDeliveryAt ? String(s.nextDeliveryAt) : s.endDate ? String(s.endDate) : "").slice(0, 10),
+      method: s.autoRenew ? "UPI AutoPay" : "Manual",
+      pincode: s.zone || "—",
+    };
+  }
+  function apBanner(host, msg, tone) {
+    if (!host || !host.parentNode) return;
+    var b = document.getElementById("ap-bk-banner");
+    if (!b) { b = document.createElement("div"); b.id = "ap-bk-banner"; host.parentNode.insertBefore(b, host); }
+    b.textContent = msg;
+    b.style.cssText = "margin:0 0 12px;padding:8px 13px;border-radius:10px;font-size:.8rem;font-weight:600;" +
+      (tone === "err" ? "background:#fdecec;color:#c0392b" : tone === "ok" ? "background:#eaf7ef;color:#1e7e44" : "background:#fff7e6;color:#9a6a00");
+  }
   function mountBilling(host) {
     if (!host) return;
     let rows = MOCK();
@@ -200,7 +225,18 @@ window.DOODLY_AUTOPAY = (function () {
       fs.addEventListener("change", () => render({ status: fs.value, plan: fp.value }));
       fp.addEventListener("change", () => render({ status: fs.value, plan: fp.value }));
     }
-    render();
+    render();   // instant render with demo data
+    // Backend-driven: replace with real subscriptions from Postgres when reachable.
+    if (window.DOODLY_API) {
+      window.DOODLY_API.get("/api/admin/subscriptions?pageSize=200").then(function (data) {
+        rows = (data.subscriptions || []).map(mapSub);
+        const fs = host.querySelector("#apFstatus"), fp = host.querySelector("#apFplan");
+        render({ status: fs ? fs.value : "all", plan: fp ? fp.value : "all" });
+        apBanner(host, "● Live — " + rows.length + " auto-pay subscription(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
+      }).catch(function (e) {
+        apBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo billing data." : e.code === "forbidden" ? "⚠ Your role can't view subscriptions (403)." : "⚠ " + (e.message || "Couldn't load billing."), "err");
+      });
+    }
   }
 
   /* ---------- toast ---------- */

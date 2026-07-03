@@ -7,11 +7,15 @@ const nav: NavGroup[] = [
     { label: "Bulk Orders", href: "/admin/bulk-orders" },
     { label: "Subscriptions", href: "/admin/subscriptions" },
     { label: "B2B Orders", href: "/admin/b2b" },
+    { label: "B2B Pricing", href: "/admin/b2b-pricing" },
+    { label: "Business Invoices", href: "/admin/business-invoices" },
+    { label: "Subscription Billing", href: "/admin/subscription-billing" },
     { label: "Customers", href: "/admin/customers" },
     { label: "Payments", href: "/admin/payments" },
   ]},
   { heading: "Catalogue", items: [
     { label: "Products", href: "/admin/products" },
+    { label: "Categories", href: "/admin/categories" },
     { label: "Inventory", href: "/admin/inventory" },
   ]},
   { heading: "Finance", items: [
@@ -29,6 +33,7 @@ const nav: NavGroup[] = [
     { label: "Quality", href: "/admin/quality" },
   ]},
   { heading: "System", items: [
+    { label: "Users & Roles", href: "/admin/users" },
     { label: "Reports", href: "/admin/reports" },
     { label: "CMS", href: "/admin/cms" },
     { label: "Brand Story", href: "/admin/brand-story" },
