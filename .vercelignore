@@ -1,7 +1,8 @@
-# Static storefront deployment (Vercel project with Root Directory = repo root).
-# The Next.js backend deploys as its own Vercel project (Root Directory = next-app),
-# so none of this belongs in the static upload.
-next-app
+# Shared ignore for Vercel uploads. IMPORTANT: next-app must NOT be listed here —
+# for Git deployments Vercel applies this file at upload time, before the
+# Root Directory setting, so excluding next-app breaks the backend project
+# ("No Next.js version detected"). The storefront project instead blocks
+# public access to /next-app/* via the redirect in vercel.json.
 tools
 *.ps1
 .claude

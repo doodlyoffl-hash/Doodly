@@ -1,0 +1,5 @@
+{
+  "redirects": [
+    { "source": "/next-app/:path*", "destination": "/", "permanent": false }
+  ]
+}
