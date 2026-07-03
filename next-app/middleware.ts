@@ -27,7 +27,7 @@ const DEV = process.env.NODE_ENV !== "production";
 // Origins of the standalone static app (:4173) allowed to call the API cross-origin.
 // Override in production via STATIC_ORIGINS (comma-separated).
 const STATIC_ORIGINS = (process.env.STATIC_ORIGINS || "http://localhost:4173,http://127.0.0.1:4173")
-  .split(",").map((s) => s.trim()).filter(Boolean);
+  .split(",").map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean);   // tolerate trailing slashes in config
 function allowedOrigin(req: { headers: { get(n: string): string | null } }): string | null {
   const o = req.headers.get("origin");
   return o && STATIC_ORIGINS.indexOf(o) >= 0 ? o : null;
