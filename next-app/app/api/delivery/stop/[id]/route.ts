@@ -10,6 +10,7 @@ import { requireUserId } from "@/lib/auth/authorize";
 import { readRole } from "@/lib/auth/identity";
 import { audit } from "@/lib/auth/audit";
 import { reqContext } from "@/lib/auth/request";
+import { notifyOutForDelivery, notifyDelivered } from "@/lib/notifications/dispatch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,16 +47,21 @@ export const POST = route("delivery.stop", async (req: NextRequest, { params }: 
   if (!delivery) throw Errors.forbidden("That stop isn't on your route.");
   const ctx = reqContext(req);
 
+  const custId = delivery.subscription?.userId ?? delivery.order?.userId ?? null;
+
   if (body.action === "status") {
     const next = body.status === "reached" ? "REACHED" : "ON_THE_WAY";
     await db.delivery.update({ where: { id: delivery.id }, data: { status: next } });
+    // Tell the customer their milk is en route (only on the first en-route flip, not on "reached").
+    if (next === "ON_THE_WAY" && delivery.status !== "ON_THE_WAY" && custId) {
+      try { await notifyOutForDelivery(custId); } catch { /* non-blocking */ }
+    }
     return ok({ status: body.status });
   }
 
   if (body.action === "deliver") {
     if (delivery.status === "DELIVERED") return ok({ status: "delivered", idempotent: true });
     const bottles = body.bottles ?? 0;
-    const custId = delivery.subscription?.userId ?? delivery.order?.userId ?? null;
     await db.$transaction(async (tx) => {
       await tx.delivery.update({
         where: { id: delivery.id },
@@ -68,6 +74,7 @@ export const POST = route("delivery.stop", async (req: NextRequest, { params }: 
       }
     });
     await audit({ userId, actorRole: role, action: "delivery.completed", target: `${delivery.id} bottles=${bottles}`, ctx });
+    if (custId) { try { await notifyDelivered(custId, { bottles }); } catch { /* non-blocking */ } }
     return ok({ status: "delivered", bottles });
   }
 

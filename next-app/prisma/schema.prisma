@@ -1521,8 +1521,15 @@ model Notification {
   sentAt    DateTime?
   readAt    DateTime?
   createdAt DateTime     @default(now())
+  // External dispatch tracking (SMS/WhatsApp/Email). PENDING rows are picked
+  // up by the drain; inline dispatch stamps these directly on create.
+  dispatchedAt   DateTime?
+  providerStatus String    @default("PENDING")   // PENDING | SENT | SKIPPED | FAILED
+  providerRef    String?                          // primary external message id
+  providerLog    String?                          // compact per-channel result JSON
   @@index([userId, readAt])
   @@index([userId, createdAt])
+  @@index([providerStatus])
 }
 
 // ================================================================

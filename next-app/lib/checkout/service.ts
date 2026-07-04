@@ -19,6 +19,7 @@ import { quote } from "@/lib/pricing";
 import { resolveCheckoutPricing } from "@/lib/catalogue/service";
 import { createOrder as createRzpOrder, razorpayConfigured } from "@/lib/razorpay";
 import { applyWalletAtCheckout, creditTrialCashback } from "@/lib/wallet/service";
+import { notifyOrderConfirmed } from "@/lib/notifications/dispatch";
 import { audit } from "@/lib/auth/audit";
 import type { ReqContext } from "@/lib/auth/request";
 
@@ -171,6 +172,7 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     let cashback = null;
     if (plan) { try { cashback = await creditTrialCashback({ userId, targetPlanSlug: plan.slug, actorId: userId }); } catch { /* non-blocking */ } }
     await audit({ userId, actorRole: "customer", action: "order.placed", target: `${base.number} wallet ₹${totalPaise / 100}`, ctx });
+    await notifyOrderConfirmed(userId, { number: base.number });   // in-app + email/SMS/WhatsApp (per opt-in + provider), non-blocking
     return { ...base, paid: true, method: "wallet", cashback };
   }
 

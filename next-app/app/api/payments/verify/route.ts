@@ -7,6 +7,9 @@ import { verifyPaymentSignature } from "@/lib/razorpay";
 import { db } from "@/lib/db";
 import { creditTrialCashback } from "@/lib/wallet/service";
 import { syncFromOrderPayment } from "@/lib/payments/service";
+import { notifyOrderConfirmed } from "@/lib/notifications/dispatch";
+
+const num = (id: string) => `DOO-${id.slice(-6).toUpperCase()}`;
 
 export const runtime = "nodejs";
 
@@ -36,7 +39,10 @@ export async function POST(req: NextRequest) {
   // customer just upgraded to an eligible plan. Never blocks the confirmation.
   let cashback: { credited: boolean; amountPaise?: number; balancePaise?: number; reference?: string } | null = null;
   if (payment) {
-    await db.order.update({ where: { id: payment.orderId }, data: { status: "PAID" } }).catch(() => {});
+    // Flip only if not already PAID (webhook may have won the race) so the
+    // confirmation notification fires exactly once per order.
+    const flip = await db.order.updateMany({ where: { id: payment.orderId, status: { not: "PAID" } }, data: { status: "PAID" } }).catch(() => ({ count: 0 }));
+    if (flip.count > 0) { try { await notifyOrderConfirmed(payment.userId, { number: num(payment.orderId) }); } catch { /* non-blocking */ } }
     // Sync this gateway payment into the unified Payments ledger (best-effort).
     await syncFromOrderPayment(payment.id).catch((e) => console.error("payment.ledgerSync", (e as Error)?.message));
     try { cashback = await creditTrialCashback({ userId: payment.userId }); }

@@ -7,6 +7,7 @@ import {
   listCampaigns, notificationsDashboard, campaignDetail, audienceCount,
   createCampaign, sendCampaign, createAndSend, softDeleteCampaign, restoreCampaign,
 } from "@/lib/notifications/service";
+import { drainPending } from "@/lib/notifications/dispatch";
 import { actorRole, actorId, canViewNotifications, canManageNotifications } from "@/lib/notifications/guard";
 import { audit } from "@/lib/auth/audit";
 import { reqContext } from "@/lib/auth/request";
@@ -53,6 +54,7 @@ export async function POST(req: NextRequest) {
     else if (action === "createAndSend") { const c = await createAndSend(body.data ?? body, actor); result = c; target = `${c.name} → ${c.deliveredCount} recipient(s)`; }
     else if (action === "delete") { const { id } = IdOnly.parse(body); result = await softDeleteCampaign(id); target = id; }
     else if (action === "restore") { const { id } = IdOnly.parse(body); result = await restoreCampaign(id); target = id; }
+    else if (action === "drain") { const r = await drainPending(500); result = r; target = `dispatched ${r.sent}/${r.processed}`; }
     else return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     await audit({ actorRole: role, action: `notification.${action}`, target, ctx });
     return NextResponse.json({ ok: true, result });

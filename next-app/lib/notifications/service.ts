@@ -11,6 +11,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { z } from "zod";
+import { channelStatus } from "./providers";
 
 interface Actor { actorId?: string; actorRole?: string }
 
@@ -101,7 +102,10 @@ export async function sendCampaign(id: string, actor: Actor) {
   for (let i = 0; i < recipients.length; i += CHUNK) {
     const slice = recipients.slice(i, i + CHUNK);
     const res = await db.notification.createMany({
-      data: slice.map((u) => ({ userId: u.id, channel: c.channel, title, body: c.message, sentAt: new Date() })),
+      // In-app fan-out. providerStatus SKIPPED keeps the transactional drain from
+      // auto-blasting a marketing campaign as SMS/WhatsApp/Email — external
+      // campaign delivery is a separate, marketing-consent-aware path (roadmap).
+      data: slice.map((u) => ({ userId: u.id, channel: c.channel, title, body: c.message, sentAt: new Date(), providerStatus: "SKIPPED" })),
       skipDuplicates: true,
     });
     delivered += res.count;
@@ -121,17 +125,25 @@ export const restoreCampaign = async (id: string) => shape(await db.notification
 // ---------------------------------------------------------------- dashboard
 export async function notificationsDashboard() {
   const now = new Date();
-  const [all, reachedAgg, sentToday, byChannel] = await Promise.all([
+  const since30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const [all, reachedAgg, sentToday, byChannel, dispatchAgg] = await Promise.all([
     db.notificationCampaign.findMany({ where: { deletedAt: null }, select: { status: true } }),
     db.notificationCampaign.aggregate({ where: { deletedAt: null, status: "SENT" }, _sum: { deliveredCount: true } }),
     db.notificationCampaign.count({ where: { deletedAt: null, sentAt: { gte: soD(now) } } }),
     db.notificationCampaign.groupBy({ by: ["channel"], where: { deletedAt: null }, _count: { _all: true } }),
+    // real external-send health over the last 30 days (transactional notifications)
+    db.notification.groupBy({ by: ["providerStatus"], where: { createdAt: { gte: since30 } }, _count: { _all: true } }),
   ]);
   const count = (s: string) => all.filter((x) => x.status === s).length;
+  const dcount = (s: string) => dispatchAgg.find((d) => d.providerStatus === s)?._count._all ?? 0;
   return {
     kpis: {
       total: all.length, sent: count("SENT"), drafts: count("DRAFT"), reached: reachedAgg._sum.deliveredCount ?? 0, sentToday,
     },
     byChannel: byChannel.map((r) => ({ channel: CHANNEL_LABEL[r.channel] || r.channel, count: r._count._all })),
+    // live provider availability so the admin sees which channels can actually send
+    channels: channelStatus(),
+    // 30-day transactional dispatch outcomes
+    dispatch: { sent: dcount("SENT"), failed: dcount("FAILED"), skipped: dcount("SKIPPED"), pending: dcount("PENDING") },
   };
 }

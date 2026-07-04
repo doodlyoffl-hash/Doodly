@@ -8,8 +8,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhookSignature } from "@/lib/razorpay";
 import { db } from "@/lib/db";
 import { syncFromOrderPayment, recordWebhook } from "@/lib/payments/service";
+import { notify, notifyOrderConfirmed } from "@/lib/notifications/dispatch";
 
 export const runtime = "nodejs";
+
+const num = (id: string) => `DOO-${id.slice(-6).toUpperCase()}`;
 
 export async function POST(req: NextRequest) {
   const raw = await req.text();                       // must verify the RAW body
@@ -40,7 +43,13 @@ export async function POST(req: NextRequest) {
       case "payment.captured": {
         const p = event.payload.payment.entity;   // pay_xxx + order_id
         await db.payment.updateMany({ where: { razorpayOrderId: p.order_id }, data: { status: "PAID", razorpayPayId: p.id } });
-        const op = await db.payment.findFirst({ where: { razorpayOrderId: p.order_id }, select: { id: true } });
+        const op = await db.payment.findFirst({ where: { razorpayOrderId: p.order_id }, select: { id: true, userId: true, orderId: true } });
+        // Flip the order to PAID (idempotent) and confirm the customer exactly once —
+        // whichever of webhook / verify wins the race fires the notification.
+        if (op?.orderId) {
+          const flip = await db.order.updateMany({ where: { id: op.orderId, status: { not: "PAID" } }, data: { status: "PAID" } }).catch(() => ({ count: 0 }));
+          if (flip.count > 0) { try { await notifyOrderConfirmed(op.userId, { number: num(op.orderId) }); } catch { /* non-blocking */ } }
+        }
         const ledgerId = op ? await syncFromOrderPayment(op.id).catch(() => null) : null;
         await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: p.id, paymentId: ledgerId ?? undefined, processed: true }).catch(() => {});
         break;
@@ -48,10 +57,19 @@ export async function POST(req: NextRequest) {
       case "payment.failed": {
         const p = event.payload.payment.entity;
         await db.payment.updateMany({ where: { razorpayOrderId: p.order_id }, data: { status: "FAILED", razorpayPayId: p.id } });
-        const op = await db.payment.findFirst({ where: { razorpayOrderId: p.order_id }, select: { id: true } });
+        const op = await db.payment.findFirst({ where: { razorpayOrderId: p.order_id }, select: { id: true, userId: true } });
         const ledgerId = op ? await syncFromOrderPayment(op.id).catch(() => null) : null;
         await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: p.id, paymentId: ledgerId ?? undefined, processed: true }).catch(() => {});
-        // TODO: enqueue the "payment failed" notification + schedule retry per autopay rules.
+        // Notify the customer their payment didn't go through (in-app + opted channels).
+        if (op?.userId) {
+          try {
+            await notify(op.userId, {
+              title: "Payment didn't go through",
+              body: "We couldn't process your recent DOODLY payment. No amount was charged — please retry from your dashboard or use your wallet.",
+              email: true, sms: true, whatsapp: true,
+            });
+          } catch { /* non-blocking */ }
+        }
         break;
       }
       case "subscription.charged": {
