@@ -16,7 +16,7 @@ import type { PaymentMethod } from "@prisma/client";
 import { db } from "@/lib/db";
 import { ApiError, Errors } from "@/lib/http";
 import { quote } from "@/lib/pricing";
-import { variants, plans, products, bottleDepositPaise } from "@/config/catalogue";
+import { resolveCheckoutPricing } from "@/lib/catalogue/service";
 import { createOrder as createRzpOrder, razorpayConfigured } from "@/lib/razorpay";
 import { applyWalletAtCheckout, creditTrialCashback } from "@/lib/wallet/service";
 import { audit } from "@/lib/auth/audit";
@@ -46,12 +46,12 @@ export interface CheckoutInput {
 const GATEWAY_METHODS: Record<string, PaymentMethod> = { upi: "UPI", card: "CARD", netbanking: "NETBANKING" };
 
 export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqContext) {
-  /* ---- 1. server-trusted pricing from the catalogue ---- */
-  const variant = variants.find((v) => v.id === input.variantId);
-  if (!variant) throw Errors.badRequest("Unknown product variant.");
-  const plan = input.planId ? plans.find((p) => p.slug === input.planId) : undefined;
+  /* ---- 1. server-trusted pricing — DB-authoritative (admin-editable) ---- */
+  const pricing = await resolveCheckoutPricing(input.variantId, input.planId);
+  if (!pricing) throw Errors.badRequest("Unknown product variant.");
+  const { variant, plan } = pricing;
   if (variant.type === "SUBSCRIPTION" && !plan) throw Errors.badRequest("A plan is required for this bottle.");
-  const product = products.find((p) => p.slug === variant.productSlug);
+  if (!variant.active) throw Errors.conflict(`${variant.label} ${variant.productName} isn't available right now.`);
   const bottles = Math.min(Math.max(input.bottles ?? 1, 1), 20);
 
   let q;
@@ -61,7 +61,7 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
       plan ? { days: plan.days, discountBps: plan.discountBps } : undefined,
     );
   } catch { throw Errors.badRequest("Could not price this selection."); }
-  const depositPaise = variant.type === "SUBSCRIPTION" ? bottleDepositPaise * bottles : 0;
+  const depositPaise = variant.type === "SUBSCRIPTION" ? pricing.depositPaise * bottles : 0;
   const totalPaise = q.totalPaise + depositPaise;
   const subtotalPaise = q.totalPaise + q.discountPaise;
   if (totalPaise <= 0) throw Errors.badRequest("Invalid order amount.");
@@ -112,29 +112,33 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
         status: "PENDING",
         items: {
           create: [{
-            productSlug: variant.productSlug, productName: product?.name ?? variant.productSlug,
+            productSlug: variant.productSlug, productName: variant.productName,
             variantLabel: variant.label, quantity: days,
             unitPricePaise: Math.round(q.totalPaise / days), lineTotalPaise: q.totalPaise,
           }],
         },
       },
     });
-    await tx.orderEvent.create({ data: { orderId: order.id, type: "CREATED", title: "Order placed", note: `${days}× ${variant.label} ${product?.name ?? ""}`.trim() } });
+    await tx.orderEvent.create({ data: { orderId: order.id, type: "CREATED", title: "Order placed", note: `${days}× ${variant.label} ${variant.productName}`.trim() } });
 
     // plans become a live Subscription record (address + slot + first delivery)
     let subscriptionId: string | null = null;
     if (orderType === "SUBSCRIPTION" && plan) {
-      const dbPlan = await tx.plan.findUnique({ where: { slug: plan.slug } });
-      const dbProduct = await tx.product.findUnique({ where: { slug: variant.productSlug }, include: { variants: true } });
-      const dbVariant = dbProduct?.variants.find((v) => v.ml === variant.ml) ?? dbProduct?.variants[0];
-      if (dbPlan && dbVariant) {
+      // the DB plan/variant ids were already resolved by resolveCheckoutPricing
+      const dbPlanId = plan.dbPlanId ?? (await tx.plan.findUnique({ where: { slug: plan.slug }, select: { id: true } }))?.id ?? null;
+      let dbVariantId = variant.dbVariantId;
+      if (!dbVariantId) {
+        const dbProduct = await tx.product.findUnique({ where: { slug: variant.productSlug }, include: { variants: true } });
+        dbVariantId = (dbProduct?.variants.find((v) => v.ml === variant.ml) ?? dbProduct?.variants[0])?.id ?? null;
+      }
+      if (dbPlanId && dbVariantId) {
         const end = new Date(startDate); end.setDate(end.getDate() + plan.days);
         const sub = await tx.subscription.create({
           data: {
-            userId, planId: dbPlan.id, addressId, status: "ACTIVE",
+            userId, planId: dbPlanId, addressId, status: "ACTIVE",
             startDate, endDate: end, deliverySlot: slot, nextDeliveryAt: startDate,
             autoRenew: false,
-            items: { create: [{ variantId: dbVariant.id, qty: bottles }] },
+            items: { create: [{ variantId: dbVariantId, qty: bottles }] },
           },
         });
         await tx.subscriptionEvent.create({

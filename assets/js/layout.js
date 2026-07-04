@@ -5210,6 +5210,8 @@
   (async () => {
     // Account surface: swap the demo dataset for the signed-in customer's real records before render.
     if (s === "account") { try { await hydrateAccount(); } catch (e) {} }
+    // Public storefront: overlay DB-authoritative prices/availability onto the catalogue before paint.
+    if (s === "public" && window.DOODLY_CATALOGUE) { try { await DOODLY_CATALOGUE.hydrate(); } catch (e) {} }
     if (s === "auth") renderAuth();
     else if (s === "public") renderPublic();
     else renderDashboard(s);
