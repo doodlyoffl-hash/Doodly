@@ -71,5 +71,35 @@ window.DOODLY_CMS = (function () {
   function hasEdits() { return !!load(); }
   function exportJson() { return JSON.stringify(overrides, null, 2); }
 
-  return { merge, findProduct, findVariant, findPlan, setField, setProduct, save, reset, hasEdits, exportJson };
+  /* --- CMS PAGE CONTENT (About / Farmers / Bottle-return …) ---
+     The prose sections carry data-cms="{key}" wrappers and
+     data-cms-field="eyebrow|heading|text|html" children. The DB holds a
+     matching CmsBlock per key. hydratePage() fetches the published blocks for
+     every prefix present on the page and overlays them onto the DOM, so admin
+     CMS edits reach the live storefront. Falls back silently to the hardcoded
+     copy when the backend is unreachable. Runs AFTER render (needs the DOM). */
+  function applyFields(host, data) {
+    if (!host || !data) return;
+    ["eyebrow", "heading", "text"].forEach(function (f) {
+      if (data[f] != null) { var el = host.querySelector('[data-cms-field="' + f + '"]'); if (el) el.textContent = data[f]; }
+    });
+    if (data.html != null) { var h = host.querySelector('[data-cms-field="html"]'); if (h) h.innerHTML = data.html; }
+  }
+  function hydratePage() {
+    var API = window.DOODLY_API;
+    if (!API || !API.get) return;
+    var secs = document.querySelectorAll("[data-cms]");
+    if (!secs.length) return;
+    var prefixes = {};
+    secs.forEach(function (el) { var k = el.getAttribute("data-cms") || ""; var p = k.split(".")[0]; if (p) prefixes[p] = 1; });
+    Object.keys(prefixes).forEach(function (prefix) {
+      API.get("/api/cms/page?prefix=" + encodeURIComponent(prefix)).then(function (r) {
+        (r && r.blocks || []).forEach(function (block) {
+          applyFields(document.querySelector('[data-cms="' + block.key + '"]'), block.data);
+        });
+      }).catch(function () {});
+    });
+  }
+
+  return { merge, findProduct, findVariant, findPlan, setField, setProduct, save, reset, hasEdits, exportJson, hydratePage: hydratePage };
 })();

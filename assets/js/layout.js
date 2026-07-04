@@ -710,6 +710,7 @@
   function wirePublic() {
     wireTheme(); wireReveals(); wireFaq(); wireTabs(); wireForms(); wireBuilder();
     try { wireBlog(); } catch (e) {}
+    try { if (window.DOODLY_CMS && DOODLY_CMS.hydratePage) DOODLY_CMS.hydratePage(); } catch (e) {}
     const burger = $("#navBurger"), menu = $("#mobileMenu");
     if (burger && menu) {
       const setOpen = (open) => {
