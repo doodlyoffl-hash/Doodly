@@ -131,7 +131,7 @@ window.DOODLY_CART = (function () {
       <div class="ci-img">${img ? `<img src="${img}" alt="${p.name}">` : ""}</div>
       <div class="ci-main">
         <div class="ci-name">${v.displayName || v.label}</div>
-        <div class="ci-meta"><span>${unitLabel}</span><span class="ci-eta">${icon("truck", 13)} Tomorrow, 7 AM</span></div>
+        <div class="ci-meta"><span>${unitLabel}</span><span class="ci-eta">${icon("truck", 13)} Tomorrow, before 7 AM</span></div>
         ${save > 0 ? `<span class="ci-save">You save ${inr(save)}</span>` : ""}
       </div>
       <div class="ci-right">

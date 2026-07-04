@@ -23,9 +23,9 @@ window.DOODLY_CHECKOUT = (function () {
   };
   const STEPS = [["cart", "Cart"], ["address", "Address"], ["slot", "Slot"], ["payment", "Payment"], ["confirm", "Done"]];
 
+  // every window keeps the platform promise: delivered before 7 AM
   const SLOTS = [
-    ["6:00 – 7:00 AM", "Recommended", true], ["7:00 – 8:00 AM", "", true],
-    ["8:00 – 9:00 AM", "Almost full", true], ["9:00 – 10:00 AM", "Full today", false],
+    ["6:00 – 7:00 AM", "Recommended", true], ["5:00 – 6:00 AM", "Early bird", true],
   ];
   const ADDR = [
     ["Home", "Ananya R", "12-3, Krishnalanka, Vijayawada 520013", "+91 90000 00000", "520013"],
@@ -378,7 +378,7 @@ window.DOODLY_CHECKOUT = (function () {
         </div>
         <div class="co-confirm-card">
           <div class="co-sched-row"><span>${icon("box", 15)} First delivery</span><b>${firstLine}</b></div>
-          <div class="co-sched-row"><span>${icon("clock", 15)} Delivery time</span><b>${SC ? SC.slotLabel() : "6:00 AM – 8:00 AM"}</b></div>
+          <div class="co-sched-row"><span>${icon("clock", 15)} Delivery time</span><b>${SC ? SC.slotLabel() : "5:00 AM – 7:00 AM"}</b></div>
           ${sch ? `<div class="co-sched-row"><span>${icon("refresh", 15)} Estimated end date</span><b>${SC.fmtLong(sch.end)}</b></div>
           <div class="co-sched-row"><span>${icon("truck", 15)} Deliveries</span><b>${sch.deliveries} · ${sch.duration}</b></div>` : ""}
         </div>

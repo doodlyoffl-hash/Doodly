@@ -39,7 +39,7 @@ window.DOODLY = {
      to localStorage doodly-delivery). Nothing is hardcoded in the UI. */
   delivery: {
     cutoffHour: 20, cutoffMinute: 0,            // 8:00 PM next-morning cut-off
-    slotStart: "6:00 AM", slotEnd: "8:00 AM",   // delivery window
+    slotStart: "5:00 AM", slotEnd: "7:00 AM",   // delivery window — before-7-AM promise
     availableDays: [0, 1, 2, 3, 4, 5, 6],       // 0=Sun … 6=Sat
     weekendDelivery: true,                       // deliver on Sat/Sun
     holidays: [],                                // ISO dates, e.g. "2026-08-15"
@@ -57,16 +57,16 @@ window.DOODLY = {
     { id: "Z3", name: "Tadepalli", executive: "Anil P." },
   ],
   serviceablePincodes: [
-    { pincode: "520013", area: "Krishnalanka", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z1", charge: 0, slot: "6:00–8:00 AM", eta: "By 8 AM", enabled: true },
-    { pincode: "520001", area: "One Town", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z1", charge: 0, slot: "6:00–8:00 AM", eta: "By 8 AM", enabled: true },
-    { pincode: "520002", area: "Governorpet", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z1", charge: 0, slot: "6:00–8:00 AM", eta: "By 8 AM", enabled: true },
-    { pincode: "520003", area: "Gandhi Nagar", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z1", charge: 0, slot: "6:00–8:00 AM", eta: "By 8 AM", enabled: true },
-    { pincode: "520012", area: "Bhavanipuram / Vidyadharapuram", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z1", charge: 0, slot: "6:00–8:00 AM", eta: "By 8 AM", enabled: true },
-    { pincode: "520011", area: "Kaleswara Rao Market Area", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z1", charge: 0, slot: "6:00–8:00 AM", eta: "By 8 AM", enabled: true },
-    { pincode: "520004", area: "Gunadala", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z2", charge: 0, slot: "6:00–8:00 AM", eta: "By 8 AM", enabled: true },
+    { pincode: "520013", area: "Krishnalanka", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z1", charge: 0, slot: "5:00–7:00 AM", eta: "By 7 AM", enabled: true },
+    { pincode: "520001", area: "One Town", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z1", charge: 0, slot: "5:00–7:00 AM", eta: "By 7 AM", enabled: true },
+    { pincode: "520002", area: "Governorpet", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z1", charge: 0, slot: "5:00–7:00 AM", eta: "By 7 AM", enabled: true },
+    { pincode: "520003", area: "Gandhi Nagar", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z1", charge: 0, slot: "5:00–7:00 AM", eta: "By 7 AM", enabled: true },
+    { pincode: "520012", area: "Bhavanipuram / Vidyadharapuram", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z1", charge: 0, slot: "5:00–7:00 AM", eta: "By 7 AM", enabled: true },
+    { pincode: "520011", area: "Kaleswara Rao Market Area", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z1", charge: 0, slot: "5:00–7:00 AM", eta: "By 7 AM", enabled: true },
+    { pincode: "520004", area: "Gunadala", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z2", charge: 0, slot: "5:00–7:00 AM", eta: "By 7 AM", enabled: true },
     { pincode: "520007", area: "Kanuru / Yanamalakuduru / Auto Nagar", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z2", charge: 0, slot: "6:30–8:30 AM", eta: "By 8:30 AM", enabled: true },
     { pincode: "520008", area: "Ramavarappadu", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z2", charge: 0, slot: "6:30–8:30 AM", eta: "By 8:30 AM", enabled: true },
-    { pincode: "520010", area: "Benz Circle / Patamata / Labbipet", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z2", charge: 0, slot: "6:00–8:00 AM", eta: "By 8 AM", enabled: true },
+    { pincode: "520010", area: "Benz Circle / Patamata / Labbipet", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z2", charge: 0, slot: "5:00–7:00 AM", eta: "By 7 AM", enabled: true },
     { pincode: "520015", area: "Ajit Singh Nagar / Payakapuram", city: "Vijayawada", state: "Andhra Pradesh", zone: "Z2", charge: 0, slot: "6:30–8:30 AM", eta: "By 8:30 AM", enabled: true },
     { pincode: "522501", area: "Tadepalli", city: "Tadepalli", state: "Andhra Pradesh", zone: "Z3", charge: 10, slot: "6:30–8:30 AM", eta: "By 8:30 AM", enabled: true },
   ],
@@ -156,7 +156,7 @@ window.DOODLY = {
       ],
 
       // AVAILABILITY
-      availability: { cities: ["Hyderabad"], slots: ["6:00–7:00 AM", "7:00–8:00 AM"],
+      availability: { cities: ["Hyderabad"], slots: ["5:00–6:00 AM", "6:00–7:00 AM"],
                       launchDate: "2026-04-01", endDate: null, inventoryStatus: "In stock" },
 
       // SEO

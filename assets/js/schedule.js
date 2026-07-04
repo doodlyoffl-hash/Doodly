@@ -16,11 +16,19 @@ window.DOODLY_SCHEDULE = (function () {
   const MON = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
   /* ---------- settings (data.js + admin override) ---------- */
-  function override() { try { return JSON.parse(localStorage.getItem("doodly-delivery") || "{}"); } catch (e) { return {}; } }
+  function override() {
+    try {
+      const o = JSON.parse(localStorage.getItem("doodly-delivery") || "{}");
+      // migrate the retired 6–8 AM window saved in older browsers to the
+      // before-7-AM promise (5:00–7:00 AM)
+      if (o.slotStart === "6:00 AM" && o.slotEnd === "8:00 AM") { delete o.slotStart; delete o.slotEnd; }
+      return o;
+    } catch (e) { return {}; }
+  }
   function settings() {
     const base = (D() && D().delivery) || {};
     return Object.assign({
-      cutoffHour: 20, cutoffMinute: 0, slotStart: "6:00 AM", slotEnd: "8:00 AM",
+      cutoffHour: 20, cutoffMinute: 0, slotStart: "5:00 AM", slotEnd: "7:00 AM",
       availableDays: [0, 1, 2, 3, 4, 5, 6], weekendDelivery: true, holidays: [], blackoutDates: [],
       minAdvanceDays: 1, maxAdvanceDays: 30,
     }, base, override());

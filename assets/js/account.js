@@ -400,7 +400,7 @@ window.DOODLY_ACCOUNT = (function () {
 
     if (tl) {
       var stages = [
-        { t: "Scheduled", s: fmtD(dv.date) + (dv.slot ? " · " + String(dv.slot).toLowerCase().replace(/_/g, " ") : "") },
+        { t: "Scheduled", s: fmtD(dv.date) + " · before 7 AM" },
         { t: "Packed at the farm", s: "Chilled & bottled fresh" },
         { t: "Out for delivery", s: dv.driver && dv.driver.name ? "With " + dv.driver.name : "With your delivery executive" },
         missed ? { t: "Not delivered", s: st === "SKIPPED" ? "Skipped for this day" : "We missed you — we’ll make it right" }

@@ -174,7 +174,7 @@ window.DOODLY_PINCODE = (function () {
         <div class="panel mt-3"><div class="panel-head"><h3>Waitlist <span class="badge">${wl.length}</span></h3><button class="btn btn-ghost" id="pc-csv" style="padding:.42rem .8rem;font-size:.82rem">Export CSV</button></div>
           <div class="panel-pad"><div class="pc-wl-list">${wlGroups}</div></div></div>`;
 
-      host.querySelector("#pc-add").addEventListener("click", () => { const a = list(); a.push({ pincode: "", area: "", city: "Vijayawada", state: "Andhra Pradesh", zone: (zones()[0] || {}).id || "Z1", charge: 0, slot: "6:00–8:00 AM", eta: "By 8 AM", enabled: true }); setList(a); render(); });
+      host.querySelector("#pc-add").addEventListener("click", () => { const a = list(); a.push({ pincode: "", area: "", city: "Vijayawada", state: "Andhra Pradesh", zone: (zones()[0] || {}).id || "Z1", charge: 0, slot: "5:00–7:00 AM", eta: "By 7 AM", enabled: true }); setList(a); render(); });
       host.querySelector("#pc-save").addEventListener("click", save);
       host.querySelector("#pc-reset").addEventListener("click", () => { resetList(); render(); });
       host.querySelector("#pc-csv").addEventListener("click", exportCsv);

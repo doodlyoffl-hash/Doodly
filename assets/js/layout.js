@@ -5095,7 +5095,7 @@
       plan: sub ? sub.planName : "No active plan",
       variant: it0 ? (it0.label + (it0.product ? " · " + it0.product : "")) : "—",
       subStatus: sub ? titleCase(sub.status) : "Inactive",
-      nextDelivery: summary.nextDelivery ? (fmtRel(summary.nextDelivery.date) + (summary.nextDelivery.slot ? ", " + titleCase(summary.nextDelivery.slot) : "")) : "No delivery scheduled",
+      nextDelivery: summary.nextDelivery ? (fmtRel(summary.nextDelivery.date) + ", before 7 AM") : "No delivery scheduled",
     });
 
     /* ---- orders / deliveries / invoices / bottle ledger / referrals ---- */

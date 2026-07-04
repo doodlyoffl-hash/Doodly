@@ -67,7 +67,7 @@ window.DOODLY_HELP = (function () {
       { q: "How fresh is the milk?", a: "Collected each morning, chilled to 4°C within minutes, and delivered the same morning. It goes from farm to your fridge without ever warming up." },
     ]},
     { id: "delivery", icon: "truck", title: "Delivery", faqs: [
-      { q: "What are the delivery timings?", a: "Morning delivery between 6:00 AM and 8:00 AM by default. You can pick a preferred slot during checkout." },
+      { q: "What are the delivery timings?", a: "Every delivery arrives before 7:00 AM — choose the 5:00–6:00 AM or 6:00–7:00 AM window during checkout." },
       { q: "What is the 8 PM cut-off rule?", a: "Orders placed before 8:00 PM qualify for next-morning delivery. Order after 8 PM and your first delivery moves to the following morning." },
       { q: "How do I track my delivery?", a: "A live status banner shows your order from Confirmed → Out for Delivery → Delivered, with your executive and ETA. You can also open Delivery Tracking in your dashboard." },
       { q: "Which areas do you serve?", a: "We're live across Vijayawada and Tadepalli. Enter your pincode on any product or the Contact page to check serviceability instantly." },
