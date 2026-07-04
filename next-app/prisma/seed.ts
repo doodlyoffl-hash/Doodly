@@ -132,6 +132,16 @@ async function seedUsers() {
   await upsertUser(adminEmail, "DOODLY Super Admin", "SUPER_ADMIN", adminPw);
   // A demo customer so the customer flows are testable immediately.
   await upsertUser("customer@doodly.test", "Demo Customer", "CUSTOMER", "Customer@2025");
+  // One account per staff role so every portal/permission set is testable.
+  // CHANGE THESE PASSWORDS after first login on a real deployment.
+  await upsertUser("support@doodly.test", "Sana Support", "SUPPORT", "Support@2026");
+  await upsertUser("operations@doodly.test", "Omar Operations", "OPERATIONS", "Operations@2026");
+  await upsertUser("accounts@doodly.test", "Asha Accounts", "ACCOUNTANT", "Accounts@2026");
+  await upsertUser("procurement@doodly.test", "Prakash Procurement", "PROCUREMENT", "Procure@2026");
+  await upsertUser("inventory@doodly.test", "Indu Inventory", "INVENTORY", "Inventory@2026");
+  await upsertUser("qualitylead@doodly.test", "Quinn Quality", "QUALITY", "Quality@2026");
+  await upsertUser("marketing@doodly.test", "Meera Marketing", "MARKETING", "Marketing@2026");
+  // (driver@doodly.test / Driver@2025 is seeded by seedDriver() below, with its route.)
 }
 
 /* Demo data for customer@doodly.test so the account surface renders with real

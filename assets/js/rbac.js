@@ -57,7 +57,8 @@ window.DOODLY_RBAC = (function () {
     inventory: { dashboard: "view", inventory: "full", bottleInventory: "full", reports: "view" },
     quality: { dashboard: "view", quality: "full", procurement: "view", reports: "view" },
     marketing: { dashboard: "view", coupons: "full", offers: "full", blogs: "full", cms: "manage", notifications: "manage", reports: "view" },
-    customer: {}, delivery_executive: {},
+    customer: {},
+    delivery_executive: { dashboard: "view", deliveries: "manage", routes: "view" },
   };
 
   function matrix() {

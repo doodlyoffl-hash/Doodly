@@ -509,6 +509,7 @@ model Subscription {
   autopay         AutopaySubscription?
   events          SubscriptionEvent[]
   billings        SubscriptionBilling[]
+  @@index([userId, status])
 }
 
 // Append-only audit / timeline for a subscription's lifecycle (admin actions,
@@ -772,6 +773,9 @@ model Delivery {
   slot           String?                           // delivery slot key (e.g. "6:00-8:00 AM")
   assignment     DeliveryAssignment?
   queueEntry     AssignmentQueue?
+  @@index([date, status])
+  @@index([subscriptionId, date])
+  @@index([driverId, date])
 }
 
 // ----------------------------------------------------------------
@@ -1515,6 +1519,8 @@ model Notification {
   sentAt    DateTime?
   readAt    DateTime?
   createdAt DateTime     @default(now())
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
 }
 
 // ================================================================

@@ -59,14 +59,24 @@ async function nextRef(): Promise<string> {
 }
 
 // ---------------------------------------------------------------- create (public)
+// Only real document formats may be stored as resume payloads (type-spoofing guard).
+const RESUME_TYPES = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/plain",
+]);
+
 export async function createApplication(raw: unknown, ip?: string) {
   const d = ApplySchema.parse(raw);
-  // base64 payload sanity: strip data-url prefix, enforce byte cap
+  // base64 payload sanity: strip data-url prefix, enforce byte cap + type whitelist
   let data: string | null = null, rType = clean(d.resumeType);
   if (d.resumeData) {
     let b64 = d.resumeData;
     const m = /^data:([^;]+);base64,(.*)$/s.exec(b64);
     if (m) { b64 = m[2]; if (!rType) rType = m[1]; }
+    if (!rType || !RESUME_TYPES.has(rType.toLowerCase()))
+      throw new Error("Please upload your resume as PDF, DOC, DOCX or TXT — or paste a link instead.");
     const bytes = Math.floor((b64.length * 3) / 4);
     if (bytes > RESUME_MAX_BYTES) throw new Error("Resume is larger than 2 MB. Upload a smaller file or paste a link instead.");
     data = b64;

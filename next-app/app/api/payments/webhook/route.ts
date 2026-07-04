@@ -21,6 +21,20 @@ export async function POST(req: NextRequest) {
   }
 
   const event = JSON.parse(raw);
+
+  // Replay guard — Razorpay retries deliveries. Each (event, payment-ref) pair
+  // is processed exactly once; duplicates are acknowledged without re-running
+  // the ledger sync (prevents double bookkeeping on webhook replays).
+  const dedupeRef: string | null =
+    event?.payload?.payment?.entity?.id ?? event?.payload?.subscription?.entity?.id ?? null;
+  if (dedupeRef) {
+    const dup = await db.gatewayWebhook.findFirst({
+      where: { eventType: event.event, paymentRef: dedupeRef, processed: true },
+      select: { id: true },
+    }).catch(() => null);
+    if (dup) return NextResponse.json({ received: true, duplicate: true });
+  }
+
   try {
     switch (event.event) {
       case "payment.captured": {
