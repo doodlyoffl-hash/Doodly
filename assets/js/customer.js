@@ -73,7 +73,8 @@ window.DOODLY_CUSTOMER = (function () {
   }
   function dashboardCards() {
     var s = stats();
-    var nd = s.nextDelivery ? (s.nextDelivery.date + " · " + s.nextDelivery.time) : "No delivery scheduled";
+    // single morning delivery run — the promise is "before 7 AM", not a time range
+    var nd = s.nextDelivery ? (s.nextDelivery.date + " · before 7 AM") : "No delivery scheduled";
     return [
       { l: "Active Subscription", v: s.plan, sub: s.subStatus + " · " + s.variant, href: "/account/subscription.html", ic: "refresh" },
       { l: "Upcoming Delivery", v: nd, sub: "Track it live", href: "/account/tracking.html", ic: "pin" },
