@@ -405,16 +405,14 @@ window.DOODLY_MANIFEST = (function () {
     "account/settings": { surface:"account", title:"Settings", blocks:[
       head("Settings","Preferences, notifications and account."),
       { type:"tabs", items:["General","Notifications","Security","Billing"], panels:[
-        formHTML({ key:"settings-general", cols:2, submit:"Save settings", fields:[
-          { label:"Default delivery time", type:"select", options:["6:00 – 6:30 AM","6:30 – 7:00 AM","7:00 – 7:30 AM"] },
+        formHTML({ key:"settings-general", cols:2, submit:"Save settings", sub:"Your language and delivery preferences.", fields:[
           { label:"Language", type:"select", options:["English","తెలుగు","हिन्दी"] },
-          { label:"Contactless delivery OTP", type:"select", options:["On","Off"] },
           { label:"WhatsApp updates", type:"select", options:["On","Off"] } ] }),
         formHTML({ key:"settings-notif", cols:2, submit:"Save notifications", sub:"Choose how you'd like to hear from us.", fields:[
-          { label:"Order updates", type:"select", options:["WhatsApp + SMS","WhatsApp only","SMS only","Off"] },
-          { label:"Delivery alerts", type:"select", options:["On","Off"] },
-          { label:"Promotions & offers", type:"select", options:["On","Off"] },
-          { label:"Payment reminders", type:"select", options:["On","Off"] } ] }),
+          { label:"Email updates", type:"select", options:["On","Off"] },
+          { label:"SMS updates", type:"select", options:["On","Off"] },
+          { label:"Push notifications", type:"select", options:["On","Off"] },
+          { label:"Promotions & offers", type:"select", options:["On","Off"] } ] }),
         formHTML({ key:"settings-security", cols:2, submit:"Save security", sub:"Need to change your password? <a href='/forgot-password.html' style='color:var(--leaf-600);font-weight:700'>Reset it here →</a>", fields:[
           { label:"Two-factor authentication", type:"select", options:["Off","SMS OTP","Authenticator app"] },
           { label:"Login alerts", type:"select", options:["On","Off"] } ] }),

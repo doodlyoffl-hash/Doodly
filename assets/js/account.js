@@ -429,6 +429,50 @@ window.DOODLY_ACCOUNT = (function () {
     }
   }
 
+  /* ============================================================ SETTINGS
+     Notification opt-ins + language + WhatsApp, backed by CustomerPreference
+     via /api/account/settings. The two preference forms (General +
+     Notifications) prefill from and save to the backend; Security/Billing
+     tabs stay informational. */
+  var LANG_LABEL = { en: "English", te: "తెలుగు", hi: "हिन्दी" };
+  var LANG_KEY = { "English": "en", "తెలుగు": "te", "हिन्दी": "hi" };
+  function wireSettings() {
+    if ((document.body.dataset.route || "") !== "account/settings" || !me()) return;
+    var gen = document.querySelector('[data-form="settings-general"]');
+    var notif = document.querySelector('[data-form="settings-notif"]');
+    if (!gen && !notif) return;
+    var sel = function (form, name) { return form ? form.querySelector('[name="' + name + '"]') : null; };
+    var setYN = function (el, on) { if (el) el.value = on ? "On" : "Off"; };
+    var yn = function (el) { return el ? el.value === "On" : undefined; };
+
+    API().get("/api/account/settings").then(function (r) {
+      var s = r.settings || {};
+      var lang = sel(gen, "language"); if (lang && LANG_LABEL[s.language]) lang.value = LANG_LABEL[s.language];
+      setYN(sel(gen, "whatsapp-updates"), s.whatsappOptIn);
+      setYN(sel(notif, "email-updates"), s.emailOptIn);
+      setYN(sel(notif, "sms-updates"), s.smsOptIn);
+      setYN(sel(notif, "push-notifications"), s.pushOptIn);
+      setYN(sel(notif, "promotions-offers"), s.marketingOptIn);
+    }).catch(function () {});
+
+    if (gen) gen.addEventListener("submit", function () {
+      var lang = sel(gen, "language");
+      API().patch("/api/account/settings", {
+        language: lang ? (LANG_KEY[lang.value] || "en") : undefined,
+        whatsappOptIn: yn(sel(gen, "whatsapp-updates")),
+      }).then(function () { toast("Settings saved ✓"); }).catch(function (e) { toast(e.message || "Couldn't save settings."); });
+    }, true);
+
+    if (notif) notif.addEventListener("submit", function () {
+      API().patch("/api/account/settings", {
+        emailOptIn: yn(sel(notif, "email-updates")),
+        smsOptIn: yn(sel(notif, "sms-updates")),
+        pushOptIn: yn(sel(notif, "push-notifications")),
+        marketingOptIn: yn(sel(notif, "promotions-offers")),
+      }).then(function () { toast("Notification preferences saved ✓"); }).catch(function (e) { toast(e.message || "Couldn't save preferences."); });
+    }, true);
+  }
+
   /* ============================================================ entry */
   function mountAll() {
     try { wireOrders(); } catch (e) {}
@@ -438,6 +482,7 @@ window.DOODLY_ACCOUNT = (function () {
     try { wireAddresses(); } catch (e) {}
     try { wireCalendar(); } catch (e) {}
     try { wireTracking(); } catch (e) {}
+    try { wireSettings(); } catch (e) {}
   }
   return { mountAll: mountAll, openOrderDetail: openOrderDetail };
 })();
