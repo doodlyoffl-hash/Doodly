@@ -14,6 +14,8 @@ window.DOODLY_CHECKOUT = (function () {
   const reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
   const icon = (n, s) => (window.DOODLY_BLOCKS ? window.DOODLY_BLOCKS.icon(n, s) : "");
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const meUser = () => { try { const u = window.DOODLY_RBAC && DOODLY_RBAC.currentUser ? DOODLY_RBAC.currentUser() : null; return (u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")) ? u : null; } catch (e) { return null; } };
   const ic = {
     upi: '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="m8 12 3 3 5-6"/>',
     card: '<rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20M6 15h4"/>',
@@ -272,22 +274,23 @@ window.DOODLY_CHECKOUT = (function () {
       hideProcessing(); failure("Please pick your bottle and plan first — taking you to the builder.");
       setTimeout(() => { window.location.href = "/subscriptions.html#builder"; }, 2200); return;
     }
-    const selA = mount.querySelector(".co-addr.sel[data-addr]");
+    const selA = mount.querySelector(".co-addr.sel[data-addr], .co-addr.sel[data-addr-id]");
     const atxt = (sel) => { const el = selA && selA.querySelector(sel); return el ? el.textContent.trim() : ""; };
     const line = atxt(".co-addr-line");
     const pin = (selA && selA.dataset.pin) || "";
     const cityM = line.match(/,\s*([A-Za-z .]+?)\s+\d{6}/);
     const SC = window.DOODLY_SCHEDULE;
+    // real saved address → send its id (the backend resolves + ownership-checks it);
+    // demo card → send the typed fields as before
+    const addressPayload = (selA && selA.dataset.addrId)
+      ? { id: selA.dataset.addrId, pincode: pin }     // pincode still needed for the serviceability check
+      : { label: atxt(".co-addr-tag") || "Home", line1: line, city: cityM ? cityM[1] : "", pincode: pin, contactName: atxt(".co-addr-name"), phone: (atxt(".co-addr-phone") || "").replace(/[^\d+ ]/g, "").trim() };
     const payload = {
       variantId: sub.variantId, planId: sub.planId || undefined,
       method: state.method === "card" ? "card" : state.method === "netbanking" ? "netbanking" : "upi",
       startDate: sub.startIso || undefined,
       slot: SC && SC.slotLabel ? SC.slotLabel() : undefined,
-      address: {
-        label: atxt(".co-addr-tag") || "Home", line1: line, city: cityM ? cityM[1] : "",
-        pincode: pin, contactName: atxt(".co-addr-name"),
-        phone: (atxt(".co-addr-phone") || "").replace(/[^\d+ ]/g, "").trim(),
-      },
+      address: addressPayload,
     };
     DOODLY_API.post("/api/checkout", payload)
       .then((res) => {
@@ -461,9 +464,11 @@ window.DOODLY_CHECKOUT = (function () {
         goto(state.step + 1); return;
       }
       if (t.closest(".co-back")) { goto(state.step - 1); return; }
-      const addr = t.closest(".co-addr[data-addr]"); if (addr) {
-        state.addr = Number(addr.dataset.addr);
-        mount.querySelectorAll(".co-addr[data-addr]").forEach((a) => a.classList.toggle("sel", a === addr));
+      const addr = t.closest(".co-addr[data-addr], .co-addr[data-addr-id]");
+      if (addr && !addr.classList.contains("co-addnew")) {
+        if (addr.dataset.addrId) state.addrId = addr.dataset.addrId;                // real saved address
+        else { state.addr = Number(addr.dataset.addr); state.addrId = null; }        // demo card
+        mount.querySelectorAll(".co-addr[data-addr], .co-addr[data-addr-id]").forEach((a) => a.classList.toggle("sel", a === addr));
         if (window.DOODLY_PINCODE && addr.dataset.pin) { window.DOODLY_PINCODE.setPin(addr.dataset.pin); const pinHost = mount.querySelector("#coPincodeHost"); if (pinHost) window.DOODLY_PINCODE.mountChecker(pinHost, { compact: true }); const r = mount.querySelector("#coPinReq"); if (r) r.hidden = window.DOODLY_PINCODE.isServiceable(); }
         return;
       }
@@ -486,7 +491,81 @@ window.DOODLY_CHECKOUT = (function () {
     el.appendChild(sp); setTimeout(() => sp.remove(), 600);
   }
 
+  /* Signed-in customer → real saved addresses (with the map pin) drive the
+     address step; the demo cards remain only for the localhost/guest preview. */
+  function realAddrCard(a, sel) {
+    const u = meUser() || {};
+    const loc = a.line1 + (a.city ? ", " + a.city : "") + " " + a.pincode;
+    return `<button type="button" class="co-addr ${sel ? "sel" : ""}" data-addr-id="${esc(a.id)}" data-pin="${esc(a.pincode)}">
+      <span class="co-check">${icon("check", 13)}</span>
+      <span class="co-addr-tag">${esc(a.label || "Home")}${a.isDefault ? " · Default" : ""}</span>
+      <span class="co-addr-name">${esc(u.name || "")}</span>
+      <span class="co-addr-line">${esc(loc)}</span>
+      <span class="co-addr-phone">${icon(a.lat != null ? "pin" : "home", 13)} ${a.lat != null ? "Pinned location" : "Saved address"}</span></button>`;
+  }
+  function hydrateAddresses() {
+    if (!meUser() || !window.DOODLY_API) return;      // demo/guest → keep the sample cards
+    const box = mount && mount.querySelector(".co-addrs");
+    if (!box) return;
+    window.DOODLY_API.get("/api/addresses").then((r) => {
+      const list = (r && r.addresses) || [];
+      const def = list.filter((x) => x.isDefault)[0] || list[0] || null;
+      state.addrId = def ? def.id : null;
+      const cards = list.length
+        ? list.map((a) => realAddrCard(a, def && a.id === def.id)).join("")
+        : `<div class="co-addr-empty" style="grid-column:1/-1;padding:14px;color:var(--ink-3);font-size:.9rem">No saved addresses yet — add your delivery address and drop a pin for accurate delivery.</div>`;
+      box.innerHTML = cards + `<button type="button" class="co-addr co-addnew js-addaddr">${icon("plus", 22)}<span>Add new address</span></button>`;
+      if (def && window.DOODLY_PINCODE && def.pincode) {
+        window.DOODLY_PINCODE.setPin(def.pincode);
+        const ph = mount.querySelector("#coPincodeHost"); if (ph) window.DOODLY_PINCODE.mountChecker(ph, { compact: true });
+      }
+    }).catch(() => {});                                // offline → keep the sample cards
+  }
+
   function addAddressModal() {
+    // guest/localhost demo keeps the lightweight sample modal
+    if (!meUser()) return addAddressModalDemo();
+    let m = document.getElementById("coAddrModal");
+    if (m) m.remove();
+    m = document.createElement("div"); m.id = "coAddrModal"; m.className = "co-modal";
+    m.innerHTML = `<div class="co-modal-card" role="dialog" aria-modal="true" aria-label="Add address">
+        <div class="co-modal-head"><h3>Add delivery address</h3><button class="co-modal-x" aria-label="Close">${icon("x", 18) || "✕"}</button></div>
+        <div class="co-modal-body">
+          <div id="coAddrMap" style="margin-bottom:12px"></div>
+          <label class="co-fl"><input class="co-input" id="cam-label" placeholder=" "><span>Label (Home / Office)</span></label>
+          <label class="co-fl"><input class="co-input" id="cam-line1" placeholder=" "><span>Flat / House no, Building, Area</span></label>
+          <div class="co-card-row"><label class="co-fl"><input class="co-input" id="cam-city" placeholder=" "><span>City</span></label><label class="co-fl"><input class="co-input" id="cam-pin" inputmode="numeric" placeholder=" "><span>PIN code</span></label></div>
+        </div>
+        <button class="btn btn-primary btn-lg co-modal-save">Save address</button></div>`;
+    document.body.appendChild(m);
+    const close = () => { m.classList.remove("show"); setTimeout(() => m.remove(), 200); };
+    let geo = { lat: null, lng: null };
+    try {
+      if (window.DOODLY_MAPS && DOODLY_MAPS.mountPicker) {
+        DOODLY_MAPS.mountPicker(m.querySelector("#coAddrMap"), { height: "200px", onChange: (res) => {
+          geo.lat = res.lat; geo.lng = res.lng;
+          const pin = m.querySelector("#cam-pin"), city = m.querySelector("#cam-city"), line1 = m.querySelector("#cam-line1");
+          if (res.pincode && pin && !pin.value) pin.value = res.pincode;
+          if (res.city && city && !city.value) city.value = res.city;
+          if (res.area && line1 && !line1.value) line1.value = res.area;
+        } });
+      }
+    } catch (e) {}
+    m.addEventListener("click", (e) => { if (e.target === m || e.target.closest(".co-modal-x")) close(); });
+    m.querySelector(".co-modal-save").addEventListener("click", () => {
+      const v = (id) => (m.querySelector(id).value || "").trim();
+      const body = { label: v("#cam-label") || "Home", line1: v("#cam-line1"), city: v("#cam-city"), pincode: v("#cam-pin"), isDefault: false };
+      if (geo.lat != null) { body.lat = geo.lat; body.lng = geo.lng; }
+      window.DOODLY_API.post("/api/addresses", body).then((r) => {
+        if (window.DOODLY_PINCODE) DOODLY_PINCODE.toast && DOODLY_PINCODE.toast("Address saved ✓");
+        if (r && r.address) state.addrId = r.address.id;
+        close(); hydrateAddresses();
+      }).catch((e) => { if (window.DOODLY_PINCODE && DOODLY_PINCODE.toast) DOODLY_PINCODE.toast((e && e.message) || "Check the address fields."); });
+    });
+    requestAnimationFrame(() => m.classList.add("show"));
+  }
+
+  function addAddressModalDemo() {
     let m = document.getElementById("coAddrModal");
     if (m) { m.classList.add("show"); return; }
     m = document.createElement("div"); m.id = "coAddrModal"; m.className = "co-modal";
@@ -512,8 +591,9 @@ window.DOODLY_CHECKOUT = (function () {
     mount = scope.querySelector("#checkoutMount");
     if (!mount || mount.dataset.built) return;
     mount.dataset.built = "1";
-    state = { step: 0, slot: 0, addr: 0, method: "upi", reached: 0, realOrder: null };
+    state = { step: 0, slot: 0, addr: 0, addrId: null, method: "upi", reached: 0, realOrder: null };
     build(); wire();
+    try { hydrateAddresses(); } catch (e) {}   // signed-in customer → real saved addresses + map pin
     // mount the delivery start-date picker into the schedule step
     if (window.DOODLY_SCHEDULE) {
       const host = mount.querySelector("#coDateHost");
