@@ -102,6 +102,7 @@ export async function routeDetail(id: string) {
     id: d.id, seq: d.sequence ?? i + 1, customer: d.subscription?.user?.name ?? d.order?.user?.name ?? "—",
     address: d.subscription?.address ? `${d.subscription.address.line1}, ${d.subscription.address.city} ${d.subscription.address.pincode}` : "—",
     status: d.status, bottlesIn: d.bottlesIn, bottleCount: d.bottleCount, hasGeo: d.subscription?.address?.lat != null,
+    lat: d.subscription?.address?.lat ?? null, lng: d.subscription?.address?.lng ?? null,   // for the admin route map
   }));
   const performance = {
     completed: deliveries.filter((d) => d.status === "DELIVERED").length,

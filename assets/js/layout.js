@@ -1997,12 +1997,30 @@
       bkRemount("routes");
       try { var st = await DOODLY_API.get("/api/admin/routes/stats"); renderRtStats(host, st); } catch (e2) {}
       loadRtLookups();
+      try { mountRtOverview(); } catch (eov) {}
       bkBanner(host, "● Live — " + rows.length + " route(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
       bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo routes." : e.code === "forbidden" ? "⚠ Your role can't view routes (403)." : "⚠ " + (e.message || "Couldn't load routes."), "err");
     }
   }
   window.DOODLY_ADMIN.wireRoutesBackend = wireRoutesBackend;
+
+  // Page-level overview: draw the first route that has geocoded stops; else keep the empty-state card.
+  async function mountRtOverview() {
+    var mapEl = document.getElementById("rtOverviewMap"), ph = document.getElementById("rtOverviewPh");
+    if (!mapEl || !window.DOODLY_MAPS || !window.DOODLY_API) return;
+    var candidates = _rtRoutes.filter(function (r) { return (r.stops || 0) > 0; }).slice(0, 4);
+    for (var i = 0; i < candidates.length; i++) {
+      try {
+        var res = await DOODLY_API.get("/api/admin/routes/" + candidates[i].id);
+        var det = res.route || {};
+        var geo = (det.stops || []).filter(function (s) { return s.lat != null && s.lng != null; })
+          .map(function (s) { return { lat: s.lat, lng: s.lng, name: s.customer, status: String(s.status || "").toLowerCase() }; });
+        if (geo.length) { mapEl.style.display = "block"; if (ph) ph.style.display = "none"; DOODLY_MAPS.routeMap(mapEl, { stops: geo }); return; }
+      } catch (e) {}
+    }
+    mapEl.style.display = "none"; if (ph) ph.style.display = "";   // nothing geocoded yet → keep the card
+  }
 
   function rtZoneOpts(sel) { return '<option value="">— No zone —</option>' + _rtZones.map(function (z) { return '<option value="' + z.id + '"' + (z.id === sel ? " selected" : "") + ">" + esc(z.name) + "</option>"; }).join(""); }
   function rtDriverOpts(sel) { return '<option value="">— Unassigned —</option>' + _rtDrivers.map(function (d) { var nm = (d.name || d.employeeId || "Driver"); return '<option value="' + d.id + '"' + (d.id === sel ? " selected" : "") + ">" + esc(nm) + "</option>"; }).join(""); }
@@ -2066,6 +2084,7 @@
             '<label class="dac-f"><span>Driver</span><select class="input" id="rm-driver">' + rtDriverOpts(r.driverId) + "</select></label></div>" +
           '<label class="check" style="margin-top:4px"><input type="checkbox" id="rm-active" ' + (r.active ? "checked" : "") + "> Active</label>" +
           '<div class="rm-stops" id="rm-stops" style="margin-top:10px;max-height:160px;overflow:auto"><p class="muted-sm">Loading stops…</p></div>' +
+          '<div id="rm-map" style="height:220px;margin-top:10px;border-radius:12px;overflow:hidden;display:none"></div>' +
           '<p class="dac-err" id="rm-err"></p>' +
         "</form>" +
         '<div class="dac-ft" style="flex-wrap:wrap;gap:8px"><button class="btn btn-ghost" type="button" id="rm-opt">Optimize stops</button><button class="btn btn-ghost" type="button" id="rm-del">Soft-delete</button><span style="flex:1"></span><button class="btn btn-ghost" type="button" id="rm-close">Close</button><button class="btn btn-primary" type="button" id="rm-save">Save</button></div>' +
@@ -2073,12 +2092,21 @@
     document.body.appendChild(ov);
     var qs = function (s) { return ov.querySelector(s); };
     var close = function () { ov.remove(); document.removeEventListener("keydown", onKey); };
-    DOODLY_API.get("/api/admin/routes/" + id).then(function (res) {
-      var det = res.route, box = qs("#rm-stops"); if (!box) return;
-      box.innerHTML = det.stops && det.stops.length
-        ? '<div class="muted-sm" style="margin-bottom:4px">Stops (' + det.performance.completed + "/" + det.performance.total + " done · " + det.performance.bottlesCollected + " bottles)</div>" + det.stops.map(function (s) { return '<div style="display:flex;gap:8px;padding:3px 0;font-size:.85rem"><b>' + s.seq + ".</b><span style=\"flex:1\">" + esc(s.customer) + ' <span class="muted-sm">' + esc(s.address) + "</span></span></div>"; }).join("")
-        : '<p class="muted-sm">No stops on this route yet.</p>';
-    }).catch(function () {});
+    function renderDetail(det) {
+      var box = qs("#rm-stops"); if (box) {
+        box.innerHTML = det.stops && det.stops.length
+          ? '<div class="muted-sm" style="margin-bottom:4px">Stops (' + det.performance.completed + "/" + det.performance.total + " done · " + det.performance.bottlesCollected + " bottles)</div>" + det.stops.map(function (s) { return '<div style="display:flex;gap:8px;padding:3px 0;font-size:.85rem"><b>' + s.seq + ".</b><span style=\"flex:1\">" + esc(s.customer) + ' <span class="muted-sm">' + esc(s.address) + "</span></span>" + (s.hasGeo ? "" : ' <span class="muted-sm" title="No map pin on this address — add one so it shows on the route map">⚠</span>') + "</div>"; }).join("")
+          : '<p class="muted-sm">No stops on this route yet.</p>';
+      }
+      // Real route map — numbered stops in delivery order + polyline. Only when stops are geocoded.
+      var mapHost = qs("#rm-map"); if (!mapHost || !window.DOODLY_MAPS) return;
+      var geo = (det.stops || []).filter(function (s) { return s.lat != null && s.lng != null; })
+        .map(function (s) { return { lat: s.lat, lng: s.lng, name: s.customer, status: String(s.status || "").toLowerCase() }; });
+      if (geo.length) { mapHost.style.display = "block"; DOODLY_MAPS.routeMap(mapHost, { stops: geo }); }
+      else { mapHost.style.display = "none"; }
+    }
+    function loadDetail() { DOODLY_API.get("/api/admin/routes/" + id).then(function (res) { renderDetail(res.route); }).catch(function () {}); }
+    loadDetail();
     async function save() {
       var err = qs("#rm-err"), btn = qs("#rm-save"); btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
       try {
@@ -2087,9 +2115,10 @@
       } catch (e) { err.textContent = e.code === "conflict" ? (e.message) : e.code === "forbidden" ? "Your role can't edit routes (403)." : (e.message || "Couldn't save."); btn.disabled = false; btn.textContent = "Save"; }
     }
     async function optimize() {
-      var err = qs("#rm-err"); err.textContent = "";
-      try { var res = await DOODLY_API.post("/api/admin/routes/" + id + "/optimize"); dacToast("Optimized: " + res.result.stops + " stops · " + res.result.distanceKm + " km · ~" + res.result.durationMin + " min"); await wireRoutesBackend(); close(); }
+      var err = qs("#rm-err"), ob = qs("#rm-opt"); err.textContent = ""; ob.disabled = true; ob.textContent = "Optimizing…";
+      try { var res = await DOODLY_API.post("/api/admin/routes/" + id + "/optimize"); dacToast("Optimized: " + res.result.stops + " stops · " + res.result.distanceKm + " km · ~" + res.result.durationMin + " min"); loadDetail(); wireRoutesBackend(); }
       catch (e) { err.textContent = e.code === "forbidden" ? "Your role can't optimize (403)." : (e.message || "Couldn't optimize."); }
+      finally { ob.disabled = false; ob.textContent = "Optimize stops"; }
     }
     async function softDel() {
       var err = qs("#rm-err"); err.textContent = "";
