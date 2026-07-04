@@ -15,7 +15,8 @@ import { z } from "zod";
 import { SignJWT } from "jose";
 import { db } from "@/lib/db";
 import { verifyPassword } from "@/lib/auth/password";
-import { isValidRoleKey } from "@/lib/auth/roles";
+import { isValidRoleKey, isStaff } from "@/lib/auth/roles";
+import type { RoleKey } from "@/lib/rbac";
 import { rateLimit } from "@/lib/auth/ratelimit";
 import { audit, recordLogin } from "@/lib/auth/audit";
 import { reqContext } from "@/lib/auth/request";
@@ -23,7 +24,20 @@ import { reqContext } from "@/lib/auth/request";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TOKEN_TTL_DAYS = 30;
+// Role-scoped session lifetime: staff/admin tokens are the crown jewels, so
+// they expire fast; delivery executives log in most days; customers get a
+// long, convenient session. A leaked privileged token self-destructs quickly.
+function ttlDaysFor(role: string): number {
+  if (isStaff(role as RoleKey)) return 3;
+  if (role === "delivery_executive") return 7;
+  return 30;
+}
+
+// Cross-instance brute-force guard: the in-memory limiter resets per serverless
+// instance, so an attacker spread across instances gets more tries. This counts
+// real failed attempts from the DB (shared) in a rolling window.
+const DB_FAIL_WINDOW_MS = 15 * 60_000;
+const DB_FAIL_LIMIT = 10;
 
 const Body = z.object({
   email: z.string().email().max(200),
@@ -39,6 +53,18 @@ export async function POST(req: NextRequest) {
   const ctx = reqContext(req);
   const rl = rateLimit(`token:${ctx.ip ?? "unknown"}`, 10, 60_000);
   if (!rl.ok) return NextResponse.json({ error: "Too many attempts — please try again in a minute." }, { status: 429 });
+
+  // persistent, cross-instance guard (fail-open if the count errors)
+  if (ctx.ip) {
+    try {
+      const recentFails = await db.loginHistory.count({
+        where: { ip: ctx.ip, success: false, createdAt: { gte: new Date(Date.now() - DB_FAIL_WINDOW_MS) } },
+      });
+      if (recentFails >= DB_FAIL_LIMIT) {
+        return NextResponse.json({ error: "Too many failed attempts — please try again later." }, { status: 429 });
+      }
+    } catch { /* fail-open: never lock everyone out on a DB hiccup */ }
+  }
 
   let json: unknown;
   try { json = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
@@ -61,11 +87,12 @@ export async function POST(req: NextRequest) {
   if (!secret) return NextResponse.json({ error: "Auth is not configured on the server." }, { status: 500 });
 
   const role = roleKey(user.role);
+  const ttlDays = ttlDaysFor(role);
   const token = await new SignJWT({ role })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.id)
     .setIssuedAt()
-    .setExpirationTime(`${TOKEN_TTL_DAYS}d`)
+    .setExpirationTime(`${ttlDays}d`)
     .setIssuer("doodly")
     .setAudience("doodly-static")
     .sign(new TextEncoder().encode(secret));
@@ -74,7 +101,7 @@ export async function POST(req: NextRequest) {
   await audit({ userId: user.id, actorRole: role, action: "auth.token_login", ctx });
 
   return NextResponse.json(
-    { ok: true, data: { token, expiresInDays: TOKEN_TTL_DAYS, user: { id: user.id, name: user.name, email: user.email, role } } },
+    { ok: true, data: { token, expiresInDays: ttlDays, user: { id: user.id, name: user.name, email: user.email, role } } },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

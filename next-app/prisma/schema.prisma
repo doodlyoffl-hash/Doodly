@@ -254,6 +254,7 @@ model LoginHistory {
   browser   String?
   createdAt DateTime @default(now())
   @@index([userId, createdAt])
+  @@index([ip, createdAt])            // cross-instance login rate-limit lookups
 }
 
 // Single-use, time-boxed password reset. Only the SHA-256 hash of the token is
