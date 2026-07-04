@@ -8,6 +8,7 @@
 import { NextResponse } from "next/server";
 import { ZodError, type ZodSchema } from "zod";
 import { log } from "@/lib/logger";
+import { db } from "@/lib/db";
 
 export class ApiError extends Error {
   status: number;
@@ -68,6 +69,29 @@ function flattenZod(e: ZodError) {
   return fieldErrors;
 }
 
+/** Instant session revocation: every bearer token carries a version claim (tv),
+    forwarded by middleware as x-doodly-tv. Here — the single choke point every
+    authenticated route passes through — we confirm it still matches the user's
+    current tokenVersion. Logout / password change bumps that version, so all
+    older tokens are rejected immediately. Only runs for bearer sessions (the
+    header is absent for public routes, Auth.js sessions and dev bridges); legacy
+    tokens minted before this feature carry no tv and are left alone until expiry.
+    Fail-open on a DB hiccup so a transient error can't lock everyone out. */
+async function revokedSession(req: unknown): Promise<boolean> {
+  const h = (req as { headers?: { get(n: string): string | null } } | undefined)?.headers;
+  if (!h || typeof h.get !== "function") return false;
+  const uid = h.get("x-doodly-uid");
+  const tv = h.get("x-doodly-tv");
+  if (!uid || tv === null) return false;               // not a bearer session (or legacy token) → nothing to check
+  try {
+    const user = await db.user.findUnique({ where: { id: uid }, select: { tokenVersion: true } });
+    if (!user) return true;                            // account gone → reject
+    return String(user.tokenVersion) !== tv;           // version moved on → this token was revoked
+  } catch {
+    return false;                                      // fail-open: don't break the app on a DB error
+  }
+}
+
 /** Wrap a route handler so thrown ApiErrors map to JSON and unexpected errors -> 500 (logged). */
 export function route<Args extends unknown[]>(
   scope: string,
@@ -75,6 +99,7 @@ export function route<Args extends unknown[]>(
 ) {
   return async (...args: Args): Promise<NextResponse> => {
     try {
+      if (await revokedSession(args[0])) return fail(Errors.unauthorized("Your session has ended. Please sign in again."));
       return await handler(...args);
     } catch (e) {
       if (e instanceof ApiError) return fail(e);

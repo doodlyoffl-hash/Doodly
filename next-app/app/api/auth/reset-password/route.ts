@@ -33,7 +33,8 @@ export const POST = route("auth.reset", async (req: NextRequest) => {
 
   const passwordHash = await hashPassword(password);
   await db.$transaction([
-    db.user.update({ where: { id: record.userId }, data: { passwordHash, forcePwReset: false } }),
+    // bump tokenVersion → instantly revoke every existing session (kicks out anyone with a stolen token)
+    db.user.update({ where: { id: record.userId }, data: { passwordHash, forcePwReset: false, tokenVersion: { increment: 1 } } }),
     // burn this token and invalidate any other outstanding ones for the user
     db.passwordResetToken.updateMany({
       where: { userId: record.userId, usedAt: null },

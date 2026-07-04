@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
   const email = parsed.data.email.toLowerCase();
   const user = await db.user.findUnique({
     where: { email },
-    select: { id: true, name: true, email: true, role: true, status: true, passwordHash: true, deletedAt: true },
+    select: { id: true, name: true, email: true, role: true, status: true, passwordHash: true, deletedAt: true, tokenVersion: true },
   });
   const eligible = !!(user && user.passwordHash && user.status === "ACTIVE" && !user.deletedAt);
   const passwordOk = eligible ? await verifyPassword(parsed.data.password, user!.passwordHash!) : false;
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
 
   const role = roleKey(user.role);
   const ttlDays = ttlDaysFor(role);
-  const token = await new SignJWT({ role })
+  const token = await new SignJWT({ role, tv: user.tokenVersion })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.id)
     .setIssuedAt()

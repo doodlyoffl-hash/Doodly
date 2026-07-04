@@ -38,9 +38,10 @@ export const POST = route("account.password.change", async (req: NextRequest) =>
 
   await db.user.update({
     where: { id: userId },
-    data: { passwordHash: await hashPassword(newPassword), forcePwReset: false },
+    data: { passwordHash: await hashPassword(newPassword), forcePwReset: false, tokenVersion: { increment: 1 } },
   });
 
   await audit({ userId, actorRole: "customer", action: "account.password.change", target: userId, ctx });
-  return ok({ message: "Your password has been updated." });
+  // tokenVersion bumped → all sessions (incl. this one) are revoked; the client re-authenticates.
+  return ok({ message: "Your password has been updated. Please sign in again.", reauth: true });
 });

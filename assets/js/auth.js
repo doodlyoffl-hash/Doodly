@@ -502,7 +502,18 @@ window.DOODLY_AUTH = (function () {
   }
 
   /* ---------- session: logout + configurable idle auto-logout ---------- */
-  function logout() {
+  async function logout() {
+    // Best-effort server-side revocation FIRST (bumps tokenVersion so this token
+    // can't be reused anywhere), then clear local state. Raced with a short
+    // timeout so a slow/offline backend never blocks sign-out.
+    try {
+      if (window.DOODLY_API && DOODLY_API.post && localStorage.getItem("doodly-token")) {
+        await Promise.race([
+          DOODLY_API.post("/api/logout", {}).catch(function () {}),
+          new Promise(function (r) { setTimeout(r, 1500); }),
+        ]);
+      }
+    } catch (e) {}
     try { sessionStorage.removeItem("doodly-session-logged"); } catch (e) {}
     try { localStorage.removeItem("doodly-currentuser"); localStorage.removeItem("doodly-token"); } catch (e) {}
     // clear any impersonation / demo-role state so the next visitor starts clean

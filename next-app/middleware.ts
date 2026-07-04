@@ -54,6 +54,7 @@ export default auth(async (req) => {
   // ---- resolve verified identity (session first, bearer token, dev bridges) ----
   let uid: string | null = req.auth?.user?.id ?? null;
   let role: RoleKey | null = (req.auth?.user?.role as RoleKey) ?? null;
+  let tokenVer: string | null = null;   // the bearer token's version claim (for instant revocation)
   // Production-safe bearer token issued by /api/auth/token (the standalone
   // storefront's sign-in — the Auth.js cookie can't cross domains).
   if (!uid) {
@@ -65,6 +66,7 @@ export default auth(async (req) => {
         if (typeof payload.sub === "string" && payload.sub) {
           uid = payload.sub;
           if (typeof payload.role === "string" && isValidRoleKey(payload.role)) role = payload.role;
+          if (typeof payload.tv === "number") tokenVer = String(payload.tv);   // carried downstream for the revocation check
         }
       } catch { /* invalid or expired token → treated as unauthenticated */ }
     }
@@ -87,8 +89,10 @@ export default auth(async (req) => {
   const headers = new Headers(req.headers);
   headers.delete("x-doodly-uid");
   headers.delete("x-doodly-role");
+  headers.delete("x-doodly-tv");                       // never trust a client-sent version
   if (uid) headers.set("x-doodly-uid", uid);
   if (role) headers.set("x-doodly-role", role);
+  if (tokenVer !== null) headers.set("x-doodly-tv", tokenVer);
   const pass = () => withCors(NextResponse.next({ request: { headers } }), origin);
 
   const denyTo = (pathname: string) => {

@@ -176,6 +176,7 @@ model User {
   status          UserStatus   @default(ACTIVE)        // active / disabled / locked
   deletedAt       DateTime?                            // soft delete
   forcePwReset    Boolean      @default(false)
+  tokenVersion    Int          @default(0)             // bump to instantly revoke all bearer tokens (logout / password change)
   twoFactorOn     Boolean      @default(false)         // enforce for ADMIN / SUPER_ADMIN
   roleAssignments UserRoleAssignment[]                 // secondary roles (multi-role)
   auditLogs       AuditLog[]
