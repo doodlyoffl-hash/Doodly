@@ -1,32 +1,32 @@
 /* =============================================================
-   DOODLY — Live Order Status Banner (DOODLY_LIVEORDER)
-   A premium, backend-driven delivery-tracking banner (Blinkit /
-   Zepto / Country Delight style) that appears below the navbar on
-   the homepage and customer dashboard whenever the customer has an
-   active order, subscription, or upcoming delivery.
-
-   • Status is the single source of truth — every message, icon and
-     timeline stage is DERIVED from a STATUS config (FLOW), never
-     hardcoded inline. Backend statuses: Pending · Confirmed ·
-     Preparing · Quality Checked · Packed · Assigned · Out for
-     Delivery · Near Destination · Delivered · Failed · Rescheduled
-     · Cancelled.
-   • Near-real-time: same-tab CustomEvent + cross-tab `storage`
-     events (the Delivery Executive portal writing `doodly-del-state`
-     and admin status changes flow straight into the banner) + a
-     light poll for the ETA countdown. Production swaps this for
-     SSE / WebSockets without touching the UI.
-   • State persists in `doodly-live-order`; order details derive from
-     the customer's `doodly-subscription` + DOODLY_SCHEDULE.
-
-   Injected by layout.js (wirePublic / wireDashboard → attach()).
+   DOODLY — Home / Dashboard status banner (DOODLY_LIVEORDER)
+   FULLY BACKEND-DRIVEN. One banner, chosen by real data hydrated
+   from the backend (orders / subscription / deliveries), never a
+   seeded demo order. States, by priority:
+     1 Out for Delivery   (today's delivery on the way / reached)
+     2 Delivery Today      (today's delivery scheduled)
+     3 Arriving Tomorrow   (tomorrow's delivery scheduled)
+     4 Delivered           (today's delivery completed)
+     5 Subscription Active (active plan, no imminent delivery)
+     6 Order Confirmed     (a placed order, no plan/imminent delivery)
+     7 Complete Checkout   (items in cart, no order)
+     8 Welcome / Book Now  (no activity — new customer)
+   Data source = window.DOODLY, populated by hydrateAccount() before
+   render (D._rawDeliveries / D._subLive / D.orders / D.__hydrated).
+   Shown only for a real, hydrated customer; otherwise nothing.
    ============================================================= */
 window.DOODLY_LIVEORDER = (function () {
+  "use strict";
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
-  var KEY = "doodly-live-order";
-  var SC = function () { return window.DOODLY_SCHEDULE; };
-  var RBAC = function () { return window.DOODLY_RBAC; };
-  var D = function () { return window.DOODLY || {}; };
+  // The signed-in customer's data (orders / subscription / deliveries) is hydrated
+  // onto window.DOODLY_DATA by hydrateAccount() — NOT the catalogue on window.DOODLY.
+  var D = function () { return window.DOODLY_DATA || {}; };
+  var toast = function (m) { try { if (window.DOODLY_PINCODE && DOODLY_PINCODE.toast) DOODLY_PINCODE.toast(m); } catch (e) {} };
+
+  function me() {
+    try { var u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null"); return (u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")) ? u : null; } catch (e) { return null; }
+  }
+  function firstName() { var u = me(); return u && u.name ? String(u.name).trim().split(/\s+/)[0] : "there"; }
 
   /* ---------- inline icons ---------- */
   var IC = {
@@ -40,324 +40,282 @@ window.DOODLY_LIVEORDER = (function () {
     truck: '<path d="M2 6h11v9H2zM13 9h4l3 3v3h-7z"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/>',
     pin: '<path d="M12 22s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12Z"/><circle cx="12" cy="10" r="2.5"/>',
     party: '<path d="m4 20 5-14 9 9-14 5Z"/><path d="M14 6a3 3 0 0 0 3 3M19 3v3M21 5h-3"/>',
-    alert: '<path d="M12 3 2 20h20L12 3Z"/><path d="M12 9v5M12 17h.01"/>',
-    x: '<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>',
-    phone: '<path d="M4 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L14 13l5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 4 6 2 2 0 0 1 4 4Z"/>',
-    chat: '<path d="M4 5h16v11H9l-5 4Z"/>',
-    chevron: '<path d="m6 9 6 6 6-6"/>',
-    star: '<path d="m12 3 2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.8 6.2 21l1.1-6.5L2.6 9.8l6.5-.9Z"/>',
     refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/>',
     eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7M12 17h.01"/>',
+    star: '<path d="m12 3 2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.8 6.2 21l1.1-6.5L2.6 9.8l6.5-.9Z"/>',
+    receipt: '<path d="M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1Z"/><path d="M9 8h6M9 12h6"/>',
+    cart: '<circle cx="9" cy="20" r="1.6"/><circle cx="18" cy="20" r="1.6"/><path d="M2 3h3l2.5 12h11l2-8H6"/>',
+    gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M5 12v9h14v-9M12 8S9 3 6.5 4 8 8 12 8Zm0 0s3-5 5.5-4S16 8 12 8Z"/>',
+    chevron: '<path d="m6 9 6 6 6-6"/>',
+    x: '<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>',
     pause: '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>',
+    sprout: '<path d="M12 22V12M12 12S12 4 4 4c0 6 4 8 8 8Zm0 0s0-6 8-6c0 5-4 6-8 6Z"/>',
   };
   var svg = function (n, s) { return '<svg viewBox="0 0 24 24" width="' + (s || 18) + '" height="' + (s || 18) + '" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (IC[n] || "") + '</svg>'; };
 
-  /* ============================================================
-     STATUS CONFIG — single source of truth (no hardcoded copy)
-     stage = index into the 6-node visual timeline.
-     ============================================================ */
-  var TIMELINE = [["confirmed", "Order Confirmed"], ["preparing", "Preparing"], ["quality", "Quality Check"], ["packed", "Packed"], ["outfordelivery", "Out for Delivery"], ["delivered", "Delivered"]];
-  var ORDER_FLOW = ["pending", "confirmed", "preparing", "quality", "packed", "assigned", "outfordelivery", "near", "delivered"];
-  var FLOW = {
-    pending: { label: "Order Placed", icon: "clock", tone: "amber", stage: 0, title: "Order received", sub: function () { return "We've got your order — confirming it now."; } },
-    confirmed: { label: "Order Confirmed", icon: "check", tone: "green", stage: 0, title: "Your order has been confirmed.", sub: function () { return "We're preparing your fresh milk."; } },
-    scheduled: { label: "Delivery Scheduled", icon: "calendar", tone: "green", stage: 0, title: function (o) { return o.deliveryWhen === "tomorrow" ? "Your first delivery is scheduled for tomorrow morning." : "Your delivery is scheduled."; }, sub: function (o) { return "Expected time: " + o.slot; } },
-    preparing: { label: "Preparing", icon: "bottle", tone: "blue", stage: 1, title: "Your fresh milk is being prepared.", sub: function () { return "Collected fresh from our trusted farmers."; } },
-    quality: { label: "Quality Checked", icon: "beaker", tone: "blue", stage: 2, title: "Quality check in progress.", sub: function () { return "Every batch is lab-tested for purity and freshness."; } },
-    packed: { label: "Packed", icon: "box", tone: "blue", stage: 3, title: "Packed and ready to go.", sub: function () { return "Sealed in chilled, food-grade glass bottles."; } },
-    assigned: { label: "Executive Assigned", icon: "user", tone: "blue", stage: 3, title: function (o) { return "Delivery executive assigned" + (o.driver ? " — " + o.driver.name + "." : "."); }, sub: function () { return "Your order will leave the warehouse shortly."; } },
-    outfordelivery: { label: "Out for Delivery", icon: "truck", tone: "blue", stage: 4, eta: true, van: true, title: "Your order is on the way!", sub: function (o) { return "Estimated arrival in about " + o.etaMinutes + " minutes."; } },
-    near: { label: "Arriving Soon", icon: "pin", tone: "blue", stage: 4, eta: true, van: true, countdown: true, title: "Your delivery is arriving in a few minutes.", sub: function () { return "Please keep your bottles/crate ready."; } },
-    delivered: { label: "Delivered", icon: "party", tone: "green", stage: 5, done: true, title: "Delivered successfully! 🎉", sub: function () { return "Enjoy your fresh DOODLY dairy products."; } },
-    failed: { label: "Delivery Failed", icon: "alert", tone: "red", stage: 4, title: "Delivery couldn't be completed.", sub: function () { return "We'll contact you shortly to reschedule."; } },
-    rescheduled: { label: "Rescheduled", icon: "calendar", tone: "amber", stage: 0, title: "Your delivery has been rescheduled.", sub: function (o) { return "New slot: " + o.slot + (o.deliveryDateLabel ? " · " + o.deliveryDateLabel : ""); } },
-    cancelled: { label: "Cancelled", icon: "x", tone: "grey", terminal: true, hide: true, title: "Order cancelled.", sub: function () { return "No delivery is scheduled."; } },
-  };
-  function meta(status) { return FLOW[status] || FLOW.confirmed; }
-  function val(v, o) { return typeof v === "function" ? v(o) : v; }
+  /* ---------- date helpers ---------- */
+  var MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function startDay(x) { var d = new Date(x); d.setHours(0, 0, 0, 0); return d; }
+  function dayDiff(iso) { var x = startDay(new Date(iso)); if (isNaN(x.getTime())) return null; return Math.round((x - startDay(new Date())) / 86400000); }
+  function fmtLong(iso) { var x = new Date(iso); if (isNaN(x.getTime())) return "—"; var days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]; return days[x.getDay()] + ", " + x.getDate() + " " + MON[x.getMonth()] + " " + x.getFullYear(); }
+  function relLabel(iso) { var diff = dayDiff(iso); if (diff === 0) return "Today"; if (diff === 1) return "Tomorrow"; if (diff === -1) return "Yesterday"; var x = new Date(iso); return x.getDate() + " " + MON[x.getMonth()]; }
+  function timeOf(iso) { var x = new Date(iso); if (isNaN(x.getTime())) return ""; var h = x.getHours(), ap = h < 12 ? "AM" : "PM"; h = h % 12 || 12; return h + ":" + String(x.getMinutes()).padStart(2, "0") + " " + ap; }
+  var SLOT = "Before 7 AM";   // single morning delivery promise
 
-  /* ============================================================
-     DATA
-     ============================================================ */
-  function read() { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { return null; } }
-  function write(o) { try { localStorage.setItem(KEY, JSON.stringify(o)); } catch (e) {} }
-
-  function subContext() { try { return JSON.parse(localStorage.getItem("doodly-subscription") || "null"); } catch (e) { return null; } }
-  function productLabel(sub) {
-    var d = D();
-    var v = sub && (d.variants || []).find(function (x) { return x.id === sub.variantId; });
-    var vol = (v && (v.label || v.volume || v.name)) || "1000 ML";
-    return { name: "A2 Buffalo Milk", volume: String(vol).toUpperCase() };
+  function cartCount() {
+    try { if (window.DOODLY_CART && DOODLY_CART.count) return DOODLY_CART.count() | 0; } catch (e) {}
+    try { var c = JSON.parse(localStorage.getItem("doodly-cart") || "null"); if (Array.isArray(c)) return c.reduce(function (n, i) { return n + (i.qty || 1); }, 0); if (c && typeof c === "object") return Object.keys(c).length; } catch (e) {}
+    return 0;
   }
 
-  // derive a fresh "active order" — from a real subscription if present, else a sensible demo default
-  function derive() {
-    var sub = subContext(), sc = SC();
-    var p = productLabel(sub);
-    var startIso = (sub && sub.startIso) || (sc ? sc.iso(sc.addDays(new Date(), 1)) : null);
-    var endIso = sub && sub.endIso;
-    var deliveryDateLabel = (sc && startIso) ? sc.fmtLong(startIso) : "Tomorrow morning";
-    var slot = (sc && sc.slotLabel) ? sc.slotLabel() : "6:00 AM – 8:00 AM";
-    var daysRemaining = (sc && endIso) ? Math.max(0, sc.diffDays(new Date(), sc.fromIso(endIso))) : (sub && sub.days) || null;
-    var when = "tomorrow";
-    if (sc && startIso) { var diff = sc.diffDays(new Date(), sc.fromIso(startIso)); when = diff <= 0 ? "today" : diff === 1 ? "tomorrow" : "soon"; }
+  var SCHEDULED = ["SCHEDULED", "ASSIGNED", "ACCEPTED", "PACKED"];
+  var ONWAY = ["OUT_FOR_DELIVERY", "ON_THE_WAY"];
+
+  /* ============================================================
+     STATE RESOLUTION — one banner, by priority, from real data
+     ============================================================ */
+  function resolveState() {
+    if (!me()) return null;                       // not a real customer
+    var d = D();
+    if (!d.__hydrated) return null;               // backend data not loaded (offline/failed) → show nothing, not a guess
+
+    var raw = (d._rawDeliveries || []).filter(function (x) { return x && x.date; });
+    var todays = raw.filter(function (x) { return dayDiff(x.date) === 0; });
+    var tomorrows = raw.filter(function (x) { return dayDiff(x.date) === 1; });
+    var sub = d._subLive || null;
+    var orders = d.orders || [];
+
+    var onway = todays.find(function (x) { return ONWAY.indexOf(x.status) >= 0; });
+    var reached = todays.find(function (x) { return x.status === "REACHED"; });
+    var deliveredToday = todays.find(function (x) { return x.status === "DELIVERED"; });
+    var schedToday = todays.find(function (x) { return SCHEDULED.indexOf(x.status) >= 0; });
+    var schedTomorrow = tomorrows.find(function (x) { return SCHEDULED.indexOf(x.status) >= 0; });
+
+    // 1–4: today's / tomorrow's delivery
+    if (reached) return { kind: "near", delivery: reached, sub: sub };
+    if (onway) return { kind: "onway", delivery: onway, sub: sub };
+    if (deliveredToday) return { kind: "delivered", delivery: deliveredToday, sub: sub };
+    if (schedToday) return { kind: "today", delivery: schedToday, sub: sub };
+    if (schedTomorrow) return { kind: "tomorrow", delivery: schedTomorrow, sub: sub };
+
+    // 5: active subscription (next delivery date from the sub or the nearest future delivery)
+    if (sub && sub.status === "ACTIVE") {
+      var future = raw.filter(function (x) { return (dayDiff(x.date) || 0) > 1 && x.status !== "DELIVERED"; })
+        .sort(function (a, b) { return new Date(a.date) - new Date(b.date); })[0];
+      var nextIso = (future && future.date) || sub.nextDeliveryAt || null;
+      return { kind: "subscription", sub: sub, nextIso: nextIso };
+    }
+
+    // 6: a placed one-time order, nothing imminent
+    if (orders.length) {
+      var latest = orders[0];   // hydrateAccount maps newest-first
+      var cancelled = latest.status && latest.status[1] === "Cancelled";
+      if (!cancelled) return { kind: "confirmed", order: latest };
+    }
+
+    // 7: items in the cart, not ordered
+    if (cartCount() > 0) return { kind: "checkout", n: cartCount() };
+
+    // 8: brand-new customer
+    return { kind: "welcome" };
+  }
+
+  function deliveryProduct(delivery, sub) {
+    if (sub && sub.items && sub.items[0]) return { label: sub.items[0].label, product: sub.items[0].product || "A2 Buffalo Milk", qty: sub.items[0].qty || 1 };
+    return { label: "", product: "A2 Buffalo Milk", qty: (delivery && delivery.bottlesOut) || 1 };
+  }
+
+  /* ============================================================
+     ORDER-STATE BANNER (rich timeline)
+     ============================================================ */
+  // status → 6-node timeline stage + tone + icon + label
+  var FLOW = {
+    confirmed:  { label: "Order Confirmed",  icon: "check",    tone: "green", stage: 0 },
+    today:      { label: "Delivery Today",   icon: "truck",    tone: "green", stage: 3 },
+    tomorrow:   { label: "Arriving Tomorrow", icon: "calendar", tone: "green", stage: 3 },
+    onway:      { label: "Out for Delivery", icon: "truck",    tone: "blue",  stage: 4, van: true },
+    near:       { label: "Arriving Soon",    icon: "pin",      tone: "blue",  stage: 4, van: true },
+    delivered:  { label: "Delivered",        icon: "party",    tone: "green", stage: 5, done: true },
+  };
+  var TIMELINE = [["confirmed", "Order Confirmed"], ["preparing", "Preparing"], ["quality", "Quality Check"], ["packed", "Packed"], ["out", "Out for Delivery"], ["delivered", "Delivered"]];
+
+  function orderView(st) {
+    var m = FLOW[st.kind];
+    var del = st.delivery || null;
+    var p = deliveryProduct(del, st.sub);
+    var dateIso = del ? del.date : (st.sub && st.sub.nextDeliveryAt);
+    var driver = del && del.driver && del.driver.name ? del.driver.name : null;
+    var title, subtitle;
+    if (st.kind === "confirmed") { title = "Your order has been confirmed."; subtitle = "We're preparing your fresh milk — you'll get delivery updates here."; }
+    else if (st.kind === "today") { title = "Your delivery is scheduled for today."; subtitle = "Arriving before 7 AM" + (driver ? " · with " + driver : "") + "."; }
+    else if (st.kind === "tomorrow") { title = "Arriving tomorrow morning."; subtitle = "Your fresh milk will reach you before 7 AM."; }
+    else if (st.kind === "onway") { title = "Your delivery is on the way! 🚚"; subtitle = (driver ? driver + " is heading to you" : "On the way") + " — arriving before 7 AM."; }
+    else if (st.kind === "near") { title = "Your delivery executive has arrived. 🏠"; subtitle = "Please keep your empty bottles ready for collection."; }
+    else if (st.kind === "delivered") { title = "Delivered successfully! 🎉"; subtitle = "Enjoy your fresh DOODLY milk" + (del && del.deliveredAt ? " · " + timeOf(del.deliveredAt) : "") + "."; }
     return {
-      id: "ORD-" + (sub && sub.startIso ? sub.startIso.replace(/\D/g, "").slice(0, 8) : "DEMO") + "-" + (Math.floor(((Date.now ? Date.now() : 0)) / 1000) % 100000),
-      status: "confirmed",
-      productName: p.name, volume: p.volume, qty: 1, unit: "bottle",
-      isSubscription: !!(sub && sub.days),
-      placedAt: new Date().toISOString(),
-      startIso: startIso, endIso: endIso,
-      deliveryDateLabel: deliveryDateLabel, deliveryWhen: when, slot: slot,
-      etaMinutes: 35, etaSetAt: null,
-      driver: null, subDaysRemaining: daysRemaining,
-      lastDelivered: null, address: "Home",
-      collapsed: false, dismissedAt: null, updatedAt: new Date().toISOString(),
+      kind: st.kind, m: m, title: title, subtitle: subtitle,
+      number: st.order ? st.order.id : (del ? "D-" + String(del.id).slice(-6).toUpperCase() : ""),
+      product: p, slot: SLOT, dateIso: dateIso, dateLabel: dateIso ? relLabel(dateIso) : "—", driver: driver,
+      isSub: !!st.sub, subName: st.sub ? st.sub.planName : null,
+      bottlesOut: del ? del.bottlesOut : null, bottlesIn: del ? del.bottlesIn : null,
+      amount: st.order ? st.order.amount : null,
     };
   }
 
-  // public: the current active order (seeded once, like other demo modules)
-  function current() {
-    var o = read();
-    if (!o) { o = derive(); write(o); }
-    return o;
-  }
-  function active(o) {
-    o = o || read();
-    if (!o) return false;
-    if (meta(o.status).hide) return false;                 // cancelled
-    if (o.dismissedAt === o.status) return false;          // dismissed for this status — reappears when it advances (setStatus clears dismissedAt)
-    return true;
-  }
-
-  /* ============================================================
-     MUTATIONS + EVENTS
-     ============================================================ */
-  function emit() { try { window.dispatchEvent(new CustomEvent("doodly:liveorder", { detail: read() })); } catch (e) {} }
-  function setStatus(status, patch) {
-    var o = current();
-    if (!FLOW[status]) return o;
-    o.status = status;
-    if (FLOW[status].eta && !o.etaSetAt) { o.etaSetAt = new Date().toISOString(); }
-    if (!FLOW[status].eta) { o.etaSetAt = null; }
-    if ((status === "assigned" || status === "outfordelivery" || status === "near") && !o.driver) { o.driver = { name: "Ravi Kumar", mobile: "+919000000010", vehicle: "AP 16 · Milk Van" }; }
-    if (status === "delivered") { o.lastDelivered = new Date().toISOString(); }
-    o.dismissedAt = null;
-    if (patch) for (var k in patch) o[k] = patch[k];
-    o.updatedAt = new Date().toISOString();
-    write(o); emit(); return o;
-  }
-  function advance() {
-    var o = current();
-    var i = ORDER_FLOW.indexOf(o.status);
-    if (i < 0) i = 0;
-    var next = ORDER_FLOW[Math.min(ORDER_FLOW.length - 1, i + 1)];
-    return setStatus(next);
-  }
-  function reset(status) { var o = derive(); write(o); if (status && status !== "confirmed") return setStatus(status); emit(); return o; }
-  function clear() { try { localStorage.removeItem(KEY); } catch (e) {} emit(); }
-
-  // map the Delivery Executive portal (doodly-del-state) onto the customer banner — cross-tab live updates
-  function syncFromDriver() {
-    var o = read(); if (!o || o.status === "delivered" || meta(o.status).hide) return;
-    var st; try { st = JSON.parse(localStorage.getItem("doodly-del-state") || "{}"); } catch (e) { return; }
-    var s1 = st && st.s1; if (!s1 || !s1.status) return;
-    var map = { assigned: "assigned", onway: "outfordelivery", reached: "near", delivered: "delivered" };
-    var target = map[s1.status]; if (!target || target === o.status) return;
-    // only move forward into / within the fulfilment phase
-    if (ORDER_FLOW.indexOf(target) >= ORDER_FLOW.indexOf(o.status)) setStatus(target);
-  }
-
-  /* ============================================================
-     RENDER
-     ============================================================ */
-  var hosts = [];               // every mounted banner host (home + dashboard)
-  var ticker = null;
-
-  function etaRemaining(o) {
-    if (!o.etaSetAt) return o.etaMinutes * 60;
-    var elapsed = (Date.now() - new Date(o.etaSetAt).getTime()) / 1000;
-    return Math.max(0, Math.round(o.etaMinutes * 60 - elapsed));
-  }
-  function mmss(sec) { var m = Math.floor(sec / 60), s = sec % 60; return m + ":" + (s < 10 ? "0" : "") + s; }
-
-  function timelineHTML(o) {
-    var cur = meta(o.status).stage;
+  function timelineHTML(v) {
+    var cur = v.m.stage, allDone = !!v.m.done;
     var pct = TIMELINE.length > 1 ? (cur / (TIMELINE.length - 1)) * 100 : 0;
-    var allDone = !!meta(o.status).done;
     var nodes = TIMELINE.map(function (t, i) {
       var done = i < cur || (i === cur && allDone), on = i === cur && !allDone;
-      return '<div class="lo-step ' + (done ? "done" : "") + ' ' + (on ? "on" : "") + '">' +
-        '<span class="lo-dot">' + (done ? svg("check", 13) : (on ? '<i class="lo-pulse"></i>' : (i + 1))) + '</span>' +
-        '<span class="lo-step-label">' + esc(t[1]) + '</span></div>';
-    }).join('');
-    var showVan = meta(o.status).van && o.status !== "delivered";
-    return '<div class="lo-timeline" style="--p:' + pct + '%">' +
-      '<div class="lo-track"><div class="lo-track-fill" style="width:' + pct + '%"></div>' +
-      (showVan ? '<div class="lo-van" style="left:' + pct + '%">' + svg("truck", 18) + '</div>' : '') + '</div>' +
-      '<div class="lo-steps">' + nodes + '</div></div>';
+      return '<div class="lo-step ' + (done ? "done" : "") + ' ' + (on ? "on" : "") + '"><span class="lo-dot">' + (done ? svg("check", 13) : (on ? '<i class="lo-pulse"></i>' : (i + 1))) + '</span><span class="lo-step-label">' + esc(t[1]) + '</span></div>';
+    }).join("");
+    var showVan = v.m.van && v.kind !== "delivered";
+    return '<div class="lo-timeline" style="--p:' + pct + '%"><div class="lo-track"><div class="lo-track-fill" style="width:' + pct + '%"></div>' + (showVan ? '<div class="lo-van" style="left:' + pct + '%">' + svg("truck", 18) + '</div>' : "") + '</div><div class="lo-steps">' + nodes + '</div></div>';
   }
 
-  function actionsHTML(o) {
-    var m = meta(o.status), btns = [];
-    var b = function (cls, ic, label, attr) { return '<button class="lo-btn ' + (cls || "") + '" ' + (attr || "") + '>' + (ic ? svg(ic, 15) : "") + '<span>' + esc(label) + '</span></button>'; };
-    var a = function (cls, ic, label, href) { return '<a class="lo-btn ' + (cls || "") + '" href="' + href + '">' + (ic ? svg(ic, 15) : "") + '<span>' + esc(label) + '</span></a>'; };
-    if (m.done) {
-      btns.push(b("lo-btn-primary", "star", "Rate Delivery", 'data-act="rate"'));
-      btns.push(b("", "refresh", "Reorder", 'data-act="reorder"'));
-      btns.push(a("", "eye", "View Order", "/account/orders.html"));
-    } else {
-      btns.push(b("lo-btn-primary", "pin", "Track Order", 'data-act="track"'));
-      btns.push(a("", "eye", "View Details", "/account/orders.html"));
-      if (o.driver && (o.status === "outfordelivery" || o.status === "near" || o.status === "assigned")) {
-        btns.push(a("", "phone", "Call Executive", "tel:" + esc(o.driver.mobile)));
-        btns.push(a("", "chat", "WhatsApp", "https://wa.me/" + esc((o.driver.mobile || "").replace(/\D/g, ""))));
-      }
-      if (o.isSubscription && o.status !== "near" && o.status !== "outfordelivery") {
-        btns.push(b("", "pause", "Pause Next Delivery", 'data-act="pause"'));
-      }
-      btns.push(a("lo-btn-quiet", "help", "Contact Support", "/account/support.html"));
-    }
-    return '<div class="lo-actions">' + btns.join("") + '</div>';
-  }
-
-  function subCardHTML(o) {
-    if (!o.isSubscription) return "";
-    return '<div class="lo-subcard">' +
-      '<div class="lo-subcard-h">' + svg("bottle", 15) + ' Tomorrow\'s Delivery</div>' +
-      '<div class="lo-subcard-grid">' +
-        '<div><span>Product</span><b>' + esc(o.productName) + '</b></div>' +
-        '<div><span>Quantity</span><b>' + esc(o.volume) + ' · ' + o.qty + ' ' + esc(o.unit) + (o.qty > 1 ? "s" : "") + '</b></div>' +
-        '<div><span>Delivery time</span><b>' + esc(o.slot) + '</b></div>' +
-        (o.driver ? '<div><span>Driver</span><b>' + esc(o.driver.name) + '</b></div>' : '') +
-        (o.subDaysRemaining != null ? '<div><span>Days remaining</span><b>' + o.subDaysRemaining + ' days</b></div>' : '') +
-      '</div></div>';
-  }
-
-  // extra customer-dashboard detail strip
-  function dashDetailsHTML(o) {
+  function detailsHTML(v) {
     var rows = [
-      ["Next delivery date", o.deliveryDateLabel || "—"],
-      ["Delivery slot", o.slot || "—"],
-      (o.isSubscription ? ["Subscription days left", (o.subDaysRemaining != null ? o.subDaysRemaining + " days" : "—")] : null),
-      ["Delivery executive", o.driver ? o.driver.name : "To be assigned"],
-      ["Last delivered", o.lastDelivered ? new Date(o.lastDelivered).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "—"],
+      ["Next delivery", v.dateLabel + (v.dateIso ? " · " + fmtLong(v.dateIso).split(", ")[1] : "")],
+      ["Delivery slot", v.slot],
+      v.product.label ? ["Product", v.product.label + " " + v.product.product + (v.product.qty > 1 ? " · " + v.product.qty : "")] : ["Product", v.product.product],
+      ["Delivery executive", v.driver || "To be assigned"],
+      v.number ? ["Order", v.number] : null,
+      v.isSub ? ["Subscription", v.subName] : null,
+      (v.amount != null ? ["Paid", "₹" + v.amount] : null),
     ].filter(Boolean);
     return '<div class="lo-dashgrid">' + rows.map(function (r) { return '<div class="lo-dashcell"><span>' + esc(r[0]) + '</span><b>' + esc(r[1]) + '</b></div>'; }).join("") + '</div>';
   }
 
-  function isAdmin() { var r = RBAC() && RBAC().activeRole(); return r === "admin" || r === "super_admin"; }
-
-  function bannerHTML(o, opts) {
-    var m = meta(o.status), tone = m.tone || "green";
-    var etaChip = "";
-    if (m.eta) {
-      var rem = etaRemaining(o);
-      etaChip = '<span class="lo-eta ' + (m.countdown ? "count" : "") + '">' + svg("clock", 14) + ' ' + (m.countdown ? mmss(rem) : ("~" + Math.ceil(rem / 60) + " min")) + '</span>';
+  function actionsHTML(v) {
+    var a = function (cls, ic, label, href) { return '<a class="lo-btn ' + (cls || "") + '" href="' + href + '">' + (ic ? svg(ic, 15) : "") + '<span>' + esc(label) + '</span></a>'; };
+    var b = function (cls, ic, label, act) { return '<button class="lo-btn ' + (cls || "") + '" data-act="' + act + '">' + (ic ? svg(ic, 15) : "") + '<span>' + esc(label) + '</span></button>'; };
+    var btns = [];
+    if (v.kind === "delivered") {
+      btns.push(b("lo-btn-primary", "star", "Rate Delivery", "rate"));
+      btns.push(a("", "refresh", "Order Again", "/subscriptions.html"));
+      if (v.bottlesOut != null && v.bottlesIn != null && v.bottlesOut > v.bottlesIn) btns.push(a("", "bottle", "Return Bottles", "/bottle-return.html"));
+      btns.push(a("", "eye", "View Order", "/account/orders.html"));
+    } else if (v.kind === "onway" || v.kind === "near") {
+      btns.push(a("lo-btn-primary", "pin", "Track Delivery", "/account/tracking.html"));
+      btns.push(a("", "eye", "View Order", "/account/orders.html"));
+    } else if (v.kind === "confirmed") {
+      btns.push(a("lo-btn-primary", "pin", "Track Order", "/account/tracking.html"));
+      btns.push(a("", "receipt", "View Invoice", "/account/invoices.html"));
+      btns.push(a("", "eye", "Continue Shopping", "/products.html"));
+    } else {   // today / tomorrow
+      btns.push(a("lo-btn-primary", "eye", "View Order", "/account/orders.html"));
+      btns.push(a("", "pin", "Track Delivery", "/account/tracking.html"));
     }
-    var collapsed = !!o.collapsed;
-    var head = '<div class="lo-head">' +
-      '<span class="lo-ic tone-' + tone + (m.done ? " lo-burst" : "") + '">' + svg(m.icon, 20) + '</span>' +
-      '<div class="lo-headtxt"><div class="lo-title">' + esc(val(m.title, o)) + '</div>' +
-      '<div class="lo-sub">' + esc(val(m.sub, o)) + '</div></div>' +
-      etaChip +
-      '<span class="lo-statusbadge badge ' + tone + '">' + esc(m.label) + '</span>' +
-      '<button class="lo-collapse" data-act="collapse" aria-label="' + (collapsed ? "Expand" : "Collapse") + '">' + svg("chevron", 18) + '</button>' +
-      '<button class="lo-dismiss" data-act="dismiss" aria-label="Dismiss">' + svg("x", 16) + '</button></div>';
-
-    var body = collapsed ? "" : '<div class="lo-body">' +
-      (m.terminal || m.tone === "red" ? "" : timelineHTML(o)) +
-      (opts && opts.dash ? dashDetailsHTML(o) : "") +
-      subCardHTML(o) +
-      actionsHTML(o) +
-      (isAdmin() ? '<div class="lo-sim"><span>Demo / admin:</span><button class="lo-simbtn" data-act="advance">Advance status ▸</button><button class="lo-simbtn" data-act="resetdemo">Reset</button><small>Status changes from Admin & the Delivery app reflect here automatically.</small></div>' : "") +
-      '</div>';
-
-    var animate = !opts || opts.animate;
-    return '<div class="lo-banner ' + (animate ? "reveal-lo " : "") + 'tone-' + tone + (collapsed ? " is-collapsed" : "") + '" data-status="' + esc(o.status) + '">' + head + body + '</div>';
+    btns.push(a("lo-btn-quiet", "help", "Contact Support", "/account/support.html"));
+    return '<div class="lo-actions">' + btns.join("") + "</div>";
   }
 
-  function paintHost(h) {
-    var o = current();                 // seeds a demo active order on first load (like other modules)
-    if (!active(o)) { h.el.innerHTML = ""; h.el.classList.remove("lo-host-on"); h.painted = false; return; }
-    h.el.classList.add("lo-host-on");
-    var animate = !h.painted || h.lastStatus !== o.status;   // slide only on first show + real status changes
-    h.painted = true; h.lastStatus = o.status;
-    h.el.innerHTML = bannerHTML(o, { dash: h.dash, animate: animate });
-    wireBanner(h.el, o);
-  }
-  function paintAll() { hosts = hosts.filter(function (h) { return document.body.contains(h.el); }); hosts.forEach(paintHost); manageTicker(); }
-
-  function wireBanner(el, o) {
-    el.querySelectorAll("[data-act]").forEach(function (n) {
-      n.addEventListener("click", function (e) {
-        var act = n.dataset.act;
-        if (act === "collapse") { o.collapsed = !o.collapsed; write(o); paintAll(); return; }
-        if (act === "dismiss") { o.dismissedAt = o.status; write(o); paintAll(); return; }
-        if (act === "advance") { advance(); return; }
-        if (act === "resetdemo") { reset("confirmed"); return; }
-        if (act === "track") { e.preventDefault(); var b = el.querySelector(".lo-banner"); el.scrollIntoView({ behavior: "smooth", block: "start" }); toast("Live tracking is active — watch the timeline update."); return; }
-        if (act === "pause") {
-          if (window.DOODLY_SCHEDULE && DOODLY_SCHEDULE.pauseNext) { try { DOODLY_SCHEDULE.pauseNext(); } catch (e2) {} }
-          try { localStorage.setItem("doodly-sub-paused", "1"); } catch (e3) {}
-          toast("Your next delivery is paused. Resume anytime from My Subscription.");
-          return;
-        }
-        if (act === "rate") { toast("Thanks! ⭐ Rating saved — we're glad you enjoyed it."); o.dismissedAt = "delivered"; write(o); paintAll(); return; }
-        if (act === "reorder") { toast("Reordering your last delivery…"); reset("confirmed"); return; }
-      });
-    });
-  }
-  function toast(m) { if (window.DOODLY_PINCODE && DOODLY_PINCODE.toast) DOODLY_PINCODE.toast(m); }
-
-  // run the per-second ticker only while an ETA/countdown status is live
-  function manageTicker() {
-    var o = read(), need = o && active(o) && meta(o.status).eta && !o.collapsed;
-    if (need && !ticker) { ticker = setInterval(function () { hosts.forEach(function (h) { var c = h.el.querySelector(".lo-eta"); if (c) { var m = meta(read().status); var rem = etaRemaining(read()); c.innerHTML = svg("clock", 14) + ' ' + (m.countdown ? mmss(rem) : ("~" + Math.ceil(rem / 60) + " min")); } }); }, 1000); }
-    else if (!need && ticker) { clearInterval(ticker); ticker = null; }
+  function orderBanner(st, collapsed) {
+    var v = orderView(st), tone = v.m.tone;
+    var head = '<div class="lo-head"><span class="lo-ic tone-' + tone + (v.m.done ? " lo-burst" : "") + '">' + svg(v.m.icon, 20) + '</span>' +
+      '<div class="lo-headtxt"><div class="lo-title">' + esc(v.title) + '</div><div class="lo-sub">' + esc(v.subtitle) + '</div></div>' +
+      '<span class="lo-statusbadge badge ' + tone + '">' + esc(v.m.label) + '</span>' +
+      '<button class="lo-collapse" data-act="collapse" aria-label="' + (collapsed ? "Expand" : "Collapse") + '">' + svg("chevron", 18) + '</button></div>';
+    var body = collapsed ? "" : '<div class="lo-body">' + timelineHTML(v) + detailsHTML(v) + actionsHTML(v) + '</div>';
+    return '<div class="lo-banner reveal-lo tone-' + tone + (collapsed ? " is-collapsed" : "") + '" data-status="' + esc(st.kind) + '">' + head + body + '</div>';
   }
 
   /* ============================================================
-     ATTACH / MOUNT  (called from layout.js)
+     HERO STATES (welcome / subscription / checkout) — no timeline
      ============================================================ */
-  function mount(el, dash) {
-    if (!el) return;
-    var h = { el: el, dash: !!dash };
-    if (hosts.indexOf(h) < 0) hosts.push(h);
-    paintHost(h); manageTicker();
+  function heroBanner(st) {
+    if (st.kind === "welcome") {
+      return '<div class="lo-banner lo-hero reveal-lo tone-green" data-status="welcome">' +
+        '<div class="lo-hero-art" aria-hidden="true"><span class="lo-milkdrop d1"></span><span class="lo-milkdrop d2"></span><span class="lo-milkdrop d3"></span><span class="lo-hero-bottle">' + svg("bottle", 34) + '</span></div>' +
+        '<div class="lo-hero-body"><span class="lo-hero-eyebrow">Welcome to DOODLY</span>' +
+        '<h2 class="lo-hero-title">Fresh dairy is just a few clicks away, ' + esc(firstName()) + '.</h2>' +
+        '<p class="lo-hero-sub">Enjoy farm-fresh A2 Buffalo Milk in returnable glass, delivered to your doorstep before 7 AM.</p>' +
+        '<div class="lo-actions"><a class="lo-btn lo-btn-primary lo-btn-lg" href="/subscriptions.html">' + svg("bottle", 16) + '<span>Book Now</span></a>' +
+        '<a class="lo-btn" href="/products.html">' + svg("eye", 15) + '<span>Explore Products</span></a>' +
+        '<a class="lo-btn" href="/subscriptions.html">' + svg("calendar", 15) + '<span>View Plans</span></a></div></div></div>';
+    }
+    if (st.kind === "checkout") {
+      return '<div class="lo-banner lo-hero reveal-lo tone-amber" data-status="checkout">' +
+        '<div class="lo-hero-art" aria-hidden="true"><span class="lo-hero-bottle">' + svg("cart", 30) + '</span></div>' +
+        '<div class="lo-hero-body"><span class="lo-hero-eyebrow">Almost there</span>' +
+        '<h2 class="lo-hero-title">Complete your order</h2>' +
+        '<p class="lo-hero-sub">You have ' + st.n + ' item' + (st.n > 1 ? "s" : "") + ' waiting in your cart. Finish checkout to get fresh milk delivered.</p>' +
+        '<div class="lo-actions"><a class="lo-btn lo-btn-primary lo-btn-lg" href="/checkout.html">' + svg("cart", 16) + '<span>Continue Checkout →</span></a>' +
+        '<a class="lo-btn" href="/products.html">' + svg("eye", 15) + '<span>Keep Shopping</span></a></div></div></div>';
+    }
+    // subscription
+    var next = st.nextIso ? relLabel(st.nextIso) : "soon";
+    var nextFull = st.nextIso ? fmtLong(st.nextIso) : "";
+    var it = st.sub && st.sub.items && st.sub.items[0];
+    return '<div class="lo-banner lo-hero reveal-lo tone-green" data-status="subscription">' +
+      '<div class="lo-hero-art" aria-hidden="true"><span class="lo-hero-bottle">' + svg("refresh", 30) + '</span></div>' +
+      '<div class="lo-hero-body"><span class="lo-hero-eyebrow badge green">Subscription Active</span>' +
+      '<h2 class="lo-hero-title">' + esc(st.sub.planName) + '</h2>' +
+      '<p class="lo-hero-sub">Next delivery <b>' + esc(next) + '</b>' + (nextFull ? ' · ' + esc(nextFull) : "") + ' · before 7 AM' + (it ? ' · ' + esc(it.label + " " + (it.product || "milk")) : "") + '.</p>' +
+      '<div class="lo-actions"><a class="lo-btn lo-btn-primary" href="/account/subscription.html">' + svg("refresh", 15) + '<span>Manage Subscription</span></a>' +
+      '<a class="lo-btn" href="/account/subscription.html">' + svg("pause", 15) + '<span>Skip / Pause</span></a>' +
+      '<a class="lo-btn" href="/account/deliveries.html">' + svg("truck", 15) + '<span>View Deliveries</span></a></div></div></div>';
   }
 
+  /* ============================================================
+     PAINT + MOUNT
+     ============================================================ */
+  var hosts = [];
+  var ORDER_KINDS = { confirmed: 1, today: 1, tomorrow: 1, onway: 1, near: 1, delivered: 1 };
+  function collapseKey() { var u = me(); return "doodly-lo-collapsed-" + (u ? u.id : "anon"); }
+  function isCollapsed() { try { return localStorage.getItem(collapseKey()) === "1"; } catch (e) { return false; } }
+  function setCollapsed(v) { try { localStorage.setItem(collapseKey(), v ? "1" : "0"); } catch (e) {} }
+
+  function paintHost(h) {
+    var st = resolveState();
+    if (!st) { h.el.innerHTML = ""; h.el.classList.remove("lo-host-on"); return; }
+    h.el.classList.add("lo-host-on");
+    h.el.innerHTML = ORDER_KINDS[st.kind] ? orderBanner(st, isCollapsed()) : heroBanner(st);
+    wireBanner(h.el, st);
+  }
+  function paintAll() { hosts = hosts.filter(function (h) { return document.body.contains(h.el); }); hosts.forEach(paintHost); }
+
+  function wireBanner(el, st) {
+    el.querySelectorAll("[data-act]").forEach(function (n) {
+      n.addEventListener("click", function () {
+        var act = n.dataset.act;
+        if (act === "collapse") { setCollapsed(!isCollapsed()); paintAll(); return; }
+        if (act === "rate") { toast("Thanks! ⭐ Your rating helps us keep every morning fresh."); return; }
+      });
+    });
+  }
+
+  function mount(el) {
+    if (!el) return;
+    var h = { el: el };
+    hosts.push(h);
+    paintHost(h);
+  }
   function attach() {
     var route = (document.body.dataset.route || "");
-    var onHome = route === "home";
-    var onAccount = route.indexOf("account/") === 0 || route === "account";
-    if (!onHome && !onAccount) return;
-    if (document.getElementById("liveOrderBar")) return;        // already attached this render
-    var anchor = onAccount ? document.querySelector(".main-col .content") : document.getElementById("main");
+    var onAccountHome = route === "account/dashboard";
+    if (!onAccountHome) return;                                   // the customer home = the account dashboard
+    if (!me()) return;                                           // real customers only
+    if (document.getElementById("liveOrderBar")) return;
+    var anchor = document.querySelector(".main-col .content");
     if (!anchor) return;
     var host = document.createElement("div");
     host.id = "liveOrderBar"; host.className = "lo-host";
     anchor.insertBefore(host, anchor.firstChild);
-    mount(host, onAccount);
+    mount(host);
   }
 
-  /* ---------- wire live signals once ---------- */
-  (function bind() {
-    if (typeof window === "undefined") return;
-    window.addEventListener("doodly:liveorder", paintAll);
-    window.addEventListener("storage", function (e) {
-      if (!e) return;
-      if (e.key === "doodly-del-state") { syncFromDriver(); paintAll(); }
-      else if (e.key === KEY) { paintAll(); }
-    });
-    // light poll: pick up admin/delivery changes even without a storage event (same tab), keep ETA fresh
-    setInterval(function () { if (hosts.length) { syncFromDriver(); manageTicker(); } }, 5000);
-  })();
+  // repaint if the account data re-hydrates later (custom event kept for compatibility)
+  (function bind() { if (typeof window === "undefined") return; window.addEventListener("doodly:liveorder", paintAll); })();
 
-  return {
-    attach: attach, mount: mount, current: current, active: active,
-    setStatus: setStatus, advance: advance, reset: reset, clear: clear,
-    syncFromDriver: syncFromDriver, FLOW: FLOW, ORDER_FLOW: ORDER_FLOW, TIMELINE: TIMELINE,
-  };
+  // compatibility shim for global search (search.js) — the current order summary, or null
+  function current() {
+    var st = resolveState();
+    if (!st || !ORDER_KINDS[st.kind]) return null;
+    var v = orderView(st);
+    return { id: v.number, code: v.number, status: v.m.label, productName: (v.product.label ? v.product.label + " " : "") + v.product.product };
+  }
+
+  return { attach: attach, mount: mount, resolveState: resolveState, paintAll: paintAll, current: current };
 })();

@@ -150,8 +150,28 @@
 [data-theme="dark"] .lo-banner { background: radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--leaf, #1FAE66) 14%, transparent), transparent 55%), var(--surface); }
 [data-theme="dark"] .lo-van { background: var(--surface); }
 
+/* ---------- hero states (welcome / subscription / checkout) ---------- */
+.lo-hero { display: flex; align-items: center; gap: clamp(16px, 3vw, 32px); padding: clamp(20px, 3vw, 30px); flex-wrap: wrap; }
+.lo-hero-art { position: relative; width: 96px; height: 96px; flex-shrink: 0; display: grid; place-items: center; border-radius: 22px;
+  background: radial-gradient(120% 120% at 30% 20%, color-mix(in srgb, var(--leaf, #1FAE66) 22%, transparent), transparent 60%), var(--surface-2, #f3faf5);
+  overflow: hidden; }
+.lo-hero-bottle { color: var(--leaf-600, #178a52); animation: loFloat 3.6s ease-in-out infinite; }
+@keyframes loFloat { 0%,100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-7px) rotate(3deg); } }
+.lo-milkdrop { position: absolute; width: 8px; height: 8px; border-radius: 50% 50% 50% 0; background: color-mix(in srgb, var(--leaf, #1FAE66) 55%, #fff); transform: rotate(45deg); opacity: 0; }
+.lo-milkdrop.d1 { left: 22px; top: -6px; animation: loDrop 2.8s ease-in 0s infinite; }
+.lo-milkdrop.d2 { left: 48px; top: -6px; animation: loDrop 2.8s ease-in .9s infinite; }
+.lo-milkdrop.d3 { left: 68px; top: -6px; animation: loDrop 2.8s ease-in 1.7s infinite; }
+@keyframes loDrop { 0% { transform: translateY(0) rotate(45deg); opacity: 0; } 15% { opacity: .9; } 80% { opacity: .5; } 100% { transform: translateY(96px) rotate(45deg); opacity: 0; } }
+.lo-hero-body { flex: 1; min-width: 240px; }
+.lo-hero-eyebrow { display: inline-block; font-size: .74rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--leaf-600, #178a52); margin-bottom: 6px; }
+.lo-hero-title { font-family: 'Fraunces', serif; color: var(--forest, #0F3D2E); font-size: clamp(1.2rem, 2.4vw, 1.6rem); line-height: 1.2; margin: 0 0 6px; }
+.lo-hero-sub { color: var(--ink-2, #33403b); font-size: .92rem; margin: 0 0 14px; max-width: 60ch; }
+.lo-hero .lo-actions { margin-top: 0; }
+.lo-btn-lg { padding: .7rem 1.2rem; font-size: .95rem; }
+
 /* reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .lo-banner.reveal-lo, .lo-ic, .lo-van, .lo-pulse, .lo-burst, .lo-body { animation: none !important; }
+  .lo-banner.reveal-lo, .lo-ic, .lo-van, .lo-pulse, .lo-burst, .lo-body, .lo-hero-bottle, .lo-milkdrop { animation: none !important; }
+  .lo-milkdrop { display: none; }
   .lo-track-fill, .lo-van, .lo-btn { transition: none !important; }
 }
