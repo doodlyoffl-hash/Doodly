@@ -287,7 +287,9 @@ window.DOODLY_ACCOUNT = (function () {
     }).catch(function (e) { host.innerHTML = '<div class="notice warn">Couldn\'t load addresses: ' + esc(e.message || "offline") + "</div>"; });
   }
   function openAddAddress(host) {
+    var geo = { lat: null, lng: null };
     modal("Add address",
+      '<div class="dac-f"><span>Pin your exact doorstep</span><div id="na-map" style="margin-top:6px"></div></div>' +
       '<label class="dac-f"><span>Label</span><input class="input" id="na-label" placeholder="Home / Office" maxlength="30"></label>' +
       '<label class="dac-f"><span>Address line</span><input class="input" id="na-line1" placeholder="House, street, area" maxlength="120"></label>' +
       '<div class="dac-row"><label class="dac-f"><span>City</span><input class="input" id="na-city" placeholder="Vijayawada" maxlength="60"></label>' +
@@ -296,14 +298,28 @@ window.DOODLY_ACCOUNT = (function () {
       '<label style="display:flex;gap:8px;align-items:center;font-size:.9rem;margin:4px 0 12px"><input type="checkbox" id="na-def"> Make this my default</label>' +
       '<div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn btn-ghost sm" id="na-cancel">Cancel</button><button class="btn btn-primary sm" id="na-save">Save address</button></div>',
       function (ov, close) {
+        // pin picker — drop a pin to capture exact GPS + auto-fill pincode/city
+        try {
+          if (window.DOODLY_MAPS && DOODLY_MAPS.mountPicker) {
+            DOODLY_MAPS.mountPicker(ov.querySelector("#na-map"), { height: "220px", onChange: function (r) {
+              geo.lat = r.lat; geo.lng = r.lng;
+              var pin = ov.querySelector("#na-pin"), city = ov.querySelector("#na-city"), line1 = ov.querySelector("#na-line1");
+              if (r.pincode && pin && !pin.value) pin.value = r.pincode;
+              if (r.city && city && !city.value) city.value = r.city;
+              if (r.area && line1 && !line1.value) line1.value = r.area;
+            } });
+          }
+        } catch (e) {}
         ov.querySelector("#na-cancel").addEventListener("click", close);
         ov.querySelector("#na-save").addEventListener("click", function () {
           var v = function (id) { return (ov.querySelector(id).value || "").trim(); };
-          API().post("/api/addresses", {
+          var body = {
             label: v("#na-label") || "Home", line1: v("#na-line1"), city: v("#na-city"),
             pincode: v("#na-pin"), deliveryNote: v("#na-note") || undefined,
             isDefault: ov.querySelector("#na-def").checked,
-          }).then(function () { toast("Address saved ✓"); close(); loadAddresses(host); })
+          };
+          if (geo.lat != null && geo.lng != null) { body.lat = geo.lat; body.lng = geo.lng; }
+          API().post("/api/addresses", body).then(function () { toast("Address saved ✓"); close(); loadAddresses(host); })
             .catch(function (e) { toast(e.message || "Check the address fields."); });
         });
       });
@@ -426,6 +442,19 @@ window.DOODLY_ACCOUNT = (function () {
         if (dv.bottlesOut != null) rows.push(["Bottles", String(dv.bottlesOut || 1) + " out · " + String(dv.bottlesIn || 0) + " collected"]);
         dl.innerHTML = rows.map(function (r) { return '<div class="row"><span class="k">' + esc(r[0]) + '</span><span class="v">' + esc(r[1]) + "</span></div>"; }).join("");
       }
+    }
+
+    // live delivery map — show the destination on a real Google map (falls back
+    // to the SVG map with no key; only shows once the address has a dropped pin)
+    var mapCard = document.querySelector(".content .media-card");
+    if (mapCard && window.DOODLY_MAPS && DOODLY_MAPS.miniMap) {
+      API().get("/api/addresses").then(function (r) {
+        var list = (r && r.addresses) || [];
+        var a = list.filter(function (x) { return x.lat != null && x.lng != null; }).sort(function (x, y) { return (y.isDefault ? 1 : 0) - (x.isDefault ? 1 : 0); })[0];
+        if (!a) return;   // no geocoded address yet → keep the placeholder
+        mapCard.style.padding = "0"; mapCard.style.minHeight = "220px"; mapCard.innerHTML = '<div id="trkMap" style="width:100%;height:220px;border-radius:14px;overflow:hidden"></div>';
+        DOODLY_MAPS.miniMap(document.getElementById("trkMap"), { lat: a.lat, lng: a.lng, label: a.label || "Delivery address", zoom: 16 });
+      }).catch(function () {});
     }
   }
 

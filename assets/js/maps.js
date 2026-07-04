@@ -247,8 +247,18 @@ window.DOODLY_MAPS = (function () {
     if (!host) return;
     o = o || {}; const lat = o.lat || BASE.lat, lng = o.lng || BASE.lng, p = toXY(lat, lng);
     host.classList.add("mp-mini");
-    host.innerHTML = `<svg viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid slice" aria-label="${esc(o.label || "Location")}">${mapBg()}<g transform="translate(${p.x},${p.y})">${PINSVG("mp-pin-main")}</g></svg>
-      <a class="mp-mini-open" href="${mapsUrl(lat, lng)}" target="_blank" rel="noopener" aria-label="Open in Google Maps">${svgPin(13)}</a>`;
+    function svgVariant() {
+      host.innerHTML = `<svg viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid slice" aria-label="${esc(o.label || "Location")}">${mapBg()}<g transform="translate(${p.x},${p.y})">${PINSVG("mp-pin-main")}</g></svg>
+        <a class="mp-mini-open" href="${mapsUrl(lat, lng)}" target="_blank" rel="noopener" aria-label="Open in Google Maps">${svgPin(13)}</a>`;
+    }
+    function realVariant(gm) {
+      host.innerHTML = `<div class="mp-gmap" style="width:100%;height:100%"></div><a class="mp-mini-open" href="${mapsUrl(lat, lng)}" target="_blank" rel="noopener" aria-label="Open in Google Maps">${svgPin(13)}</a>`;
+      const map = new gm.Map(host.querySelector(".mp-gmap"), { center: { lat, lng }, zoom: o.zoom || 15, disableDefaultUI: true, gestureHandling: "none", clickableIcons: false, keyboardShortcuts: false });
+      new gm.Marker({ position: { lat, lng }, map });
+    }
+    if (window.google && window.google.maps) return realVariant(window.google.maps);
+    svgVariant();
+    ensureGoogle().then((gm) => { if (gm && document.body.contains(host)) realVariant(gm); });
   }
 
   /* ============================================================
@@ -259,20 +269,42 @@ window.DOODLY_MAPS = (function () {
     if (!host) return;
     o = o || {}; const stops = o.stops || [];
     const cur = locs()[0] || BASE;                 // executive "current location"
-    const pts = stops.map((s) => toXY(s.lat, s.lng));
-    const cp = toXY(cur.lat, cur.lng);
     let dist = 0, prev = cur; stops.forEach((s) => { dist += distanceKm(prev, s); prev = s; });
     const eta = Math.round(dist / 18 * 60 + stops.length * 3);   // ~18km/h city + 3min/stop
-    const line = `M${cp.x},${cp.y} ` + pts.map((p) => `L${p.x},${p.y}`).join(" ");
-    host.classList.add("mp-route");
-    host.innerHTML = `
-      <svg viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid slice" aria-label="Delivery route">${mapBg()}
-        <path d="${line}" class="mp-route-line"/>
-        <g class="mp-cur" transform="translate(${cp.x},${cp.y})"><circle r="11" class="mp-cur-halo"/><circle r="6" class="mp-cur-dot"/></g>
-        ${stops.map((s, i) => { const p = pts[i]; const done = s.status === "delivered" || s.status === "completed"; return `<g class="mp-stop ${done ? "done" : ""}" data-i="${i}" transform="translate(${p.x},${p.y})"><circle r="15" class="mp-stop-c"/><text y="5" text-anchor="middle" class="mp-stop-n">${i + 1}</text></g>`; }).join("")}
-      </svg>
-      <div class="mp-route-meta"><span>${svgPin(13)} ${stops.length} stops</span><span>${dist.toFixed(1)} km</span><span>~${eta} min</span></div>`;
-    if (o.onStop) host.querySelectorAll(".mp-stop").forEach((g) => g.addEventListener("click", () => o.onStop(Number(g.dataset.i))));
+
+    function svgVariant() {
+      const pts = stops.map((s) => toXY(s.lat, s.lng)), cp = toXY(cur.lat, cur.lng);
+      const line = `M${cp.x},${cp.y} ` + pts.map((p) => `L${p.x},${p.y}`).join(" ");
+      host.classList.add("mp-route");
+      host.innerHTML = `
+        <svg viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid slice" aria-label="Delivery route">${mapBg()}
+          <path d="${line}" class="mp-route-line"/>
+          <g class="mp-cur" transform="translate(${cp.x},${cp.y})"><circle r="11" class="mp-cur-halo"/><circle r="6" class="mp-cur-dot"/></g>
+          ${stops.map((s, i) => { const p = pts[i]; const done = s.status === "delivered" || s.status === "completed"; return `<g class="mp-stop ${done ? "done" : ""}" data-i="${i}" transform="translate(${p.x},${p.y})"><circle r="15" class="mp-stop-c"/><text y="5" text-anchor="middle" class="mp-stop-n">${i + 1}</text></g>`; }).join("")}
+        </svg>
+        <div class="mp-route-meta"><span>${svgPin(13)} ${stops.length} stops</span><span>${dist.toFixed(1)} km</span><span>~${eta} min</span></div>`;
+      if (o.onStop) host.querySelectorAll(".mp-stop").forEach((g) => g.addEventListener("click", () => o.onStop(Number(g.dataset.i))));
+    }
+    function realVariant(gm) {
+      host.classList.add("mp-route");
+      host.innerHTML = `<div class="mp-gmap" style="width:100%;height:280px"></div><div class="mp-route-meta"><span>${svgPin(13)} ${stops.length} stops</span><span>${dist.toFixed(1)} km</span><span>~${eta} min</span></div>`;
+      const map = new gm.Map(host.querySelector(".mp-gmap"), { disableDefaultUI: true, zoomControl: true, clickableIcons: false, gestureHandling: "greedy" });
+      const bounds = new gm.LatLngBounds();
+      const path = [{ lat: cur.lat, lng: cur.lng }];
+      new gm.Marker({ position: { lat: cur.lat, lng: cur.lng }, map, label: "•", title: "Current location" });
+      stops.forEach((s, i) => {
+        const ll = { lat: s.lat, lng: s.lng };
+        const done = s.status === "delivered" || s.status === "completed";
+        const m = new gm.Marker({ position: ll, map, label: String(i + 1), title: s.name || ("Stop " + (i + 1)), opacity: done ? 0.5 : 1 });
+        if (o.onStop) m.addListener("click", () => o.onStop(i));
+        path.push(ll); bounds.extend(ll);
+      });
+      bounds.extend({ lat: cur.lat, lng: cur.lng });
+      new gm.Polyline({ path, map, strokeColor: "#1FAE66", strokeOpacity: 0.9, strokeWeight: 3 });
+      if (stops.length) map.fitBounds(bounds, 40); else { map.setCenter({ lat: cur.lat, lng: cur.lng }); map.setZoom(13); }
+    }
+    if (window.google && window.google.maps) realVariant(window.google.maps);
+    else { svgVariant(); ensureGoogle().then((gm) => { if (gm && document.body.contains(host)) realVariant(gm); }); }
     return { distance: dist, eta };
   }
 
