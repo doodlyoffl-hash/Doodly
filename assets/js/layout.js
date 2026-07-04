@@ -4968,8 +4968,11 @@
     if (window.DOODLY_ASSIGN) { const am = $("#assignMount"); if (am) window.DOODLY_ASSIGN.mountAdmin(am); }
     // GST Management (Settings → GST Management) — Super Admin manages, others view-only
     if (window.DOODLY_GST) { const gm = $("#gstAdminMount"); if (gm) window.DOODLY_GST.mountAdmin(gm); }
-    // Referral & rewards (customer dashboard + admin management)
-    if (window.DOODLY_REFERRAL) { const rc = $("#referralPanelMount"); if (rc) window.DOODLY_REFERRAL.mountCustomer(rc); const ra2 = $("#referralAdminMount"); if (ra2) window.DOODLY_REFERRAL.mountAdmin(ra2); }
+    // Referral & rewards (customer dashboard + admin management). For a REAL
+    // signed-in customer the backend panel (DOODLY_ACCOUNT.wireReferrals) owns
+    // #referralPanelMount — skip the localStorage demo mount so it isn't clobbered.
+    const realCust = (() => { try { const u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null"); return !!(u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")); } catch (e) { return false; } })();
+    if (window.DOODLY_REFERRAL) { const rc = $("#referralPanelMount"); if (rc && !realCust) window.DOODLY_REFERRAL.mountCustomer(rc); const ra2 = $("#referralAdminMount"); if (ra2) window.DOODLY_REFERRAL.mountAdmin(ra2); }
     // Premium B2B business statement
     if (window.DOODLY_INVOICE) { const ibb = $("#invoiceB2BMount"); if (ibb) window.DOODLY_INVOICE.mountB2B(ibb); }
     // session: configurable idle auto-logout + any sign-out controls

@@ -473,6 +473,71 @@ window.DOODLY_ACCOUNT = (function () {
     }, true);
   }
 
+  /* ============================================================ REFERRALS
+     Real referral programme for the signed-in customer (code, share link,
+     friends who joined, wallet earned) from /api/account/referrals — replaces
+     the localStorage demo panel. */
+  function wireReferrals() {
+    if ((document.body.dataset.route || "") !== "account/referrals" || !me()) return;
+    var host = document.getElementById("referralPanelMount"); if (!host) return;
+    host.innerHTML = '<div class="panel panel-pad"><div class="sk-line skeleton w40"></div><div class="sk-line skeleton"></div></div>';
+    API().get("/api/account/referrals").then(function (r) {
+      var d = r.referral || {};
+      var url = d.shareUrl || ("/signup?ref=" + (d.code || ""));
+      var msg = encodeURIComponent("Join me on DOODLY for fresh A2 buffalo milk! Use my code " + (d.code || "") + " when you subscribe: " + url);
+      var friends = d.friends || [];
+      host.innerHTML =
+        '<div class="rf"><div class="rf-top">' +
+          '<div class="rf-codecard">' +
+            '<div class="rf-codelbl">Your referral code</div><div class="rf-code">' + esc(d.code || "—") + '</div>' +
+            '<div class="rf-link"><input id="acRfLink" readonly value="' + esc(url) + '"><button class="btn btn-ghost sm" id="acRfCopyLink">' + icon("copy", 15) + ' Copy link</button></div>' +
+            '<div class="rf-share">' +
+              '<button class="rf-sbtn" id="acRfCopyCode">' + icon("copy", 15) + ' Copy code</button>' +
+              '<a class="rf-sbtn wa" href="https://wa.me/?text=' + msg + '" target="_blank" rel="noopener">' + icon("chat", 15) + ' WhatsApp</a>' +
+              '<a class="rf-sbtn" href="sms:?&body=' + msg + '">' + icon("msg", 15) + ' SMS</a>' +
+              '<a class="rf-sbtn" href="mailto:?subject=' + encodeURIComponent("Try DOODLY fresh milk") + '&body=' + msg + '">' + icon("mail", 15) + ' Email</a>' +
+            '</div>' +
+            '<p class="rf-policy">Earn ₹100 when a friend subscribes to a 30-day or longer plan. <a class="link" href="/referral-policy.html">Terms apply</a>.</p>' +
+          '</div>' +
+          '<div class="rf-stats">' +
+            '<div class="rf-stat"><div class="rf-stat-v">' + (d.referredCount || 0) + '</div><div class="rf-stat-l">Friends joined</div></div>' +
+            '<div class="rf-stat green"><div class="rf-stat-v">' + inr(d.earningsPaise || 0) + '</div><div class="rf-stat-l">Wallet earned</div></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="panel"><div class="panel-head"><h3>Friends you referred</h3></div><div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Friend</th><th>Joined</th><th>Status</th></tr></thead><tbody>' +
+          (friends.length ? friends.map(function (f) { return '<tr><td><b>' + esc(f.name) + '</b></td><td>' + fmtD(f.joinedAt) + '</td><td><span class="badge green">Joined</span></td></tr>'; }).join("") : '<tr><td colspan="3" class="muted-sm" style="padding:16px">No referrals yet — share your code to start earning.</td></tr>') +
+        '</tbody></table></div></div></div></div>';
+      var copy = function (t) { try { navigator.clipboard.writeText(t); } catch (e) {} };
+      var cc = host.querySelector("#acRfCopyCode"); if (cc) cc.addEventListener("click", function () { copy(d.code || ""); toast("Code copied ✓"); });
+      var cl = host.querySelector("#acRfCopyLink"); if (cl) cl.addEventListener("click", function () { copy(url); toast("Link copied ✓"); });
+    }).catch(function (e) { host.innerHTML = '<div class="notice warn">Couldn\'t load your referrals: ' + esc(e.message || "offline") + "</div>"; });
+  }
+
+  /* ============================================================ REWARDS
+     Real loyalty rewards for the signed-in customer (points, tier, redeemable
+     value, recent reward credits) from /api/account/rewards. */
+  var KIND_LABEL = { cashback: "Cashback", referral: "Referral reward", promo: "Promo credit" };
+  function wireRewards() {
+    if ((document.body.dataset.route || "") !== "account/rewards" || !me()) return;
+    var host = document.getElementById("rewardsPanelMount"); if (!host) return;
+    host.innerHTML = '<div class="panel panel-pad"><div class="sk-line skeleton w40"></div><div class="sk-line skeleton"></div></div>';
+    API().get("/api/account/rewards").then(function (r) {
+      var d = r.rewards || {};
+      var next = d.nextTier;
+      var acts = d.activity || [];
+      host.innerHTML =
+        '<div class="panel panel-pad reveal"><div class="rw-hero">' +
+          '<div class="rw-points"><div class="rw-pv">' + (d.points || 0) + '</div><div class="rw-pl">points · ' + esc(d.tier || "Silver") + ' tier</div></div>' +
+          '<div class="rw-redeem"><div class="muted-sm">Redeemable value</div><div class="rw-rv">' + inr(d.redeemablePaise || 0) + '</div></div>' +
+        '</div>' +
+        (next ? '<p class="muted-sm" style="margin-top:10px">Earn <b>' + next.pointsAway + '</b> more points to reach <b>' + esc(next.name) + '</b>.</p>' : '<p class="muted-sm" style="margin-top:10px">You\'re at our top tier — enjoy the perks! 🎉</p>') +
+        '</div>' +
+        '<div class="panel" style="margin-top:14px"><div class="panel-head"><h3>Recent reward credits</h3></div><div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Type</th><th>Amount</th><th>When</th></tr></thead><tbody>' +
+          (acts.length ? acts.map(function (a) { return '<tr><td>' + esc(KIND_LABEL[a.kind] || a.kind) + (a.description ? ' <span class="muted-sm">· ' + esc(a.description) + '</span>' : "") + '</td><td class="green"><b>+' + inr(a.amountPaise || 0) + '</b></td><td>' + fmtD(a.createdAt) + '</td></tr>'; }).join("") : '<tr><td colspan="3" class="muted-sm" style="padding:16px">No reward credits yet — points build up with every delivery.</td></tr>') +
+        '</tbody></table></div></div></div>';
+    }).catch(function (e) { host.innerHTML = '<div class="notice warn">Couldn\'t load your rewards: ' + esc(e.message || "offline") + "</div>"; });
+  }
+
   /* ============================================================ entry */
   function mountAll() {
     try { wireOrders(); } catch (e) {}
@@ -483,6 +548,8 @@ window.DOODLY_ACCOUNT = (function () {
     try { wireCalendar(); } catch (e) {}
     try { wireTracking(); } catch (e) {}
     try { wireSettings(); } catch (e) {}
+    try { wireReferrals(); } catch (e) {}
+    try { wireRewards(); } catch (e) {}
   }
   return { mountAll: mountAll, openOrderDetail: openOrderDetail };
 })();

@@ -28,3 +28,12 @@ a.cu-kpi:hover .cu-k-go { opacity: 1; transform: translateX(0); }
 
 @media (max-width: 560px) { .cu-kpis { grid-template-columns: 1fr 1fr; gap: 9px; } .cu-k-v { font-size: 1.2rem; } }
 @media (max-width: 360px) { .cu-kpis { grid-template-columns: 1fr 1fr; } }
+
+/* backend-driven rewards panel (DOODLY_ACCOUNT.wireRewards) */
+.rw-hero { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.rw-points { display: flex; flex-direction: column; }
+.rw-pv { font-family: 'Fraunces', serif; font-size: 2.4rem; font-weight: 700; color: var(--forest, #0F3D2E); line-height: 1; }
+.rw-pl { font-size: .85rem; color: var(--ink-3, #6b7772); margin-top: 4px; }
+.rw-redeem { text-align: right; }
+.rw-rv { font-family: 'Fraunces', serif; font-size: 1.6rem; font-weight: 700; color: var(--leaf-600, #178a52); }
+@media (max-width: 460px) { .rw-hero { flex-direction: column; align-items: flex-start; } .rw-redeem { text-align: left; } }
