@@ -52,7 +52,7 @@ window.DOODLY_CHECKOUT = (function () {
     if (!lines.length) return `<div class="co-empty">${icon("box", 34)}<h3>Your cart is empty</h3><p>Add a fresh bottle to get started.</p><a class="btn btn-primary" href="/products/milk.html">Browse milk</a></div>`;
     return `<h2 class="co-h">Review your cart</h2>
       <div class="co-cartlist">${lines.map((l) => `
-        <div class="co-line"><div class="co-line-img">${l.image ? `<img src="${l.image}" alt="${l.name}">` : ""}</div>
+        <div class="co-cartrow"><div class="co-line-img">${l.image ? `<img src="${l.image}" alt="${l.name}">` : ""}</div>
           <div class="co-line-main"><div class="co-line-name">${l.name}</div>
             <div class="co-line-meta">${l.type === "trial" ? `${inr(l.unit)} · ${l.fixedDays || 3}-day` : `${inr(l.unit)}/day`} · Qty ${l.qty}</div></div>
           <div class="co-line-price">${inr(l.unit * l.qty)}</div></div>`).join("")}</div>
