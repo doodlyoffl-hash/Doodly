@@ -314,6 +314,46 @@ window.DOODLY_MAPS = (function () {
   }
 
   /* ============================================================
+     Tracking map  trackMap(host, { dest, driver, driverLabel, updatedText })
+     dest: {lat,lng}  ·  driver: {lat,lng}|null (live executive position)
+     Re-callable — on each poll pass the new driver position to move it.
+     ============================================================ */
+  function trackMap(host, o) {
+    if (!host) return;
+    o = o || {};
+    const dest = (o.dest && o.dest.lat != null) ? o.dest : BASE;
+    const drv = (o.driver && o.driver.lat != null && o.driver.lng != null) ? o.driver : null;
+    function svgVariant() {
+      const dp = toXY(dest.lat, dest.lng), parts = [mapBg()];
+      if (drv) {
+        const kp = toXY(drv.lat, drv.lng);
+        parts.push(`<path d="M${kp.x},${kp.y} L${dp.x},${dp.y}" class="mp-route-line"/>`);
+        parts.push(`<g class="mp-cur" transform="translate(${kp.x},${kp.y})"><circle r="11" class="mp-cur-halo"/><circle r="6" class="mp-cur-dot"/></g>`);
+      }
+      parts.push(`<g transform="translate(${dp.x},${dp.y})">${PINSVG("mp-pin-main")}</g>`);
+      host.classList.add("mp-mini");
+      host.innerHTML = `<svg viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid slice" aria-label="Delivery tracking">${parts.join("")}</svg>`
+        + (drv ? `<div class="mp-route-meta"><span>${svgPin(13)} ${esc(o.driverLabel || "Your delivery is on the way")}</span>${o.updatedText ? `<span>${esc(o.updatedText)}</span>` : ""}</div>` : "");
+    }
+    function realVariant(gm) {
+      host.innerHTML = `<div class="mp-gmap" style="width:100%;height:100%"></div>`
+        + (drv ? `<div class="mp-route-meta"><span>${svgPin(13)} ${esc(o.driverLabel || "Your delivery is on the way")}</span>${o.updatedText ? `<span>${esc(o.updatedText)}</span>` : ""}</div>` : "");
+      const map = new gm.Map(host.querySelector(".mp-gmap"), { disableDefaultUI: true, zoomControl: true, clickableIcons: false, gestureHandling: "greedy" });
+      const bounds = new gm.LatLngBounds();
+      new gm.Marker({ position: { lat: dest.lat, lng: dest.lng }, map, title: o.destLabel || "Delivery address" });
+      bounds.extend({ lat: dest.lat, lng: dest.lng });
+      if (drv) {
+        new gm.Marker({ position: { lat: drv.lat, lng: drv.lng }, map, label: { text: "🚚", fontSize: "18px" }, title: o.driverLabel || "Your delivery executive" });
+        new gm.Polyline({ path: [{ lat: drv.lat, lng: drv.lng }, { lat: dest.lat, lng: dest.lng }], map, strokeColor: "#1FAE66", strokeOpacity: 0.9, strokeWeight: 3 });
+        bounds.extend({ lat: drv.lat, lng: drv.lng });
+        map.fitBounds(bounds, 60);
+      } else { map.setCenter({ lat: dest.lat, lng: dest.lng }); map.setZoom(o.zoom || 15); }
+    }
+    if (window.google && window.google.maps) realVariant(window.google.maps);
+    else { svgVariant(); ensureGoogle().then((gm) => { if (gm && document.body.contains(host)) realVariant(gm); }); }
+  }
+
+  /* ============================================================
      Address manager  mountAddressManager(host)
      saved addresses w/ labels, default, mini-map, add/edit/delete
      ============================================================ */
@@ -394,5 +434,5 @@ window.DOODLY_MAPS = (function () {
   function svgX(s) { return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>`; }
   function svgChk(s) { return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12 5 5L20 6"/></svg>`; }
 
-  return { mountPicker, miniMap, routeMap, mountAddressManager, navUrl, mapsUrl, distanceKm, locs, nearest, BASE, ready, ensureGoogle };
+  return { mountPicker, miniMap, routeMap, trackMap, mountAddressManager, navUrl, mapsUrl, distanceKm, locs, nearest, BASE, ready, ensureGoogle };
 })();

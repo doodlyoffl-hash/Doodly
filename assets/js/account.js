@@ -444,16 +444,36 @@ window.DOODLY_ACCOUNT = (function () {
       }
     }
 
-    // live delivery map — show the destination on a real Google map (falls back
-    // to the SVG map with no key; only shows once the address has a dropped pin)
+    // live delivery map — destination on a real Google map (SVG fallback with no
+    // key; only once the address has a dropped pin) PLUS, while the delivery is
+    // en route, the executive's live GPS marker moving toward you.
     var mapCard = document.querySelector(".content .media-card");
-    if (mapCard && window.DOODLY_MAPS && DOODLY_MAPS.miniMap) {
+    if (mapCard && window.DOODLY_MAPS && DOODLY_MAPS.trackMap) {
       API().get("/api/addresses").then(function (r) {
         var list = (r && r.addresses) || [];
         var a = list.filter(function (x) { return x.lat != null && x.lng != null; }).sort(function (x, y) { return (y.isDefault ? 1 : 0) - (x.isDefault ? 1 : 0); })[0];
         if (!a) return;   // no geocoded address yet → keep the placeholder
         mapCard.style.padding = "0"; mapCard.style.minHeight = "220px"; mapCard.innerHTML = '<div id="trkMap" style="width:100%;height:220px;border-radius:14px;overflow:hidden"></div>';
-        DOODLY_MAPS.miniMap(document.getElementById("trkMap"), { lat: a.lat, lng: a.lng, label: a.label || "Delivery address", zoom: 16 });
+        var trkHost = document.getElementById("trkMap");
+        var dest = { lat: a.lat, lng: a.lng, label: a.label || "Delivery address" };
+        DOODLY_MAPS.trackMap(trkHost, { dest: dest });   // destination first (instant)
+
+        // Poll the executive's live position while the delivery is still active today.
+        if (missed || st === "DELIVERED") return;
+        var _trk = null;
+        function stop() { if (_trk) { clearInterval(_trk); _trk = null; } }
+        function ago(ts) { if (!ts) return ""; var s = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 1000)); return s < 60 ? "updated " + s + "s ago" : "updated " + Math.round(s / 60) + "m ago"; }
+        function poll() {
+          if (!document.body.contains(trkHost)) { stop(); return; }   // left the page → stop
+          API().get("/api/account/tracking").then(function (res) {
+            var t = res || {};
+            if (t.enRoute && t.driver) {
+              DOODLY_MAPS.trackMap(trkHost, { dest: dest, driver: { lat: t.driver.lat, lng: t.driver.lng }, driverLabel: (t.driver.name || "Your delivery") + " is on the way", updatedText: ago(t.driver.lastSeenAt) });
+            }
+            if (!t.active || t.status === "DELIVERED") stop();   // finished for today → stop
+          }).catch(function () {});
+        }
+        poll(); _trk = setInterval(poll, 20000);
       }).catch(function () {});
     }
   }

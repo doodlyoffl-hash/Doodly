@@ -48,6 +48,26 @@ window.DOODLY_DELIVERY = (function () {
     return API().post("/api/delivery/stop/" + encodeURIComponent(id), body).catch((e) => { toast(e.message || "Couldn't sync — will keep your local note."); return null; });
   }
 
+  /* ---------- live GPS reporting (customer + admin tracking maps) ---------- */
+  let _geoTimer = null;
+  function pingLocation() {
+    if (!execUser() || !API() || !navigator.geolocation) return;
+    // Stop reporting once every stop on the live route is done.
+    if (_live && Array.isArray(_live.stops) && _live.stops.length && _live.stops.every((s) => String(s.status) === "delivered")) { stopLocationPolling(); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { API().post("/api/delivery/location", { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }).catch(() => {}); },
+      () => {},                                                    // permission denied / unavailable → silently skip
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 15000 }
+    );
+  }
+  function startLocationPolling() {
+    if (_geoTimer || !execUser() || !navigator.geolocation) return;
+    pingLocation();                                                // report once immediately
+    _geoTimer = setInterval(pingLocation, 30000);                  // then every 30s while on route
+    window.addEventListener("beforeunload", stopLocationPolling);
+  }
+  function stopLocationPolling() { if (_geoTimer) { clearInterval(_geoTimer); _geoTimer = null; } }
+
   /* ---------- today's route (demo data when not signed in) ---------- */
   function stops() {
     if (_live) return _live.stops;
@@ -195,7 +215,9 @@ window.DOODLY_DELIVERY = (function () {
     function setBottles(id, n) { const s2 = all.find((x) => x.id === id); st[id] = Object.assign({}, st[id], { bottles: Math.max(0, Math.min(s2.bottlesExpected, n)) }); save(st); }
 
     function wire() {
-      host.querySelector("#dlStart").addEventListener("click", () => { all.forEach((s2) => { if (stStatus(st, s2.id) === "assigned") setStatus(s2.id, "onway"); }); toast("Route started — drive safe!"); render(); });
+      host.querySelector("#dlStart").addEventListener("click", () => { all.forEach((s2) => { if (stStatus(st, s2.id) === "assigned") setStatus(s2.id, "onway"); }); startLocationPolling(); toast("Route started — drive safe!"); render(); });
+      // resume live GPS reporting if the route is already in progress (e.g. after a page reload)
+      if (_live && all.some((s2) => { var ss = stStatus(st, s2.id); return ss === "onway" || ss === "reached"; })) startLocationPolling();
       host.querySelector("#dlRefresh").addEventListener("click", () => { render(); toast("Route refreshed"); });
       host.querySelectorAll("[data-next]").forEach((b) => b.addEventListener("click", () => {
         const id = b.dataset.next, status = stStatus(st, id), i = WORKFLOW.findIndex((w) => w[0] === status);
