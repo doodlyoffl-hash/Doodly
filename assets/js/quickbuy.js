@@ -80,7 +80,8 @@ window.DOODLY_QUICKBUY = (function () {
   let modal = null, qty = 1, lastFocus = null;
   function buildModal() {
     const t = trial();
-    const loggedIn = false; // public visitor = guest in this prototype
+    const me = qbUser();
+    const loggedIn = !!me;
     modal = document.createElement("div");
     modal.className = "qmodal";
     modal.innerHTML = `
@@ -108,8 +109,8 @@ window.DOODLY_QUICKBUY = (function () {
           <div class="qm-total">Total <b>${inr(t.fixedPrice)}</b></div>
         </div>
         <div class="qm-auth">${loggedIn
-          ? `<div class="qm-addr">${icon("pin", 15)} Deliver to <b>Home</b> · Jubilee Hills <a href="/account/addresses.html">Change</a></div>`
-          : `<div class="qm-guest">${icon("user", 15)} Have an account? <a href="/login.html">Log in</a> for faster checkout — or continue as guest.</div>`}</div>
+          ? `<div class="qm-addr">${icon("user", 15)} Ordering as <b>${(String(me.name || "you").split(/\s+/)[0] || "you").replace(/[<>&"]/g, "")}</b> — pick your address &amp; payment at checkout.</div>`
+          : `<div class="qm-guest">${icon("user", 15)} Have an account? <a href="/login/customer.html">Log in</a> for faster checkout — or create one on the way.</div>`}</div>
         <button class="btn btn-primary btn-lg qmodal-checkout">Proceed to Checkout</button>
         <p class="fineprint center">Secure checkout · Refundable glass-bottle deposit added at checkout</p>
       </div>`;
@@ -121,10 +122,15 @@ window.DOODLY_QUICKBUY = (function () {
     modal.querySelector(".qm-inc").addEventListener("click", () => { if (qty < 9) { qty++; renderTotal(); } });
     modal.querySelector(".qm-dec").addEventListener("click", () => { if (qty > 1) { qty--; renderTotal(); } });
     modal.querySelector(".qmodal-checkout").addEventListener("click", () => {
-      // Prototype: simulate the order being placed, then hand off to the
-      // account/checkout flow. Sets the flag that hides the widget afterward.
       try { localStorage.setItem("doodly-trial-purchased", "1"); } catch (e) {}
-      window.location.href = "/signup.html?order=trial&qty=" + qty;
+      // hand the trial to the REAL checkout: order context + cart line
+      try {
+        const d = new Date(Date.now() + 86400000);
+        localStorage.setItem("doodly-subscription", JSON.stringify({ variantId: "v300", days: 3, startIso: d.toISOString().slice(0, 10) }));
+      } catch (e) {}
+      try { if (window.DOODLY_CART) for (let i = 0; i < qty; i++) DOODLY_CART.add("v300"); } catch (e) {}
+      // signed-in customers go straight to checkout; guests create an account on the way
+      window.location.href = qbUser() ? "/checkout.html" : "/signup.html?order=trial&qty=" + qty;
     });
     document.addEventListener("keydown", (e) => {
       if (!modal || !modal.classList.contains("open")) return;
@@ -136,8 +142,16 @@ window.DOODLY_QUICKBUY = (function () {
     modal.querySelector(".qm-qty-val").textContent = qty;
     modal.querySelector(".qm-total b").textContent = inr(trial().fixedPrice * qty);
   }
+  // Real signed-in session (backend identity + token) — never the demo ids.
+  function qbUser() {
+    try {
+      const u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null");
+      return (u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")) ? u : null;
+    } catch (e) { return null; }
+  }
   function openModal() {
-    if (!modal) buildModal();
+    if (modal) { modal.remove(); modal = null; }   // rebuild so the login state is always current
+    buildModal();
     qty = 1; renderTotal();
     lastFocus = document.activeElement;
     modal.classList.add("open");

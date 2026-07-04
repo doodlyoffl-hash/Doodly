@@ -461,6 +461,10 @@ window.DOODLY_AUTH = (function () {
     const pwInp = form.querySelector('input[type="password"]');
     const password = pwInp ? String(pwInp.value || "") : "";
 
+    // arrived mid-purchase (e.g. trial quick-order)? continue to checkout after joining
+    const fromOrder = /[?&]order=/.test(location.search);
+    if (fromOrder) form.dataset.dest = "/checkout.html";
+
     if (window.DOODLY_API) {
       try {
         await window.DOODLY_API.post("/api/register", { name: name, email: email, phone: phone || undefined, password: password });
