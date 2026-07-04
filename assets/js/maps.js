@@ -126,6 +126,11 @@ window.DOODLY_MAPS = (function () {
     const map = new gm.Map(mapEl, { center: cur, zoom: 16, disableDefaultUI: true, zoomControl: true, gestureHandling: "greedy", clickableIcons: false });
     const marker = new gm.Marker({ position: cur, map, draggable: true });
     const geocoder = new gm.Geocoder();
+    // a map created inside an animating modal captures a 0-size viewport and
+    // under-tiles — nudge it to re-render once the container is actually laid out
+    function nudge() { try { gm.event.trigger(map, "resize"); map.setCenter(marker.getPosition() || cur); } catch (e) {} }
+    setTimeout(nudge, 300); setTimeout(nudge, 700);
+    try { if (window.ResizeObserver) { const ro = new ResizeObserver(nudge); ro.observe(mapEl); setTimeout(() => ro.disconnect(), 2500); } } catch (e) {}
 
     function emit(lat, lng, formatted, comp) {
       cur = { lat, lng };
