@@ -20,8 +20,8 @@ window.DOODLY_SCHEDULE = (function () {
     try {
       const o = JSON.parse(localStorage.getItem("doodly-delivery") || "{}");
       // migrate the retired 6–8 AM window saved in older browsers to the
-      // before-7-AM promise (5:00–7:00 AM)
-      if (o.slotStart === "6:00 AM" && o.slotEnd === "8:00 AM") { delete o.slotStart; delete o.slotEnd; }
+      // single before-7-AM slot
+      if (o.slotEnd === "8:00 AM") { delete o.slotStart; delete o.slotEnd; }
       return o;
     } catch (e) { return {}; }
   }
@@ -39,7 +39,8 @@ window.DOODLY_SCHEDULE = (function () {
     return next;
   }
   function resetSettings() { try { localStorage.removeItem("doodly-delivery"); } catch (e) {} }
-  function slotLabel() { const s = settings(); return `${s.slotStart} – ${s.slotEnd}`; }
+  // one delivery run every morning — the label is the promise, not a range
+  function slotLabel() { const s = settings(); return `Before ${s.slotEnd}`; }
   function cutoffLabel() {
     const s = settings(); let h = s.cutoffHour, m = s.cutoffMinute || 0;
     const ap = h >= 12 ? "PM" : "AM"; let hh = h % 12; if (hh === 0) hh = 12;
@@ -195,7 +196,7 @@ window.DOODLY_SCHEDULE = (function () {
       info.innerHTML = `<div class="dz-first ${animate ? "pop" : ""}">
         <div class="dz-first-h">Your first delivery</div>
         <div class="dz-first-row">${cal}<b>${fmtLong(selected)}</b></div>
-        <div class="dz-first-row">${clk}<span>Between ${slotLabel()}</span></div>
+        <div class="dz-first-row">${clk}<span>Delivered ${slotLabel().replace(/^B/, "b")}</span></div>
         <span class="dz-badge">${chk} Fresh delivery scheduled</span>
         ${sch ? `<div class="dz-sched"><span>Ends ${fmtShort(sch.end)}</span><span>·</span><span>${sch.deliveries} deliveries</span><span>·</span><span>${sch.duration}</span></div>` : ""}
       </div>`;

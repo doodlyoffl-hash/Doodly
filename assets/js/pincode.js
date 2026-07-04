@@ -82,7 +82,7 @@ window.DOODLY_PINCODE = (function () {
           <div class="pc-line"><span class="pc-badge ok">${I.check} Serviceable</span></div>
           <div class="pc-head">✅ Great news!</div>
           <p>We currently deliver fresh DOODLY milk to <b>${esc(res.area)}, ${esc(res.city)}</b>.</p>
-          <div class="pc-meta">${esc(res.state)} · ${esc(res.slot)} · ${esc(res.eta)} · ${res.charge ? "Delivery " + inr(res.charge) : "Free delivery"}</div>
+          <div class="pc-meta">${[res.state, res.slot, res.eta, res.charge ? "Delivery " + inr(res.charge) : "Free delivery"].filter(Boolean).map(esc).join(" · ")}</div>
         </div>`;
       } else {
         out.innerHTML = `<div class="pc-no">
@@ -174,7 +174,7 @@ window.DOODLY_PINCODE = (function () {
         <div class="panel mt-3"><div class="panel-head"><h3>Waitlist <span class="badge">${wl.length}</span></h3><button class="btn btn-ghost" id="pc-csv" style="padding:.42rem .8rem;font-size:.82rem">Export CSV</button></div>
           <div class="panel-pad"><div class="pc-wl-list">${wlGroups}</div></div></div>`;
 
-      host.querySelector("#pc-add").addEventListener("click", () => { const a = list(); a.push({ pincode: "", area: "", city: "Vijayawada", state: "Andhra Pradesh", zone: (zones()[0] || {}).id || "Z1", charge: 0, slot: "5:00–7:00 AM", eta: "By 7 AM", enabled: true }); setList(a); render(); });
+      host.querySelector("#pc-add").addEventListener("click", () => { const a = list(); a.push({ pincode: "", area: "", city: "Vijayawada", state: "Andhra Pradesh", zone: (zones()[0] || {}).id || "Z1", charge: 0, slot: "Before 7 AM", eta: "", enabled: true }); setList(a); render(); });
       host.querySelector("#pc-save").addEventListener("click", save);
       host.querySelector("#pc-reset").addEventListener("click", () => { resetList(); render(); });
       host.querySelector("#pc-csv").addEventListener("click", exportCsv);

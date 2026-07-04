@@ -84,7 +84,7 @@ export async function createPincode(input: {
   const created = await db.serviceablePincode.create({
     data: {
       pincode, area: input.area.trim(), city: input.city.trim(), state: (input.state ?? "Andhra Pradesh").trim(),
-      zoneId: input.zoneId || null, charge: clampCharge(input.charge), slot: input.slot?.trim() || "5:00–7:00 AM",
+      zoneId: input.zoneId || null, charge: clampCharge(input.charge), slot: input.slot?.trim() || "Before 7 AM",
       eta: input.eta?.trim() || null, enabled: input.enabled !== false,
     },
     include: { zone: { select: { id: true, name: true } } },

@@ -23,20 +23,20 @@ window.DOODLY_CHECKOUT = (function () {
   };
   const STEPS = [["cart", "Cart"], ["address", "Address"], ["slot", "Slot"], ["payment", "Payment"], ["confirm", "Done"]];
 
-  // every window keeps the platform promise: delivered before 7 AM
+  // one delivery run every morning — a single window, no slot choosing
   const SLOTS = [
-    ["6:00 – 7:00 AM", "Recommended", true], ["5:00 – 6:00 AM", "Early bird", true],
+    ["Before 7:00 AM", "Every morning", true],
   ];
   const ADDR = [
     ["Home", "Ananya R", "12-3, Krishnalanka, Vijayawada 520013", "+91 90000 00000", "520013"],
     ["Work", "Ananya R", "Benz Circle, Labbipet, Vijayawada 520010", "+91 90000 00000", "520010"],
   ];
+  // prepaid only — DOODLY doesn't take cash on delivery
   const METHODS = [
     ["upi", "UPI", "Google Pay, PhonePe, Paytm & more"],
     ["card", "Credit / Debit Card", "Visa, Mastercard, RuPay"],
     ["netbanking", "Net Banking", "All major banks"],
     ["wallet", "Wallet", "Paytm, PhonePe, Amazon Pay"],
-    ["cod", "Cash on Delivery", "Pay when your milk arrives"],
   ];
 
   let mount, coPicker, state = { step: 0, slot: 0, addr: 0, method: "upi", reached: 0 };
@@ -84,7 +84,7 @@ window.DOODLY_CHECKOUT = (function () {
       <div id="coDateHost"></div>
       <div class="co-schedule" id="coSchedule" aria-live="polite"></div>
       <div class="dz-required" id="coDateReq" hidden>Please choose a delivery start date to continue.</div>
-      <div class="co-h" style="font-size:1.04rem;margin-top:20px">Preferred time window</div>
+      <div class="co-h" style="font-size:1.04rem;margin-top:20px">Delivery window</div>
       <div class="co-cards co-slots">${SLOTS.map((s, i) => `
         <button type="button" class="co-slot ${i === state.slot && s[2] ? "sel" : ""} ${s[2] ? "" : "off"}" data-slot="${i}" ${s[2] ? "" : "disabled aria-disabled=true"}>
           <span class="co-check">${icon("check", 13)}</span>
@@ -215,7 +215,6 @@ window.DOODLY_CHECKOUT = (function () {
   /* ---------------- payment ---------------- */
   function validateMethod() {
     const m = state.method;
-    if (m === "cod") return true;
     const body = mount.querySelector(`.co-method[data-method="${m}"] .co-method-body`);
     if (m === "upi") { const v = body.querySelector(".co-input").value.trim(); return v.length >= 4 && v.includes("@") || false; }
     if (m === "card") {
@@ -281,7 +280,7 @@ window.DOODLY_CHECKOUT = (function () {
     const SC = window.DOODLY_SCHEDULE;
     const payload = {
       variantId: sub.variantId, planId: sub.planId || undefined,
-      method: state.method === "cod" ? "cod" : state.method === "card" ? "card" : state.method === "netbanking" ? "netbanking" : "upi",
+      method: state.method === "card" ? "card" : state.method === "netbanking" ? "netbanking" : "upi",
       startDate: sub.startIso || undefined,
       slot: SC && SC.slotLabel ? SC.slotLabel() : undefined,
       address: {
@@ -369,7 +368,7 @@ window.DOODLY_CHECKOUT = (function () {
         <div class="co-suc-badge">${icon("check", 30)}</div>
         <h2>${trialBought ? "Trial Pack confirmed!" : "Subscription confirmed!"}</h2>
         <p class="co-suc-amt">${state.realOrder
-          ? `${inr((state.realOrder.totalPaise || 0) / 100)} ${state.realOrder.method === "cod" ? "to pay on delivery" : "paid"} · Order ${state.realOrder.number}`
+          ? `${inr((state.realOrder.totalPaise || 0) / 100)} paid · Order ${state.realOrder.number}`
           : `${inr(t.total)} paid · Order #DZ${Date.now().toString().slice(-6)}`}</p>
         <div class="co-scene" aria-hidden="true">
           <div class="co-bottle"><span class="co-bottle-milk"></span></div>
@@ -378,7 +377,7 @@ window.DOODLY_CHECKOUT = (function () {
         </div>
         <div class="co-confirm-card">
           <div class="co-sched-row"><span>${icon("box", 15)} First delivery</span><b>${firstLine}</b></div>
-          <div class="co-sched-row"><span>${icon("clock", 15)} Delivery time</span><b>${SC ? SC.slotLabel() : "5:00 AM – 7:00 AM"}</b></div>
+          <div class="co-sched-row"><span>${icon("clock", 15)} Delivery time</span><b>${SC ? SC.slotLabel() : "Before 7:00 AM"}</b></div>
           ${sch ? `<div class="co-sched-row"><span>${icon("refresh", 15)} Estimated end date</span><b>${SC.fmtLong(sch.end)}</b></div>
           <div class="co-sched-row"><span>${icon("truck", 15)} Deliveries</span><b>${sch.deliveries} · ${sch.duration}</b></div>` : ""}
         </div>

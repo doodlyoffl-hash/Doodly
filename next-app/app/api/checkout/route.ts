@@ -19,7 +19,7 @@ const Body = z.object({
   variantId: z.string().min(1).max(30),
   planId: z.string().min(1).max(30).optional(),
   bottles: z.number().int().min(1).max(20).optional(),
-  method: z.enum(["upi", "card", "netbanking", "wallet", "cod"]),
+  method: z.enum(["upi", "card", "netbanking", "wallet"]),   // prepaid only — no COD
   startDate: z.string().max(40).optional(),
   slot: z.string().max(40).optional(),
   address: z.object({
