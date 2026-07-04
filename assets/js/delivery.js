@@ -17,8 +17,40 @@ window.DOODLY_DELIVERY = (function () {
   const WORKFLOW = [["assigned", "Assigned"], ["onway", "On the way"], ["reached", "Reached"], ["delivered", "Delivered"]];
   const ISSUES = ["Customer unavailable", "Wrong address", "Damaged bottle", "Payment issue", "Product issue", "Delivery failed"];
 
-  /* ---------- today's route (demo data; would come from the API) ---------- */
+  /* ---------- LIVE route (signed-in executive) ---------- */
+  const API = () => window.DOODLY_API;
+  function execUser() {
+    try {
+      const u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null");
+      return (u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token") &&
+        (u.role === "delivery_executive" || u.role === "super_admin")) ? u : null;
+    } catch (e) { return null; }
+  }
+  let _live = null;   // { driver, route, date, stops } from /api/delivery/my-route
+  function loadLive() {
+    if (!execUser() || !API()) return Promise.resolve(false);
+    return API().get("/api/delivery/my-route").then((r) => {
+      const L = (M() ? M().locs() : []);
+      r.stops = (r.stops || []).map((s, i) => {
+        const fb = L[i % Math.max(1, L.length)] || { lat: 16.5062, lng: 80.648 };
+        return Object.assign({}, s, {
+          lat: s.lat != null ? s.lat : fb.lat, lng: s.lng != null ? s.lng : fb.lng,
+          instructions: s.instructions || "Deliver before 7 AM",
+          plan: s.itemLabel ? s.plan + " · " + s.itemLabel : s.plan,
+        });
+      });
+      _live = r;
+      return true;
+    }).catch(() => false);
+  }
+  function postStop(id, body) {
+    if (!_live || !API()) return Promise.resolve(null);
+    return API().post("/api/delivery/stop/" + encodeURIComponent(id), body).catch((e) => { toast(e.message || "Couldn't sync — will keep your local note."); return null; });
+  }
+
+  /* ---------- today's route (demo data when not signed in) ---------- */
   function stops() {
+    if (_live) return _live.stops;
     const L = (M() ? M().locs() : []);
     const names = ["Ananya Rao", "Karthik Varma", "Priya Sharma", "Rahul Mehta", "Sneha Reddy", "Vikram Joshi"];
     const labels = ["Home", "Office", "Apartment", "Home", "Home", "Office"];
@@ -57,8 +89,21 @@ window.DOODLY_DELIVERY = (function () {
      ============================================================ */
   function mountPortal(host) {
     if (!host) return;
+    if (execUser() && !_live) {
+      host.innerHTML = '<div class="dl-hero"><div><div class="dl-greet">Loading your route…</div><div class="dl-sub">Fetching today\'s assignments</div></div></div>';
+      loadLive().then(() => mountPortalNow(host));
+      return;
+    }
+    mountPortalNow(host);
+  }
+  function mountPortalNow(host) {
     const all = stops();
     let st = load();
+    // live mode: the SERVER state is the truth — seed local state from it
+    if (_live) {
+      st = {};
+      all.forEach((s) => { st[s.id] = { status: s.status || "assigned", bottles: s.bottlesCollected || 0 }; });
+    }
 
     function summary() {
       const total = all.length, done = all.filter((s) => stStatus(st, s.id) === "delivered").length;
@@ -72,8 +117,11 @@ window.DOODLY_DELIVERY = (function () {
       const s = summary();
       host.innerHTML = `
         <div class="dl-hero">
-          <div><div class="dl-greet">Good morning, Ramesh 👋</div><div class="dl-sub">Route RT-JH-01 · Jubilee Hills · ${s.total} stops today</div></div>
-          <span class="badge green">On shift</span>
+          <div><div class="dl-greet">Good morning, ${esc(_live ? String((_live.driver || {}).name || "Executive").split(/\s+/)[0] : "Ramesh")} 👋</div>
+          <div class="dl-sub">${_live
+            ? `${_live.route ? esc(_live.route.name || _live.route.code || "Your route") + " · " : ""}${esc(_live.date || "")}${_live.isFallbackDate ? " (latest assigned day)" : ""} · ${s.total} stops`
+            : `Route RT-JH-01 · Jubilee Hills · ${s.total} stops today`}</div></div>
+          <span class="badge green">${_live ? "Live" : "On shift"}</span>
         </div>
         <div class="dl-kpis">
           <div class="dl-kpi"><div class="n">${s.total}</div><div class="l">Assigned</div></div>
@@ -134,7 +182,10 @@ window.DOODLY_DELIVERY = (function () {
         </div>`;
     }
 
-    function setStatus(id, status) { st[id] = Object.assign({}, st[id], { status }); save(st); }
+    function setStatus(id, status) {
+      st[id] = Object.assign({}, st[id], { status }); save(st);
+      if (_live && (status === "onway" || status === "reached")) postStop(id, { action: "status", status: status });
+    }
     function setBottles(id, n) { const s2 = all.find((x) => x.id === id); st[id] = Object.assign({}, st[id], { bottles: Math.max(0, Math.min(s2.bottlesExpected, n)) }); save(st); }
 
     function wire() {
@@ -172,6 +223,8 @@ window.DOODLY_DELIVERY = (function () {
       m.querySelector(".dl-confirm").addEventListener("click", () => {
         setBottles(id, bottles); setStatus(id, "delivered");
         st[id].deliveredAt = new Date().toISOString(); st[id].notes = m.querySelector("#dlNotes").value.trim(); save(st);
+        // live mode: record the completion (bottles → customer's bottle ledger)
+        if (_live) postStop(id, { action: "deliver", bottles: bottles, notes: st[id].notes || undefined });
         // automatic late-delivery monitoring: detect lateness vs the 7:00 AM promise, apologise + record if late
         try {
           if (window.DOODLY_LATE) {
@@ -202,8 +255,12 @@ window.DOODLY_DELIVERY = (function () {
       m.querySelector("#dlIPhoto").addEventListener("change", (e) => { if (e.target.files[0]) m.querySelector("#dlILabel").innerHTML = `${svg("check", 16)} Photo attached`; });
       m.querySelector(".dl-isubmit").addEventListener("click", () => {
         const type = (m.querySelector(".dl-itype.sel") || {}).dataset.t;
-        st[id] = Object.assign({}, st[id], { issue: { type, priority: (m.querySelector(".dl-pbtn.sel") || {}).dataset.p, comments: m.querySelector("#dlIComments").value.trim() } });
-        save(st); close(); toast("Issue reported to ops");
+        const priority = (m.querySelector(".dl-pbtn.sel") || {}).dataset.p;
+        const comments = m.querySelector("#dlIComments").value.trim();
+        st[id] = Object.assign({}, st[id], { issue: { type, priority, comments } });
+        save(st);
+        if (_live) postStop(id, { action: "issue", issueType: type, priority: priority, comments: comments || undefined });
+        close(); toast("Issue reported to ops");
       });
     }
     render();
