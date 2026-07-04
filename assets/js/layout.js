@@ -4892,6 +4892,7 @@
     if (window.DOODLY_ASSISTANT) { window.DOODLY_ASSISTANT.mount(); const cs = $("#chatSupportMount"); if (cs) window.DOODLY_ASSISTANT.mountAdmin(cs); }   // customer assistant (self-gates) + admin chat management
     if (window.DOODLY_CUSTOMER) window.DOODLY_CUSTOMER.mountAll();   // live customer/user KPI cards, subscription card, rewards redeem, user stats
     if (window.DOODLY_PUZZLE) { try { DOODLY_PUZZLE.mountAll(); } catch (e) {} }   // Monthly Puzzle Challenge (dashboard/rewards card + admin module)
+    if (window.DOODLY_ACCOUNT) { try { DOODLY_ACCOUNT.mountAll(); } catch (e) {} } // customer account ACTIONS (orders/subscription/notifications/profile/addresses)
     if (window.DOODLY_TOUR) window.DOODLY_TOUR.init();
     // Global Smart Search — topbar box + shortcuts on every dashboard surface + admin insights
     if (window.DOODLY_SEARCH) { window.DOODLY_SEARCH.init(); const sa = $("#searchAdminMount"); if (sa) window.DOODLY_SEARCH.mountAdmin(sa); }
@@ -5057,7 +5058,7 @@
     });
 
     /* ---- orders / deliveries / invoices / bottle ledger / referrals ---- */
-    if (orders) D.orders = orders.map((o) => ({ id: o.number || o.id, date: fmtFull(o.createdAt), item: o.itemsSummary || "—", amount: Math.round((o.totalPaise || 0) / 100), status: ORD_STATUS(o) }));
+    if (orders) D.orders = orders.map((o) => ({ id: o.number || o.id, _id: o.id, date: fmtFull(o.createdAt), item: o.itemsSummary || "—", amount: Math.round((o.totalPaise || 0) / 100), status: ORD_STATUS(o) }));
     if (deliveries) D.deliveries = deliveries.map((dv) => ({ id: dv.id, date: fmtRel(dv.date), time: dv.deliveredAt ? fmtTime(dv.deliveredAt) : (dv.slot ? titleCase(dv.slot) : fmtTime(dv.date)), item: "—", driver: dv.driver ? dv.driver.name : "—", status: DEL_STATUS(dv.status) }));
     if (invoices) D.invoices = invoices.map((iv) => ({ id: iv.number || iv.id, date: fmtFull(iv.issuedAt), amount: Math.round(((iv.order && iv.order.totalPaise) || 0) / 100), gst: "incl. GST", status: PAY_STATUS(iv.order && iv.order.status), pdfUrl: iv.pdfUrl || null }));
     if (bottles && bottles.ledger) {

@@ -114,6 +114,7 @@ $template = @'
   <script src="/assets/js/assign.js"></script>
   <script src="/assets/js/gst.js"></script>
   <script src="/assets/js/puzzle.js"></script>
+  <script src="/assets/js/account.js"></script>
   <script src="/assets/js/layout.js"></script>
 </body>
 </html>

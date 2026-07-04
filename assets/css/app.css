@@ -1064,3 +1064,15 @@ code { background:var(--surface-2); border:1px solid var(--line); border-radius:
   display:grid; place-items:center; font-size:.7rem; font-weight:800; letter-spacing:.02em; }
 .nav-un { font-size:.88rem; max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 @media (max-width: 720px) { .nav-un { display:none; } .nav-user { padding:4px; } }
+
+/* ---- customer account actions (account.js) ---- */
+.acc-tls { display:flex; flex-direction:column; gap:10px; }
+.acc-tl { display:flex; gap:10px; align-items:flex-start; font-size:.88rem; }
+.acc-tl-dot { width:10px; height:10px; border-radius:50%; background:var(--leaf, #1FAE66); margin-top:5px; flex:none; }
+.acc-nf-actions { display:flex; gap:6px; margin-left:auto; align-self:center; }
+.acc-nf-btn { width:28px; height:28px; border-radius:8px; border:1px solid var(--line, #E3EDE6); background:var(--surface, #fff);
+  cursor:pointer; font-size:.8rem; color:var(--ink-2, #55655C); transition:background .15s, color .15s; }
+.acc-nf-btn:hover { background:var(--mint-soft, #EAF7EF); color:var(--forest, #0F3D2E); }
+.feed .item { transition:opacity .25s; }
+.acc-addr { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px dashed var(--line, #E3EDE6); }
+.acc-addr:last-child { border-bottom:0; }

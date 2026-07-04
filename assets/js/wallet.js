@@ -454,9 +454,47 @@ window.DOODLY_WALLET = (function () {
     var sel = host.querySelector("#wal-hist-src"); if (sel) sel.addEventListener("change", function () { _histState.source = sel.value; _histState.page = 1; renderHistory(host, w); });
     host.querySelectorAll("[data-scroll]").forEach(function (b) { b.addEventListener("click", function () { if (b.dataset.src) { _histState.source = b.dataset.src; _histState.page = 1; var s2 = host.querySelector("#wal-hist-src"); if (s2) s2.value = b.dataset.src; renderHistory(host, w); } var t = host.querySelector(b.dataset.scroll); if (t) t.scrollIntoView({ behavior: "smooth", block: "start" }); }); });
   }
+  /* Signed-in customers see their REAL wallet: pull the backend ledger and
+     sync it into the local display store before the panel renders (the local
+     store becomes a cache of backend truth; demo mode is untouched). */
+  function realCustomer() {
+    try {
+      var u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null");
+      return (u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")) ? u : null;
+    } catch (e) { return null; }
+  }
+  var _synced = false;
+  function syncFromBackend() {
+    if (!realCustomer() || !window.DOODLY_API) return Promise.resolve(false);
+    return DOODLY_API.get("/api/wallet").then(function (d) {
+      if (!d || d.balancePaise == null) return false;
+      var w = meWallet();
+      w.balance = Math.round(d.balancePaise) / 100;
+      w.txns = (d.transactions || []).map(function (t) {
+        return {
+          id: t.id, ref: t.reference || t.id, date: t.createdAt,
+          kind: t.type === "CREDIT" ? "credit" : "debit",
+          type: t.kind || (t.type === "CREDIT" ? "topup" : "usage"),
+          amount: Math.round(t.amountPaise) / 100,
+          desc: t.description || "", balanceAfter: t.balanceAfterPaise != null ? Math.round(t.balanceAfterPaise) / 100 : null,
+        };
+      });
+      saveWith(w);
+      _synced = true;
+      return true;
+    }).catch(function () { return false; });
+  }
+
   function mountPanel(host) {
     if (!host) return;
     _panelHost = host;
+    if (realCustomer() && !_synced) {
+      // render once from cache, then refresh with the live ledger
+      syncFromBackend().then(function (ok) { if (ok && document.body.contains(host)) { _synced = true; renderPanelNow(host); } });
+    }
+    renderPanelNow(host);
+  }
+  function renderPanelNow(host) {
     var w = meWallet(), m = walletMetrics(w);
     host.innerHTML = panelHTML(w, m);
     wirePanel(host, w);
