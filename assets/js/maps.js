@@ -62,7 +62,128 @@ window.DOODLY_MAPS = (function () {
   /* ============================================================
      Address picker  mountPicker(host, { value, onChange, height })
      ============================================================ */
+  /* ============================================================
+     Google Maps loader — activates the REAL map when a key is set
+     (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, surfaced via /api/config). No
+     key → everything falls back to the dependency-free SVG map, so
+     the app works either way. Callers never change.
+     ============================================================ */
+  let _gmPromise = null;
+  function ensureGoogle() {
+    if (_gmPromise) return _gmPromise;
+    _gmPromise = new Promise((resolve) => {
+      if (window.google && window.google.maps) return resolve(window.google.maps);
+      const API = window.DOODLY_API;
+      const keyP = (API && API.get) ? API.get("/api/config").then((c) => c && c.mapsKey).catch(() => null) : Promise.resolve(null);
+      keyP.then((key) => {
+        if (!key) return resolve(null);                       // no key → SVG fallback
+        const cbName = "__doodlyMapsReady";
+        window[cbName] = () => resolve((window.google && window.google.maps) || null);
+        const s = document.createElement("script");
+        s.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(key) + "&libraries=places&loading=async&callback=" + cbName;
+        s.async = true; s.defer = true;
+        s.onerror = () => resolve(null);
+        document.head.appendChild(s);
+      });
+    });
+    return _gmPromise;
+  }
+  function ready() { return ensureGoogle().then((gm) => !!gm); }
+  // best-effort preload so the real map is usually ready by the time a picker mounts
+  try { setTimeout(ensureGoogle, 0); } catch (e) {}
+
+  // pull area/city/state/pincode out of a Geocoder result's address_components
+  function parseComponents(comp) {
+    const out = { area: "", city: "", state: "", pincode: "" };
+    (comp || []).forEach((c) => {
+      const t = c.types || [];
+      if (t.indexOf("postal_code") >= 0) out.pincode = c.long_name;
+      else if (t.indexOf("sublocality") >= 0 || t.indexOf("sublocality_level_1") >= 0 || t.indexOf("neighborhood") >= 0) out.area = out.area || c.long_name;
+      else if (t.indexOf("locality") >= 0) out.city = c.long_name;
+      else if (t.indexOf("administrative_area_level_1") >= 0) out.state = c.long_name;
+    });
+    return out;
+  }
+
+  /* Real interactive Google map picker — draggable marker + Places search +
+     reverse geocode. Emits the SAME onChange shape as the SVG picker. */
+  function realPicker(host, opts, gm) {
+    opts = opts || {};
+    let cur = opts.value || { lat: BASE.lat, lng: BASE.lng };
+    host.classList.add("mp-picker", "mp-real");
+    host.innerHTML = `
+      <div class="mp-search">
+        <span class="mp-search-ic">${svgPin(16)}</span>
+        <input class="mp-search-i" placeholder="Search your area, street or landmark" autocomplete="off" aria-label="Search address">
+        <button type="button" class="mp-geo" title="Use my location" aria-label="Use my location">${svgGeo(16)}</button>
+      </div>
+      <div class="mp-stage" style="${opts.height ? "height:" + opts.height : ""}">
+        <div class="mp-gmap" style="width:100%;height:100%"></div>
+        <div class="mp-hint">${svgPin(13)} Drag the pin to your exact doorstep</div>
+      </div>`;
+    const input = host.querySelector(".mp-search-i");
+    const mapEl = host.querySelector(".mp-gmap");
+    const map = new gm.Map(mapEl, { center: cur, zoom: 16, disableDefaultUI: true, zoomControl: true, gestureHandling: "greedy", clickableIcons: false });
+    const marker = new gm.Marker({ position: cur, map, draggable: true });
+    const geocoder = new gm.Geocoder();
+
+    function emit(lat, lng, formatted, comp) {
+      cur = { lat, lng };
+      const c = parseComponents(comp);
+      const pincode = c.pincode || (PC() && PC().nearest ? "" : "");
+      const serviceable = (PC() && pincode) ? PC().validate(pincode).serviceable : true;
+      host.dataset.serviceable = serviceable ? "1" : "0";
+      if (opts.onChange) opts.onChange({ lat: +lat, lng: +lng, area: c.area, city: c.city, state: c.state, pincode: pincode, serviceable: serviceable, formatted: formatted || `${c.area}, ${c.city} ${pincode}`.trim() });
+    }
+    function reverse(lat, lng) {
+      geocoder.geocode({ location: { lat: +lat, lng: +lng } }, (results, status) => {
+        if (status === "OK" && results && results[0]) emit(lat, lng, results[0].formatted_address, results[0].address_components);
+        else emit(lat, lng, "", []);
+      });
+    }
+    function setPos(lat, lng, pan) { const ll = { lat: +lat, lng: +lng }; marker.setPosition(ll); if (pan) map.panTo(ll); reverse(lat, lng); }
+
+    marker.addListener("dragend", () => { const p = marker.getPosition(); setPos(p.lat(), p.lng(), false); });
+    map.addListener("click", (e) => setPos(e.latLng.lat(), e.latLng.lng(), true));
+    host.querySelector(".mp-geo").addEventListener("click", () => {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition((pos) => { map.setZoom(17); setPos(pos.coords.latitude, pos.coords.longitude, true); }, () => { if (PC()) toast_("Couldn't get your location — drag the pin instead."); });
+    });
+
+    // Places autocomplete on the search box
+    try {
+      const ac = new gm.places.Autocomplete(input, { fields: ["geometry", "formatted_address", "address_components"], componentRestrictions: { country: "in" } });
+      ac.bindTo("bounds", map);
+      ac.addListener("place_changed", () => {
+        const pl = ac.getPlace(); if (!pl || !pl.geometry) return;
+        const loc = pl.geometry.location; map.panTo(loc); map.setZoom(17); marker.setPosition(loc);
+        emit(loc.lat(), loc.lng(), pl.formatted_address, pl.address_components);
+      });
+    } catch (e) {}
+
+    reverse(cur.lat, cur.lng);
+    return { place: (lat, lng) => setPos(lat, lng, true), get value() { return Object.assign({}, cur); }, _real: true };
+  }
+  function toast_(m) { try { if (window.DOODLY_PINCODE && DOODLY_PINCODE.toast) DOODLY_PINCODE.toast(m); } catch (e) {} }
+
+  /* Public picker: real Google map when available, SVG otherwise. Renders the
+     SVG instantly, then upgrades in place once Maps loads (no visible stall). */
   function mountPicker(host, opts) {
+    if (!host) return null;
+    opts = opts || {};
+    if (window.google && window.google.maps) return realPicker(host, opts, window.google.maps);
+    const svgCtl = svgPicker(host, opts);
+    const proxy = { place: (a, b) => svgCtl.place(a, b), get value() { return proxy._impl ? proxy._impl.value : svgCtl.value; }, _impl: null };
+    ensureGoogle().then((gm) => {
+      if (!gm || !document.body.contains(host)) return;
+      const last = svgCtl.value;                               // carry the current pin over
+      const real = realPicker(host, Object.assign({}, opts, { value: { lat: last.lat, lng: last.lng } }), gm);
+      proxy._impl = real; proxy.place = (a, b) => real.place(a, b);
+    });
+    return proxy;
+  }
+
+  function svgPicker(host, opts) {
     if (!host) return null;
     opts = opts || {};
     let cur = opts.value || { lat: BASE.lat, lng: BASE.lng };
@@ -236,5 +357,5 @@ window.DOODLY_MAPS = (function () {
   function svgX(s) { return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>`; }
   function svgChk(s) { return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12 5 5L20 6"/></svg>`; }
 
-  return { mountPicker, miniMap, routeMap, mountAddressManager, navUrl, mapsUrl, distanceKm, locs, nearest, BASE };
+  return { mountPicker, miniMap, routeMap, mountAddressManager, navUrl, mapsUrl, distanceKm, locs, nearest, BASE, ready, ensureGoogle };
 })();
