@@ -51,7 +51,7 @@ window.DOODLY_TOUR = (function () {
       return '<div class="tour-savings"><div class="tour-bars">' + plans.map(function (p) { return '<div class="tour-bar-col"><div class="tour-bar" style="--v:' + (p[1] / 18 * 100) + '%"><span>' + (p[1] ? "-" + p[1] + "%" : "—") + '</span></div><small>' + p[0] + '</small></div>'; }).join("") + '</div><p class="tour-savings-cap">Save more with longer plans</p></div>';
     }
     if (kind === "cutoff") {
-      return '<div class="tour-cutoff"><div class="tour-clock">' + svg("calendar", 26) + '</div><div class="tour-cutoff-line"><span class="tour-now">Order by 8 PM</span><span class="tour-arrow">→</span><span class="tour-then">Delivered 6–8 AM</span></div></div>';
+      return '<div class="tour-cutoff"><div class="tour-clock">' + svg("calendar", 26) + '</div><div class="tour-cutoff-line"><span class="tour-now">Order by 8 PM</span><span class="tour-arrow">→</span><span class="tour-then">Delivered 5–7 AM</span></div></div>';
     }
     if (kind === "map") return '<div class="tour-map"><span class="tour-pin">📍</span><span class="tour-zone z1"></span><span class="tour-zone z2"></span></div>';
     if (kind === "pay") return '<div class="tour-pay">' + ["UPI", "Card", "Net-banking", "Wallet", "Auto Pay"].map(function (m) { return '<span class="tour-chip">' + m + '</span>'; }).join("") + '</div>';
