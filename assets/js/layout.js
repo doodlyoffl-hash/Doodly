@@ -662,8 +662,54 @@
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(recompute).catch(() => {});
   }
 
+  /* Public blog — the list (blog.html) and the single-post reader
+     (blog/read.html?slug=…) both render from /api/blog. The mock cards are the
+     offline fallback; the reader degrades to a friendly not-found. */
+  const BLOG_EMOJI = { Nutrition: "🥛", "Our farmers": "🧑‍🌾", Sustainability: "♻️", Quality: "🔬", Recipes: "🍳" };
+  function blogDate(iso) { const x = new Date(iso); if (isNaN(x.getTime())) return ""; return x.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }); }
+  function blogMeta(p) { return [esc(p.author || "Team DOODLY"), blogDate(p.publishedAt || p.createdAt), ((p.readingMinutes || 3) + " min read")].filter(Boolean).join(" · "); }
+  function blogCard(p) {
+    const cover = p.featuredImage ? `<img src="${esc(p.featuredImage)}" alt="" loading="lazy">` : (BLOG_EMOJI[p.categoryName] || "🥛");
+    return `<a class="post" href="/blog/read.html?slug=${encodeURIComponent(p.slug)}"><div class="cover">${cover}</div>
+      <div class="pbody"><div class="cat">${esc(p.categoryName || "Journal")}</div><h3>${esc(p.title)}</h3><p>${esc(p.excerpt || "")}</p><div class="meta">${blogMeta(p)}</div></div></a>`;
+  }
+  function wireBlog() {
+    const API = window.DOODLY_API; if (!API) return;
+    const list = $("#blogListMount");
+    if (list) {
+      API.get("/api/blog?limit=30").then((r) => {
+        const posts = (r && r.posts) || [];
+        if (posts.length) list.innerHTML = posts.map(blogCard).join("");
+      }).catch(() => {});   // keep the mock fallback
+    }
+    const reader = $("#blogReaderMount");
+    if (reader) {
+      let slug = ""; try { slug = new URLSearchParams(location.search).get("slug") || ""; } catch (e) {}
+      const notFound = (msg) => { reader.innerHTML = `<div class="wrap" style="max-width:720px;margin:40px auto;text-align:center"><div class="state"><h3>${msg || "Story not found"}</h3><p>It may have been moved or unpublished.</p><a class="btn btn-primary btn-lg" href="/blog.html">Back to the journal</a></div></div>`; };
+      if (!slug) { notFound("No story selected"); return; }
+      reader.innerHTML = `<div class="wrap" style="max-width:720px;margin:32px auto"><div class="sk-line skeleton w60"></div><div class="sk-line skeleton"></div><div class="sk-line skeleton"></div></div>`;
+      API.get("/api/blog?slug=" + encodeURIComponent(slug)).then((r) => {
+        const p = r && r.post; if (!p) return notFound();
+        document.title = p.title + " · DOODLY";
+        reader.innerHTML =
+          `<div class="wrap blog-read">
+            <a class="link blog-back" href="/blog.html">← All stories</a>
+            <span class="eyebrow">${esc(p.categoryName || "Journal")}${p.readingMinutes ? " · " + p.readingMinutes + " min read" : ""}</span>
+            <h1 class="display blog-title">${esc(p.title)}</h1>
+            ${p.excerpt ? `<p class="lead">${esc(p.excerpt)}</p>` : ""}
+            <div class="muted-sm blog-byline">${blogMeta(p)}</div>
+            ${p.featuredImage ? `<img class="blog-hero-img" src="${esc(p.featuredImage)}" alt="">` : ""}
+            <article class="blog-article">${p.content || ""}</article>
+            <div class="blog-cta"><a class="btn btn-primary btn-lg" href="/subscriptions.html">Taste it tomorrow morning</a></div>
+          </div>`;
+        try { wireReveals(); } catch (e) {}
+      }).catch((e) => notFound((e && (e.status === 404 || /not found/i.test(e.message || ""))) ? "Story not found" : "Couldn't load this story"));
+    }
+  }
+
   function wirePublic() {
     wireTheme(); wireReveals(); wireFaq(); wireTabs(); wireForms(); wireBuilder();
+    try { wireBlog(); } catch (e) {}
     const burger = $("#navBurger"), menu = $("#mobileMenu");
     if (burger && menu) {
       const setOpen = (open) => {

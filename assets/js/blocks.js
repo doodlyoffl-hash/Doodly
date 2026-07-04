@@ -1139,10 +1139,15 @@ window.DOODLY_BLOCKS = (function () {
   };
 
   /* ---------- blog list ---------- */
+  // #blogListMount is hydrated from /api/blog by wireBlog() (layout.js); the
+  // mock cards below are the offline/first-paint fallback.
   R.blogList = (s) => `
-    <div class="blog-grid reveal">${(M().posts||[]).map(p=>`
+    <div id="blogListMount" class="blog-grid reveal">${(M().posts||[]).map(p=>`
       <a class="post" href="/blog/why-a2.html"><div class="cover">${p.emoji}</div>
         <div class="pbody"><div class="cat">${p.cat}</div><h3>${p.title}</h3><p>${p.excerpt}</p><div class="meta">${p.meta}</div></div></a>`).join("")}</div>`;
+
+  // Single-post reader — reads ?slug= and fetches /api/blog?slug= (wireBlog).
+  R.blogReader = () => `<div id="blogReaderMount" class="reveal"></div>`;
 
   /* ---------- admin product table (with status flip) ---------- */
   R.productAdmin = () => {

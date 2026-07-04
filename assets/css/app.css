@@ -75,6 +75,23 @@
 .sb-signout { background:none; border:0; width:100%; text-align:left; cursor:pointer; font-family:inherit; color:#c0392b; }
 .sb-signout:hover { background:#fdecea; color:#c0392b; }
 
+/* ---------- public blog reader (layout.js wireBlog) ---------- */
+.blog-read { max-width: 720px; margin: 32px auto; padding: 0 20px; }
+.blog-back { display:inline-block; margin-bottom:14px; font-weight:600; }
+.blog-title { font-size: clamp(1.8rem, 4vw, 2.6rem); margin: 6px 0 12px; }
+.blog-byline { margin-bottom: 20px; }
+.blog-hero-img { width:100%; border-radius:16px; margin: 8px 0 24px; display:block; }
+.blog-article { font-size: 1.05rem; line-height: 1.75; color: var(--ink-2, #33403b); }
+.blog-article p { margin: 0 0 1.1em; }
+.blog-article h2 { font-family:'Fraunces',serif; color:var(--forest); font-size:1.5rem; margin:1.6em 0 .5em; }
+.blog-article h3 { font-family:'Fraunces',serif; color:var(--forest); font-size:1.2rem; margin:1.4em 0 .4em; }
+.blog-article ul, .blog-article ol { margin:0 0 1.1em 1.2em; }
+.blog-article li { margin: .3em 0; }
+.blog-article a { color: var(--leaf-600); font-weight:600; }
+.blog-article img { max-width:100%; border-radius:12px; }
+.blog-article blockquote { border-left:3px solid var(--leaf); padding-left:16px; margin:1.2em 0; color:var(--ink-3); font-style:italic; }
+.blog-cta { margin: 28px 0 8px; }
+
 /* main column */
 .main-col { min-width: 0; display:flex; flex-direction:column; }
 .topbar {

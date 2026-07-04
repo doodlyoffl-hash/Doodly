@@ -164,6 +164,9 @@ window.DOODLY_MANIFEST = (function () {
       { type:"html", html:`<div class="chips-row"><span class="chip-f active">All</span><span class="chip-f">Nutrition</span><span class="chip-f">Our farmers</span><span class="chip-f">Sustainability</span><span class="chip-f">Quality</span><span class="chip-f">Recipes</span></div>` },
       { type:"blogList" },
     ]},
+    "blog/read": { surface:"public", title:"DOODLY Journal", blocks:[
+      { type:"blogReader" },
+    ]},
     "blog/why-a2": { surface:"public", title:"Why A2 buffalo milk is easier to digest", blocks:[
       { type:"innerHero", eyebrow:"Nutrition · 5 min", title:"Why A2 buffalo milk is easier to digest", text:"The science behind A2 beta-casein and what it means for your gut." },
       { type:"prose", sections:[
