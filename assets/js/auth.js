@@ -384,6 +384,10 @@ window.DOODLY_AUTH = (function () {
     // Adopt the customer role locally first (works even if the backend is down).
     if (RB) { if (RB.setRealRole) RB.setRealRole("customer"); if (RB.returnToSelf) RB.returnToSelf(); }
 
+    // Arrived mid-purchase (?order= — e.g. from the subscription builder or a
+    // trial quick-order)? Return to checkout after signing in, not the dashboard.
+    if (/[?&]order=/.test(location.search)) form.dataset.dest = "/checkout.html";
+
     const res = await tokenSignIn(email, password);
     if (res === "invalid") return showCustomerAuthError(form, "Invalid email or password.");
     if (res === "throttled") return showCustomerAuthError(form, "Too many attempts — please try again in a minute.");

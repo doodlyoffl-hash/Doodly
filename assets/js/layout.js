@@ -264,6 +264,9 @@
   function renderAuth() {
     const a = entry.auth;
     const dest = a.dest || (a.otp ? "/account/dashboard.html" : ((a.submit && a.submit.match(/code|reset/i)) ? "/otp.html" : "/account/dashboard.html"));
+    // preserve a mid-purchase marker (?order=) across the login/signup pages so
+    // a guest who registers or switches forms still returns to checkout
+    const carry = /[?&]order=/.test(location.search) ? location.search : "";
     const fieldIcon = (f) => {
       const t = (f.type || "").toLowerCase(), l = (f.label || "").toLowerCase();
       if (t === "password") return icon("lock", 18);
@@ -327,7 +330,7 @@
             Continue with Google</button>` : ""}
         ${a.otpLink ? `<a class="btn-google auth-otp-link" href="/otp.html">${icon("phone", 18)} Log in with OTP</a>` : ""}
         ${a.terms ? `<p class="auth-terms">By continuing you agree to our <a href="/terms.html">Terms</a> &amp; <a href="/privacy.html">Privacy Policy</a>.</p>` : ""}
-        ${a.alt ? `<p class="auth-alt">${a.alt[0]} <a href="${a.alt[2]}">${a.alt[1]}</a></p>` : ""}
+        ${a.alt ? `<p class="auth-alt">${a.alt[0]} <a href="${a.alt[2]}${/^\/(login|signup)/.test(a.alt[2]) ? carry : ""}">${a.alt[1]}</a></p>` : ""}
         ${extras}
       </form>`;
 
@@ -336,7 +339,7 @@
       <div class="auth-card login-choose" aria-label="Choose login type">
         <a href="/" class="logo" aria-label="DOODLY home"><img src="/assets/img/logo.png" alt="DOODLY Logo" class="logo-img"></a>
         <h1>${a.title}</h1><p class="sub">${a.sub}</p>
-        <a class="lc-card" href="/login/customer.html">
+        <a class="lc-card" href="/login/customer.html${carry}">
           <span class="lc-ic lc-cust">${icon("user", 22)}</span>
           <span class="lc-body"><span class="lc-t">Customer Login</span><span class="lc-d">For customers to manage subscriptions, orders, deliveries, invoices and account settings.</span><span class="lc-cta">Login as Customer ${icon("arrow", 16)}</span></span>
         </a>

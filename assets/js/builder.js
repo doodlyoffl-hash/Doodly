@@ -12,6 +12,23 @@ window.DOODLY_BUILDER = (function () {
   const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
   let _api = null;   // set on mount; lets the variant cards drive the builder
 
+  // Where "Continue to checkout" should go. A signed-in customer goes STRAIGHT
+  // to checkout — never asked to log in again. A guest on the live site goes to
+  // login (with ?order= so they return to checkout after authenticating, with
+  // their build preserved in localStorage). On localhost the demo checkout is
+  // reachable without a login so the flow stays explorable.
+  function signedInCustomer() {
+    try {
+      const u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null");
+      return !!(u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token"));
+    } catch (e) { return false; }
+  }
+  function isLocalHost() { try { return /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname); } catch (e) { return false; } }
+  function checkoutDest() {
+    if (signedInCustomer() || isLocalHost()) return "/checkout.html";
+    return "/login/customer.html?order=subscription";
+  }
+
   function mount() {
     const D_ = D();
     const variants = (D_.variants || []).filter(v => v.active !== false);
@@ -116,7 +133,7 @@ window.DOODLY_BUILDER = (function () {
         <div class="sum-line"><span class="k">Delivery time</span><span class="v">${sch.slot}</span></div>
         <div class="sum-line"><span class="k">Ends</span><span class="v">${SC.fmtShort(sch.end)}</span></div>
         <div class="sum-line"><span class="k">Deliveries</span><span class="v">${sch.deliveries}</span></div>`;
-      if (cta) { cta.classList.remove("is-disabled"); cta.removeAttribute("aria-disabled"); }
+      if (cta) { cta.classList.remove("is-disabled"); cta.removeAttribute("aria-disabled"); cta.setAttribute("href", checkoutDest()); }
       if (req) req.hidden = true;
     }
 
@@ -134,16 +151,24 @@ window.DOODLY_BUILDER = (function () {
         onSelect: () => renderSchedule(),
       });
     }
-    // gate "Continue to checkout" until a valid start date is chosen
+    // "Continue to checkout": gate on a valid start date, then route based on
+    // session — signed-in customers proceed to checkout WITHOUT re-authenticating.
     const cta = $("#builderCta");
-    if (cta) cta.addEventListener("click", (e) => {
-      const SC = window.DOODLY_SCHEDULE;
-      if (SC && !SC.validSelection()) {
+    if (cta) {
+      cta.setAttribute("href", checkoutDest());   // correct target for hover / no-JS
+      cta.addEventListener("click", (e) => {
+        const SC = window.DOODLY_SCHEDULE;
+        if (SC && !SC.validSelection()) {
+          e.preventDefault();
+          const req = $("#dateRequired"); if (req) req.hidden = false;
+          const host = $("#datePickerHost"); if (host) host.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+        // authoritative at click time (session may have changed since render)
         e.preventDefault();
-        const req = $("#dateRequired"); if (req) req.hidden = false;
-        const host = $("#datePickerHost"); if (host) host.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-    });
+        window.location.href = checkoutDest();
+      });
+    }
 
     _api = (vid, pid) => {
       if (vid && variants.some(v => v.id === vid)) state.variantId = vid;

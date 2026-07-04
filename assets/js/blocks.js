@@ -543,7 +543,7 @@ window.DOODLY_BLOCKS = (function () {
             <div class="saved" id="sumSaved">Choose a plan to see your savings</div>
             <div class="sum-schedule" id="sumSchedule" hidden></div>
           </div>
-          <a href="/signup.html" class="btn btn-cta btn-lg" id="builderCta">Continue to checkout</a>
+          <a href="/checkout.html" class="btn btn-cta btn-lg" id="builderCta">Continue to checkout</a>
           <div class="dz-required" id="dateRequired" hidden>Please choose a delivery start date to continue.</div>
           <p class="fineprint">Refundable glass-bottle deposit added at checkout · Pause or cancel anytime</p>
         </div>
