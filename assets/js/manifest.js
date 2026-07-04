@@ -176,12 +176,12 @@ window.DOODLY_MANIFEST = (function () {
 
     "contact": { surface:"public", title:"Contact Us", hero:{ eyebrow:"Contact", title:"We'd love to hear from you.", text:"Questions about milk, delivery, or your subscription? Reach out — we usually reply within a few hours." }, blocks:[
       { type:"columns", cols:2, items:[
-        { type:"form", title:"Send us a message", cols:2, fields:[
-          { label:"Full name", placeholder:"Your name" },
+        { type:"form", key:"contact", title:"Send us a message", cols:2, fields:[
+          { label:"Full name", placeholder:"Your name", req:true },
           { label:"Phone", type:"tel", placeholder:"+91 …" },
-          { label:"Email", type:"email", placeholder:"you@email.com", full:true },
+          { label:"Email", type:"email", placeholder:"you@email.com", full:true, req:true },
           { label:"Subject", type:"select", options:["General enquiry","Delivery issue","Subscription help","Partnership"], full:true },
-          { label:"Message", type:"textarea", placeholder:"How can we help?", full:true },
+          { label:"Message", type:"textarea", placeholder:"How can we help?", full:true, req:true },
         ], submit:"Send message" },
         (function(){
           var b=(window.DOODLY&&window.DOODLY.brand)||{}, s=b.support||{};

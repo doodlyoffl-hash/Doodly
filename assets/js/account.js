@@ -309,6 +309,126 @@ window.DOODLY_ACCOUNT = (function () {
       });
   }
 
+  /* ============================================================ CALENDAR
+     Live month grid from the customer's real Delivery rows (raw ISO rows are
+     stashed by hydrateAccount as D._rawDeliveries). Delivered = green dot,
+     missed/skipped = amber, the next scheduled delivery = outlined. ‹ › walk
+     months. Demo users keep the static mock. */
+  function wireCalendar() {
+    if ((document.body.dataset.route || "") !== "account/calendar") return;
+    if (!me()) return;
+    var D = window.DOODLY_DATA || {};
+    var raw = D._rawDeliveries || [];
+    var calEl = document.querySelector(".cal"); if (!calEl) return;
+    var panel = calEl.closest(".panel"); if (!panel) return;
+
+    var key = function (x) { return x.getFullYear() + "-" + x.getMonth() + "-" + x.getDate(); };
+    var byDay = {};
+    raw.forEach(function (dv) { var x = new Date(dv.date); if (!isNaN(x.getTime())) byDay[key(x)] = dv.status; });
+    var sched = null;
+    if (D._nextDelivery && D._nextDelivery.date) { var nx = new Date(D._nextDelivery.date); if (!isNaN(nx.getTime())) sched = key(nx); }
+
+    var MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    var view = new Date(); view.setDate(1);
+
+    function render() {
+      var y = view.getFullYear(), m = view.getMonth();
+      var first = new Date(y, m, 1).getDay();
+      var days = new Date(y, m + 1, 0).getDate();
+      var todayK = key(new Date());
+      var cells = "";
+      for (var i = 0; i < first; i++) cells += '<div class="day muted"></div>';
+      for (var d = 1; d <= days; d++) {
+        var k = y + "-" + m + "-" + d, st = byDay[k];
+        var cls = "", dot = "", extra = "";
+        if (st === "DELIVERED") { cls = "deliver"; dot = '<span class="d-dot"></span>'; }
+        else if (st === "FAILED" || st === "SKIPPED") { cls = "paused"; }
+        else if (st) { cls = "deliver"; }                                   // scheduled / en-route row exists
+        else if (k === sched) { cls = "deliver"; extra = 'style="box-shadow:inset 0 0 0 2px var(--leaf-600)"'; }
+        if (k === todayK) extra = 'style="outline:2px solid var(--forest);outline-offset:-2px"';
+        cells += '<div class="day ' + cls + '" ' + extra + ">" + d + dot + "</div>";
+      }
+      panel.innerHTML =
+        '<div class="row-between" style="margin-bottom:14px"><h3 style="font-family:\'Fraunces\',serif;color:var(--forest)">' + MONTHS[m] + " " + y + "</h3>" +
+        '<div class="seg"><button type="button" data-cal="prev" aria-label="Previous month">‹</button><button type="button" class="active">Month</button><button type="button" data-cal="next" aria-label="Next month">›</button></div></div>' +
+        '<div class="cal">' + ["S","M","T","W","T","F","S"].map(function (dw) { return '<div class="dow">' + dw + "</div>"; }).join("") + cells + "</div>" +
+        '<div class="chart-legend"><span style="color:var(--leaf-600)">● Delivered</span><span style="color:#a9791b">● Missed / skipped</span><span style="color:var(--forest)">◻ Next delivery</span></div>';
+      var pv = panel.querySelector('[data-cal="prev"]'), nxb = panel.querySelector('[data-cal="next"]');
+      if (pv) pv.addEventListener("click", function () { view.setMonth(view.getMonth() - 1); render(); });
+      if (nxb) nxb.addEventListener("click", function () { view.setMonth(view.getMonth() + 1); render(); });
+    }
+    render();
+  }
+
+  /* ============================================================ TRACKING
+     Live status for today's (or the latest) delivery: real timeline stages,
+     real driver, real bottle counts. The map stays a placeholder until a
+     Maps key is configured. */
+  function wireTracking() {
+    if ((document.body.dataset.route || "") !== "account/tracking") return;
+    if (!me()) return;
+    var D = window.DOODLY_DATA || {};
+    var raw = D._rawDeliveries || [];
+    var headP = document.querySelector(".page-head p");
+    var tl = document.querySelector(".timeline");
+    if (!raw.length) {
+      if (headP) headP.textContent = "No deliveries yet — your first delivery will show up here.";
+      if (tl) { var pn = tl.closest(".panel"); if (pn) pn.innerHTML = '<div class="state"><h3>Nothing to track yet</h3><p>Once your subscription starts, every morning’s delivery will appear here live.</p></div>'; }
+      return;
+    }
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var dv = null;
+    for (var i = 0; i < raw.length; i++) { var x = new Date(raw[i].date); x.setHours(0, 0, 0, 0); if (x.getTime() === today.getTime()) { dv = raw[i]; break; } }
+    dv = dv || raw[0];   // newest-first from the API
+    var st = dv.status;
+    var when = new Date(dv.date);
+    var dayLabel = (function () { var x = new Date(dv.date); x.setHours(0,0,0,0); var diff = Math.round((x - today) / 86400000); return diff === 0 ? "today" : diff === -1 ? "yesterday" : "on " + fmtD(dv.date); })();
+    var t = dv.deliveredAt ? new Date(dv.deliveredAt) : null;
+    var tStr = t ? t.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }) : "";
+
+    // stage index: 0 scheduled · 1 packed · 2 out for delivery · 3 delivered
+    var idx = st === "DELIVERED" ? 3
+      : (st === "OUT_FOR_DELIVERY" || st === "ON_THE_WAY" || st === "REACHED") ? 2
+      : (st === "PACKED" || st === "ACCEPTED") ? 1 : 0;
+    var missed = st === "FAILED" || st === "SKIPPED";
+
+    if (headP) headP.textContent = missed
+      ? "We couldn’t complete your delivery " + dayLabel + " — our team has been notified."
+      : st === "DELIVERED" ? "Delivered " + dayLabel + (tStr ? " at " + tStr : "") + " ✓"
+      : idx === 2 ? (st === "REACHED" ? "Your delivery executive has arrived 🏠" : "Your bottle is on the way — arriving before 7 AM.")
+      : "Your next delivery is scheduled " + (dayLabel === "today" ? "for today" : dayLabel) + ", before 7 AM.";
+
+    if (tl) {
+      var stages = [
+        { t: "Scheduled", s: fmtD(dv.date) + (dv.slot ? " · " + String(dv.slot).toLowerCase().replace(/_/g, " ") : "") },
+        { t: "Packed at the farm", s: "Chilled & bottled fresh" },
+        { t: "Out for delivery", s: dv.driver && dv.driver.name ? "With " + dv.driver.name : "With your delivery executive" },
+        missed ? { t: "Not delivered", s: st === "SKIPPED" ? "Skipped for this day" : "We missed you — we’ll make it right" }
+               : { t: "Delivered", s: tStr ? tStr + (dv.bottlesIn ? " · " + dv.bottlesIn + " empty bottle" + (dv.bottlesIn > 1 ? "s" : "") + " collected" : "") : "Before 7 AM" },
+      ];
+      tl.innerHTML = stages.map(function (sg, j) {
+        var state = missed && j === 3 ? "warn" : j < idx ? "done" : j === idx ? (st === "DELIVERED" ? "done" : "active") : "";
+        var ic = state === "done" ? (window.DOODLY_BLOCKS ? icon("check", 12) : "") : "";
+        return '<div class="tl-item ' + state + '"><span class="dot">' + ic + '</span><div class="tl-t">' + esc(sg.t) + '</div><div class="tl-s">' + esc(sg.s || "") + "</div></div>";
+      }).join("");
+    }
+
+    // driver & proof panel — real executive + real delivery facts
+    var cu = document.querySelector(".content .cell-user");
+    if (cu) {
+      var nm = (dv.driver && dv.driver.name) || "Assigning…";
+      var ini = nm.split(/\s+/).map(function (w) { return w[0] || ""; }).slice(0, 2).join("").toUpperCase();
+      cu.innerHTML = '<span class="av">' + esc(ini) + '</span><span><span class="strong">' + esc(nm) + '</span><br><small class="muted">Your delivery executive</small></span>';
+      var dl = cu.parentElement ? cu.parentElement.querySelector(".deflist") : null;
+      if (dl) {
+        var rows = [["Delivery ID", "D-" + String(dv.id).slice(-6).toUpperCase()], ["Status", missed ? (st === "SKIPPED" ? "Skipped" : "Missed") : st === "DELIVERED" ? "Delivered" : idx === 2 ? "On the way" : "Scheduled"]];
+        if (tStr) rows.push(["Delivered at", tStr]); else rows.push(["ETA", "Before 7 AM"]);
+        if (dv.bottlesOut != null) rows.push(["Bottles", String(dv.bottlesOut || 1) + " out · " + String(dv.bottlesIn || 0) + " collected"]);
+        dl.innerHTML = rows.map(function (r) { return '<div class="row"><span class="k">' + esc(r[0]) + '</span><span class="v">' + esc(r[1]) + "</span></div>"; }).join("");
+      }
+    }
+  }
+
   /* ============================================================ entry */
   function mountAll() {
     try { wireOrders(); } catch (e) {}
@@ -316,6 +436,8 @@ window.DOODLY_ACCOUNT = (function () {
     try { wireNotifications(); } catch (e) {}
     try { wireProfile(); } catch (e) {}
     try { wireAddresses(); } catch (e) {}
+    try { wireCalendar(); } catch (e) {}
+    try { wireTracking(); } catch (e) {}
   }
   return { mountAll: mountAll, openOrderDetail: openOrderDetail };
 })();

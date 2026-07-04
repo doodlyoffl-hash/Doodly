@@ -442,6 +442,17 @@
 
   function accessDenied() {
     const RB = window.DOODLY_RBAC, active = RB.activeRole(), home = RB.roleOf(active).home;
+    // Live site, nobody signed in → this is a staff area, ask for a sign-in
+    // rather than accusing a visitor's "role" of lacking permission.
+    if (!(RB.realSession && RB.realSession()) && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
+      return `<div class="rbac-denied">
+        <div class="rbac-denied-ic">${icon("lock", 30)}</div>
+        <h2>Sign in required</h2>
+        <p>This area is for the DOODLY team. Sign in with your staff account to continue.</p>
+        <a class="btn btn-primary btn-lg" href="/login.html">Sign in</a>
+        <a class="btn btn-ghost btn-lg" href="/">Back to the site</a>
+      </div>`;
+    }
     return `<div class="rbac-denied">
       <div class="rbac-denied-ic">${icon("lock", 30)}</div>
       <h2>Access restricted</h2>
@@ -531,10 +542,40 @@
   }
 
   // Functional forms: prefill from localStorage, validate required, persist, success/error message + toast, reset.
+  // Contact page — the message really goes to the support desk (POST /api/contact
+  // → SupportTicket). The generic wireForms "save locally" behaviour would be a
+  // lie here, so this form gets its own submit path with a real ticket number back.
+  function wireContactForm(form) {
+    const toast = (m) => { if (window.DOODLY_PINCODE && window.DOODLY_PINCODE.toast) window.DOODLY_PINCODE.toast(m); };
+    const msg = form.querySelector(".form-msg");
+    const note = (cls, text) => { if (msg) { msg.hidden = false; msg.className = "form-msg " + cls; msg.textContent = text; } };
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      let bad = null;
+      $$("[required]", form).forEach(el => { const ok = String(el.value || "").trim() !== ""; el.classList.toggle("invalid", !ok); if (!ok && !bad) bad = el; });
+      if (bad) { note("err", "Please complete the required fields."); bad.focus(); return; }
+      const v = (n) => { const el = form.querySelector(`[name="${n}"]`); return el ? String(el.value || "").trim() : ""; };
+      const btn = form.querySelector("button[type=submit]");
+      const label = btn ? btn.textContent : "";
+      if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+      try {
+        const r = await window.DOODLY_API.post("/api/contact", { name: v("full-name"), phone: v("phone"), email: v("email"), subject: v("subject"), message: v("message") });
+        note("ok", `Message sent ✓ Your ticket ${r.number} is with our support team — we usually reply within a few hours.`);
+        form.reset(); $$(".invalid", form).forEach(el => el.classList.remove("invalid"));
+        toast("Message sent ✓ " + r.number);
+      } catch (err) {
+        note("err", err && err.code === "offline" ? "We couldn't reach DOODLY right now — please try again, or WhatsApp us from the panel alongside." : (err && err.message) || "Couldn't send your message — please try again.");
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = label; }
+      }
+    });
+  }
+
   function wireForms() {
     const toast = (m) => { if (window.DOODLY_PINCODE && window.DOODLY_PINCODE.toast) window.DOODLY_PINCODE.toast(m); };
     $$(".js-form").forEach(form => {
       if (form._wired) return; form._wired = true;
+      if (form.dataset.form === "contact" && window.DOODLY_API) { wireContactForm(form); return; }
       const key = "doodly-form-" + (form.dataset.form || (location.pathname.replace(/\W+/g, "-")));
       try { const saved = JSON.parse(localStorage.getItem(key) || "null"); if (saved) $$("[name]", form).forEach(el => { if (saved[el.name] != null) { if (el.type === "checkbox") el.checked = !!saved[el.name]; else el.value = saved[el.name]; } }); } catch (e) {}
       const msg = form.querySelector(".form-msg");
@@ -5016,9 +5057,9 @@
         Promise.all([ get("/api/account/summary"), get("/api/orders?limit=100"), get("/api/deliveries"), get("/api/invoices"), get("/api/bottles"), get("/api/account/referrals"), get("/api/account/notifications") ]),
         guard(5000),
       ]);
-    } catch (e) { return; }                              // timeout / offline → keep mock
+    } catch (e) { D.__offline = true; return; }          // timeout / offline → keep mock + banner
     const summary = res[0] && res[0].summary;
-    if (!summary) return;                                // no core profile → keep mock (avoid a half-empty page)
+    if (!summary) { D.__offline = true; return; }        // no core profile → keep mock (avoid a half-empty page)
     const orders = res[1] && res[1].orders, deliveries = res[2] && res[2].deliveries, invoices = res[3] && res[3].invoices, bottles = res[4], referral = res[5] && res[5].referral, notifs = res[6] && res[6].notifications;
 
     /* ---- format + status → [color,label] helpers (match the mock tuple shape) ---- */
@@ -5076,6 +5117,11 @@
       D.notifications = notifs.map((n2) => ({ ic: icFor((n2.title || "") + " " + (n2.body || "")), t: n2.title, s: n2.body, unread: !n2.readAt, id: n2.id }));
     }
 
+    // raw rows kept for the pages that need real dates/statuses (calendar, tracking)
+    D._rawDeliveries = deliveries || [];
+    D._subLive = summary.activeSubscription || null;
+    D._nextDelivery = summary.nextDelivery || null;
+
     D.__hydrated = true;
   }
 
@@ -5086,6 +5132,30 @@
     const nm = (D.me && D.me.name) ? String(D.me.name).split(/\s+/)[0] : ""; if (!nm) return;
     const hr = new Date().getHours(), greet = hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening";
     document.querySelectorAll(".ph-title, h1, h2").forEach((el) => { if (/good (morning|afternoon|evening)/i.test(el.textContent || "")) el.textContent = greet + ", " + nm + " 👋"; });
+  }
+
+  /* ============================================================
+     Connectivity banner — one fixed pill for "browser offline" and
+     "backend unreachable while signed in" (account hydration failed).
+     ============================================================ */
+  function netBanner(show, text) {
+    let el = document.getElementById("doodlyNetBanner");
+    if (!show) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "doodlyNetBanner";
+      el.setAttribute("role", "status");
+      el.style.cssText = "position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9998;background:#0F3D2E;color:#fff;padding:10px 18px;border-radius:999px;font-size:.85rem;font-weight:600;box-shadow:0 8px 30px rgba(15,61,46,.35);display:flex;gap:8px;align-items:center;max-width:92vw";
+      document.body.appendChild(el);
+    }
+    el.textContent = "⚠ " + text;
+  }
+  function wireNet() {
+    window.addEventListener("offline", () => netBanner(true, "You're offline — some actions won't work until you reconnect."));
+    window.addEventListener("online", () => netBanner(false));
+    const D = window.DOODLY_DATA;
+    if (D && D.__offline) netBanner(true, "Couldn't reach DOODLY right now — showing your last known data.");
+    else if (navigator.onLine === false) netBanner(true, "You're offline — some actions won't work until you reconnect.");
   }
 
   /* ============================================================
@@ -5102,5 +5172,6 @@
     // After render, swap mock data for the real backend where a module is wired.
     if (s === "admin") { try { bkWire(document.body.dataset.route || ""); } catch (e) {} }
     if (s === "account") { try { patchAccountGreeting(); } catch (e) {} }
+    try { wireNet(); } catch (e) {}
   })();
 })();

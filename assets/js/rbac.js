@@ -190,16 +190,40 @@ window.DOODLY_RBAC = (function () {
   function canRoute(href, role) {
     const mod = routeModule(href);
     if (!mod) return true;                 // non-admin route → not RBAC-gated here
+    // admin URLs are for admin-surface roles only — a customer or delivery
+    // executive is denied outright, whatever the module matrix says.
+    const uid = role ? "" : activeUserId();
+    const eff = role || (uid ? ((userById(uid) || {}).role || activeRole()) : activeRole());
+    if (((roleOf(eff) || {}).surface || "") !== "admin") return false;
     if (role) return can(mod, "view", role);
-    const uid = activeUserId(); if (uid) return effectiveCan(uid, mod, "view");
+    if (uid) return effectiveCan(uid, mod, "view");
     return can(mod, "view", activeRole());
   }
 
   /* ---------- active role + Super-Admin impersonation ---------- */
-  // realRole = who you actually are (demo defaults to super_admin on the admin surface).
-  function realRole() { try { return localStorage.getItem("doodly-realrole") || "super_admin"; } catch (e) { return "super_admin"; } }
+  // realRole = who you actually are. A REAL signed-in session (backend id +
+  // bearer token) always wins; the demo default (super_admin) only applies on
+  // localhost so the live site never hands the admin shell to visitors.
+  function isLocalHostEnv() { try { return /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname); } catch (e) { return false; } }
+  function realSession() {
+    try {
+      const u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null");
+      if (u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")) return u;
+    } catch (e) {}
+    return null;
+  }
+  function realRole() {
+    const ru = realSession(); if (ru && ru.role) return ru.role;
+    if (!isLocalHostEnv()) return "customer";   // live site, not signed in → no admin access
+    try { return localStorage.getItem("doodly-realrole") || "super_admin"; } catch (e) { return "super_admin"; }
+  }
   function setRealRole(r) { try { localStorage.setItem("doodly-realrole", r); } catch (e) {} }
-  function activeRole() { try { return localStorage.getItem("doodly-role") || realRole(); } catch (e) { return realRole(); } }
+  function activeRole() {
+    const rr = realRole();
+    if (realSession() && rr !== "super_admin") return rr;   // real non-super sessions can't wear another role
+    if (!realSession() && !isLocalHostEnv()) return rr;     // anonymous on the live site → fixed
+    try { return localStorage.getItem("doodly-role") || rr; } catch (e) { return rr; }
+  }
   function activeUserId() { try { return localStorage.getItem("doodly-viewuser") || ""; } catch (e) { return ""; } }
   function isImpersonating() { return activeRole() !== realRole() || !!activeUserId(); }
   function canSwitch() { return realRole() === "super_admin"; }
@@ -223,6 +247,9 @@ window.DOODLY_RBAC = (function () {
   /* ---------- nav filtering (hide unauthorized completely) ---------- */
   function filterNav(groups, role) {
     const uid = role ? "" : activeUserId();
+    // same surface rule as canRoute — non-admin roles get no admin nav at all
+    const eff = role || (uid ? ((userById(uid) || {}).role || activeRole()) : activeRole());
+    if (((roleOf(eff) || {}).surface || "") !== "admin") return [];
     const allow = (mod) => !mod ? true : (role ? can(mod, "view", role) : (uid ? effectiveCan(uid, mod, "view") : can(mod, "view", activeRole())));
     return (groups || []).map((g) => ({
       h: g.h,
@@ -388,7 +415,7 @@ window.DOODLY_RBAC = (function () {
   return {
     ROLES: roles, modules, label, roleOf,
     matrix, setLevel, resetMatrix, levelFor, can, canRoute, routeModule, filterNav,
-    realRole, setRealRole, activeRole, isImpersonating, canSwitch, switchTo, returnToSelf,
+    realRole, setRealRole, activeRole, realSession, isImpersonating, canSwitch, switchTo, returnToSelf,
     activeUserId, viewAsUser, viewingUser,
     audit, auditEntries, loginHistory, recordLogin, deviceInfo,
     users, saveUsers, currentUser, LEVEL_ACTIONS,

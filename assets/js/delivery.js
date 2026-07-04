@@ -89,6 +89,12 @@ window.DOODLY_DELIVERY = (function () {
      ============================================================ */
   function mountPortal(host) {
     if (!host) return;
+    // Live site: the executive portal is for signed-in executives only — the
+    // demo route sheet stays a localhost development aid.
+    if (!/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) && !execUser()) {
+      location.replace("/delivery/login.html");
+      return;
+    }
     if (execUser() && !_live) {
       host.innerHTML = '<div class="dl-hero"><div><div class="dl-greet">Loading your route…</div><div class="dl-sub">Fetching today\'s assignments</div></div></div>';
       loadLive().then(() => mountPortalNow(host));
