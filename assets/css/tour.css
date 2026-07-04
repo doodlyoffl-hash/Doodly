@@ -57,7 +57,7 @@
 .tour-clock { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; background: #fff; color: var(--leaf-600, #169A57); }
 .tour-cutoff-line { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; }
 .tour-now { background: var(--gold-soft, #FBF0D9); color: #8a6516; padding: 5px 10px; border-radius: 8px; }
-.tour-next { background: #fff; color: var(--leaf-600, #169A57); padding: 5px 10px; border-radius: 8px; }
+.tour-then { background: #fff; color: var(--leaf-600, #169A57); padding: 5px 10px; border-radius: 8px; }
 .tour-arrow { color: var(--ink-3, #9aa4a0); }
 
 /* map */

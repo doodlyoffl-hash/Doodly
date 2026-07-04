@@ -51,7 +51,7 @@ window.DOODLY_TOUR = (function () {
       return '<div class="tour-savings"><div class="tour-bars">' + plans.map(function (p) { return '<div class="tour-bar-col"><div class="tour-bar" style="--v:' + (p[1] / 18 * 100) + '%"><span>' + (p[1] ? "-" + p[1] + "%" : "—") + '</span></div><small>' + p[0] + '</small></div>'; }).join("") + '</div><p class="tour-savings-cap">Save more with longer plans</p></div>';
     }
     if (kind === "cutoff") {
-      return '<div class="tour-cutoff"><div class="tour-clock">' + svg("calendar", 26) + '</div><div class="tour-cutoff-line"><span class="tour-now">Order by 8 PM</span><span class="tour-arrow">→</span><span class="tour-next">Delivered 6–8 AM</span></div></div>';
+      return '<div class="tour-cutoff"><div class="tour-clock">' + svg("calendar", 26) + '</div><div class="tour-cutoff-line"><span class="tour-now">Order by 8 PM</span><span class="tour-arrow">→</span><span class="tour-then">Delivered 6–8 AM</span></div></div>';
     }
     if (kind === "map") return '<div class="tour-map"><span class="tour-pin">📍</span><span class="tour-zone z1"></span><span class="tour-zone z2"></span></div>';
     if (kind === "pay") return '<div class="tour-pay">' + ["UPI", "Card", "Net-banking", "Wallet", "Auto Pay"].map(function (m) { return '<span class="tour-chip">' + m + '</span>'; }).join("") + '</div>';
@@ -102,12 +102,15 @@ window.DOODLY_TOUR = (function () {
       wireStep();
     }
     function wireStep() {
+      // nav buttons are queried WITHIN .tour-nav — step artwork must never be
+      // able to steal these bindings via a colliding class name (the "cutoff"
+      // art's chip once did, dead-ending the tour at that step)
       var q = function (sel) { return ov.querySelector(sel); };
       if (q(".tour-x")) q(".tour-x").addEventListener("click", function () { fade(ov); });
-      if (q(".tour-skip")) q(".tour-skip").addEventListener("click", function () { track("tourSkipped"); fade(ov); });
-      if (q(".tour-prev")) q(".tour-prev").addEventListener("click", function () { i = Math.max(0, i - 1); paint(); });
-      if (q(".tour-next")) q(".tour-next").addEventListener("click", function () { i = Math.min(STEPS.length - 1, i + 1); paint(); });
-      if (q(".tour-finish")) q(".tour-finish").addEventListener("click", function () { track("tourCompleted"); finish(ov); });
+      if (q(".tour-nav .tour-skip")) q(".tour-nav .tour-skip").addEventListener("click", function () { track("tourSkipped"); fade(ov); });
+      if (q(".tour-nav .tour-prev")) q(".tour-nav .tour-prev").addEventListener("click", function () { i = Math.max(0, i - 1); paint(); });
+      if (q(".tour-nav .tour-next")) q(".tour-nav .tour-next").addEventListener("click", function () { i = Math.min(STEPS.length - 1, i + 1); paint(); });
+      if (q(".tour-nav .tour-finish")) q(".tour-nav .tour-finish").addEventListener("click", function () { track("tourCompleted"); finish(ov); });
       ov.querySelectorAll(".tour-dot").forEach(function (d) { d.addEventListener("click", function () { i = +d.dataset.go; paint(); }); });
     }
     ov.addEventListener("mousedown", function (e) { if (e.target === ov) fade(ov); });
