@@ -71,7 +71,9 @@
 .sb-link:hover { background: var(--surface-2); color: var(--forest); }
 .sb-link.active { background: var(--mint-soft); color: var(--forest-700); font-weight:700; }
 .sb-link .tag-soon { margin-left:auto; font-size:.62rem; font-weight:700; color:var(--gold); background:var(--gold-soft); padding:.1rem .4rem; border-radius:999px; }
-.sb-foot { padding: 12px; border-top:1px solid var(--line); }
+.sb-foot { padding: 12px; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:2px; }
+.sb-signout { background:none; border:0; width:100%; text-align:left; cursor:pointer; font-family:inherit; color:#c0392b; }
+.sb-signout:hover { background:#fdecea; color:#c0392b; }
 
 /* main column */
 .main-col { min-width: 0; display:flex; flex-direction:column; }
@@ -100,6 +102,22 @@
 .tb-user .av { width:34px; height:34px; border-radius:50%; background:var(--grad-leaf); color:#fff; display:grid; place-items:center; font-weight:700; font-size:.85rem; }
 .tb-user .nm { font-size:.85rem; font-weight:600; color:var(--forest); display:none; }
 @media (min-width:560px){ .tb-user .nm { display:block; } }
+
+/* ---------- account dropdown (sign-out) — public nav chip + dashboard top-bar ---------- */
+.acct-dd { position:relative; }
+.acct-dd > summary { list-style:none; cursor:pointer; }
+.acct-dd > summary::-webkit-details-marker { display:none; }
+.acct-dd > summary::marker { content:""; }
+.acct-dd[open] > summary { outline:none; }
+.acct-menu { position:absolute; right:0; top:calc(100% + 8px); min-width:196px; background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:0 16px 44px rgba(15,61,46,.18); padding:6px; z-index:200; display:flex; flex-direction:column; gap:2px; animation:acctPop .16s ease; }
+@keyframes acctPop { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
+.acct-mi { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; color:var(--ink-2); font-weight:600; font-size:.9rem; background:none; border:0; width:100%; text-align:left; cursor:pointer; font-family:inherit; text-decoration:none; }
+.acct-mi:hover { background:var(--surface-2); color:var(--forest); }
+.acct-mi svg { width:17px; height:17px; opacity:.85; flex-shrink:0; }
+.acct-signout { color:#c0392b; }
+.acct-signout:hover { background:#fdecea; color:#c0392b; }
+.acct-who { padding:8px 12px 8px; font-weight:700; color:var(--forest); font-size:.9rem; border-bottom:1px solid var(--line); margin-bottom:4px; line-height:1.3; }
+.acct-who small { display:block; font-weight:500; color:var(--ink-3); font-size:.76rem; margin-top:2px; word-break:break-all; }
 
 .content { padding: clamp(18px,3vw,30px); flex:1; }
 .content > .reveal { will-change: opacity, transform; }

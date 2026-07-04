@@ -505,8 +505,10 @@ window.DOODLY_AUTH = (function () {
   function logout() {
     try { sessionStorage.removeItem("doodly-session-logged"); } catch (e) {}
     try { localStorage.removeItem("doodly-currentuser"); localStorage.removeItem("doodly-token"); } catch (e) {}
+    // clear any impersonation / demo-role state so the next visitor starts clean
+    try { localStorage.removeItem("doodly-role"); localStorage.removeItem("doodly-viewuser"); localStorage.removeItem("doodly-realrole"); } catch (e) {}
     const RB = window.DOODLY_RBAC; if (RB) { if (RB.returnToSelf) RB.returnToSelf(); RB.audit && RB.audit("auth.logout", "Signed out"); }
-    window.location.href = "/login.html";
+    window.location.href = "/";   // back to the storefront home (nav shows "Log in" again)
   }
   let idleTimer = null;
   function setIdleTimeout(min) { try { localStorage.setItem("doodly-idle-min", String(min)); } catch (e) {} initIdle(); }

@@ -50,8 +50,17 @@
     const name = String(u.name || "Account").trim();
     const first = name.split(/\s+/)[0] || "Account";
     const initials = name.split(/\s+/).map(w => w[0] || "").slice(0, 2).join("").toUpperCase() || "•";
-    return `<a href="${accountHome(u)}" class="nav-user nav-cta" aria-label="My account — ${esc(name)}">
-      <span class="nav-av">${esc(initials)}</span><span class="nav-un">${esc(first)}</span></a>`;
+    const isCust = (u.role || "customer") === "customer";
+    return `<details class="acct-dd nav-acct-dd">
+      <summary class="nav-user nav-cta" aria-haspopup="menu" aria-label="Account menu — ${esc(name)}">
+        <span class="nav-av">${esc(initials)}</span><span class="nav-un">${esc(first)}</span></summary>
+      <div class="acct-menu" role="menu">
+        <div class="acct-who">${esc(name)}${u.email ? `<small>${esc(u.email)}</small>` : ""}</div>
+        <a href="${accountHome(u)}" class="acct-mi" role="menuitem">${icon("user", 17)} ${isCust ? "My Account" : "Dashboard"}</a>
+        ${isCust ? `<a href="/account/orders.html" class="acct-mi" role="menuitem">${icon("clock", 17)} My Orders</a>` : ""}
+        <button type="button" class="acct-mi acct-signout" data-logout role="menuitem">${icon("logout", 17)} Sign out</button>
+      </div>
+    </details>`;
   }
 
   function publicHeader() {
@@ -108,7 +117,8 @@
         <div class="mm-cta">
           <a href="/doodly.html" class="btn btn-ghost btn-lg mm-story"><img src="/assets/img/logo.png" alt="" style="height:16px;width:auto;vertical-align:-2px;margin-right:6px">✦ Unfold Pure</a>
           ${(() => { const u = publicUser(); return u
-            ? `<a href="${accountHome(u)}" class="btn btn-ghost btn-lg">${icon("user", 16)} My Account — ${esc(String(u.name || "").split(/\s+/)[0] || "Account")}</a>`
+            ? `<a href="${accountHome(u)}" class="btn btn-ghost btn-lg">${icon("user", 16)} My Account — ${esc(String(u.name || "").split(/\s+/)[0] || "Account")}</a>
+               <button type="button" class="btn btn-ghost btn-lg mm-signout" data-logout>${icon("logout", 16)} Sign out</button>`
             : `<a href="/login.html" class="btn btn-ghost btn-lg">Log in</a>`; })()}
           <a href="/subscriptions.html" class="btn btn-primary btn-lg">Subscribe</a>
         </div>
@@ -391,13 +401,18 @@
     const groups = navGroups.map(g => `
       <div class="sb-group"><div class="sb-h">${g.h}</div>
         ${g.items.map(([label, href, ic]) =>
-          `<a class="sb-link ${isActive(href) ? "active" : ""}" href="${href}">${icon(ic || "box", 18)}<span>${label}</span></a>`).join("")}
+          /sign\s*out|log\s*out/i.test(label)
+            ? `<button type="button" class="sb-link sb-signout" data-logout>${icon(ic || "logout", 18)}<span>${label}</span></button>`
+            : `<a class="sb-link ${isActive(href) ? "active" : ""}" href="${href}">${icon(ic || "box", 18)}<span>${label}</span></a>`).join("")}
       </div>`).join("");
     return `
     <aside class="sidebar" id="sidebar">
       <div class="sb-brand"><a href="/" aria-label="DOODLY home" style="display:flex"><img src="/assets/img/logo.png" alt="DOODLY Logo" class="logo-img"></a><span class="sb-role">${roleLabel}</span></div>
       <div class="sb-scroll">${groups}</div>
-      <div class="sb-foot"><a class="sb-link" href="/">${icon("logout",18)}<span>Back to site</span></a></div>
+      <div class="sb-foot">
+        <a class="sb-link" href="/">${icon("home",18)}<span>Back to site</span></a>
+        <button type="button" class="sb-link sb-signout" data-logout>${icon("logout",18)}<span>Sign out</span></button>
+      </div>
     </aside>`;
   }
 
@@ -411,7 +426,14 @@
         ${roleSwitchControl(surface)}
         <button class="icon-btn" id="themeBtn" aria-label="Toggle dark mode">${icon("sun",18)}</button>
         <a class="tb-icon" href="${surface === "account" ? "/account/notifications.html" : surface === "admin" ? "/admin/notifications.html" : SURFACE_HOME[surface] || "/"}" aria-label="Notifications">${icon("bell",18)}<span class="dot-badge"></span></a>
-        <div class="tb-user"><span class="av">${surface === "driver" || surface === "delivery" ? "RK" : surface === "admin" ? "AD" : me.initials}</span><span class="nm">${surface === "driver" || surface === "delivery" ? "Ramesh K." : surface === "admin" ? "Admin" : me.name.split(" ")[0]}</span></div>
+        <details class="acct-dd tb-user-dd">
+          <summary class="tb-user" aria-haspopup="menu" aria-label="Account menu"><span class="av">${surface === "driver" || surface === "delivery" ? "RK" : surface === "admin" ? "AD" : me.initials}</span><span class="nm">${surface === "driver" || surface === "delivery" ? "Ramesh K." : surface === "admin" ? "Admin" : me.name.split(" ")[0]}</span></summary>
+          <div class="acct-menu" role="menu">
+            <a href="${surface === "account" ? "/account/profile.html" : surface === "delivery" || surface === "driver" ? "/delivery/profile.html" : "/admin/settings.html"}" class="acct-mi" role="menuitem">${icon("user",17)} ${surface === "account" ? "My profile" : "Profile & settings"}</a>
+            <a href="/" class="acct-mi" role="menuitem">${icon("home",17)} Back to site</a>
+            <button type="button" class="acct-mi acct-signout" data-logout role="menuitem">${icon("logout",17)} Sign out</button>
+          </div>
+        </details>
       </div>
     </div>`;
   }
@@ -4951,7 +4973,7 @@
     // Premium B2B business statement
     if (window.DOODLY_INVOICE) { const ibb = $("#invoiceB2BMount"); if (ibb) window.DOODLY_INVOICE.mountB2B(ibb); }
     // session: configurable idle auto-logout + any sign-out controls
-    if (window.DOODLY_AUTH) { window.DOODLY_AUTH.initIdle(); $$("[data-logout]").forEach((l) => l.addEventListener("click", (e) => { e.preventDefault(); window.DOODLY_AUTH.logout(); })); }
+    if (window.DOODLY_AUTH) { window.DOODLY_AUTH.initIdle(); }   // sign-out is wired globally (wireGlobalAuth) so it works on every surface
     // brand story CMS (Content → Brand Story)
     if (window.DOODLY_UNFOLD) { const bs = $("#brandStoryMount"); if (bs) window.DOODLY_UNFOLD.mountAdmin(bs); }
     // wallet + trial cashback (customer panel + admin management)
@@ -5161,6 +5183,25 @@
     else if (navigator.onLine === false) netBanner(true, "You're offline — some actions won't work until you reconnect.");
   }
 
+  /* Sign-out + account dropdown — delegated on document so a single handler
+     serves EVERY surface (public nav, mobile menu, dashboard sidebar/top-bar). */
+  function wireGlobalAuth() {
+    if (document._authWired) return; document._authWired = true;
+    document.addEventListener("click", (e) => {
+      const lo = e.target.closest && e.target.closest("[data-logout]");
+      if (lo) {
+        e.preventDefault();
+        if (window.DOODLY_AUTH && DOODLY_AUTH.logout) DOODLY_AUTH.logout();
+        else { try { localStorage.removeItem("doodly-token"); localStorage.removeItem("doodly-currentuser"); } catch (er) {} window.location.href = "/login.html"; }
+        return;
+      }
+      // close any open account dropdown when clicking outside it
+      document.querySelectorAll("details.acct-dd[open]").forEach((d) => { if (!d.contains(e.target)) d.removeAttribute("open"); });
+    });
+    // Esc closes an open dropdown
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") document.querySelectorAll("details.acct-dd[open]").forEach((d) => d.removeAttribute("open")); });
+  }
+
   /* ============================================================
      Boot
      ============================================================ */
@@ -5176,5 +5217,6 @@
     if (s === "admin") { try { bkWire(document.body.dataset.route || ""); } catch (e) {} }
     if (s === "account") { try { patchAccountGreeting(); } catch (e) {} }
     try { wireNet(); } catch (e) {}
+    try { wireGlobalAuth(); } catch (e) {}
   })();
 })();
