@@ -555,21 +555,24 @@ window.DOODLY_CHECKOUT = (function () {
       <span class="co-addr-line">${esc(loc)}</span>
       <span class="co-addr-phone">${icon(a.lat != null ? "pin" : "home", 13)} ${a.lat != null ? "Pinned location" : "Saved address"}</span></button>`;
   }
-  function hydrateAddresses() {
+  function hydrateAddresses(preferId) {
     if (!meUser() || !window.DOODLY_API) return;      // demo/guest → keep the sample cards
     const box = mount && mount.querySelector(".co-addrs");
     if (!box) return;
     window.DOODLY_API.get("/api/addresses").then((r) => {
       const list = (r && r.addresses) || [];
-      const def = list.filter((x) => x.isDefault)[0] || list[0] || null;
-      state.addrId = def ? def.id : null;
+      // Prefer the just-added/pinned address, then the default, then the first —
+      // so pinning a new address selects THAT address (+ its pincode) and the step can continue.
+      const sel = (preferId && list.filter((x) => x.id === preferId)[0]) || list.filter((x) => x.isDefault)[0] || list[0] || null;
+      state.addrId = sel ? sel.id : null;
       const cards = list.length
-        ? list.map((a) => realAddrCard(a, def && a.id === def.id)).join("")
+        ? list.map((a) => realAddrCard(a, sel && a.id === sel.id)).join("")
         : `<div class="co-addr-empty" style="grid-column:1/-1;padding:14px;color:var(--ink-3);font-size:.9rem">No saved addresses yet — add your delivery address and drop a pin for accurate delivery.</div>`;
       box.innerHTML = cards + `<button type="button" class="co-addr co-addnew js-addaddr">${icon("plus", 22)}<span>Add new address</span></button>`;
-      if (def && window.DOODLY_PINCODE && def.pincode) {
-        window.DOODLY_PINCODE.setPin(def.pincode);
+      if (sel && window.DOODLY_PINCODE && sel.pincode) {
+        window.DOODLY_PINCODE.setPin(sel.pincode);
         const ph = mount.querySelector("#coPincodeHost"); if (ph) window.DOODLY_PINCODE.mountChecker(ph, { compact: true });
+        const req = mount.querySelector("#coPinReq"); if (req) req.hidden = DOODLY_PINCODE.isServiceable();   // clear the block once the pinned address is serviceable
       }
     }).catch(() => {});                                // offline → keep the sample cards
   }
@@ -610,8 +613,9 @@ window.DOODLY_CHECKOUT = (function () {
       if (geo.lat != null) { body.lat = geo.lat; body.lng = geo.lng; }
       window.DOODLY_API.post("/api/addresses", body).then((r) => {
         if (window.DOODLY_PINCODE) DOODLY_PINCODE.toast && DOODLY_PINCODE.toast("Address saved ✓");
-        if (r && r.address) state.addrId = r.address.id;
-        close(); hydrateAddresses();
+        const newId = r && r.address ? r.address.id : null;
+        if (newId) state.addrId = newId;
+        close(); hydrateAddresses(newId);   // select the address they just pinned + adopt its pincode
       }).catch((e) => { if (window.DOODLY_PINCODE && DOODLY_PINCODE.toast) DOODLY_PINCODE.toast((e && e.message) || "Check the address fields."); });
     });
     requestAnimationFrame(() => m.classList.add("show"));
