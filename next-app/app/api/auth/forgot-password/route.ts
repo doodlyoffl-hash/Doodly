@@ -20,6 +20,24 @@ const schema = z.object({ email: z.string().trim().toLowerCase().email("Enter a 
 
 const GENERIC = "If an account exists for that email, we've sent a reset link.";
 
+// The reset link must land on the STOREFRONT (static app), NEVER this backend
+// (it has no /reset-password.html → 404). NOTE: we intentionally do NOT use
+// NEXT_PUBLIC_SITE_URL — that is the *backend's* own public URL (used by
+// robots/sitemap), and basing the link on it sends customers to the backend.
+// Priority: NEXT_PUBLIC_STOREFRONT_URL (dedicated override) → the allow-listed
+// calling origin (the storefront that made this request) → canonical default.
+const STOREFRONT_HOSTS = new Set([
+  "www.doodly.in", "doodly.in", "doodly-admin.vercel.app",
+  "localhost:4173", "127.0.0.1:4173",
+]);
+function storefrontBase(req: NextRequest): string {
+  const explicit = process.env.NEXT_PUBLIC_STOREFRONT_URL?.replace(/\/$/, "");
+  if (explicit) return explicit;
+  const origin = req.headers.get("origin");
+  if (origin) { try { if (STOREFRONT_HOSTS.has(new URL(origin).host)) return origin.replace(/\/$/, ""); } catch { /* ignore */ } }
+  return "https://www.doodly.in";
+}
+
 export const POST = route("auth.forgot", async (req: NextRequest) => {
   const ctx = reqContext(req);
   const rl = rateLimit(`forgot:${ctx.ip ?? "anon"}`, 5, 60_000);
@@ -33,11 +51,8 @@ export const POST = route("auth.forgot", async (req: NextRequest) => {
     await db.passwordResetToken.create({
       data: { userId: user.id, tokenHash: hashToken(rawToken), expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS) },
     });
-    // Point at the deployed STATIC storefront (no clean URLs → needs .html).
-    // NEXT_PUBLIC_SITE_URL must be the storefront origin (e.g. https://www.doodly.in),
-    // NOT the backend, or the link would 404 on the backend host.
-    const base = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || req.nextUrl.origin;
-    const resetUrl = `${base}/reset-password.html?token=${rawToken}`;
+    // Always points at the storefront (.html — the static app has no clean URLs).
+    const resetUrl = `${storefrontBase(req)}/reset-password.html?token=${rawToken}`;
     const sent = await sendPasswordResetEmail(user.email!, resetUrl, user.name);
     if (!sent.delivered) log.info("auth.forgot", "reset link (dev fallback)", { resetUrl });
     await audit({ userId: user.id, actorRole: "customer", action: "auth.forgot_password", target: user.id, ctx });

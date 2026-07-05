@@ -40,17 +40,19 @@ In **vercel.com → `doodly-backendstore` → Settings → Environment Variables
 ```
 RESEND_API_KEY=re_xxxxxxxxxxxxxxxx
 EMAIL_FROM=DOODLY <noreply@doodly.in>          # must be on your verified domain
-NEXT_PUBLIC_SITE_URL=https://www.doodly.in     # your storefront (see note below)
 ```
 
 Then **Redeploy**. Keep `RESEND_API_KEY` server-side only — never in the
-storefront or in chat.
+storefront or in chat. That's all email needs.
 
-> **`NEXT_PUBLIC_SITE_URL` matters for password reset.** The reset email links to
-> `${NEXT_PUBLIC_SITE_URL}/reset-password.html?token=…`. It must be your
-> **storefront** origin (e.g. `https://www.doodly.in`), NOT the backend — otherwise
-> the link 404s. If it's unset, the code falls back to the request origin (the
-> backend), which is wrong for this link.
+> **Password-reset link (no config needed).** The reset email automatically links
+> to your **storefront** at `/reset-password.html` — it targets the site the
+> request came from (allow-listed to your real storefront hosts), so it works out
+> of the box and can never be pointed at the backend or a spoofed host. Only if
+> you serve the storefront from a brand-new domain do you need to override it:
+> set `NEXT_PUBLIC_STOREFRONT_URL=https://your-storefront` (and/or add the host to
+> the allow-list in `app/api/auth/forgot-password/route.ts`).
+> Do NOT use `NEXT_PUBLIC_SITE_URL` for this — that's the backend's own URL.
 
 ---
 
