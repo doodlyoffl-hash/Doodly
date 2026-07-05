@@ -351,7 +351,7 @@ window.DOODLY_MANIFEST = (function () {
 
     /* ===== CUSTOMER ===== */
     "account/dashboard": { surface:"account", title:"Dashboard", blocks:[
-      head("Good morning, Ananya 👋","Here's everything about your milk today."),
+      head("Good morning 👋","Here's everything about your milk today."),
       { type:"customerKpis", page:"dashboard" },
       { type:"quickActions", items:[
         { ic:"pause", t:"Pause plan", s:"Going away?", href:"/account/vacation.html" },
@@ -359,31 +359,24 @@ window.DOODLY_MANIFEST = (function () {
         { ic:"bottle", t:"Return bottles", s:"Manage empties", href:"/account/bottles.html" },
         { ic:"pin", t:"Track delivery", s:"Live now", href:"/account/tracking.html" } ]},
       { type:"puzzleCard" },
-      { type:"columns", cols:2, items:[
-        { type:"customerSub" },
-        { type:"timeline", dataset:"trackTimeline" } ]},
+      { type:"customerSub" },
       { type:"table", dataset:"orders", toolbar:false, pager:false },
     ]},
     "account/orders": { surface:"account", title:"My Orders", blocks:[ head("My Orders","Every order you've placed with DOODLY.",[{label:"New subscription",kind:"btn-primary",href:"/subscriptions.html",icon:"plus"}]), tbl("orders",{filters:["All","Active","Completed","Refunded"]}) ]},
     "account/subscription": { surface:"account", title:"My Subscription", blocks:[
       head("My Subscription","Manage your plan, bottle size and delivery.",[{label:"Pause",kind:"btn-ghost",href:"/account/vacation.html",icon:"pause"}]),
       { type:"columns", cols:2, items:[ { type:"subSchedule" }, { type:"autopaySettings" } ]},
-      { type:"columns", cols:2, items:[
-        { type:"deflist", title:"Active plan", rows:[["Plan","30-Day Morning Ritual"],["Bottle","1000 ml Family"],["Daily price","₹130"],["Discount","8% (₹312 saved)"],["Status","Active"],["Renews","26 Jul 2026"]] },
-        { type:"panel", title:"Manage", html:`<div class="qa-row" style="grid-template-columns:1fr 1fr"><a class="qa-tile" href="/account/vacation.html"><div class="ic">${ic("pause")}</div><div class="t">Pause / Vacation</div></a><a class="qa-tile" href="/account/extra-milk.html"><div class="ic">${ic("plus")}</div><div class="t">Extra milk</div></a><a class="qa-tile" href="/subscriptions.html"><div class="ic">${ic("refresh")}</div><div class="t">Change plan</div></a><a class="qa-tile" href="/account/subscription.html"><div class="ic">${ic("trash")}</div><div class="t">Cancel</div></a></div>` } ]},
+      { type:"panel", title:"Manage", html:`<div class="qa-row" style="grid-template-columns:repeat(4,1fr)"><a class="qa-tile" href="/account/vacation.html"><div class="ic">${ic("pause")}</div><div class="t">Pause / Vacation</div></a><a class="qa-tile" href="/account/extra-milk.html"><div class="ic">${ic("plus")}</div><div class="t">Extra milk</div></a><a class="qa-tile" href="/subscriptions.html"><div class="ic">${ic("refresh")}</div><div class="t">Change plan</div></a><a class="qa-tile" href="/account/subscription.html"><div class="ic">${ic("trash")}</div><div class="t">Cancel</div></a></div>` },
       { type:"notice", text:"Your subscription auto-renews. You can pause, skip a day, or cancel anytime before the renewal date." },
     ]},
-    "account/subscription-history": { surface:"account", title:"Subscription History", blocks:[ head("Subscription History","A record of every plan change and renewal."), { type:"timeline", items:[
-      { t:"Renewed — 30-Day Morning Ritual", s:"26 Jun 2026 · ₹3,588", state:"done" },
-      { t:"Upgraded 500 ml → 1000 ml", s:"01 Jun 2026", state:"done" },
-      { t:"Started — 30-Day Morning Ritual", s:"02 May 2026 · ₹1,932", state:"done" },
-      { t:"Completed trial pack", s:"12 Apr 2026 · ₹200", state:"done" } ]} ]},
+    "account/subscription-history": { surface:"account", title:"Subscription History", blocks:[ head("Subscription History","A record of every plan change and renewal."),
+      { type:"panel", html:`<div id="subHistoryMount"><div class="state"><div class="ic">${ic("refresh")}</div><h3>No subscription history yet</h3><p>Your plan changes and renewals will appear here once you subscribe.</p></div></div>` } ]},
     "account/deliveries": { surface:"account", title:"Deliveries", blocks:[ head("Deliveries","Upcoming and past deliveries.",[{label:"Track live",kind:"btn-primary",href:"/account/tracking.html",icon:"pin"}]), { type:"lateCustomerStats" }, tbl("deliveries",{filters:["All","Scheduled","Delivered","Skipped"]}) ]},
     "account/tracking": { surface:"account", title:"Delivery Tracking", blocks:[
-      head("Delivery Tracking","Your 1000 ml bottle is on the way — ETA 6:40 AM."),
+      head("Delivery Tracking","Track your delivery in real time."),
       { type:"columns", cols:2, items:[
         { type:"timeline", dataset:"trackTimeline" },
-        { type:"panel", title:"Driver & proof", html:`<div class="cell-user" style="margin-bottom:14px"><span class="av">RK</span><span><span class="strong">Ramesh Kumar</span><br><small class="muted">DRV-07 · 4.9★</small></span></div><div class="deflist"><div class="row"><span class="k">Delivery ID</span><span class="v">D-88142</span></div><div class="row"><span class="k">OTP</span><span class="v">4 8 2 1</span></div><div class="row"><span class="k">ETA</span><span class="v">6:40 AM</span></div></div><div class="media-card mt-2" style="min-height:160px"><div><div class="big">🗺️</div><div class="muted-sm" style="color:rgba(255,255,255,.8);margin-top:6px">Live map placeholder</div></div></div>` } ]},
+        { type:"panel", title:"Driver & proof", html:`<div class="cell-user" style="margin-bottom:14px"><span class="av">··</span><span><span class="strong">Assigning…</span><br><small class="muted">Your delivery executive</small></span></div><div class="deflist"><div class="row"><span class="k">Delivery ID</span><span class="v">—</span></div><div class="row"><span class="k">Status</span><span class="v">—</span></div><div class="row"><span class="k">ETA</span><span class="v">Before 7 AM</span></div></div><div class="media-card mt-2" style="min-height:160px"><div><div class="big">🗺️</div><div class="muted-sm" style="color:rgba(255,255,255,.8);margin-top:6px">Live map appears here when a delivery is on the way</div></div></div>` } ]},
     ]},
     "account/calendar": { surface:"account", title:"Delivery Calendar", blocks:[ head("Delivery Calendar","See your deliveries, skips and pauses at a glance."), { type:"calendar" } ]},
     "account/bottles": { surface:"account", title:"Bottle Tracking", blocks:[

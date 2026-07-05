@@ -584,10 +584,52 @@ window.DOODLY_ACCOUNT = (function () {
     }).catch(function (e) { host.innerHTML = '<div class="notice warn">Couldn\'t load your rewards: ' + esc(e.message || "offline") + "</div>"; });
   }
 
+  /* ============================================================ SUBSCRIPTION HISTORY
+     Real plan timeline built from the customer's own subscriptions
+     (/api/account/subscription): started / paused / cancelled / active events.
+     If the customer has never subscribed, the honest empty state seeded in the
+     manifest (#subHistoryMount) is left untouched — never fabricated records. */
+  function wireSubscriptionHistory() {
+    if ((document.body.dataset.route || "") !== "account/subscription-history" || !me() || !API()) return;
+    var host = document.getElementById("subHistoryMount"); if (!host) return;
+    API().get("/api/account/subscription").then(function (r) {
+      var subs = r.subscriptions || [];
+      var events = [];
+      subs.forEach(function (s) {
+        var plan = (s.plan && s.plan.name) || "Subscription";
+        if (s.startDate) events.push({ ts: +new Date(s.startDate), t: "Started — " + plan, s: fmtD(s.startDate) + (s.perDeliveryPaise ? " · " + inr(s.perDeliveryPaise) + " / delivery" : ""), state: "done" });
+        if (s.status === "VACATION" && s.pausedFrom) events.push({ ts: +new Date(s.pausedFrom), t: "Paused — " + plan, s: fmtD(s.pausedFrom) + (s.pausedUntil ? " → " + fmtD(s.pausedUntil) : ""), state: "" });
+        if (s.status === "CANCELLED" && s.endDate) events.push({ ts: +new Date(s.endDate), t: "Cancelled — " + plan, s: fmtD(s.endDate), state: "warn" });
+        else if (s.status === "ACTIVE") events.push({ ts: Date.now(), t: "Active — " + plan, s: s.nextDeliveryAt ? "Next delivery " + fmtD(s.nextDeliveryAt) : "Ongoing", state: "active" });
+      });
+      events.sort(function (a, b) { return b.ts - a.ts; });
+      if (!events.length) return;   // keep the seeded "No subscription history yet" empty state
+      host.innerHTML = '<div class="panel panel-pad reveal"><div class="timeline">' +
+        events.map(function (e) { return '<div class="tl-item ' + e.state + '"><span class="dot">' + (e.state === "done" ? icon("check", 12) : "") + '</span><div class="tl-t">' + esc(e.t) + '</div><div class="tl-s">' + esc(e.s || "") + '</div></div>'; }).join("") +
+        '</div></div>';
+    }).catch(function () {});   // on error, leave the honest empty state in place
+  }
+
+  /* Any empty timeline / notification feed left on an account page → an honest empty
+     state, never a blank box. (Specific wires above own the tracking timeline etc.;
+     this only touches containers still empty after they run.) */
+  function fillEmptyPanels() {
+    if (!/^account\//.test(document.body.dataset.route || "")) return;
+    document.querySelectorAll(".content .timeline").forEach(function (tl) {
+      if (tl.children.length) return;
+      var pn = tl.closest(".panel"); if (pn) pn.innerHTML = '<div class="state"><div class="ic">' + icon("box", 22) + '</div><h3>Nothing here yet</h3><p>Your activity will show up here.</p></div>';
+    });
+    document.querySelectorAll(".content .feed").forEach(function (fd) {
+      if (fd.children.length) return;
+      var pn = fd.closest(".panel"); if (pn) pn.innerHTML = '<div class="state"><div class="ic">' + icon("bell", 22) + '</div><h3>You\'re all caught up</h3><p>No notifications right now.</p></div>';
+    });
+  }
+
   /* ============================================================ entry */
   function mountAll() {
     try { wireOrders(); } catch (e) {}
     try { wireSubscription(); } catch (e) {}
+    try { wireSubscriptionHistory(); } catch (e) {}
     try { wireNotifications(); } catch (e) {}
     try { wireProfile(); } catch (e) {}
     try { wireAddresses(); } catch (e) {}
@@ -596,6 +638,7 @@ window.DOODLY_ACCOUNT = (function () {
     try { wireSettings(); } catch (e) {}
     try { wireReferrals(); } catch (e) {}
     try { wireRewards(); } catch (e) {}
+    try { fillEmptyPanels(); } catch (e) {}
   }
   return { mountAll: mountAll, openOrderDetail: openOrderDetail };
 })();

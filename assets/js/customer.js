@@ -56,7 +56,9 @@ window.DOODLY_CUSTOMER = (function () {
       paidInvoices: invs.filter(function (i) { return st1(i) === "Paid"; }).length,
       pendingInvoices: invs.filter(function (i) { return st1(i) !== "Paid"; }).length,
       pendingPay: invs.filter(function (i) { return st1(i) !== "Paid"; }).reduce(function (s, i) { return s + (i.amount || 0); }, 0),
-      points: points(), tier: tier(), redeemable: redeemable(), badges: 3,
+      points: points(), tier: tier(), redeemable: redeemable(),
+      // badges are EARNED from real thresholds (Early Bird ≥30 deliveries, Eco Hero ≥40 returns, Connector ≥2 referrals) — never a fixed count
+      badges: (dels.filter(function (x) { return st1(x) === "Delivered"; }).length >= 30 ? 1 : 0) + (bl.filter(function (b) { return b.type && b.type[1] === "Returned"; }).length >= 40 ? 1 : 0) + (refs.filter(function (r) { return st1(r) === "Joined"; }).length >= 2 ? 1 : 0),
       bottlesPending: m.bottlesPending || 0, deposit: (m.depositPaise || 0) / 100,
       bottlesIssued: bl.filter(function (b) { return b.type && b.type[1] === "Issued"; }).length,
       bottlesReturned: bl.filter(function (b) { return b.type && b.type[1] === "Returned"; }).length,
@@ -103,10 +105,25 @@ window.DOODLY_CUSTOMER = (function () {
   function mountSub(host) {
     if (!host) return;
     var s = stats();
-    var row = function (k, v) { return '<div class="row"><span class="k">' + esc(k) + '</span><span class="v">' + esc(v) + '</span></div>'; };
-    var dprice = (function () { try { var pl = (window.DOODLY && DOODLY.plans || []).find(function (x) { return x.name === s.plan; }); return pl && pl.discount ? "₹130 (" + Math.round(pl.discount * 100) + "% off)" : "₹130"; } catch (e) { return "₹130"; } })();
+    // No active subscription → honest empty state + CTA (never a fabricated plan).
+    var noSub = !s.plan || s.plan === "—" || /no active plan/i.test(s.plan) || s.subStatus === "Inactive";
+    if (noSub) {
+      host.innerHTML = '<div class="panel reveal"><div class="panel-head"><h3>Current subscription</h3></div><div class="panel-pad">' +
+        '<div class="state"><div class="ic">' + icon("refresh", 22) + '</div><h3>No active subscription</h3><p>Subscribe today to enjoy fresh farm-to-home dairy deliveries.</p>' +
+        '<a class="btn btn-primary sm" href="/subscriptions.html">Browse subscription plans</a></div>' +
+        '</div></div>';
+      return;
+    }
+    var row = function (k, v) { return v ? '<div class="row"><span class="k">' + esc(k) + '</span><span class="v">' + esc(v) + '</span></div>' : ""; };
+    // Real per-delivery price + renewal come from the live subscription (D._subLive) — omit
+    // the row rather than guess when a value isn't available. The exact figures live on the
+    // Subscription page (#accSubManager). No hardcoded ₹130 / computed renewal.
+    var sub = (DA() || {})._subLive || null;
+    var dprice = "", renews = "";
+    try { if (sub && sub.perDeliveryPaise != null) dprice = inr(sub.perDeliveryPaise / 100) + " / delivery"; } catch (e) {}
+    try { if (sub && sub.endDate) renews = fmtDate(new Date(sub.endDate)); } catch (e) {}
     host.innerHTML = '<div class="panel reveal"><div class="panel-head"><h3>Current subscription</h3><a class="link" href="/account/subscription.html">Manage →</a></div><div class="panel-pad">' +
-      '<div class="deflist">' + row("Plan", s.plan) + row("Status", s.subStatus) + row("Bottle", s.variant) + row("Daily price", dprice) + row("Renews", s.renew.date + " · " + s.renew.days + " days") + '</div>' +
+      '<div class="deflist">' + row("Plan", s.plan) + row("Status", s.subStatus) + row("Bottle", s.variant) + row("Per delivery", dprice) + row("Renews", renews) + '</div>' +
       '<div class="cu-subactions">' + (s.subStatus === "Paused" ? '<a class="btn btn-primary sm" href="/account/subscription.html">Resume plan</a>' : '<a class="btn btn-ghost sm" href="/account/vacation.html">Pause / vacation</a>') + '<a class="btn btn-ghost sm" href="/account/extra-milk.html">Add extra milk</a></div>' +
       '</div></div>';
   }

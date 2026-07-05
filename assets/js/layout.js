@@ -5003,10 +5003,15 @@
       const ret = $("#rbacReturn") || $("#rbacReturn2");
       [ "#rbacReturn", "#rbacReturn2" ].forEach(sel => { const el = $(sel); if (el) el.addEventListener("click", () => { RB.returnToSelf(); window.location.href = "/admin/dashboard.html"; }); });
     }
+    // A REAL signed-in customer? Then the localStorage/demo renderers below (subscription
+    // schedule, auto-pay, address manager) must NOT run — the backend-driven panels
+    // (DOODLY_ACCOUNT.wire*) own those surfaces with honest empty states. Only demo /
+    // not-signed-in exploration keeps the client-side mocks.
+    const realCust = (() => { try { const u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null"); return !!(u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")); } catch (e) { return false; } })();
     // delivery scheduling surfaces (admin settings + customer active-subscription)
     if (window.DOODLY_SCHEDULE) {
       const ds = $("#deliverySettingsMount"); if (ds) window.DOODLY_SCHEDULE.mountSettingsForm(ds);
-      const ss = $("#subScheduleMount"); if (ss) window.DOODLY_SCHEDULE.mountSubSchedule(ss);
+      const ss = $("#subScheduleMount"); if (ss && !realCust) window.DOODLY_SCHEDULE.mountSubSchedule(ss);
     }
     // serviceable pincode (admin areas + account checker) + auto-pay (admin billing + account settings)
     if (window.DOODLY_PINCODE) {
@@ -5015,7 +5020,7 @@
     }
     if (window.DOODLY_AUTOPAY) {
       const ab = $("#autopayBillingMount"); if (ab) window.DOODLY_AUTOPAY.mountBilling(ab);
-      const as = $("#autopaySettingsMount"); if (as) window.DOODLY_AUTOPAY.mountSettings(as);
+      const as = $("#autopaySettingsMount"); if (as && !realCust) window.DOODLY_AUTOPAY.mountSettings(as);
     }
     // daily expense management (Finance → Daily Expenses)
     if (window.DOODLY_EXPENSES) { const ex = $("#expensesMount"); if (ex) window.DOODLY_EXPENSES.mount(ex); }
@@ -5046,8 +5051,8 @@
     if (window.DOODLY_GST) { const gm = $("#gstAdminMount"); if (gm) window.DOODLY_GST.mountAdmin(gm); }
     // Referral & rewards (customer dashboard + admin management). For a REAL
     // signed-in customer the backend panel (DOODLY_ACCOUNT.wireReferrals) owns
-    // #referralPanelMount — skip the localStorage demo mount so it isn't clobbered.
-    const realCust = (() => { try { const u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null"); return !!(u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")); } catch (e) { return false; } })();
+    // #referralPanelMount — skip the localStorage demo mount so it isn't clobbered
+    // (realCust is computed once, higher up, and reused here).
     if (window.DOODLY_REFERRAL) { const rc = $("#referralPanelMount"); if (rc && !realCust) window.DOODLY_REFERRAL.mountCustomer(rc); const ra2 = $("#referralAdminMount"); if (ra2) window.DOODLY_REFERRAL.mountAdmin(ra2); }
     // Premium B2B business statement
     if (window.DOODLY_INVOICE) { const ibb = $("#invoiceB2BMount"); if (ibb) window.DOODLY_INVOICE.mountB2B(ibb); }
@@ -5071,7 +5076,7 @@
       const ra = $("#rolesAdminMount"); if (ra) window.DOODLY_RBAC_ADMIN.mount(ra);
     }
     // maps address manager (customer) + delivery executive portal
-    if (window.DOODLY_MAPS) { const am = $("#addressManagerMount"); if (am) window.DOODLY_MAPS.mountAddressManager(am); }
+    if (window.DOODLY_MAPS) { const am = $("#addressManagerMount"); if (am && !realCust) window.DOODLY_MAPS.mountAddressManager(am); }
     if (window.DOODLY_DELIVERY) { const dp = $("#deliveryPortalMount"); if (dp) window.DOODLY_DELIVERY.mountPortal(dp); }
     // invoice download + page-head actions (real CSV / friendly feedback) — wired once
     if (!document.body.dataset.invWired) {
@@ -5156,8 +5161,11 @@
     D.me = { name: nm, initials: initials, phone: cu.phone || "—", email: cu.email || "—", area: "—",
       walletPaise: 0, bottlesPending: 0, depositPaise: 0, plan: "No active plan", variant: "—",
       nextDelivery: "No delivery scheduled", subStatus: "Inactive", points: 0 };
-    ["orders", "deliveries", "trackTimeline", "bottleLedger", "wallet", "invoices", "referrals", "notifications"].forEach((k) => { D[k] = []; });
+    ["orders", "deliveries", "trackTimeline", "bottleLedger", "wallet", "invoices", "referrals", "notifications", "tickets", "addresses"].forEach((k) => { D[k] = []; });
     D._rawDeliveries = []; D._subLive = null; D._nextDelivery = null;
+    // Client-side demo seeds (localStorage) that some renderers fall back to — clear them
+    // so a real customer never sees a fabricated subscription / address / rewards balance.
+    try { ["doodly-subscription", "doodly-sub-skips", "doodly-sub-paused", "doodly-addresses", "doodly-reward-points", "doodly-reward-redemptions", "doodly-autopay"].forEach((k) => localStorage.removeItem(k)); } catch (e) {}
     D.__realUser = true; D.__hydrated = false; D.__offline = false;
   }
   // Expired / revoked session (e.g. after a password reset) → drop it and re-login. Never demo.
