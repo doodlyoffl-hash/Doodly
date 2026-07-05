@@ -293,13 +293,11 @@ window.DOODLY_CHECKOUT = (function () {
     if (!validateMethod()) { failure("We couldn't verify your payment details. Please check and try again."); return; }
     const me = coSignedIn();
     if (me && window.DOODLY_API) { processing(); placeRealOrder(me); return; }   // REAL order into the backend
-    if (!coIsLocalhost()) {
-      failure("Please sign in to your DOODLY account to place the order — your selections are saved.");
-      setTimeout(() => { window.location.href = "/login/customer.html"; }, 2400);
-      return;
-    }
-    processing();                                                        // localhost demo flow
-    setTimeout(() => { hideProcessing(); success(); }, reduced() ? 400 : 2200);
+    // No guest / localhost bypass — an order can ONLY be placed by a signed-in customer.
+    // Send guests to login (selections are preserved) and return them to checkout.
+    failure("Please log in to your DOODLY account to place the order — your selections are saved.");
+    const back = encodeURIComponent(location.pathname + location.search);
+    setTimeout(() => { window.location.href = "/login/customer.html?from=" + back; }, 1800);
   }
 
   /* ---------------- real checkout (backend order + Razorpay) ---------------- */
@@ -350,7 +348,14 @@ window.DOODLY_CHECKOUT = (function () {
         state.realOrder = res; hideProcessing(); success();
       })
       .catch((err) => {
-        // local dev without gateway keys / backend → keep the demo experience
+        // session expired mid-checkout → re-login and resume (cart + selection are preserved in localStorage)
+        if (err && (err.status === 401 || err.code === "unauthorized")) {
+          hideProcessing(); failure("Your session expired — please log in again. Your cart and selection are saved.");
+          const back = encodeURIComponent(location.pathname + location.search);
+          setTimeout(() => { window.location.href = "/login/customer.html?from=" + back; }, 1800);
+          return;
+        }
+        // local dev without gateway keys / backend → keep the demo experience (signed-in customer only)
         if (coIsLocalhost() && err && (err.code === "offline" || err.status === 503 || err.code === "gateway_unconfigured")) {
           setTimeout(() => { hideProcessing(); success(); }, reduced() ? 300 : 1200); return;
         }
@@ -673,6 +678,15 @@ window.DOODLY_CHECKOUT = (function () {
     scope = scope || document;
     mount = scope.querySelector("#checkoutMount");
     if (!mount || mount.dataset.built) return;
+    // Auth gate — checkout is for signed-in customers only. Guests are sent to login
+    // (their cart / subscription selection is preserved) and returned here after.
+    try {
+      if (window.DOODLY_GUARD && !DOODLY_GUARD.isLoggedIn()) {
+        const from = encodeURIComponent(location.pathname + location.search);
+        window.location.replace("/login/customer.html?from=" + from);
+        return;
+      }
+    } catch (e) {}
     mount.dataset.built = "1";
     state = { step: 0, slot: 0, addr: 0, addrId: null, method: "upi", reached: 0, realOrder: null };
     build(); wire();

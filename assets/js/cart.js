@@ -45,6 +45,9 @@ window.DOODLY_CART = (function () {
   /* ---- mutations ---- */
   function add(variantId, fromEl) {
     const v = variant(variantId); if (!v) return;
+    // Auth gate — guests must sign in before anything can enter the cart (the chosen
+    // bottle is remembered and added automatically after login).
+    if (window.DOODLY_GUARD && !window.DOODLY_GUARD.requireLogin({ action: "add", variant: variantId }, "Please log in or create an account to add products to your cart and continue shopping.")) return;
     if (S() && !S().compute(v, { product: milk() }).orderable) { toast("That bottle is currently unavailable", v); return; }
     const cart = read(), ex = cart.find((i) => i.variantId === variantId);
     if (ex) ex.qty = (ex.qty || 1) + 1; else cart.push({ variantId, productId: v.productId || "milk", qty: 1 });

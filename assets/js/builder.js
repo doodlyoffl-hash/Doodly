@@ -23,10 +23,11 @@ window.DOODLY_BUILDER = (function () {
       return !!(u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token"));
     } catch (e) { return false; }
   }
-  function isLocalHost() { try { return /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname); } catch (e) { return false; } }
+  // Checkout requires a signed-in customer everywhere (no localhost bypass). Guests
+  // are sent to the customer login and returned to checkout with their build intact.
   function checkoutDest() {
-    if (signedInCustomer() || isLocalHost()) return "/checkout.html";
-    return "/login/customer.html?order=subscription";
+    if (signedInCustomer()) return "/checkout.html";
+    return "/login/customer.html?from=" + encodeURIComponent("/checkout.html");
   }
 
   /* "Order Now" from a product card → persist the selection (variant + plan +
@@ -49,7 +50,9 @@ window.DOODLY_BUILDER = (function () {
       if (startIso && SC.setSelected) SC.setSelected(startIso);
     }
     try { localStorage.setItem("doodly-subscription", JSON.stringify({ variantId: variantId, planId: pid, days: days, startIso: startIso, endIso: endIso })); } catch (e) {}
-    window.location.href = checkoutDest();
+    // Auth gate — guests sign in first, then land on checkout with the selection preserved.
+    if (window.DOODLY_GUARD && !window.DOODLY_GUARD.requireLogin(null, "Please log in or create an account to complete your order — your selection is saved.", "/checkout.html")) return;
+    window.location.href = "/checkout.html";
   }
 
   function mount() {
@@ -189,7 +192,9 @@ window.DOODLY_BUILDER = (function () {
         }
         // authoritative at click time (session may have changed since render)
         e.preventDefault();
-        window.location.href = checkoutDest();
+        // Auth gate — guests sign in first; the subscription build is preserved for checkout.
+        if (window.DOODLY_GUARD && !window.DOODLY_GUARD.requireLogin(null, "Please log in or create an account to complete your subscription — your build is saved.", "/checkout.html")) return;
+        window.location.href = "/checkout.html";
       });
     }
 

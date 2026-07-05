@@ -161,10 +161,15 @@ window.DOODLY_VARIANT = (function () {
       const v = variant(selectedId); if (!v || !orderable(v)) return;
       // Subscribe → the dedicated "Build your subscription" screen, bottle (+ plan) preselected.
       const q = "?variant=" + encodeURIComponent(selectedId) + (v.type === "trial" ? "" : "&plan=p30");
-      window.location.href = "/subscriptions.html" + q + "#builder";
+      const dest = "/subscriptions.html" + q + "#builder";
+      // Auth gate — guests sign in first, then land back on the subscription builder.
+      if (window.DOODLY_GUARD && !window.DOODLY_GUARD.requireLogin(null, "Please log in or create an account to build your DOODLY subscription.", dest)) return;
+      window.location.href = dest;
     });
     if (cart) cart.addEventListener("click", () => {
       const v = variant(selectedId); if (!v || !orderable(v)) return;
+      // Auth gate (covers the localStorage fallback path too; the bottle is added after login).
+      if (window.DOODLY_GUARD && !window.DOODLY_GUARD.requireLogin({ action: "add", variant: selectedId }, "Please log in or create an account to add products to your cart and continue shopping.")) return;
       if (window.DOODLY_CART) {
         // premium path: fly-to-cart + drawer badge + toast handled centrally
         const card = scope.querySelector(`.vposter[data-variant="${selectedId}"]`);

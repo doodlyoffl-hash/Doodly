@@ -407,9 +407,13 @@ window.DOODLY_AUTH = (function () {
     // Adopt the customer role locally first (works even if the backend is down).
     if (RB) { if (RB.setRealRole) RB.setRealRole("customer"); if (RB.returnToSelf) RB.returnToSelf(); }
 
-    // Arrived mid-purchase (?order= — e.g. from the subscription builder or a
-    // trial quick-order)? Return to checkout after signing in, not the dashboard.
-    if (/[?&]order=/.test(location.search)) form.dataset.dest = "/checkout.html";
+    // Return the customer to where they were gated: ?from= (a same-origin path — the
+    // /^\/[^/]/ guard blocks open-redirects), else a mid-purchase ?order= → checkout.
+    try {
+      const from = new URLSearchParams(location.search).get("from");
+      if (from && /^\/[^/]/.test(from)) form.dataset.dest = from;
+      else if (/[?&]order=/.test(location.search)) form.dataset.dest = "/checkout.html";
+    } catch (e) { if (/[?&]order=/.test(location.search)) form.dataset.dest = "/checkout.html"; }
 
     const res = await tokenSignIn(email, password);
     if (res === "invalid") return showCustomerAuthError(form, "Invalid email or password.");
@@ -490,9 +494,13 @@ window.DOODLY_AUTH = (function () {
     const refInp = form.querySelector('input[data-rule*="Referral"]');
     const referralCode = refInp ? String(refInp.value || "").trim().toUpperCase() : "";
 
-    // arrived mid-purchase (e.g. trial quick-order)? continue to checkout after joining
-    const fromOrder = /[?&]order=/.test(location.search);
-    if (fromOrder) form.dataset.dest = "/checkout.html";
+    // Return the new customer to where they were gated: ?from= (same-origin), else
+    // a mid-purchase ?order= → checkout.
+    try {
+      const from = new URLSearchParams(location.search).get("from");
+      if (from && /^\/[^/]/.test(from)) form.dataset.dest = from;
+      else if (/[?&]order=/.test(location.search)) form.dataset.dest = "/checkout.html";
+    } catch (e) { if (/[?&]order=/.test(location.search)) form.dataset.dest = "/checkout.html"; }
 
     if (window.DOODLY_API) {
       try {

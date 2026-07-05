@@ -44,6 +44,51 @@
     if (r === "delivery_executive") return "/delivery/dashboard.html";
     return "/admin/dashboard.html";
   }
+
+  /* ============================================================
+     Purchase auth-guard — browsing is public, but cart / Buy Now /
+     Subscribe / checkout / wallet / account require a signed-in
+     customer. Reuses publicUser() (real token + non-static id).
+     Guests get a message + redirect to the customer login with a
+     ?from= return URL; the intended action resumes after login.
+     ============================================================ */
+  function guardToast(msg) {
+    let el = document.getElementById("doodlyGuardToast");
+    if (!el) {
+      el = document.createElement("div"); el.id = "doodlyGuardToast"; el.setAttribute("role", "status");
+      el.style.cssText = "position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:99999;background:#0F3D2E;color:#fff;padding:12px 20px;border-radius:14px;font-size:.9rem;font-weight:600;box-shadow:0 12px 40px rgba(15,61,46,.4);max-width:90vw;text-align:center;line-height:1.4";
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+  }
+  window.DOODLY_GUARD = {
+    isLoggedIn: function () { return !!publicUser(); },
+    /* true if signed in; else stash the intent, show the message, and send the
+       guest to the customer login with a ?from= return URL. `dest` overrides the
+       page to return to after login (e.g. the subscription builder or checkout). */
+    requireLogin: function (intent, message, dest) {
+      if (publicUser()) return true;
+      try { if (intent) sessionStorage.setItem("doodly-intent", JSON.stringify(intent)); } catch (e) {}
+      const from = encodeURIComponent(dest || (location.pathname + location.search + location.hash));
+      guardToast(message || "Please log in or create an account to continue.");
+      setTimeout(function () { window.location.href = "/login/customer.html?from=" + from; }, 1100);
+      return false;
+    },
+    /* After login, replay a stashed intent (e.g. add the chosen product to cart). */
+    consumeIntent: function () {
+      if (!publicUser()) return;
+      let it = null; try { it = JSON.parse(sessionStorage.getItem("doodly-intent") || "null"); } catch (e) {}
+      if (!it) return;
+      try { sessionStorage.removeItem("doodly-intent"); } catch (e) {}
+      try {
+        if (it.action === "add" && it.variant && window.DOODLY_CART && window.DOODLY_CART.add) {
+          window.DOODLY_CART.add(it.variant);
+          if (window.DOODLY_CART.open) setTimeout(function () { window.DOODLY_CART.open(); }, 350);
+        }
+        // buynow / subscribe intents resume via the ?from= destination URL itself
+      } catch (e) {}
+    },
+  };
   function navAccountCta() {
     const u = publicUser();
     if (!u) return `<a href="/login.html" class="btn btn-ghost nav-cta">Log in</a>`;
@@ -274,9 +319,9 @@
   function renderAuth() {
     const a = entry.auth;
     const dest = a.dest || (a.otp ? "/account/dashboard.html" : ((a.submit && a.submit.match(/code|reset/i)) ? "/otp.html" : "/account/dashboard.html"));
-    // preserve a mid-purchase marker (?order=) across the login/signup pages so
-    // a guest who registers or switches forms still returns to checkout
-    const carry = /[?&]order=/.test(location.search) ? location.search : "";
+    // preserve the return marker (?from= gated action, or ?order= mid-purchase) across
+    // the login/signup pages so a guest who registers or switches forms still returns there
+    const carry = /[?&](order|from)=/.test(location.search) ? location.search : "";
     const fieldIcon = (f) => {
       const t = (f.type || "").toLowerCase(), l = (f.label || "").toLowerCase();
       if (t === "password") return icon("lock", 18);
@@ -5336,6 +5381,13 @@
   dacMerge();   // fold any persisted admin-added customers into the live dataset before render
   const s = entry.surface;
   (async () => {
+    // Account / wallet pages require a signed-in customer — send guests to the
+    // customer login with a return URL (they never see these pages).
+    if (s === "account" && !publicUser()) {
+      const from = encodeURIComponent(location.pathname + location.search);
+      try { window.location.replace("/login/customer.html?from=" + from); } catch (e) { window.location.href = "/login/customer.html"; }
+      return;
+    }
     // Account surface: swap the demo dataset for the signed-in customer's real records before render.
     if (s === "account") { try { await hydrateAccount(); } catch (e) {} }
     // Public storefront: overlay DB-authoritative prices/availability onto the catalogue before paint.
@@ -5346,6 +5398,8 @@
     // After render, swap mock data for the real backend where a module is wired.
     if (s === "admin") { try { bkWire(document.body.dataset.route || ""); } catch (e) {} }
     if (s === "account") { try { patchAccountGreeting(); } catch (e) {} }
+    // Public: after a login-return, replay any stashed purchase intent (e.g. add-to-cart).
+    if (s === "public") { try { setTimeout(function () { if (window.DOODLY_GUARD) DOODLY_GUARD.consumeIntent(); }, 600); } catch (e) {} }
     try { wireNet(); } catch (e) {}
     try { wireGlobalAuth(); } catch (e) {}
   })();
