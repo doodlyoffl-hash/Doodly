@@ -18,7 +18,14 @@ window.DOODLY_WALLET = (function () {
   var _mine = null;
   function rbacUser() { try { return window.DOODLY_RBAC && DOODLY_RBAC.currentUser ? DOODLY_RBAC.currentUser() : null; } catch (e) { return null; } }
   function isRealUser() { var u = rbacUser(); try { return !!(u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")); } catch (e) { return false; } }
-  function emptyMine() { var u = rbacUser() || {}; return { id: ME, name: u.name || "You", mobile: u.phone || "", balance: 0, trialCredited: false, trialPurchased: false, txns: [] }; }
+  function emptyMine() {
+    var u = rbacUser() || {};
+    // Until the full wallet (/api/wallet) is fetched (only the Wallet page calls hydrateMine),
+    // use the authoritative balance already loaded into the account summary (me.walletPaise)
+    // so KPIs like the dashboard show the real balance instead of ₹0.
+    var wp = 0; try { wp = (window.DOODLY_DATA && window.DOODLY_DATA.me && window.DOODLY_DATA.me.walletPaise) || 0; } catch (e) {}
+    return { id: ME, name: u.name || "You", mobile: u.phone || "", balance: Math.round(wp / 100), trialCredited: false, trialPurchased: false, txns: [] };
+  }
 
   /* ---------- config (admin-editable) ---------- */
   function defaultCfg() { return { enabled: true, amount: 200, eligiblePlans: ["p30", "p90"], expiryDays: null, startDate: null, endDate: null, rechargeEnabled: true, rechargeMin: 100, rechargeMax: 100000, presets: [100, 250, 500, 1000, 2000, 5000] }; }

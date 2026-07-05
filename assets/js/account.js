@@ -589,25 +589,81 @@ window.DOODLY_ACCOUNT = (function () {
      (/api/account/subscription): started / paused / cancelled / active events.
      If the customer has never subscribed, the honest empty state seeded in the
      manifest (#subHistoryMount) is left untouched — never fabricated records. */
+  function renderSubHistory(host, events) {
+    if (!events.length) return;   // keep the seeded "No subscription history yet" empty state
+    host.innerHTML = '<div class="panel panel-pad reveal"><div class="timeline">' +
+      events.map(function (e) {
+        var state = /cancel|refund/.test(e.type || "") ? "warn" : e.type === "active" ? "active" : /paus/.test(e.type || "") ? "" : "done";
+        var meta = e.sub || "";
+        if (e.type !== "active" && e.at) { var d = fmtD(e.at); meta = meta ? (meta + " · " + d) : d; }
+        return '<div class="tl-item ' + state + '"><span class="dot">' + (state === "done" ? icon("check", 12) : "") + '</span><div class="tl-t">' + esc(e.title) + '</div><div class="tl-s">' + esc(meta) + '</div></div>';
+      }).join("") + '</div></div>';
+  }
   function wireSubscriptionHistory() {
     if ((document.body.dataset.route || "") !== "account/subscription-history" || !me() || !API()) return;
     var host = document.getElementById("subHistoryMount"); if (!host) return;
-    API().get("/api/account/subscription").then(function (r) {
-      var subs = r.subscriptions || [];
-      var events = [];
-      subs.forEach(function (s) {
-        var plan = (s.plan && s.plan.name) || "Subscription";
-        if (s.startDate) events.push({ ts: +new Date(s.startDate), t: "Started — " + plan, s: fmtD(s.startDate) + (s.perDeliveryPaise ? " · " + inr(s.perDeliveryPaise) + " / delivery" : ""), state: "done" });
-        if (s.status === "VACATION" && s.pausedFrom) events.push({ ts: +new Date(s.pausedFrom), t: "Paused — " + plan, s: fmtD(s.pausedFrom) + (s.pausedUntil ? " → " + fmtD(s.pausedUntil) : ""), state: "" });
-        if (s.status === "CANCELLED" && s.endDate) events.push({ ts: +new Date(s.endDate), t: "Cancelled — " + plan, s: fmtD(s.endDate), state: "warn" });
-        else if (s.status === "ACTIVE") events.push({ ts: Date.now(), t: "Active — " + plan, s: s.nextDeliveryAt ? "Next delivery " + fmtD(s.nextDeliveryAt) : "Ongoing", state: "active" });
-      });
-      events.sort(function (a, b) { return b.ts - a.ts; });
-      if (!events.length) return;   // keep the seeded "No subscription history yet" empty state
-      host.innerHTML = '<div class="panel panel-pad reveal"><div class="timeline">' +
-        events.map(function (e) { return '<div class="tl-item ' + e.state + '"><span class="dot">' + (e.state === "done" ? icon("check", 12) : "") + '</span><div class="tl-t">' + esc(e.t) + '</div><div class="tl-s">' + esc(e.s || "") + '</div></div>'; }).join("") +
+    // Prefer the dedicated history endpoint (richest timeline: renewals, cashback, refunds).
+    API().get("/api/account/subscription-history").then(function (r) {
+      renderSubHistory(host, r.events || []);
+    }).catch(function () {
+      // Fall back to deriving from the subscription list if the endpoint isn't deployed yet.
+      API().get("/api/account/subscription").then(function (r) {
+        var subs = r.subscriptions || [], events = [];
+        subs.forEach(function (s) {
+          var plan = (s.plan && s.plan.name) || "Subscription";
+          if (s.startDate) events.push({ type: "started", title: "Started — " + plan, sub: (s.perDeliveryPaise ? inr(s.perDeliveryPaise) + " / delivery" : ""), at: s.startDate });
+          if (s.status === "CANCELLED" && s.endDate) events.push({ type: "cancelled", title: "Cancelled — " + plan, sub: "", at: s.endDate });
+          else if (s.status === "ACTIVE") events.push({ type: "active", title: "Active — " + plan, sub: s.nextDeliveryAt ? "Next delivery " + fmtD(s.nextDeliveryAt) : "Ongoing", at: new Date().toISOString() });
+        });
+        events.sort(function (a, b) { return +new Date(b.at) - +new Date(a.at); });
+        renderSubHistory(host, events);
+      }).catch(function () {});
+    });
+  }
+
+  /* ============================================================ SUPPORT
+     The signed-in customer's own tickets (/api/account/support): list their past
+     tickets and raise a new one via the page form (replaces the demo tickets table). */
+  function loadTickets(host) {
+    API().get("/api/account/support").then(function (r) {
+      var list = r.tickets || [];
+      var badge = function (t) { var s = t.status || ""; var cls = /RESOLVED|CLOSED/.test(s) ? "green" : /PROGRESS|ASSIGNED/.test(s) ? "blue" : "amber"; return '<span class="badge ' + cls + '">' + esc(t.statusLabel || s) + '</span>'; };
+      host.innerHTML = '<div class="panel" style="margin:14px 0"><div class="panel-head"><h3>Your tickets</h3></div><div class="panel-pad">' +
+        (list.length
+          ? '<div class="table-wrap"><table class="tbl"><thead><tr><th>Ticket</th><th>Subject</th><th>Category</th><th>Status</th><th>Raised</th></tr></thead><tbody>' +
+            list.map(function (t) { return '<tr><td><b>' + esc(t.number) + '</b></td><td>' + esc(t.subject) + '</td><td>' + esc(t.category || "—") + '</td><td>' + badge(t) + '</td><td>' + fmtD(t.createdAt) + '</td></tr>'; }).join("") +
+            '</tbody></table></div>'
+          : '<div class="state"><div class="ic">' + icon("chat", 22) + '</div><h3>No support tickets yet</h3><p>Raise a ticket above and we\'ll get back to you.</p></div>') +
         '</div></div>';
-    }).catch(function () {});   // on error, leave the honest empty state in place
+    }).catch(function (e) { host.innerHTML = '<div class="notice warn">Couldn\'t load your tickets: ' + esc(e.message || "offline") + "</div>"; });
+  }
+  function wireSupport() {
+    if ((document.body.dataset.route || "") !== "account/support" || !me() || !API()) return;
+    // hide the static (empty) demo tickets table — the real list renders in our own panel
+    var dt = document.querySelector('.dt-host[data-dataset="tickets"]');
+    var host = document.createElement("div"); host.id = "accTicketsLive";
+    if (dt && dt.parentNode) { dt.parentNode.insertBefore(host, dt); dt.style.display = "none"; }
+    else { var anchor = document.querySelector(".page-head"); if (!anchor || !anchor.parentNode) return; anchor.parentNode.insertBefore(host, anchor.nextSibling); }
+    loadTickets(host);
+    // Intercept the "Raise a ticket" form at document-capture so the generic js-form
+    // demo handler (localStorage + fake "Saved ✓") never runs — we POST a real ticket.
+    if (!document.body.dataset.acSupportWired) {
+      document.body.dataset.acSupportWired = "1";
+      document.addEventListener("submit", function (e) {
+        var form = e.target && e.target.closest ? e.target.closest('form.js-form[data-form="support-ticket"]') : null;
+        if (!form) return;
+        if ((document.body.dataset.route || "") !== "account/support" || !me() || !API()) return;
+        e.preventDefault(); e.stopImmediatePropagation();
+        var val = function (n) { var el = form.querySelector('[name="' + n + '"]'); return el ? (el.value || "").trim() : ""; };
+        var subject = val("subject"), category = val("category"), message = val("message");
+        if (subject.length < 3 || !message) { toast("Please add a subject and describe your issue."); return; }
+        var btn = form.querySelector('button[type="submit"]'); if (btn) btn.disabled = true;
+        API().post("/api/account/support", { subject: subject, category: category, message: message })
+          .then(function (r) { toast("Ticket " + ((r.ticket && r.ticket.number) || "") + " raised ✓"); form.reset(); loadTickets(host); })
+          .catch(function (er) { toast(er.message || "Couldn't submit your ticket."); })
+          .then(function () { if (btn) btn.disabled = false; });
+      }, true);
+    }
   }
 
   /* Any empty timeline / notification feed left on an account page → an honest empty
@@ -638,6 +694,7 @@ window.DOODLY_ACCOUNT = (function () {
     try { wireSettings(); } catch (e) {}
     try { wireReferrals(); } catch (e) {}
     try { wireRewards(); } catch (e) {}
+    try { wireSupport(); } catch (e) {}
     try { fillEmptyPanels(); } catch (e) {}
   }
   return { mountAll: mountAll, openOrderDetail: openOrderDetail };
