@@ -11,6 +11,7 @@ import { sendPasswordResetEmail } from "@/lib/auth/email";
 import { reqContext } from "@/lib/auth/request";
 import { audit } from "@/lib/auth/audit";
 import { rateLimit } from "@/lib/auth/ratelimit";
+import { storefrontBase } from "@/lib/auth/storefront";
 import { log } from "@/lib/logger";
 
 export const runtime = "nodejs";
@@ -19,24 +20,6 @@ export const dynamic = "force-dynamic";
 const schema = z.object({ email: z.string().trim().toLowerCase().email("Enter a valid email") });
 
 const GENERIC = "If an account exists for that email, we've sent a reset link.";
-
-// The reset link must land on the STOREFRONT (static app), NEVER this backend
-// (it has no /reset-password.html → 404). NOTE: we intentionally do NOT use
-// NEXT_PUBLIC_SITE_URL — that is the *backend's* own public URL (used by
-// robots/sitemap), and basing the link on it sends customers to the backend.
-// Priority: NEXT_PUBLIC_STOREFRONT_URL (dedicated override) → the allow-listed
-// calling origin (the storefront that made this request) → canonical default.
-const STOREFRONT_HOSTS = new Set([
-  "www.doodly.in", "doodly.in", "doodly-admin.vercel.app",
-  "localhost:4173", "127.0.0.1:4173",
-]);
-function storefrontBase(req: NextRequest): string {
-  const explicit = process.env.NEXT_PUBLIC_STOREFRONT_URL?.replace(/\/$/, "");
-  if (explicit) return explicit;
-  const origin = req.headers.get("origin");
-  if (origin) { try { if (STOREFRONT_HOSTS.has(new URL(origin).host)) return origin.replace(/\/$/, ""); } catch { /* ignore */ } }
-  return "https://www.doodly.in";
-}
 
 export const POST = route("auth.forgot", async (req: NextRequest) => {
   const ctx = reqContext(req);
