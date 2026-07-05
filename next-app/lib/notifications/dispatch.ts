@@ -24,17 +24,28 @@ import { sendEmail, sendSMS, sendWhatsApp, channelStatus, type SendResult } from
 
 type Chan = "SMS" | "WHATSAPP" | "PUSH" | "EMAIL" | "IN_APP";
 
+/** SMS/WhatsApp spec: `template` = MSG91 event key (DLT/WA template), `vars` = ordered values. */
+export type ChannelSpec = { template?: string; vars?: string[] };
+
 export interface NotifyOpts {
   title: string;
   body: string;
   /** Inbox row channel — defaults to IN_APP so it shows cleanly once, no duplicates. */
   channel?: Chan;
-  email?: boolean;      // also attempt email
-  sms?: boolean;        // also attempt SMS
-  whatsapp?: boolean;   // also attempt WhatsApp
+  email?: boolean;                     // also attempt email
+  sms?: boolean | ChannelSpec;         // also attempt SMS (object carries the MSG91 template)
+  whatsapp?: boolean | ChannelSpec;    // also attempt WhatsApp
   emailHtml?: string;   // optional rich HTML body for email (falls back to text)
   emailSubject?: string;
 }
+
+/** Normalise a boolean|ChannelSpec flag into a spec (or null when the channel is off). */
+function toSpec(v: boolean | ChannelSpec | undefined, on: boolean): ChannelSpec | null {
+  if (v && typeof v === "object") return v;
+  return (v || on) ? {} : null;
+}
+
+interface DeliverPlan { email: boolean; sms: ChannelSpec | null; whatsapp: ChannelSpec | null }
 
 function escapeHtml(s: string) {
   return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
@@ -52,10 +63,10 @@ function defaultHtml(title: string, body: string) {
 
 type Prefs = { emailOptIn: boolean; smsOptIn: boolean; whatsappOptIn: boolean } | null;
 
-/** Deliver a single notification row across the given external channels. Records the outcome on the row. */
+/** Deliver a single notification row across the planned external channels. Records the outcome on the row. */
 async function deliverRow(
   rowId: string,
-  channels: Chan[],
+  plan: DeliverPlan,
   user: { email: string | null; phone: string | null },
   prefs: Prefs,
   title: string,
@@ -69,7 +80,10 @@ async function deliverRow(
   let firstRef: string | undefined;
   let attempted = 0;
 
-  const wants = Array.from(new Set(channels)).filter((c) => c === "EMAIL" || c === "SMS" || c === "WHATSAPP");
+  const wants: Chan[] = [];
+  if (plan.email) wants.push("EMAIL");
+  if (plan.sms) wants.push("SMS");
+  if (plan.whatsapp) wants.push("WHATSAPP");
 
   for (const ch of wants) {
     // consent gate (defaults: email on, sms/whatsapp off)
@@ -86,8 +100,8 @@ async function deliverRow(
     attempted++;
     let res: SendResult;
     if (ch === "EMAIL") res = await sendEmail(user.email, emailSubject || title, emailHtml || defaultHtml(title, body), body);
-    else if (ch === "SMS") res = await sendSMS(user.phone, `${title}\n${body}`);
-    else res = await sendWhatsApp(user.phone, `*${title}*\n${body}`);
+    else if (ch === "SMS") res = await sendSMS(user.phone, { text: `${title}\n${body}`, template: plan.sms!.template, vars: plan.sms!.vars });
+    else res = await sendWhatsApp(user.phone, { text: `*${title}*\n${body}`, template: plan.whatsapp!.template, vars: plan.whatsapp!.vars });
 
     if (res.ok) { anyOk = true; firstRef = firstRef || res.ref; perChannel[ch] = res.ref ? `sent:${res.ref}` : "sent"; }
     else if (res.skipped) { attempted--; perChannel[ch] = `skipped:${res.error || "unavailable"}`; }
@@ -117,12 +131,13 @@ export async function notify(userId: string, opts: NotifyOpts) {
       data: { userId, channel, title: opts.title, body: opts.body, sentAt: new Date(), providerStatus: "PENDING" },
     });
 
-    const external: Chan[] = [];
-    if (opts.email || channel === "EMAIL") external.push("EMAIL");
-    if (opts.sms || channel === "SMS") external.push("SMS");
-    if (opts.whatsapp || channel === "WHATSAPP") external.push("WHATSAPP");
+    const plan: DeliverPlan = {
+      email: !!(opts.email || channel === "EMAIL"),
+      sms: toSpec(opts.sms, channel === "SMS"),
+      whatsapp: toSpec(opts.whatsapp, channel === "WHATSAPP"),
+    };
 
-    if (!external.length) {
+    if (!plan.email && !plan.sms && !plan.whatsapp) {
       // in-app only → nothing to dispatch, mark terminal so the drain ignores it
       await db.notification.update({ where: { id: row.id }, data: { providerStatus: "SKIPPED", dispatchedAt: new Date() } });
       return { id: row.id, providerStatus: "SKIPPED" as const };
@@ -132,7 +147,7 @@ export async function notify(userId: string, opts: NotifyOpts) {
     const prefs = await db.customerPreference.findUnique({
       where: { userId }, select: { emailOptIn: true, smsOptIn: true, whatsappOptIn: true },
     });
-    const out = await deliverRow(row.id, external, user ?? { email: null, phone: null }, prefs, opts.title, opts.body, opts.emailHtml, opts.emailSubject);
+    const out = await deliverRow(row.id, plan, user ?? { email: null, phone: null }, prefs, opts.title, opts.body, opts.emailHtml, opts.emailSubject);
     return { id: row.id, ...out };
   } catch (e) {
     log.error("notify", "notify() failed (swallowed)", { userId, msg: (e as Error)?.message });
@@ -164,8 +179,14 @@ export async function drainPending(limit = 200) {
 
   let sent = 0, skipped = 0, failed = 0;
   for (const r of rows) {
+    // drain rows carry no template info → email/Twilio free-text; MSG91 skips (no template).
+    const plan: DeliverPlan = {
+      email: r.channel === "EMAIL",
+      sms: r.channel === "SMS" ? {} : null,
+      whatsapp: r.channel === "WHATSAPP" ? {} : null,
+    };
     const out = await deliverRow(
-      r.id, [r.channel as Chan], r.user ?? { email: null, phone: null },
+      r.id, plan, r.user ?? { email: null, phone: null },
       prefMap.get(r.userId) ?? null, r.title, r.body,
     );
     if (out.providerStatus === "SENT") sent++;
@@ -177,12 +198,18 @@ export async function drainPending(limit = 200) {
 }
 
 // ------------------------------------------------------------------ transactional event templates
+// The `template` keys below must match the MSG91 template maps
+// (MSG91_SMS_TEMPLATES / MSG91_WHATSAPP_TEMPLATES) and the `vars` order must
+// match the registered DLT/WhatsApp template placeholders. See docs/MSG91-SETUP.md.
+
 /** Order placed → confirmation across in-app + opted channels. */
 export function notifyOrderConfirmed(userId: string, o: { number: string }) {
   return notify(userId, {
     title: "Order confirmed 🎉",
     body: `Your DOODLY order ${o.number} is confirmed. Fresh A2 milk will reach you before 7:00 AM. Track it anytime in your dashboard.`,
-    email: true, sms: true, whatsapp: true,
+    email: true,
+    sms: { template: "order_confirmed", vars: [o.number] },
+    whatsapp: { template: "order_confirmed", vars: [o.number] },
   });
 }
 
@@ -191,7 +218,9 @@ export function notifyOutForDelivery(userId: string) {
   return notify(userId, {
     title: "Out for delivery 🚚",
     body: "Your DOODLY delivery is on the way and will reach you before 7:00 AM. Please keep your bottle crate ready.",
-    email: true, sms: true, whatsapp: true,
+    email: true,
+    sms: { template: "out_for_delivery" },
+    whatsapp: { template: "out_for_delivery" },
   });
 }
 
@@ -201,7 +230,9 @@ export function notifyDelivered(userId: string, d: { bottles?: number } = {}) {
   return notify(userId, {
     title: "Delivered ✅",
     body: `Your DOODLY milk has been delivered.${b} Thank you for choosing farm-fresh A2. Rate today's delivery in the app.`,
-    email: true, sms: true, whatsapp: true,
+    email: true,
+    sms: { template: "delivered" },
+    whatsapp: { template: "delivered" },
   });
 }
 

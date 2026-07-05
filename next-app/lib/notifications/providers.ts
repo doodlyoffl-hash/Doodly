@@ -10,6 +10,7 @@
    ============================================================= */
 import "server-only";
 import { log } from "@/lib/logger";
+import { msg91, msg91SendSMS, msg91SendWhatsApp } from "./msg91";
 
 const env = (k: string) => {
   const v = process.env[k];
@@ -24,18 +25,16 @@ const TWILIO_TOKEN = () => env("TWILIO_AUTH_TOKEN");
 const TWILIO_SMS_FROM = () => env("TWILIO_SMS_FROM"); // +1XXXXXXXXXX or a Messaging Service SID (MGxxxx)
 const TWILIO_WA_FROM = () => env("TWILIO_WHATSAPP_FROM"); // whatsapp:+14155238886
 
-const MSG91_KEY = () => env("MSG91_AUTH_KEY");
-const MSG91_SENDER = () => env("MSG91_SENDER_ID");
-const MSG91_ROUTE = () => env("MSG91_ROUTE") || "4"; // 4 = transactional
-
 export type SendResult = { ok: boolean; skipped?: boolean; ref?: string; error?: string };
+/** A message to send on SMS/WhatsApp: free `text` (Twilio) + optional MSG91 template. */
+export type ChannelMsg = { text: string; template?: string | null; vars?: string[] };
 
 /** Which external channels are live right now (drives admin visibility + gating). */
 export function channelStatus() {
   const email = !!RESEND_KEY();
   const twilio = !!(TWILIO_SID() && TWILIO_TOKEN());
-  const sms = (twilio && !!TWILIO_SMS_FROM()) || !!(MSG91_KEY() && MSG91_SENDER());
-  const whatsapp = twilio && !!TWILIO_WA_FROM();
+  const sms = msg91.smsConfigured() || (twilio && !!TWILIO_SMS_FROM());
+  const whatsapp = msg91.whatsappConfigured() || (twilio && !!TWILIO_WA_FROM());
   return { email, sms, whatsapp, push: false };
 }
 
@@ -106,44 +105,40 @@ async function twilioMessage(from: string, to: string, body: string): Promise<Se
   }
 }
 
-// ------------------------------------------------------------------ MSG91 (optional India SMS fallback)
-async function msg91SMS(digits: string, text: string): Promise<SendResult> {
-  const key = MSG91_KEY()!, sender = MSG91_SENDER()!;
-  try {
-    const url = new URL("https://api.msg91.com/api/sendhttp.php");
-    url.searchParams.set("authkey", key);
-    url.searchParams.set("mobiles", digits);
-    url.searchParams.set("message", text);
-    url.searchParams.set("sender", sender);
-    url.searchParams.set("route", MSG91_ROUTE()!);
-    url.searchParams.set("country", "91");
-    const res = await fetch(url.toString(), { method: "GET" });
-    const b = await res.text().catch(() => "");
-    if (!res.ok || /error/i.test(b)) {
-      log.error("notify.msg91", "SMS rejected", { status: res.status, body: b.slice(0, 120) });
-      return { ok: false, error: `msg91-${res.status}` };
-    }
-    return { ok: true, ref: b.slice(0, 60) || undefined };
-  } catch (e) {
-    log.error("notify.msg91", (e as Error)?.message ?? "send failed", {});
-    return { ok: false, error: "msg91-exception" };
-  }
-}
-
 // ------------------------------------------------------------------ SMS / WhatsApp public senders
-export async function sendSMS(phone: string | null | undefined, text: string): Promise<SendResult> {
+// Provider priority: MSG91 (India, DLT-compliant, template-based) → Twilio
+// (free text) → skip. A `msg` may carry a template key; on MSG91 the template
+// is required (DLT), while Twilio uses the free `text`.
+const digitsOf = (e164: string) => e164.replace(/^\+/, "");
+
+export async function sendSMS(phone: string | null | undefined, msg: ChannelMsg): Promise<SendResult> {
   const to = toE164(phone);
   if (!to) return { ok: false, skipped: true, error: "no-phone-number" };
-  if (TWILIO_SID() && TWILIO_TOKEN() && TWILIO_SMS_FROM()) return twilioMessage(TWILIO_SMS_FROM()!, to, text);
-  if (MSG91_KEY() && MSG91_SENDER()) return msg91SMS(to.replace(/^\+/, ""), text);
+  if (msg91.smsConfigured()) {
+    const tpl = msg.template ? msg91.smsTemplateFor(msg.template) : null;
+    if (tpl) return msg91SendSMS(digitsOf(to), tpl, msg.vars ?? []);
+    // MSG91 is the SMS provider but this event has no registered template — don't
+    // fall through to Twilio free text (DLT would reject); skip cleanly.
+    if (!(TWILIO_SID() && TWILIO_TOKEN() && TWILIO_SMS_FROM())) {
+      return { ok: false, skipped: true, error: msg.template ? `no-sms-template:${msg.template}` : "no-sms-template" };
+    }
+  }
+  if (TWILIO_SID() && TWILIO_TOKEN() && TWILIO_SMS_FROM()) return twilioMessage(TWILIO_SMS_FROM()!, to, msg.text);
   log.warn("notify.sms", "no SMS provider configured — skipped (in-app only)", { to });
   return { ok: false, skipped: true, error: "sms-provider-not-configured" };
 }
 
-export async function sendWhatsApp(phone: string | null | undefined, text: string): Promise<SendResult> {
+export async function sendWhatsApp(phone: string | null | undefined, msg: ChannelMsg): Promise<SendResult> {
   const to = toE164(phone);
   if (!to) return { ok: false, skipped: true, error: "no-phone-number" };
-  if (TWILIO_SID() && TWILIO_TOKEN() && TWILIO_WA_FROM()) return twilioMessage(TWILIO_WA_FROM()!, "whatsapp:" + to, text);
+  if (msg91.whatsappConfigured()) {
+    const tpl = msg.template ? msg91.whatsappTemplateFor(msg.template) : null;
+    if (tpl) return msg91SendWhatsApp(digitsOf(to), tpl, msg.vars ?? []);
+    if (!(TWILIO_SID() && TWILIO_TOKEN() && TWILIO_WA_FROM())) {
+      return { ok: false, skipped: true, error: msg.template ? `no-whatsapp-template:${msg.template}` : "no-whatsapp-template" };
+    }
+  }
+  if (TWILIO_SID() && TWILIO_TOKEN() && TWILIO_WA_FROM()) return twilioMessage(TWILIO_WA_FROM()!, "whatsapp:" + to, msg.text);
   log.warn("notify.whatsapp", "no WhatsApp provider configured — skipped (in-app only)", { to });
   return { ok: false, skipped: true, error: "whatsapp-provider-not-configured" };
 }

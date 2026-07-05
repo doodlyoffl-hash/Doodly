@@ -66,7 +66,9 @@ export async function POST(req: NextRequest) {
             await notify(op.userId, {
               title: "Payment didn't go through",
               body: "We couldn't process your recent DOODLY payment. No amount was charged — please retry from your dashboard or use your wallet.",
-              email: true, sms: true, whatsapp: true,
+              email: true,
+              sms: { template: "payment_failed" },
+              whatsapp: { template: "payment_failed" },
             });
           } catch { /* non-blocking */ }
         }
