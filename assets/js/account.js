@@ -260,17 +260,43 @@ window.DOODLY_ACCOUNT = (function () {
     if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(host, anchor.nextSibling); else return;
     loadAddresses(host);
   }
+  /* Structured one-line summary of an address for the saved-list card. */
+  function addrSummary(a) {
+    var l1 = [a.houseNo, a.buildingName, a.floor].filter(Boolean).join(", ") || a.line1 || "";
+    var l2 = [a.street, a.area].filter(Boolean).join(", ");
+    var loc = [a.city, a.state, a.pincode].filter(Boolean).join(", ");
+    return [l1, l2, loc].filter(Boolean).join(" · ");
+  }
+  function addrMapUrl(a) {
+    try { if (window.DOODLY_MAPS && DOODLY_MAPS.navUrl && a.lat != null && a.lng != null) return DOODLY_MAPS.navUrl(a.lat, a.lng); } catch (e) {}
+    if (a.lat != null && a.lng != null) return "https://www.google.com/maps/search/?api=1&query=" + a.lat + "," + a.lng;
+    return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(addrSummary(a));
+  }
+  function addrCard(a) {
+    var contact = [a.contactName, a.contactPhone].filter(Boolean).join(" · ");
+    var lm = a.landmark ? '<div class="muted-sm">' + icon("pin", 12) + " Landmark: " + esc(a.landmark) + "</div>" : "";
+    var note = a.deliveryNote ? '<div class="muted-sm" style="font-style:italic;margin-top:2px">“' + esc(a.deliveryNote) + "”</div>" : "";
+    return '<div class="acc-addr2">' +
+      '<div class="acc-addr2-h"><b>' + esc(a.label) + "</b>" + (a.isDefault ? ' <span class="tp-yn yes">Default</span>' : "") + "</div>" +
+      (contact ? '<div class="muted-sm" style="font-weight:600;color:#2c3a33">' + esc(contact) + "</div>" : "") +
+      '<div class="acc-addr2-body">' + esc(addrSummary(a)) + "</div>" + lm + note +
+      '<div class="acc-addr2-acts">' +
+        '<a class="btn btn-ghost sm" target="_blank" rel="noopener" href="' + addrMapUrl(a) + '">' + icon("pin", 13) + " Map</a>" +
+        '<button class="btn btn-ghost sm ad-edit" data-id="' + a.id + '">Edit</button>' +
+        (!a.isDefault ? '<button class="btn btn-ghost sm ad-def" data-id="' + a.id + '">Set default</button>' : "") +
+        '<button class="btn btn-ghost sm ad-del" data-id="' + a.id + '" style="color:#b3261e">Delete</button>' +
+      "</div></div>";
+  }
   function loadAddresses(host) {
+    addrFormStyles();
     API().get("/api/addresses").then(function (r) {
       var list = r.addresses || [];
       host.innerHTML = '<div class="panel" style="margin:14px 0"><div class="panel-head"><h3>Your saved addresses</h3><button class="btn btn-primary sm" id="ad-add">' + icon("plus", 14) + " Add address</button></div><div class=\"panel-pad\">" +
-        (list.length ? list.map(function (a) {
-          return '<div class="acc-addr"><div><b>' + esc(a.label) + "</b>" + (a.isDefault ? ' <span class="tp-yn yes">Default</span>' : "") +
-            '<div class="muted-sm">' + esc(a.line1) + (a.line2 ? ", " + esc(a.line2) : "") + ", " + esc(a.city) + " " + esc(a.pincode) + "</div></div>" +
-            '<div style="display:flex;gap:6px">' + (!a.isDefault ? '<button class="btn btn-ghost sm ad-def" data-id="' + a.id + '">Set default</button>' : "") +
-            '<button class="btn btn-ghost sm ad-del" data-id="' + a.id + '" style="color:#b3261e">Delete</button></div></div>';
-        }).join("") : '<p class="muted-sm">No addresses yet — add your first one.</p>') + "</div></div>";
-      host.querySelector("#ad-add").addEventListener("click", function () { openAddAddress(host); });
+        (list.length ? '<div class="acc-addr-grid">' + list.map(addrCard).join("") + "</div>"
+          : '<div class="state"><div class="ic">' + icon("pin", 22) + '</div><h3>No addresses yet</h3><p>Add your delivery address so we know exactly where to bring your fresh milk.</p></div>') +
+        "</div></div>";
+      host.querySelector("#ad-add").addEventListener("click", function () { openAddAddress(host, null, list); });
+      host.querySelectorAll(".ad-edit").forEach(function (b) { b.addEventListener("click", function () { openAddAddress(host, list.filter(function (x) { return x.id === b.dataset.id; })[0], list); }); });
       host.querySelectorAll(".ad-del").forEach(function (b) {
         b.addEventListener("click", function () {
           if (!confirm("Delete this address?")) return;
@@ -286,40 +312,158 @@ window.DOODLY_ACCOUNT = (function () {
       });
     }).catch(function (e) { host.innerHTML = '<div class="notice warn">Couldn\'t load addresses: ' + esc(e.message || "offline") + "</div>"; });
   }
-  function openAddAddress(host) {
-    var geo = { lat: null, lng: null };
-    modal("Add address",
-      '<div class="dac-f"><span>Pin your exact doorstep</span><div id="na-map" style="margin-top:6px"></div></div>' +
-      '<label class="dac-f"><span>Label</span><input class="input" id="na-label" placeholder="Home / Office" maxlength="30"></label>' +
-      '<label class="dac-f"><span>Address line</span><input class="input" id="na-line1" placeholder="House, street, area" maxlength="120"></label>' +
-      '<div class="dac-row"><label class="dac-f"><span>City</span><input class="input" id="na-city" placeholder="Vijayawada" maxlength="60"></label>' +
-      '<label class="dac-f"><span>Pincode</span><input class="input" id="na-pin" inputmode="numeric" maxlength="6" placeholder="520001"></label></div>' +
-      '<label class="dac-f"><span>Delivery note (optional)</span><input class="input" id="na-note" placeholder="Gate code, landmark…" maxlength="160"></label>' +
-      '<label style="display:flex;gap:8px;align-items:center;font-size:.9rem;margin:4px 0 12px"><input type="checkbox" id="na-def"> Make this my default</label>' +
-      '<div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn btn-ghost sm" id="na-cancel">Cancel</button><button class="btn btn-primary sm" id="na-save">Save address</button></div>',
-      function (ov, close) {
-        // pin picker — drop a pin to capture exact GPS + auto-fill pincode/city
-        try {
-          if (window.DOODLY_MAPS && DOODLY_MAPS.mountPicker) {
-            DOODLY_MAPS.mountPicker(ov.querySelector("#na-map"), { height: "220px", onChange: function (r) {
-              // Capture the pin location only — the customer types their own address details.
-              geo.lat = r.lat; geo.lng = r.lng;
-            } });
-          }
-        } catch (e) {}
-        ov.querySelector("#na-cancel").addEventListener("click", close);
-        ov.querySelector("#na-save").addEventListener("click", function () {
-          var v = function (id) { return (ov.querySelector(id).value || "").trim(); };
-          var body = {
-            label: v("#na-label") || "Home", line1: v("#na-line1"), city: v("#na-city"),
-            pincode: v("#na-pin"), deliveryNote: v("#na-note") || undefined,
-            isDefault: ov.querySelector("#na-def").checked,
-          };
-          if (geo.lat != null && geo.lng != null) { body.lat = geo.lat; body.lng = geo.lng; }
-          API().post("/api/addresses", body).then(function () { toast("Address saved ✓"); close(); loadAddresses(host); })
-            .catch(function (e) { toast(e.message || "Check the address fields."); });
-        });
+  function addrFormStyles() {
+    if (document.getElementById("naFormStyles")) return;
+    var s = document.createElement("style"); s.id = "naFormStyles";
+    s.textContent =
+      ".na-sec{font-family:'Fraunces',serif;color:var(--forest,#0f3d2e);font-size:1rem;font-weight:600;margin:18px 0 10px;padding-top:14px;border-top:1px solid #eee}.na-sec:first-child{border-top:none;padding-top:0;margin-top:0}" +
+      ".na-chips{display:flex;flex-wrap:wrap;gap:8px}.na-chip{border:1px solid #d8ddd8;background:#fff;border-radius:999px;padding:8px 15px;font-size:.85rem;font-weight:600;cursor:pointer;color:#33413a;min-height:38px}.na-chip.sel{background:var(--leaf-600,#2f7d4f);border-color:var(--leaf-600,#2f7d4f);color:#fff}" +
+      ".na-sv{margin:10px 0;font-size:.85rem;font-weight:600;padding:9px 13px;border-radius:10px}.na-sv.ok{background:#e8f6ec;color:#1c6b3a}.na-sv.no{background:#fdece9;color:#b3261e}" +
+      ".na-counter{font-size:.75rem;color:#8a948d;text-align:right;margin-top:4px}.input.na-bad{border-color:#e5533c!important;background:#fff7f5}.na-note-chips .na-chip{font-weight:500;font-size:.8rem}" +
+      ".na-form textarea.input{width:100%;font:inherit;padding:10px 12px;border:1px solid #d8ddd8;border-radius:10px;resize:vertical}" +
+      ".acc-addr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}" +
+      ".acc-addr2{border:1px solid #e6e9e6;border-radius:14px;padding:14px 16px;background:#fff;display:flex;flex-direction:column;gap:2px}" +
+      ".acc-addr2-h{display:flex;align-items:center;gap:8px;font-size:1rem}.acc-addr2-body{font-size:.9rem;color:#3a453e;margin-top:4px;line-height:1.45}" +
+      ".acc-addr2-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}" +
+      ".na-form .dac-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.na-form .dac-f{display:block}.na-form .input,.na-form select.input{width:100%}" +
+      "@media (max-width:600px){.na-form .dac-row{grid-template-columns:1fr}}";
+    document.head.appendChild(s);
+  }
+  var FLOORS = ["Independent House", "Ground Floor", "1st Floor", "2nd Floor", "3rd Floor", "4th Floor", "5th Floor", "6th Floor", "7th Floor", "8th Floor", "9th Floor", "10th Floor", "Above 10th Floor"];
+  var ADDR_LABELS = ["Home", "Office", "Apartment", "Friend & Family", "Other"];
+  var NOTE_CHIPS = ["Ring the bell once.", "Leave at the security desk.", "Call before delivery.", "Beware of pets.", "Deliver to the back entrance."];
+  var PHONE_RE = /^[+]?[0-9\s-]{7,15}$/;
+  function openAddAddress(host, editing, existing) {
+    addrFormStyles();
+    var e = editing || {};
+    var prof = (window.DOODLY_DATA && window.DOODLY_DATA.me) || {};
+    var pre = function (v) { return (v && v !== "—") ? v : ""; };   // never prefill placeholder dashes
+    var geo = { lat: e.lat != null ? e.lat : null, lng: e.lng != null ? e.lng : null };
+    var svOK = false;
+    var chosenLabel = e.label || "Home";
+    var fld = function (id, label, ph, val, o) {
+      o = o || {};
+      var req = o.req ? ' <span style="color:#c0392b">*</span>' : "";
+      var attr = (o.inputmode ? ' inputmode="' + o.inputmode + '"' : "") + (o.maxlength ? ' maxlength="' + o.maxlength + '"' : "");
+      return '<label class="dac-f"><span>' + label + req + '</span><input class="input" id="' + id + '" placeholder="' + (ph || "") + '" value="' + esc(val || "") + '"' + attr + "></label>";
+    };
+    var floorSel = '<label class="dac-f"><span>Floor <span style="color:#c0392b">*</span></span><select class="input" id="na-floor"><option value="">Select floor</option>' +
+      FLOORS.map(function (f) { return "<option" + (e.floor === f ? " selected" : "") + ">" + f + "</option>"; }).join("") + "</select></label>";
+    var isCustomLabel = ADDR_LABELS.indexOf(chosenLabel) === -1;
+    var labelUi = '<div class="na-chips" id="na-labels">' + ADDR_LABELS.map(function (l) { return '<button type="button" class="na-chip' + ((isCustomLabel ? "Other" : chosenLabel) === l ? " sel" : "") + '" data-label="' + l + '">' + l + "</button>"; }).join("") +
+      '</div><input class="input" id="na-label-custom" placeholder="Custom label (e.g. Mom\'s house)" maxlength="30" value="' + esc(isCustomLabel ? chosenLabel : "") + '" style="margin-top:8px;' + (isCustomLabel ? "" : "display:none") + '">';
+
+    var body = '<div class="na-form">' +
+      '<div class="na-sec">Pin your exact doorstep</div>' +
+      '<p class="muted-sm" style="margin:-4px 0 8px">Drag the pin to your doorstep — we save the exact GPS and auto-fill the pincode. You can still edit any field below.</p>' +
+      '<div id="na-map" style="border-radius:12px;overflow:hidden"></div>' +
+      '<div class="na-sv" id="na-sv" style="display:none"></div>' +
+      '<div class="na-sec">Delivery contact</div>' +
+      '<div class="dac-row">' + fld("na-cname", "Contact name", "Full name", e.contactName || pre(prof.name), { req: true, maxlength: 80 }) + fld("na-cphone", "Mobile number", "+91 …", e.contactPhone || pre(prof.phone), { req: true, inputmode: "tel", maxlength: 20 }) + "</div>" +
+      fld("na-altphone", "Alternate contact number (optional)", "Another number we can call", e.altPhone, { inputmode: "tel", maxlength: 20 }) +
+      '<div class="na-sec">Where should we deliver?</div>' +
+      '<div class="dac-row">' + fld("na-house", "House / Flat number", "Flat 302 · H.No 12-45 · Villa 18", e.houseNo, { req: true, maxlength: 60 }) + fld("na-building", "Apartment / Building / House name", "Sri Sai Residency", e.buildingName, { req: true, maxlength: 120 }) + "</div>" +
+      '<div class="dac-row">' + floorSel + fld("na-street", "Street / Road", "MG Road", e.street, { req: true, maxlength: 120 }) + "</div>" +
+      '<div class="dac-row">' + fld("na-area", "Area / Locality", "Benz Circle", e.area, { req: true, maxlength: 80 }) + fld("na-landmark", "Landmark", "Opposite SBI Bank", e.landmark, { req: true, maxlength: 120 }) + "</div>" +
+      '<div class="dac-row">' + fld("na-city", "City", "Vijayawada", e.city || "Vijayawada", { req: true, maxlength: 60 }) + fld("na-state", "State", "Andhra Pradesh", e.state || "Andhra Pradesh", { req: true, maxlength: 60 }) + "</div>" +
+      fld("na-pin", "Pincode", "520010", e.pincode, { req: true, inputmode: "numeric", maxlength: 6 }) +
+      '<div class="na-sec">More details (optional)</div>' +
+      '<div class="dac-row">' + fld("na-block", "Block / Tower", "Block B", e.block, { maxlength: 60 }) + fld("na-wing", "Wing", "A Wing", e.wing, { maxlength: 40 }) + "</div>" +
+      '<div class="dac-row">' + fld("na-gate", "Society gate number", "Gate 2", e.gateNumber, { maxlength: 40 }) + fld("na-door", "Door colour", "Brown", e.doorColor, { maxlength: 40 }) + "</div>" +
+      '<div class="na-sec">Label this address</div>' + labelUi +
+      '<div class="na-sec">Delivery instructions (optional)</div>' +
+      '<div class="na-note-chips na-chips" style="margin-bottom:8px">' + NOTE_CHIPS.map(function (n) { return '<button type="button" class="na-chip" data-note="' + esc(n) + '">' + esc(n) + "</button>"; }).join("") + "</div>" +
+      '<textarea class="input" id="na-note" rows="2" maxlength="250" placeholder="e.g. Ring the bell once. Beware of pets.">' + esc(e.deliveryNote || "") + "</textarea>" +
+      '<div class="na-counter" id="na-counter"></div>' +
+      '<label style="display:flex;gap:8px;align-items:center;font-size:.9rem;margin:12px 0"><input type="checkbox" id="na-def"' + (e.isDefault ? " checked" : "") + "> Make this my default address</label>" +
+      '<div id="na-err" style="display:none;color:#b3261e;font-size:.85rem;font-weight:600;margin-bottom:8px"></div>' +
+      '<div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn btn-ghost sm" id="na-cancel">Cancel</button><button class="btn btn-primary sm" id="na-save">' + (editing ? "Save changes" : "Save address") + "</button></div>" +
+      "</div>";
+
+    modal(editing ? "Edit address" : "Add address", body, function (ov, close) {
+      var q = function (sel) { return ov.querySelector(sel); };
+      var g = function (sel) { return (q(sel).value || "").trim(); };
+      var errEl = q("#na-err");
+      var showErr = function (m) { errEl.style.display = "block"; errEl.textContent = m; };
+      var counter = q("#na-counter"), noteEl = q("#na-note");
+      var updCount = function () { counter.textContent = (noteEl.value || "").length + " / 250"; };
+      updCount();
+      // Keep area/city/state synced to the pincode UNLESS the customer typed their own.
+      // Manual entry wins over the map's auto-fill (the map still updates the GPS pin).
+      var areaTouched = !!e.area, pinTouched = !!e.pincode;
+      q("#na-area").addEventListener("input", function () { areaTouched = true; });
+
+      function checkPin() {
+        var pin = g("#na-pin"), sv = q("#na-sv");
+        if (pin.length !== 6) { sv.style.display = "none"; svOK = false; return; }
+        var res = window.DOODLY_PINCODE ? DOODLY_PINCODE.validate(pin) : { serviceable: true };
+        sv.style.display = "block";
+        if (res.serviceable) {
+          svOK = true; sv.className = "na-sv ok"; sv.textContent = "✓ We deliver to " + ((res.area ? res.area + ", " : "") + (res.city || "Vijayawada"));
+          if (res.city) q("#na-city").value = res.city;
+          if (res.state) q("#na-state").value = res.state;
+          if (res.area && !areaTouched) q("#na-area").value = res.area;
+        } else { svOK = false; sv.className = "na-sv no"; sv.textContent = "Sorry! DOODLY does not currently deliver to this location."; }
+      }
+
+      try {
+        if (window.DOODLY_MAPS && DOODLY_MAPS.mountPicker) {
+          DOODLY_MAPS.mountPicker(q("#na-map"), { value: geo.lat != null ? { lat: geo.lat, lng: geo.lng } : undefined, height: "200px", onChange: function (r) {
+            geo.lat = r.lat; geo.lng = r.lng;   // GPS always follows the pin
+            if (r.pincode && !pinTouched) q("#na-pin").value = String(r.pincode).replace(/\D/g, "").slice(0, 6);
+            if (r.city && !pinTouched) q("#na-city").value = r.city;
+            if (r.state && !pinTouched) q("#na-state").value = r.state;
+            if (r.area && !areaTouched && !pinTouched) q("#na-area").value = r.area;
+            checkPin();
+          } });
+        }
+      } catch (er) {}
+
+      q("#na-pin").addEventListener("input", function () { pinTouched = true; this.value = this.value.replace(/\D/g, "").slice(0, 6); checkPin(); });
+      checkPin();
+      noteEl.addEventListener("input", updCount);
+      // label chips
+      ov.querySelectorAll("#na-labels .na-chip").forEach(function (b) { b.addEventListener("click", function () {
+        chosenLabel = b.dataset.label; ov.querySelectorAll("#na-labels .na-chip").forEach(function (x) { x.classList.toggle("sel", x === b); });
+        q("#na-label-custom").style.display = chosenLabel === "Other" ? "" : "none"; if (chosenLabel === "Other") q("#na-label-custom").focus();
+      }); });
+      // instruction chips → append
+      ov.querySelectorAll(".na-note-chips .na-chip").forEach(function (b) { b.addEventListener("click", function () {
+        var cur = noteEl.value.trim(), add = b.dataset.note;
+        if (cur.indexOf(add) === -1) { noteEl.value = (cur ? cur + " " : "") + add; updCount(); }
+      }); });
+      q("#na-cancel").addEventListener("click", close);
+
+      q("#na-save").addEventListener("click", function () {
+        errEl.style.display = "none";
+        var required = [["#na-cname", "contact name"], ["#na-cphone", "mobile number"], ["#na-house", "house / flat number"], ["#na-building", "apartment / building name"], ["#na-floor", "floor"], ["#na-street", "street / road"], ["#na-area", "area / locality"], ["#na-landmark", "landmark"], ["#na-city", "city"], ["#na-state", "state"], ["#na-pin", "pincode"]];
+        var missing = null;
+        required.forEach(function (f) { var el = q(f[0]), okv = !!g(f[0]); el.classList.toggle("na-bad", !okv); if (!okv && !missing) missing = f; });
+        if (missing) { showErr("Please fill in the " + missing[1] + "."); q(missing[0]).focus(); return; }
+        var phone = g("#na-cphone"); if (!PHONE_RE.test(phone)) { q("#na-cphone").classList.add("na-bad"); showErr("Enter a valid mobile number."); return; }
+        var alt = g("#na-altphone"); if (alt && !PHONE_RE.test(alt)) { q("#na-altphone").classList.add("na-bad"); showErr("Enter a valid alternate contact number."); return; }
+        var pin = g("#na-pin"); if (!/^[1-9][0-9]{5}$/.test(pin)) { q("#na-pin").classList.add("na-bad"); showErr("Enter a valid 6-digit pincode."); return; }
+        if (!svOK) { showErr("Sorry! DOODLY does not currently deliver to this location."); return; }
+        var label = chosenLabel === "Other" ? (g("#na-label-custom") || "Other") : chosenLabel;
+        // duplicate guard (add only)
+        if (!editing && (existing || []).some(function (x) { return (x.houseNo || "").toLowerCase() === g("#na-house").toLowerCase() && x.pincode === pin; })) {
+          if (!confirm("You already have an address at this house number and pincode. Save another one anyway?")) return;
+        }
+        var b = {
+          label: label, contactName: g("#na-cname"), contactPhone: phone, altPhone: alt || undefined,
+          houseNo: g("#na-house"), buildingName: g("#na-building"), floor: g("#na-floor"),
+          street: g("#na-street"), area: g("#na-area"), landmark: g("#na-landmark"),
+          city: g("#na-city"), state: g("#na-state"), pincode: pin,
+          block: g("#na-block") || undefined, wing: g("#na-wing") || undefined, gateNumber: g("#na-gate") || undefined, doorColor: g("#na-door") || undefined,
+          deliveryNote: g("#na-note") || undefined, isDefault: q("#na-def").checked,
+        };
+        if (geo.lat != null && geo.lng != null) { b.lat = geo.lat; b.lng = geo.lng; }
+        var btn = this; btn.disabled = true;
+        var reqP = editing ? API().patch("/api/addresses/" + editing.id, b) : API().post("/api/addresses", b);
+        reqP.then(function () { toast(editing ? "Address updated ✓" : "Address saved ✓"); close(); loadAddresses(host); })
+          .catch(function (er) { btn.disabled = false; showErr(er.message || "Please check the address fields."); });
       });
+    });
   }
 
   /* ============================================================ CALENDAR

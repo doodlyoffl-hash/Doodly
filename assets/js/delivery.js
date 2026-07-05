@@ -186,8 +186,16 @@ window.DOODLY_DELIVERY = (function () {
           <div class="dl-stop-id"><b>${esc(s2.name)}</b><small>${esc(s2.plan)} · ${s2.qty} bottle${s2.qty > 1 ? "s" : ""}</small></div>
           <span class="badge ${s2.payment === "Paid" ? "green" : "amber"}">${esc(s2.payment)}</span>
         </div>
-        <div class="dl-stop-addr">${svg("pin", 14)} ${esc(s2.address)}</div>
-        <div class="dl-instr">${svg("alert", 13)} ${esc(s2.instructions)}</div>
+        ${(function () {
+          const main = [s2.houseNo, s2.buildingName, s2.floor].filter(Boolean).join(", ") || s2.address;
+          const loc = [s2.street, s2.area, s2.pincode].filter(Boolean).join(", ");
+          const xtra = [s2.block ? "Block " + s2.block : "", s2.wing ? s2.wing + " Wing" : "", s2.gateNumber ? "Gate " + s2.gateNumber : "", s2.doorColor ? s2.doorColor + " door" : ""].filter(Boolean).join(" · ");
+          return `<div class="dl-stop-addr">${svg("pin", 14)} <span><b>${esc(main)}</b>${loc ? `<br><span class="muted-sm">${esc(loc)}</span>` : ""}</span></div>` +
+            (s2.landmark ? `<div style="font-size:.85rem;color:#a15b12;font-weight:600;margin-top:3px">${svg("pin", 12)} Landmark: ${esc(s2.landmark)}</div>` : "") +
+            (xtra ? `<div class="muted-sm" style="margin-top:2px">${esc(xtra)}</div>` : "") +
+            (s2.customerName && s2.customerName !== s2.name ? `<div class="muted-sm" style="margin-top:2px">Account: ${esc(s2.customerName)}</div>` : "");
+        })()}
+        ${s2.instructions ? `<div class="dl-instr">${svg("alert", 13)} ${esc(s2.instructions)}</div>` : ""}
         <div class="dl-steps">${WORKFLOW.map((w, i) => `<span class="dl-step ${i <= stepIdx ? "on" : ""}">${esc(w[1])}</span>`).join('<span class="dl-step-sep"></span>')}</div>
         <div class="dl-bottles">
           <span>${svg("bottle", 14)} Bottles — expected <b>${s2.bottlesExpected}</b> · collected <b>${collected}</b> · pending <b>${pendingB}</b></span>

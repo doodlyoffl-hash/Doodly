@@ -3,11 +3,13 @@
    POST — add an address (first one, or isDefault, becomes the default). */
 import { NextRequest } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { ok, parseBody, route } from "@/lib/http";
 import { requireUserId } from "@/lib/auth/authorize";
 import { reqContext } from "@/lib/auth/request";
 import { audit } from "@/lib/auth/audit";
+import { addressFields, assertServiceable, buildAddressData } from "@/lib/addresses/helpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,41 +23,24 @@ export const GET = route("addresses.list", async (req: NextRequest) => {
   return ok({ addresses });
 });
 
-const createSchema = z.object({
-  label: z.string().trim().max(30).optional(),
-  line1: z.string().trim().min(3, "Enter the address").max(120),
-  line2: z.string().trim().max(120).optional(),
-  city: z.string().trim().min(2).max(60),
+const createSchema = z.object(addressFields).extend({
   pincode: z.string().trim().regex(/^[1-9][0-9]{5}$/, "Enter a valid 6-digit pincode"),
-  deliveryNote: z.string().trim().max(160).optional(),
-  lat: z.number().optional(),
-  lng: z.number().optional(),
-  isDefault: z.boolean().optional(),
 });
 
 export const POST = route("addresses.create", async (req: NextRequest) => {
   const userId = requireUserId(req);
   const body = await parseBody(req, createSchema);
 
+  // pincode must be inside DOODLY's serviceable area (also gives us area/city/state/zone)
+  const sp = await assertServiceable(body.pincode);
+  const data = buildAddressData(body as Record<string, unknown>, sp);
+
   const count = await db.address.count({ where: { userId } });
   const makeDefault = body.isDefault || count === 0;
 
   const address = await db.$transaction(async (tx) => {
     if (makeDefault) await tx.address.updateMany({ where: { userId }, data: { isDefault: false } });
-    return tx.address.create({
-      data: {
-        userId,
-        label: body.label || "Home",
-        line1: body.line1,
-        line2: body.line2 ?? null,
-        city: body.city,
-        pincode: body.pincode,
-        deliveryNote: body.deliveryNote ?? null,
-        lat: body.lat ?? null,
-        lng: body.lng ?? null,
-        isDefault: makeDefault,
-      },
-    });
+    return tx.address.create({ data: { userId, ...data, pincode: body.pincode, isDefault: makeDefault } as Prisma.AddressUncheckedCreateInput });
   });
 
   await audit({ userId, actorRole: "customer", action: "address.create", target: address.id, ctx: reqContext(req) });

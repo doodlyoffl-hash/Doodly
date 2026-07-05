@@ -28,7 +28,14 @@ export const GET = route("admin.customers.profile", async (req: NextRequest, { p
   return ok({ customer: profile });
 });
 
-const addr = { label: z.string().max(40).optional(), line1: z.string().min(1).max(120), line2: z.string().max(120).optional(), city: z.string().min(1).max(60), pincode: z.string().min(4).max(10), lat: z.number().optional(), lng: z.number().optional(), deliveryNote: z.string().max(200).optional(), isDefault: z.boolean().optional() };
+const addrExtra = {
+  state: z.string().max(60).optional(), area: z.string().max(80).optional(),
+  contactName: z.string().max(80).optional(), contactPhone: z.string().max(20).optional(), altPhone: z.string().max(20).optional(),
+  houseNo: z.string().max(60).optional(), buildingName: z.string().max(120).optional(), floor: z.string().max(40).optional(),
+  street: z.string().max(120).optional(), landmark: z.string().max(120).optional(),
+  block: z.string().max(60).optional(), wing: z.string().max(40).optional(), gateNumber: z.string().max(40).optional(), doorColor: z.string().max(40).optional(),
+};
+const addr = { label: z.string().max(40).optional(), line1: z.string().min(1).max(160), line2: z.string().max(160).optional(), city: z.string().min(1).max(60), pincode: z.string().min(4).max(10), lat: z.number().optional(), lng: z.number().optional(), deliveryNote: z.string().max(250).optional(), isDefault: z.boolean().optional(), ...addrExtra };
 
 const patchSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("update"), name: z.string().max(80).optional(), email: z.string().email().or(z.literal("")).optional(), phone: z.string().max(20).optional(), tags: z.array(z.string().max(30)).max(20).optional() }),
@@ -39,7 +46,7 @@ const patchSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("preferences"), emailOptIn: z.boolean().optional(), smsOptIn: z.boolean().optional(), whatsappOptIn: z.boolean().optional(), pushOptIn: z.boolean().optional(), marketingOptIn: z.boolean().optional(), language: z.string().max(10).optional(), preferredSlot: z.string().max(40).nullable().optional() }),
   z.object({ action: z.literal("assign-exec"), executive: z.string().min(1).max(60) }),
   z.object({ action: z.literal("add-address"), ...addr }),
-  z.object({ action: z.literal("update-address"), addressId: z.string().min(1), label: z.string().max(40).optional(), line1: z.string().max(120).optional(), line2: z.string().max(120).optional(), city: z.string().max(60).optional(), pincode: z.string().max(10).optional(), lat: z.number().optional(), lng: z.number().optional(), deliveryNote: z.string().max(200).optional(), isDefault: z.boolean().optional() }),
+  z.object({ action: z.literal("update-address"), addressId: z.string().min(1), label: z.string().max(40).optional(), line1: z.string().max(160).optional(), line2: z.string().max(160).optional(), city: z.string().max(60).optional(), pincode: z.string().max(10).optional(), lat: z.number().optional(), lng: z.number().optional(), deliveryNote: z.string().max(250).optional(), isDefault: z.boolean().optional(), ...addrExtra }),
   z.object({ action: z.literal("delete-address"), addressId: z.string().min(1) }),
   z.object({ action: z.literal("default-address"), addressId: z.string().min(1) }),
 ]);

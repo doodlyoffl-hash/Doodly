@@ -63,10 +63,18 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
     const cod = d.order && d.order.status === "PENDING" && d.order.payment?.method === "CASH";
     return {
       id: d.id, seq: d.sequence ?? i + 1,
-      name: cust?.name ?? "Customer", mobile: cust?.phone ?? "",
+      // the person to meet at the door = the address's delivery contact if set, else the account holder
+      name: addr?.contactName || cust?.name || "Customer",
+      mobile: addr?.contactPhone || cust?.phone || "",
+      customerName: cust?.name ?? "Customer",
+      altPhone: addr?.altPhone ?? null,
       label: addr?.label ?? "Home",
       address: addr ? [addr.line1, addr.line2, `${addr.city} ${addr.pincode}`].filter(Boolean).join(", ") : "Address on file",
-      area: addr?.city ?? "", pincode: addr?.pincode ?? "",
+      // structured last-mile fields — so the executive can find the exact door without calling
+      houseNo: addr?.houseNo ?? null, buildingName: addr?.buildingName ?? null, floor: addr?.floor ?? null,
+      street: addr?.street ?? null, landmark: addr?.landmark ?? null,
+      block: addr?.block ?? null, wing: addr?.wing ?? null, gateNumber: addr?.gateNumber ?? null, doorColor: addr?.doorColor ?? null,
+      area: addr?.area || addr?.city || "", city: addr?.city ?? "", state: addr?.state ?? "", pincode: addr?.pincode ?? "",
       lat: addr?.lat ?? null, lng: addr?.lng ?? null,
       plan: d.subscription?.plan?.name ?? (d.order ? "One-time order" : "Delivery"),
       qty: item?.qty ?? 1,

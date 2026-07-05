@@ -119,6 +119,14 @@ export async function listCustomers(args: ListArgs): Promise<CustomerListRespons
       { email: { contains: q, mode: "insensitive" } },
       { phone: { contains: q } },
       { referralCode: { contains: q, mode: "insensitive" } },
+      // search by address too — area / apartment / landmark / city / pincode
+      { addresses: { some: { OR: [
+        { pincode: { contains: q } },
+        { area: { contains: q, mode: "insensitive" } },
+        { buildingName: { contains: q, mode: "insensitive" } },
+        { landmark: { contains: q, mode: "insensitive" } },
+        { city: { contains: q, mode: "insensitive" } },
+      ] } } },
     ] });
   }
   const where: Prisma.UserWhereInput = { AND: and };
@@ -193,7 +201,13 @@ export async function getCustomerProfile(id: string): Promise<CustomerProfile | 
     type: deriveType(hasActiveSub, hasTrial, c._count.orders), role: c.role, emailVerified: !!c.emailVerified, forcePwReset: c.forcePwReset,
     tags: c.tags, referralCode: c.referralCode, loyaltyPoints: c.loyaltyPoints, walletPaise: c.walletPaise,
     createdAt: c.createdAt.toISOString(), deletedAt: c.deletedAt?.toISOString() ?? null,
-    addresses: c.addresses.map((a) => ({ id: a.id, label: a.label, line1: a.line1, line2: a.line2, city: a.city, pincode: a.pincode, lat: a.lat, lng: a.lng, isDefault: a.isDefault, deliveryNote: a.deliveryNote, zone: a.zone?.name ?? null, executive: a.zone?.executive ?? null })),
+    addresses: c.addresses.map((a) => ({
+      id: a.id, label: a.label, line1: a.line1, line2: a.line2, city: a.city, state: a.state, area: a.area, pincode: a.pincode,
+      contactName: a.contactName, contactPhone: a.contactPhone, altPhone: a.altPhone,
+      houseNo: a.houseNo, buildingName: a.buildingName, floor: a.floor, street: a.street, landmark: a.landmark,
+      block: a.block, wing: a.wing, gateNumber: a.gateNumber, doorColor: a.doorColor,
+      lat: a.lat, lng: a.lng, isDefault: a.isDefault, deliveryNote: a.deliveryNote, zone: a.zone?.name ?? null, executive: a.zone?.executive ?? null,
+    })),
     subscriptions: c.subscriptions.map((s) => ({ id: s.id, shortId: shortId(s.id), status: s.status, plan: s.plan.name, nextDeliveryAt: s.nextDeliveryAt?.toISOString() ?? null, deliverySlot: s.deliverySlot, autoRenew: s.autoRenew })),
     orders: c.orders.map((o) => ({ id: o.id, type: o.type, status: o.status, totalPaise: o.totalPaise, createdAt: o.createdAt.toISOString() })),
     ordersTotal: c._count.orders,
@@ -317,7 +331,13 @@ export async function setPreferences(id: string, prefs: PrefArgs, actor: Actor) 
 }
 
 // ---- address management ----
-export interface AddrArgs { label?: string; line1: string; line2?: string; city: string; pincode: string; lat?: number; lng?: number; deliveryNote?: string; isDefault?: boolean }
+export interface AddrArgs {
+  label?: string; line1: string; line2?: string; city: string; state?: string; area?: string; pincode: string;
+  contactName?: string; contactPhone?: string; altPhone?: string;
+  houseNo?: string; buildingName?: string; floor?: string; street?: string; landmark?: string;
+  block?: string; wing?: string; gateNumber?: string; doorColor?: string;
+  lat?: number; lng?: number; deliveryNote?: string; isDefault?: boolean;
+}
 
 async function resolvePincode(pincode: string) {
   const sp = await db.serviceablePincode.findUnique({ where: { pincode }, select: { zoneId: true, enabled: true } });
@@ -329,7 +349,13 @@ export async function addAddress(id: string, a: AddrArgs, actor: Actor) {
   const { zoneId, serviceable } = await resolvePincode(a.pincode);
   const addr = await db.$transaction(async (tx) => {
     if (a.isDefault) await tx.address.updateMany({ where: { userId: id }, data: { isDefault: false } });
-    const created = await tx.address.create({ data: { userId: id, label: a.label ?? "Home", line1: a.line1, line2: a.line2, city: a.city, pincode: a.pincode, lat: a.lat, lng: a.lng, deliveryNote: a.deliveryNote, isDefault: a.isDefault ?? false, zoneId } });
+    const created = await tx.address.create({ data: {
+      userId: id, label: a.label ?? "Home", line1: a.line1, line2: a.line2, city: a.city, state: a.state, area: a.area, pincode: a.pincode,
+      contactName: a.contactName, contactPhone: a.contactPhone, altPhone: a.altPhone,
+      houseNo: a.houseNo, buildingName: a.buildingName, floor: a.floor, street: a.street, landmark: a.landmark,
+      block: a.block, wing: a.wing, gateNumber: a.gateNumber, doorColor: a.doorColor,
+      lat: a.lat, lng: a.lng, deliveryNote: a.deliveryNote, isDefault: a.isDefault ?? false, zoneId,
+    } });
     await logCustomerEvent(tx, id, "ADDRESS", `Address added (${a.pincode}${serviceable ? "" : " — not serviceable"})`, { pincode: a.pincode, serviceable }, actor);
     return created;
   });

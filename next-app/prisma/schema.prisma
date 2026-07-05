@@ -283,7 +283,22 @@ model Address {
   lat          Float?
   lng          Float?
   isDefault    Boolean @default(false)
-  deliveryNote String?                           // "leave at door", gate code, etc.
+  deliveryNote String?                           // delivery instructions ("ring the bell", "leave at security"), ≤250
+  // --- structured last-mile delivery fields (for accurate house/apartment location) ---
+  contactName  String?                           // delivery contact name (defaults to the customer)
+  contactPhone String?                           // delivery contact number (defaults to the customer)
+  altPhone     String?                           // optional alternate contact number
+  houseNo      String?                           // House / Flat number  (e.g. "Flat 302", "H.No 12-45", "Villa 18")
+  buildingName String?                           // Apartment / Building / House name
+  floor        String?                           // Floor ("Ground Floor", "1st Floor", "Independent House")
+  street       String?                           // Street / Road name
+  area         String?                           // Area / Locality
+  state        String?                           // State (e.g. "Andhra Pradesh")
+  landmark     String?                           // nearest landmark ("Opposite SBI", "Near Benz Circle")
+  block        String?                           // optional — Block / Tower
+  wing         String?                           // optional — Wing
+  gateNumber   String?                           // optional — Society gate number
+  doorColor    String?                           // optional — door colour (visual cue for the executive)
   zoneId       String?
   zone         DeliveryZone? @relation(fields: [zoneId], references: [id])
   subscriptions Subscription[]
