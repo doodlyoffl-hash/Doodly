@@ -5147,24 +5147,53 @@
      per-page wiring. Graceful: not-signed-in or an unreachable backend
      keeps the demo dataset so the portal stays explorable. Fast-fails.
      ============================================================ */
+  /* A REAL signed-in customer is showing — the demo seed (mockdata.js) must never
+     render. Reset window.DOODLY_DATA to the signed-in identity + EMPTY data, so a
+     failed/rejected fetch shows honest empty states, not the "Ananya" demo account. */
+  function resetAccountToUser(D, cu) {
+    const nm = cu.name || (cu.email ? String(cu.email).split("@")[0] : "there");
+    const initials = String(nm).trim().split(/\s+/).map((w) => w[0] || "").slice(0, 2).join("").toUpperCase() || "•";
+    D.me = { name: nm, initials: initials, phone: cu.phone || "—", email: cu.email || "—", area: "—",
+      walletPaise: 0, bottlesPending: 0, depositPaise: 0, plan: "No active plan", variant: "—",
+      nextDelivery: "No delivery scheduled", subStatus: "Inactive", points: 0 };
+    ["orders", "deliveries", "trackTimeline", "bottleLedger", "wallet", "invoices", "referrals", "notifications"].forEach((k) => { D[k] = []; });
+    D._rawDeliveries = []; D._subLive = null; D._nextDelivery = null;
+    D.__realUser = true; D.__hydrated = false; D.__offline = false;
+  }
+  // Expired / revoked session (e.g. after a password reset) → drop it and re-login. Never demo.
+  function accountSessionExpired() {
+    try { localStorage.removeItem("doodly-token"); localStorage.removeItem("doodly-currentuser"); } catch (e) {}
+    const back = encodeURIComponent(location.pathname + location.search);
+    try { location.replace("/login/customer.html?expired=1&from=" + back); } catch (e) { location.href = "/login/customer.html?expired=1"; }
+  }
+
   async function hydrateAccount() {
     const API = window.DOODLY_API, RB = window.DOODLY_RBAC, D = window.DOODLY_DATA;
     if (!API || !D) return;
     let cu = null; try { cu = RB && RB.currentUser ? RB.currentUser() : null; } catch (e) {}
-    if (!cu || !cu.id || /^static-/.test(String(cu.id))) return;   // demo / not signed in → keep mock
+    if (!cu || !cu.id || /^static-/.test(String(cu.id))) return;   // demo / not signed in → keep the exploration mock
+
+    resetAccountToUser(D, cu);                            // wipe the demo seed BEFORE any fetch
 
     const get = (p) => API.get(p).catch(() => null);
     const guard = (ms) => new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms));
-    let res;
+    // Fetch the profile FIRST so we can tell an expired/revoked session (401) apart
+    // from a network blip: a bad session forces re-login, a blip shows empty states.
+    let summaryRes;
     try {
-      res = await Promise.race([
-        Promise.all([ get("/api/account/summary"), get("/api/orders?limit=100"), get("/api/deliveries"), get("/api/invoices"), get("/api/bottles"), get("/api/account/referrals"), get("/api/account/notifications") ]),
-        guard(5000),
-      ]);
-    } catch (e) { D.__offline = true; return; }          // timeout / offline → keep mock + banner
-    const summary = res[0] && res[0].summary;
-    if (!summary) { D.__offline = true; return; }        // no core profile → keep mock (avoid a half-empty page)
-    const orders = res[1] && res[1].orders, deliveries = res[2] && res[2].deliveries, invoices = res[3] && res[3].invoices, bottles = res[4], referral = res[5] && res[5].referral, notifs = res[6] && res[6].notifications;
+      summaryRes = await Promise.race([API.get("/api/account/summary"), guard(6000)]);
+    } catch (e) {
+      if (e && (e.code === "unauthorized" || e.status === 401)) { accountSessionExpired(); return; }
+      D.__offline = true; return;                        // offline / timeout → empty + banner (NOT demo)
+    }
+    const summary = summaryRes && summaryRes.summary;
+    if (!summary) { D.__offline = true; return; }        // no profile → empty + banner (NOT demo)
+
+    // core ok → fetch the rest best-effort (a failing section just stays empty)
+    let rest;
+    try { rest = await Promise.race([ Promise.all([ get("/api/orders?limit=100"), get("/api/deliveries"), get("/api/invoices"), get("/api/bottles"), get("/api/account/referrals"), get("/api/account/notifications") ]), guard(6000) ]); }
+    catch (e) { rest = [null, null, null, null, null, null]; }
+    const orders = rest[0] && rest[0].orders, deliveries = rest[1] && rest[1].deliveries, invoices = rest[2] && rest[2].invoices, bottles = rest[3], referral = rest[4] && rest[4].referral, notifs = rest[5] && rest[5].notifications;
 
     /* ---- format + status → [color,label] helpers (match the mock tuple shape) ---- */
     const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -5232,7 +5261,7 @@
   // Personalise the dashboard greeting once real data is in (recipe hardcodes a name).
   function patchAccountGreeting() {
     if ((document.body.dataset.route || "") !== "account/dashboard") return;
-    const D = window.DOODLY_DATA; if (!D || !D.__hydrated) return;
+    const D = window.DOODLY_DATA; if (!D || !(D.__hydrated || D.__realUser)) return;   // real user → real name even if the fetch failed
     const nm = (D.me && D.me.name) ? String(D.me.name).split(/\s+/)[0] : ""; if (!nm) return;
     const hr = new Date().getHours(), greet = hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening";
     document.querySelectorAll(".ph-title, h1, h2").forEach((el) => { if (/good (morning|afternoon|evening)/i.test(el.textContent || "")) el.textContent = greet + ", " + nm + " 👋"; });
@@ -5258,7 +5287,9 @@
     window.addEventListener("offline", () => netBanner(true, "You're offline — some actions won't work until you reconnect."));
     window.addEventListener("online", () => netBanner(false));
     const D = window.DOODLY_DATA;
-    if (D && D.__offline) netBanner(true, "Couldn't reach DOODLY right now — showing your last known data.");
+    if (D && D.__offline) netBanner(true, D.__realUser
+      ? "Couldn't load your account data right now — check your connection and refresh."
+      : "Couldn't reach DOODLY right now — please try again.");
     else if (navigator.onLine === false) netBanner(true, "You're offline — some actions won't work until you reconnect.");
   }
 
