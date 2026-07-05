@@ -5130,7 +5130,7 @@
     if (window.DOODLY_MAPS) { const am = $("#addressManagerMount"); if (am && !realCust) window.DOODLY_MAPS.mountAddressManager(am); }
     if (window.DOODLY_DELIVERY) { const dp = $("#deliveryPortalMount"); if (dp) window.DOODLY_DELIVERY.mountPortal(dp); }
     // HR / Payroll (admin): Employee Master + HR dashboard
-    if (window.DOODLY_HR) { const hd = $("#hrDashboardMount"); if (hd) window.DOODLY_HR.mountDashboard(hd); const he = $("#hrEmployeesMount"); if (he) window.DOODLY_HR.mount(he); }
+    if (window.DOODLY_HR) { const hd = $("#hrDashboardMount"); if (hd) window.DOODLY_HR.mountDashboard(hd); const he = $("#hrEmployeesMount"); if (he) window.DOODLY_HR.mount(he); const ha = $("#hrAttendanceMount"); if (ha) window.DOODLY_HR.mountAttendance(ha); const hl = $("#hrLeaveMount"); if (hl) window.DOODLY_HR.mountLeave(hl); }
     // invoice download + page-head actions (real CSV / friendly feedback) — wired once
     if (!document.body.dataset.invWired) {
       document.body.dataset.invWired = "1";

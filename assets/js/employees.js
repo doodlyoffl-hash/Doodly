@@ -18,6 +18,17 @@ window.DOODLY_HR = (function () {
   var EMP_TYPES = [["FULL_TIME", "Full Time"], ["PART_TIME", "Part Time"], ["CONTRACT", "Contract"], ["INTERNSHIP", "Internship"]];
   var EMP_STATUS = [["ACTIVE", "Active"], ["ON_LEAVE", "On Leave"], ["RESIGNED", "Resigned"], ["TERMINATED", "Terminated"]];
   var statusBadge = function (s) { var c = s === "ACTIVE" ? "green" : s === "ON_LEAVE" ? "amber" : "red"; var l = (EMP_STATUS.filter(function (x) { return x[0] === s; })[0] || [s, s])[1]; return '<span class="badge ' + c + '">' + esc(l) + "</span>"; };
+  var ATT_STATUS = [["PRESENT", "Present"], ["ABSENT", "Absent"], ["HALF_DAY", "Half Day"], ["PAID_LEAVE", "Paid Leave"], ["SICK_LEAVE", "Sick Leave"], ["WEEKLY_OFF", "Weekly Off"], ["HOLIDAY", "Holiday"], ["WFH", "WFH"]];
+  var LEAVE_TYPES = [["CASUAL", "Casual"], ["SICK", "Sick"], ["EARNED", "Earned"], ["MATERNITY", "Maternity"], ["EMERGENCY", "Emergency"], ["LOSS_OF_PAY", "Loss of Pay"]];
+  var LEAVE_STATUS = [["PENDING", "Pending"], ["MANAGER_APPROVED", "Manager approved"], ["APPROVED", "Approved"], ["REJECTED", "Rejected"], ["CANCELLED", "Cancelled"]];
+  var todayISO = function () { var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  var attLabel = function (s) { return (ATT_STATUS.filter(function (x) { return x[0] === s; })[0] || [s, s])[1]; };
+  var attBadge = function (s) { var c = /PRESENT|WFH/.test(s) ? "green" : s === "ABSENT" ? "red" : /LEAVE/.test(s) ? "amber" : "blue"; return '<span class="badge ' + c + '">' + attLabel(s) + "</span>"; };
+  var attShort = function (s) { return { PRESENT: "P", ABSENT: "A", HALF_DAY: "½", PAID_LEAVE: "PL", SICK_LEAVE: "SL", WEEKLY_OFF: "WO", HOLIDAY: "H", WFH: "W" }[s] || ""; };
+  var leaveTypeLabel = function (t) { return (LEAVE_TYPES.filter(function (x) { return x[0] === t; })[0] || [t, t])[1]; };
+  var leaveStatusBadge = function (s) { var c = s === "APPROVED" ? "green" : (s === "REJECTED" || s === "CANCELLED") ? "red" : s === "MANAGER_APPROVED" ? "blue" : "amber"; return '<span class="badge ' + c + '">' + (LEAVE_STATUS.filter(function (x) { return x[0] === s; })[0] || [s, s])[1] + "</span>"; };
+  var canA = function (a) { try { return !window.DOODLY_RBAC || DOODLY_RBAC.can("attendance", a); } catch (e) { return true; } };
+  var canL = function (a) { try { return !window.DOODLY_RBAC || DOODLY_RBAC.can("leave", a); } catch (e) { return true; } };
 
   /* ---------------- Employee board ---------------- */
   function mount(host) {
@@ -186,9 +197,113 @@ window.DOODLY_HR = (function () {
       ".hr-kpi.green b{color:#1c6b3a}.hr-kpi.amber b{color:#a15b12}.hr-kpi.red b{color:#b3261e}" +
       ".hr-form .na-sec{font-family:'Fraunces',serif;color:var(--forest,#0f3d2e);font-size:1rem;font-weight:600;margin:18px 0 10px;padding-top:14px;border-top:1px solid #eee}.hr-form .na-sec:first-child{border-top:none;padding-top:0;margin-top:0}" +
       ".hr-form .dac-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.hr-form .input{width:100%}@media(max-width:600px){.hr-form .dac-row{grid-template-columns:1fr}}" +
-      ".hr-dhead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}";
+      ".hr-dhead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}" +
+      ".att-sel{padding:6px 8px;font-size:.85rem}" +
+      ".cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.cal-cell{aspect-ratio:1;border:1px solid #eee;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.75rem;background:#fafdfa;color:#33413a}.cal-cell span{font-weight:700}.cal-cell small{font-size:.62rem;opacity:.85}" +
+      ".cal-cell.s-PRESENT,.cal-cell.s-WFH{background:#e8f6ec;border-color:#bfe6cb}.cal-cell.s-ABSENT{background:#fdece9;border-color:#f3c6bd}.cal-cell.s-PAID_LEAVE,.cal-cell.s-SICK_LEAVE{background:#fff5e0;border-color:#f0dca8}.cal-cell.s-WEEKLY_OFF,.cal-cell.s-HOLIDAY{background:#eef2f7;border-color:#d6dde6}.cal-cell.s-HALF_DAY{background:#eaf3ff;border-color:#c4dbf5}";
     document.head.appendChild(s);
   }
 
-  return { mount: mount, mountDashboard: mountDashboard };
+  /* ---------------- Attendance ---------------- */
+  function mountAttendance(host) {
+    if (!host) return; hrStyles();
+    var st = { date: todayISO(), department: "", q: "", data: null };
+    function load() {
+      var qs = "?view=register&date=" + st.date + (st.department ? "&department=" + encodeURIComponent(st.department) : "") + (st.q ? "&q=" + encodeURIComponent(st.q) : "");
+      host.querySelector("#atBody").innerHTML = '<div class="panel panel-pad"><div class="sk-line skeleton"></div></div>';
+      API().get("/api/admin/attendance" + qs).then(function (r) { st.data = r; renderReg(); }).catch(function (e) { host.querySelector("#atBody").innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load attendance.") + "</div>"; });
+    }
+    host.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">' +
+      '<label class="dac-f" style="margin:0"><span>Date</span><input class="input" type="date" id="atDate" value="' + st.date + '"></label>' +
+      '<select class="input" id="atDept" style="max-width:180px"><option value="">All departments</option>' + DEPARTMENTS.map(function (d) { return "<option>" + d + "</option>"; }).join("") + "</select>" +
+      '<input class="input" id="atQ" placeholder="Search employee…" style="flex:1;min-width:160px">' +
+      (canA("edit") ? '<button class="btn btn-ghost sm" id="atBulk">Bulk mark…</button>' : "") +
+      '</div><div id="atCounts"></div><div id="atBody" style="margin-top:12px"></div>';
+    host.querySelector("#atDate").addEventListener("change", function () { st.date = this.value; load(); });
+    host.querySelector("#atDept").addEventListener("change", function () { st.department = this.value; load(); });
+    host.querySelector("#atQ").addEventListener("input", function () { st.q = this.value; clearTimeout(st._t); st._t = setTimeout(load, 350); });
+    var bulk = host.querySelector("#atBulk"); if (bulk) bulk.addEventListener("click", openBulk);
+    function renderReg() {
+      var d = st.data, c = d.counts;
+      host.querySelector("#atCounts").innerHTML = '<div class="hr-kpis">' + kpi("Present", c.present, "green") + kpi("Absent", c.absent, "red") + kpi("On leave", c.leave, "amber") + kpi("Off/Holiday", c.off) + kpi("Unmarked", c.unmarked) + "</div>";
+      var editable = canA("edit");
+      var rows = (d.rows || []).map(function (r) {
+        var sel = editable ? '<select class="input att-sel" data-id="' + r.employeeId + '" style="min-width:130px"><option value="">— mark —</option>' + ATT_STATUS.map(function (s) { return '<option value="' + s[0] + '"' + (r.status === s[0] ? " selected" : "") + ">" + s[1] + "</option>"; }).join("") + "</select>" : (r.status ? attBadge(r.status) : '<span class="muted-sm">—</span>');
+        return "<tr><td><b>" + esc(r.employeeCode) + "</b></td><td>" + esc(r.name) + '<div class="muted-sm">' + esc(r.designation) + "</div></td><td>" + esc(r.department) + "</td><td>" + sel + "</td><td>" + (r.overtimeMins ? Math.round(r.overtimeMins / 60 * 10) / 10 + "h OT" : "") + '</td><td><button class="link att-cal" data-id="' + r.employeeId + '">Calendar</button></td></tr>';
+      }).join("");
+      host.querySelector("#atBody").innerHTML = '<div class="panel"><div class="panel-pad" style="padding-top:0"><div class="table-wrap"><table class="tbl"><thead><tr><th>Code</th><th>Employee</th><th>Dept</th><th>Status</th><th>OT</th><th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="6" class="muted-sm" style="padding:16px">No employees for this filter.</td></tr>') + "</tbody></table></div></div></div>";
+      host.querySelectorAll(".att-sel").forEach(function (s) { s.addEventListener("change", function () { if (this.value) mark(this.dataset.id, this.value); }); });
+      host.querySelectorAll(".att-cal").forEach(function (b) { b.addEventListener("click", function () { openCalendar(b.dataset.id); }); });
+    }
+    function mark(employeeId, status) { API().post("/api/admin/attendance", { action: "mark", employeeId: employeeId, date: st.date, status: status }).then(function () { toast("Marked ✓"); load(); }).catch(function (e) { toast((e && e.message) || "Couldn't mark."); }); }
+    function openBulk() {
+      var ids = (st.data && st.data.rows || []).map(function (r) { return r.employeeId; });
+      var m = modal("Bulk mark attendance", '<p class="muted-sm">Apply a status to all ' + ids.length + " listed employees for <b>" + st.date + '</b>.</p><label class="dac-f"><span>Status</span><select class="input" id="bkStatus">' + ATT_STATUS.map(function (s) { return '<option value="' + s[0] + '">' + s[1] + "</option>"; }).join("") + '</select></label><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="btn btn-ghost sm" id="bkCancel">Cancel</button><button class="btn btn-primary sm" id="bkGo">Apply to ' + ids.length + "</button></div>");
+      m.ov.querySelector("#bkCancel").addEventListener("click", m.close);
+      m.ov.querySelector("#bkGo").addEventListener("click", function () { this.disabled = true; API().post("/api/admin/attendance", { action: "bulk", date: st.date, employeeIds: ids, status: m.ov.querySelector("#bkStatus").value }).then(function (r) { toast("Marked " + r.marked + " ✓"); m.close(); load(); }).catch(function (e) { toast((e && e.message) || "Failed."); }); });
+    }
+    function openCalendar(employeeId) {
+      var month = st.date.slice(0, 7), m = modal("Monthly calendar", '<div class="panel panel-pad"><div class="sk-line skeleton"></div></div>');
+      API().get("/api/admin/attendance?view=calendar&employeeId=" + employeeId + "&month=" + month).then(function (r) {
+        var cells = r.days.map(function (d) { return '<div class="cal-cell ' + (d.status ? "s-" + d.status : "") + '"><span>' + d.day + "</span>" + (d.status ? "<small>" + attShort(d.status) + "</small>" : "") + "</div>"; }).join("");
+        var s = r.summary;
+        m.ov.querySelector(".dac-body").innerHTML = '<div class="hr-dhead"><div><b>' + esc(r.name || "") + "</b> · " + esc(r.employeeCode) + '<div class="muted-sm">' + month + "</div></div></div><div class=\"cal-grid\">" + cells + '</div><div class="hr-kpis" style="margin-top:12px">' + kpi("Present", s.present, "green") + kpi("Absent", s.absent, "red") + kpi("Leave", s.paidLeave + s.sickLeave, "amber") + kpi("Off", s.weeklyOff + s.holiday) + kpi("OT (h)", Math.round(s.overtimeMins / 60 * 10) / 10) + "</div>";
+      }).catch(function (e) { m.ov.querySelector(".dac-body").innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load.") + "</div>"; });
+    }
+    load();
+  }
+
+  /* ---------------- Leave ---------------- */
+  function mountLeave(host) {
+    if (!host) return; hrStyles();
+    var st = { status: "", q: "", data: null };
+    function load() {
+      var qs = "?view=list" + (st.status ? "&status=" + st.status : "") + (st.q ? "&q=" + encodeURIComponent(st.q) : "");
+      host.querySelector("#lvBody").innerHTML = '<div class="panel panel-pad"><div class="sk-line skeleton"></div></div>';
+      API().get("/api/admin/leave" + qs).then(function (r) { st.data = r; renderList(); }).catch(function (e) { host.querySelector("#lvBody").innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load leave.") + "</div>"; });
+    }
+    host.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">' +
+      '<select class="input" id="lvStatus" style="max-width:180px"><option value="">All status</option>' + LEAVE_STATUS.map(function (s) { return '<option value="' + s[0] + '">' + s[1] + "</option>"; }).join("") + "</select>" +
+      '<input class="input" id="lvQ" placeholder="Search code / employee…" style="flex:1;min-width:160px">' +
+      (canL("edit") ? '<button class="btn btn-primary sm" id="lvNew">' + icon("plus", 14) + " New request</button>" : "") +
+      '</div><div id="lvBody"></div>';
+    host.querySelector("#lvStatus").addEventListener("change", function () { st.status = this.value; load(); });
+    host.querySelector("#lvQ").addEventListener("input", function () { st.q = this.value; clearTimeout(st._t); st._t = setTimeout(load, 350); });
+    var nw = host.querySelector("#lvNew"); if (nw) nw.addEventListener("click", function () { openNewLeave(load); });
+    function renderList() {
+      var d = st.data, rows = (d.rows || []).map(function (r) {
+        var canDecide = canL("edit") && (r.status === "PENDING" || r.status === "MANAGER_APPROVED");
+        return "<tr><td><b>" + esc(r.code) + "</b></td><td>" + esc(r.name) + '<div class="muted-sm">' + esc(r.employeeCode + " · " + r.department) + "</div></td><td>" + leaveTypeLabel(r.type) + "</td><td>" + fmtD(r.startDate) + " → " + fmtD(r.endDate) + '<div class="muted-sm">' + r.days + " day" + (r.days === 1 ? "" : "s") + "</div></td><td>" + leaveStatusBadge(r.status) + "</td><td>" + (canDecide ? '<button class="btn btn-primary sm lv-ok" data-id="' + r.id + '">Approve</button> <button class="btn btn-ghost sm lv-no" data-id="' + r.id + '" style="color:#b3261e">Reject</button>' : (r.reason ? '<span class="muted-sm">' + esc(r.reason) + "</span>" : "")) + "</td></tr>";
+      }).join("");
+      host.querySelector("#lvBody").innerHTML = '<div class="panel"><div class="panel-pad" style="padding-top:0">' + (d.stats.pending ? '<div class="notice">' + d.stats.pending + " request" + (d.stats.pending === 1 ? "" : "s") + " awaiting approval.</div>" : "") + '<div class="table-wrap"><table class="tbl"><thead><tr><th>Code</th><th>Employee</th><th>Type</th><th>Dates</th><th>Status</th><th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="6" class="muted-sm" style="padding:16px">No leave requests.</td></tr>') + "</tbody></table></div></div></div>";
+      host.querySelectorAll(".lv-ok").forEach(function (b) { b.addEventListener("click", function () { decide(b.dataset.id, "approve"); }); });
+      host.querySelectorAll(".lv-no").forEach(function (b) { b.addEventListener("click", function () { var why = prompt("Reason for rejection:"); if (why === null) return; decide(b.dataset.id, "reject", why); }); });
+    }
+    function decide(id, action, reason) { API().post("/api/admin/leave", { action: action, id: id, reason: reason || undefined }).then(function (r) { toast(action === "approve" ? (r.status === "APPROVED" ? "Leave approved ✓" : "Sent for HR approval") : "Leave rejected"); load(); }).catch(function (e) { toast((e && e.message) || "Couldn't update."); }); }
+    function openNewLeave(done) {
+      API().get("/api/admin/employees?pageSize=500").then(function (r) {
+        var opts = (r.items || []).map(function (e) { return '<option value="' + e.id + '">' + esc(e.employeeCode + " · " + e.name) + "</option>"; }).join("");
+        var body = '<div class="hr-form"><label class="dac-f"><span>Employee <span style="color:#c0392b">*</span></span><select class="input" id="lvEmp">' + opts + "</select></label>" +
+          '<div class="dac-row"><label class="dac-f"><span>Leave type <span style="color:#c0392b">*</span></span><select class="input" id="lvType">' + LEAVE_TYPES.map(function (t) { return '<option value="' + t[0] + '">' + t[1] + "</option>"; }).join("") + '</select></label><label class="dac-f"><span>Balance</span><span class="input" id="lvBal" style="display:flex;align-items:center;background:#f6faf6">—</span></label></div>' +
+          '<div class="dac-row"><label class="dac-f"><span>Start date <span style="color:#c0392b">*</span></span><input class="input" type="date" id="lvStart"></label><label class="dac-f"><span>End date <span style="color:#c0392b">*</span></span><input class="input" type="date" id="lvEnd"></label></div>' +
+          '<label class="dac-f"><span>Reason</span><textarea class="input" id="lvReason" rows="2" maxlength="500"></textarea></label>' +
+          '<div id="lvErr" style="display:none;color:#b3261e;font-size:.85rem;font-weight:600;margin:6px 0"></div>' +
+          '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px"><button class="btn btn-ghost sm" id="lvCancel">Cancel</button><button class="btn btn-primary sm" id="lvSave">Submit request</button></div></div>';
+        var m = modal("New leave request", body), q = function (s) { return m.ov.querySelector(s); };
+        function showBal() { var emp = q("#lvEmp").value; if (!emp) return; API().get("/api/admin/leave?view=balances&employeeId=" + emp).then(function (r2) { var t = q("#lvType").value, b = (r2.balances || []).filter(function (x) { return x.type === t; })[0]; q("#lvBal").textContent = b ? (b.remaining + " of " + b.allotted + " days left") : "—"; }).catch(function () {}); }
+        q("#lvEmp").addEventListener("change", showBal); q("#lvType").addEventListener("change", showBal); showBal();
+        q("#lvCancel").addEventListener("click", m.close);
+        q("#lvSave").addEventListener("click", function () {
+          var err = q("#lvErr"); err.style.display = "none";
+          var emp = q("#lvEmp").value, start = q("#lvStart").value, end = q("#lvEnd").value;
+          if (!emp || !start || !end) { err.style.display = "block"; err.textContent = "Employee and both dates are required."; return; }
+          this.disabled = true;
+          API().post("/api/admin/leave", { action: "create", employeeId: emp, type: q("#lvType").value, startDate: start, endDate: end, reason: q("#lvReason").value || undefined }).then(function () { toast("Leave request created ✓"); m.close(); if (done) done(); }).catch(function (e) { err.style.display = "block"; err.textContent = (e && e.message) || "Couldn't create."; q("#lvSave").disabled = false; });
+        });
+      }).catch(function () { toast("Couldn't load employees."); });
+    }
+    load();
+  }
+
+  return { mount: mount, mountDashboard: mountDashboard, mountAttendance: mountAttendance, mountLeave: mountLeave };
 })();
