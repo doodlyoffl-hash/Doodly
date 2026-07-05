@@ -20,10 +20,12 @@
 @keyframes ccRoll { 0%{ transform:translateY(-60%); opacity:0; } 100%{ transform:translateY(0); opacity:1; } }
 
 /* ---- backdrop + drawer ---- */
-.cart-backdrop { position:fixed; inset:0; z-index:1190; background:rgba(8,30,21,.34);
+/* z-index above the floating chat/help FABs (1200–1250) so the drawer + backdrop
+   cleanly cover them instead of the FABs overlapping the checkout button/total */
+.cart-backdrop { position:fixed; inset:0; z-index:1290; background:rgba(8,30,21,.34);
   backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px); opacity:0; pointer-events:none; transition:opacity .35s ease; }
 .cart-backdrop.show { opacity:1; pointer-events:auto; }
-.cart-drawer { position:fixed; top:0; right:0; bottom:0; z-index:1200; width:min(420px, 92vw);
+.cart-drawer { position:fixed; top:0; right:0; bottom:0; z-index:1300; width:min(420px, 92vw);
   display:flex; flex-direction:column; background:var(--glass-bg); border-left:1px solid var(--glass-brd);
   backdrop-filter:var(--glass-blur); -webkit-backdrop-filter:var(--glass-blur); box-shadow:-24px 0 60px rgba(15,61,46,.22);
   transform:translateX(102%); transition:transform .42s cubic-bezier(.22,1,.36,1); will-change:transform; }
@@ -117,12 +119,12 @@
 .cart-trust { text-align:center; font-size:.74rem; color:var(--ink-3); margin-top:9px; display:flex; align-items:center; justify-content:center; gap:.35rem; }
 
 /* ---- fly-to-cart clone ---- */
-.cart-fly { position:fixed; z-index:1300; pointer-events:none; border-radius:12px; overflow:hidden;
+.cart-fly { position:fixed; z-index:1400; pointer-events:none; border-radius:12px; overflow:hidden;
   box-shadow:0 12px 24px rgba(15,61,46,.28); will-change:transform,opacity; }
 .cart-fly img { width:100%; height:100%; object-fit:contain; }
 
 /* ---- toast ---- */
-.cart-toast-wrap { position:fixed; left:50%; bottom:26px; transform:translateX(-50%); z-index:1250; display:flex; flex-direction:column; gap:8px; align-items:center; pointer-events:none; }
+.cart-toast-wrap { position:fixed; left:50%; bottom:26px; transform:translateX(-50%); z-index:1350; display:flex; flex-direction:column; gap:8px; align-items:center; pointer-events:none; }
 .cart-toast { display:flex; align-items:center; gap:.6rem; background:var(--forest); color:#fff; font-weight:600; font-size:.88rem;
   padding:.7rem 1rem; border-radius:14px; box-shadow:0 12px 30px rgba(15,61,46,.32); max-width:90vw;
   transform:translateY(16px) scale(.96); opacity:0; transition:transform .3s cubic-bezier(.2,1.2,.3,1), opacity .3s; }
