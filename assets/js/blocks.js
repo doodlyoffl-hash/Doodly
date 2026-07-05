@@ -348,7 +348,7 @@ window.DOODLY_BLOCKS = (function () {
       const req = f.req ? " required" : "";
       const star = f.req ? ` <span class="req" aria-hidden="true">*</span>` : "";
       const ctrl = f.type === "textarea" ? `<textarea name="${name}" placeholder="${f.placeholder || ""}"${req}>${f.value || ""}</textarea>`
-        : f.type === "select" ? `<select name="${name}"${req}>${(f.options || []).map(o => `<option${f.value === o ? " selected" : ""}>${o}</option>`).join("")}</select>`
+        : f.type === "select" ? `<select name="${name}"${req}>${(f.options || []).map(o => { const obj = o && typeof o === "object"; const val = obj ? (o.value != null ? o.value : o.label) : o; const lbl = obj ? o.label : o; const dis = obj && o.disabled ? " disabled" : ""; return `<option${f.value === val ? " selected" : ""}${dis}>${lbl}</option>`; }).join("")}</select>`
         : `<input name="${name}" type="${f.type || "text"}" placeholder="${f.placeholder || ""}" value="${f.value || ""}"${req}>`;
       return `<div class="field ${f.full ? "full" : ""}"><label>${f.label}${star}</label>${ctrl}${f.hint ? `<span class="hint">${f.hint}</span>` : ""}</div>`;
     }).join("");

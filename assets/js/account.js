@@ -486,37 +486,83 @@ window.DOODLY_ACCOUNT = (function () {
     if ((document.body.dataset.route || "") !== "account/settings" || !me()) return;
     var gen = document.querySelector('[data-form="settings-general"]');
     var notif = document.querySelector('[data-form="settings-notif"]');
-    if (!gen && !notif) return;
     var sel = function (form, name) { return form ? form.querySelector('[name="' + name + '"]') : null; };
     var setYN = function (el, on) { if (el) el.value = on ? "On" : "Off"; };
     var yn = function (el) { return el ? el.value === "On" : undefined; };
 
-    API().get("/api/account/settings").then(function (r) {
-      var s = r.settings || {};
-      var lang = sel(gen, "language"); if (lang && LANG_LABEL[s.language]) lang.value = LANG_LABEL[s.language];
-      setYN(sel(gen, "whatsapp-updates"), s.whatsappOptIn);
-      setYN(sel(notif, "email-updates"), s.emailOptIn);
-      setYN(sel(notif, "sms-updates"), s.smsOptIn);
-      setYN(sel(notif, "push-notifications"), s.pushOptIn);
-      setYN(sel(notif, "promotions-offers"), s.marketingOptIn);
-    }).catch(function () {});
+    if (gen || notif) {
+      // prefill every control from the customer's saved preferences
+      API().get("/api/account/settings").then(function (r) {
+        var s = r.settings || {};
+        var lang = sel(gen, "language"); if (lang && LANG_LABEL[s.language]) lang.value = LANG_LABEL[s.language];
+        setYN(sel(notif, "email-updates"), s.emailOptIn);
+        setYN(sel(notif, "sms-updates"), s.smsOptIn);
+        setYN(sel(notif, "whatsapp-updates"), s.whatsappOptIn);
+        setYN(sel(notif, "push-notifications"), s.pushOptIn);
+        setYN(sel(notif, "promotions-offers"), s.marketingOptIn);
+      }).catch(function () {});
 
-    if (gen) gen.addEventListener("submit", function () {
-      var lang = sel(gen, "language");
-      API().patch("/api/account/settings", {
-        language: lang ? (LANG_KEY[lang.value] || "en") : undefined,
-        whatsappOptIn: yn(sel(gen, "whatsapp-updates")),
-      }).then(function () { toast("Settings saved ✓"); }).catch(function (e) { toast(e.message || "Couldn't save settings."); });
-    }, true);
+      if (gen) gen.addEventListener("submit", function () {
+        var lang = sel(gen, "language");
+        API().patch("/api/account/settings", { language: lang ? (LANG_KEY[lang.value] || "en") : undefined })
+          .then(function () { toast("Settings saved ✓"); }).catch(function (e) { toast(e.message || "Couldn't save settings."); });
+      }, true);
 
-    if (notif) notif.addEventListener("submit", function () {
-      API().patch("/api/account/settings", {
-        emailOptIn: yn(sel(notif, "email-updates")),
-        smsOptIn: yn(sel(notif, "sms-updates")),
-        pushOptIn: yn(sel(notif, "push-notifications")),
-        marketingOptIn: yn(sel(notif, "promotions-offers")),
-      }).then(function () { toast("Notification preferences saved ✓"); }).catch(function (e) { toast(e.message || "Couldn't save preferences."); });
-    }, true);
+      if (notif) notif.addEventListener("submit", function () {
+        API().patch("/api/account/settings", {
+          emailOptIn: yn(sel(notif, "email-updates")),
+          smsOptIn: yn(sel(notif, "sms-updates")),
+          whatsappOptIn: yn(sel(notif, "whatsapp-updates")),
+          pushOptIn: yn(sel(notif, "push-notifications")),
+          marketingOptIn: yn(sel(notif, "promotions-offers")),
+        }).then(function () { toast("Notification preferences saved ✓"); }).catch(function (e) { toast(e.message || "Couldn't save preferences."); });
+      }, true);
+    }
+
+    wireSecurity();
+  }
+
+  /* Security tab — real change-password (POST /api/account/password) and sign-out
+     of all devices (POST /api/logout bumps tokenVersion → revokes every session). */
+  function signOutAndRelogin() {
+    try { localStorage.removeItem("doodly-token"); localStorage.removeItem("doodly-currentuser"); } catch (e) {}
+    var back = encodeURIComponent("/account/settings.html");
+    try { location.replace("/login/customer.html?from=" + back); } catch (e) { location.href = "/login/customer.html"; }
+  }
+  function wireSecurity() {
+    var out = document.getElementById("secMsg");
+    var showMsg = function (okState, txt) { if (!out) return; out.hidden = false; out.className = "form-msg " + (okState ? "ok" : "err"); out.textContent = txt; };
+    var btn = document.getElementById("secPwBtn");
+    if (btn && !btn.dataset.wired) {
+      btn.dataset.wired = "1";
+      btn.addEventListener("click", function () {
+        var cur = (document.getElementById("secCur") || {}).value || "";
+        var nw = (document.getElementById("secNew") || {}).value || "";
+        var cf = (document.getElementById("secConf") || {}).value || "";
+        if (!cur) { showMsg(false, "Enter your current password."); return; }
+        if (nw.length < 8) { showMsg(false, "New password must be at least 8 characters."); return; }
+        if (nw !== cf) { showMsg(false, "New passwords don't match."); return; }
+        btn.disabled = true; showMsg(true, "Updating…");
+        API().post("/api/account/password", { currentPassword: cur, newPassword: nw })
+          .then(function (r) {
+            showMsg(true, (r && r.message) || "Password updated. Please sign in again.");
+            toast("Password updated ✓");
+            setTimeout(signOutAndRelogin, 1400);   // tokenVersion bumped → this session is revoked
+          })
+          .catch(function (e) { btn.disabled = false; showMsg(false, e.message || "Couldn't update your password."); });
+      });
+    }
+    var so = document.getElementById("secSignoutAll");
+    if (so && !so.dataset.wired) {
+      so.dataset.wired = "1";
+      so.addEventListener("click", function () {
+        if (!confirm("Sign out of all devices? You'll need to sign in again here too.")) return;
+        so.disabled = true;
+        API().post("/api/logout", {})
+          .then(function () { toast("Signed out of all devices"); setTimeout(signOutAndRelogin, 700); })
+          .catch(function (e) { so.disabled = false; toast(e.message || "Couldn't sign out. Please try again."); });
+      });
+    }
   }
 
   /* ============================================================ REFERRALS
