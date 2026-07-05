@@ -149,6 +149,11 @@ window.DOODLY_VARIANT = (function () {
     const order = scope.querySelector(".vp-order"), sub = scope.querySelector(".vp-sub"), cart = scope.querySelector(".vp-cart");
     if (order) order.addEventListener("click", () => {
       const v = variant(selectedId); if (!v || !orderable(v)) return;
+      // Order Now → straight to the checkout steps (persist the selection first).
+      if (window.DOODLY_BUILDER && window.DOODLY_BUILDER.checkoutNow) {
+        window.DOODLY_BUILDER.checkoutNow(selectedId, v.type === "trial" ? null : "single");
+        return;
+      }
       if (window.DOODLY_BUILDER) window.DOODLY_BUILDER.select(selectedId, v.type === "trial" ? null : "single");
       scrollToBuilder(true);
     });

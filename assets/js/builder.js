@@ -29,6 +29,29 @@ window.DOODLY_BUILDER = (function () {
     return "/login/customer.html?order=subscription";
   }
 
+  /* "Order Now" from a product card → persist the selection (variant + plan +
+     earliest start date) and go straight to checkout, skipping the builder. */
+  function checkoutNow(variantId, planId) {
+    const D_ = D();
+    const v = (D_.variants || []).filter((x) => x.id === variantId)[0];
+    if (!v) return;
+    const trial = v.type === "trial";
+    const pid = trial ? undefined : (planId || "single");
+    const p = pid ? (D_.plans || []).filter((x) => x.id === pid)[0] : null;
+    const days = trial ? (v.fixedDays || 3) : (p ? p.days : 1);
+    const SC = window.DOODLY_SCHEDULE;
+    let startIso = null, endIso = null;
+    if (SC && SC.earliest) {
+      const start = SC.earliest();
+      const sch = SC.schedule ? SC.schedule(start, days) : null;
+      startIso = sch ? sch.startIso : (SC.iso ? SC.iso(start) : null);
+      endIso = sch ? sch.endIso : null;
+      if (startIso && SC.setSelected) SC.setSelected(startIso);
+    }
+    try { localStorage.setItem("doodly-subscription", JSON.stringify({ variantId: variantId, planId: pid, days: days, startIso: startIso, endIso: endIso })); } catch (e) {}
+    window.location.href = checkoutDest();
+  }
+
   function mount() {
     const D_ = D();
     const variants = (D_.variants || []).filter(v => v.active !== false);
@@ -213,5 +236,6 @@ window.DOODLY_BUILDER = (function () {
     mount,
     // drive the builder from the "Choose your bottle" cards
     select(vid, pid) { if (_api) _api(vid, pid); },
+    checkoutNow,
   };
 })();
