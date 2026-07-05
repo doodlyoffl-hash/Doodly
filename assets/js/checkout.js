@@ -598,11 +598,8 @@ window.DOODLY_CHECKOUT = (function () {
     try {
       if (window.DOODLY_MAPS && DOODLY_MAPS.mountPicker) {
         DOODLY_MAPS.mountPicker(m.querySelector("#coAddrMap"), { height: "200px", onChange: (res) => {
+          // Capture the pin location only — the customer types their own address details.
           geo.lat = res.lat; geo.lng = res.lng;
-          const pin = m.querySelector("#cam-pin"), city = m.querySelector("#cam-city"), line1 = m.querySelector("#cam-line1");
-          if (res.pincode && pin && !pin.value) pin.value = res.pincode;
-          if (res.city && city && !city.value) city.value = res.city;
-          if (res.area && line1 && !line1.value) line1.value = res.area;
         } });
       }
     } catch (e) {}
