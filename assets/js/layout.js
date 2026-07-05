@@ -845,6 +845,12 @@
       ".dac-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}" +
       ".dac-ft{display:flex;justify-content:flex-end;gap:10px;padding:14px 18px;border-top:1px solid var(--line,#e3ece3);background:var(--mint-soft,#f6faf6)}" +
       ".dac-err{color:#d83a3a;font-size:.78rem;font-weight:600;margin:0;min-height:1em}" +
+      // modal() helper card (account/puzzle) — constrain height + scroll the body so tall forms stay usable
+      ".dac-ov{overflow-y:auto}" +
+      ".dac-modal{background:var(--surface,#fff);color:var(--ink,#16241c);width:min(640px,100%);max-height:calc(100vh - 40px);display:flex;flex-direction:column;border-radius:18px;border:1px solid var(--line,#e3ece3);box-shadow:0 24px 60px rgba(15,61,46,.28);overflow:hidden;animation:dacPop .2s ease}" +
+      ".dac-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line,#e3ece3);flex:0 0 auto}" +
+      ".dac-head h3{margin:0;font-family:var(--font-display,inherit);font-size:1.05rem;color:var(--ink,#16241c)}" +
+      ".dac-body{padding:16px 18px;overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1 1 auto;min-height:0}" +
       "@keyframes dacFade{from{opacity:0}to{opacity:1}}@keyframes dacPop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}";
     document.head.appendChild(s);
   }

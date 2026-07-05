@@ -326,6 +326,7 @@ window.DOODLY_ACCOUNT = (function () {
       ".acc-addr2-h{display:flex;align-items:center;gap:8px;font-size:1rem}.acc-addr2-body{font-size:.9rem;color:#3a453e;margin-top:4px;line-height:1.45}" +
       ".acc-addr2-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}" +
       ".na-form .dac-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.na-form .dac-f{display:block}.na-form .input,.na-form select.input{width:100%}" +
+      ".na-actions{position:sticky;bottom:-16px;background:#fff;padding:12px 0;margin:0 -2px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #eee}" +
       "@media (max-width:600px){.na-form .dac-row{grid-template-columns:1fr}}";
     document.head.appendChild(s);
   }
@@ -377,7 +378,7 @@ window.DOODLY_ACCOUNT = (function () {
       '<div class="na-counter" id="na-counter"></div>' +
       '<label style="display:flex;gap:8px;align-items:center;font-size:.9rem;margin:12px 0"><input type="checkbox" id="na-def"' + (e.isDefault ? " checked" : "") + "> Make this my default address</label>" +
       '<div id="na-err" style="display:none;color:#b3261e;font-size:.85rem;font-weight:600;margin-bottom:8px"></div>' +
-      '<div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn btn-ghost sm" id="na-cancel">Cancel</button><button class="btn btn-primary sm" id="na-save">' + (editing ? "Save changes" : "Save address") + "</button></div>" +
+      '<div class="na-actions"><button class="btn btn-ghost sm" id="na-cancel">Cancel</button><button class="btn btn-primary sm" id="na-save">' + (editing ? "Save changes" : "Save address") + "</button></div>" +
       "</div>";
 
     modal(editing ? "Edit address" : "Add address", body, function (ov, close) {
