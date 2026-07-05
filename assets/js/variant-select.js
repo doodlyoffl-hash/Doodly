@@ -159,8 +159,9 @@ window.DOODLY_VARIANT = (function () {
     });
     if (sub) sub.addEventListener("click", () => {
       const v = variant(selectedId); if (!v || !orderable(v)) return;
-      if (window.DOODLY_BUILDER) window.DOODLY_BUILDER.select(selectedId, v.type === "trial" ? null : "p30");
-      scrollToBuilder(false);
+      // Subscribe → the dedicated "Build your subscription" screen, bottle (+ plan) preselected.
+      const q = "?variant=" + encodeURIComponent(selectedId) + (v.type === "trial" ? "" : "&plan=p30");
+      window.location.href = "/subscriptions.html" + q + "#builder";
     });
     if (cart) cart.addEventListener("click", () => {
       const v = variant(selectedId); if (!v || !orderable(v)) return;
