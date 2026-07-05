@@ -69,7 +69,18 @@ window.DOODLY_MAPS = (function () {
      the app works either way. Callers never change.
      ============================================================ */
   let _gmPromise = null;
+  let _gmDead = false;   // set by gm_authFailure — key rejected (invalid / referrer / billing-auth) → use SVG
+  // Google's documented global hook: fires when the Maps key is rejected. Flip
+  // every future map mount to the built-in SVG fallback instead of a broken
+  // Google canvas (e.g. BillingNotEnabledMapError / RefererNotAllowedMapError).
+  if (typeof window !== "undefined" && !window.gm_authFailure) {
+    window.gm_authFailure = function () {
+      _gmDead = true; _gmPromise = Promise.resolve(null);
+      try { console.warn("[DOODLY maps] Google Maps auth failed (key / referrer / billing) — falling back to the built-in map."); } catch (e) {}
+    };
+  }
   function ensureGoogle() {
+    if (_gmDead) return Promise.resolve(null);
     if (_gmPromise) return _gmPromise;
     _gmPromise = new Promise((resolve) => {
       if (window.google && window.google.maps) return resolve(window.google.maps);
