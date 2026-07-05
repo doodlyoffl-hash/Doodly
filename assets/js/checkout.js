@@ -51,15 +51,29 @@ window.DOODLY_CHECKOUT = (function () {
   }
   function cartPaneHTML() {
     const lines = CART() ? CART().lines() : [];
-    if (!lines.length) return `<div class="co-empty">${icon("box", 34)}<h3>Your cart is empty</h3><p>Add a fresh bottle to get started.</p><a class="btn btn-primary" href="/products/milk.html">Browse milk</a></div>`;
-    return `<h2 class="co-h">Review your cart</h2>
-      <div class="co-cartlist">${lines.map((l) => `
-        <div class="co-cartrow"><div class="co-line-img">${l.image ? `<img src="${l.image}" alt="${l.name}">` : ""}</div>
-          <div class="co-line-main"><div class="co-line-name">${l.name}</div>
-            <div class="co-line-meta">${l.type === "trial" ? `${inr(l.unit)} · ${l.fixedDays || 3}-day` : `${inr(l.unit)}/day`} · Qty ${l.qty}</div></div>
-          <div class="co-line-price">${inr(l.unit * l.qty)}</div></div>`).join("")}</div>
-      <button type="button" class="co-link js-editcart">${icon("edit", 15)} Edit cart</button>
-      ${navHTML(false, "Continue to address")}`;
+    if (lines.length) {
+      return `<h2 class="co-h">Review your cart</h2>
+        <div class="co-cartlist">${lines.map((l) => `
+          <div class="co-cartrow"><div class="co-line-img">${l.image ? `<img src="${l.image}" alt="${l.name}">` : ""}</div>
+            <div class="co-line-main"><div class="co-line-name">${l.name}</div>
+              <div class="co-line-meta">${l.type === "trial" ? `${inr(l.unit)} · ${l.fixedDays || 3}-day` : `${inr(l.unit)}/day`} · Qty ${l.qty}</div></div>
+            <div class="co-line-price">${inr(l.unit * l.qty)}</div></div>`).join("")}</div>
+        <button type="button" class="co-link js-editcart">${icon("edit", 15)} Edit cart</button>
+        ${navHTML(false, "Continue to address")}`;
+    }
+    // subscription flow: the builder set doodly-subscription, not the one-off cart
+    const sd = subDisplay();
+    if (sd) {
+      return `<h2 class="co-h">Review your subscription</h2>
+        <div class="co-cartlist">
+          <div class="co-cartrow"><div class="co-line-img">${sd.line.image ? `<img src="${esc(sd.line.image)}" alt="">` : icon("bottle", 30)}</div>
+            <div class="co-line-main"><div class="co-line-name">${esc(sd.line.name)}</div>
+              <div class="co-line-meta">${esc(sd.line.meta)} · ${inr(sd.line.unit)}${sd.trial ? "" : "/day"}</div></div>
+            <div class="co-line-price">${inr(sd.line.total)}</div></div></div>
+        <a class="co-link" href="/subscriptions.html#builder">${icon("edit", 15)} Edit plan</a>
+        ${navHTML(false, "Continue to address")}`;
+    }
+    return `<div class="co-empty">${icon("box", 34)}<h3>Your cart is empty</h3><p>Add a fresh bottle to get started.</p><a class="btn btn-primary" href="/products/milk.html">Browse milk</a></div>`;
   }
   function addressPaneHTML() {
     return `<h2 class="co-h">Delivery address</h2>
@@ -96,6 +110,38 @@ window.DOODLY_CHECKOUT = (function () {
   }
   /* stored subscription context (set by the builder) gives plan days */
   function subContext() { try { return JSON.parse(localStorage.getItem("doodly-subscription") || "null"); } catch (e) { return null; } }
+
+  /* Build the checkout review line + totals from the subscription context when
+     the one-off cart is empty (the builder/quick-buy flow sets doodly-subscription,
+     not the cart). Prices come from the SAME catalogue fields the builder uses. */
+  function subDisplay() {
+    const sub = subContext();
+    if (!sub || !sub.variantId) return null;
+    const D = window.DOODLY || {};
+    const v = (D.variants || []).filter(function (x) { return x.id === sub.variantId; })[0];
+    if (!v) return null;
+    const p = (D.plans || []).filter(function (x) { return x.id === sub.planId; })[0];
+    const milk = (D.products || []).filter(function (x) { return x.id === "milk" || x.slug === "milk"; })[0] || {};
+    const pr = milk.pricing || {};
+    const trial = v.type === "trial";
+    const days = sub.days || (p ? p.days : (v.fixedDays || 1));
+    const bottles = 1;
+    const dailyPrice = trial ? (v.fixedPrice || 0) : (v.dailyPrice || 0);
+    const original = trial ? (v.fixedPrice || 0) : dailyPrice * days;
+    const discount = trial ? 0 : Math.round(original * (p ? (p.discount || 0) : 0));
+    const net = original - discount;
+    const deposit = (pr.deposit || 0) * bottles;
+    const delivery = pr.deliveryCharge || 0;
+    const gst = Math.round(net * ((pr.taxPct || 0) / 100));
+    const total = net + deposit + delivery + gst;
+    const name = v.displayName || v.label || (v.ml + " ml Milk");
+    const planName = trial ? (days + "-day sample pack") : ((p ? p.name : "Subscription") + " · " + days + " days");
+    return {
+      trial: trial,
+      line: { name: name, meta: planName, unit: dailyPrice, qty: bottles, total: net, type: v.type, image: milk.image, ml: v.ml },
+      totals: { subtotal: original, savings: discount, deposit: deposit, delivery: delivery, gst: gst, total: total, bottles: bottles },
+    };
+  }
   function renderCoSchedule() {
     const SC = window.DOODLY_SCHEDULE, box = mount.querySelector("#coSchedule");
     if (!SC || !box) return;
@@ -152,10 +198,13 @@ window.DOODLY_CHECKOUT = (function () {
       <button type="button" class="btn btn-primary co-next ${nextCls || ""}">${nextLabel}</button></div>`;
   }
   function summaryHTML() {
-    const t = CART() ? CART().getTotals() : { subtotal: 0, savings: 0, deposit: 0, delivery: 0, gst: 0, total: 0, bottles: 0 };
+    const cartT = CART() ? CART().getTotals() : null;
+    // subscription flow (empty one-off cart) → derive the summary from the sub context
+    const sd = (cartT && cartT.bottles) ? null : subDisplay();
+    const t = (cartT && cartT.bottles) ? cartT : (sd ? sd.totals : { subtotal: 0, savings: 0, deposit: 0, delivery: 0, gst: 0, total: 0, bottles: 0 });
     // Trial-Pack cashback reminder — shown when a Trial Pack is being purchased and the
     // promo is enabled. Amount + min eligible plan length come from the admin wallet config.
-    const trialInCart = !!(CART() && CART().lines && CART().lines().some(l => (l.variant && l.variant.type === "trial") || l.type === "trial"));
+    const trialInCart = !!((CART() && CART().lines && CART().lines().some(l => (l.variant && l.variant.type === "trial") || l.type === "trial")) || (sd && sd.trial));
     const wc = (window.DOODLY_WALLET && DOODLY_WALLET.config) ? DOODLY_WALLET.config() : { enabled: true, amount: 200, eligiblePlans: ["p30", "p90"] };
     const pdays = { single: 1, p7: 7, p30: 30, p90: 90 };
     const minDays = Math.min.apply(null, (wc.eligiblePlans && wc.eligiblePlans.length ? wc.eligiblePlans : ["p30"]).map(p => pdays[p] || 30));
