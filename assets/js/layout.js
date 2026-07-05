@@ -5057,7 +5057,7 @@
     if (window.DOODLY_UNFOLD) { const bs = $("#brandStoryMount"); if (bs) window.DOODLY_UNFOLD.mountAdmin(bs); }
     // wallet + trial cashback (customer panel + admin management)
     if (window.DOODLY_WALLET) {
-      const wp = $("#walletPanelMount"); if (wp) window.DOODLY_WALLET.mountPanel(wp);
+      const wp = $("#walletPanelMount"); if (wp) { window.DOODLY_WALLET.mountPanel(wp); if (window.DOODLY_WALLET.hydrateMine) window.DOODLY_WALLET.hydrateMine(); }
       const wa = $("#walletAdminMount"); if (wa) window.DOODLY_WALLET.mountAdmin(wa);
     }
     // RBAC admin surfaces (user management · permission matrix · live audit log)

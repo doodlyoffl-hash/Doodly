@@ -13,6 +13,12 @@ window.DOODLY_WALLET = (function () {
   var inr = function (n) { return "₹" + (Number(n) || 0).toLocaleString("en-IN"); };
   var inr2 = function (n) { return "₹" + (Number(n) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
   var ME = "c-you";
+  // A REAL signed-in customer must NEVER see the demo wallet store — they use
+  // _mine, hydrated from /api/wallet (empty until then, never the "Ananya" seed).
+  var _mine = null;
+  function rbacUser() { try { return window.DOODLY_RBAC && DOODLY_RBAC.currentUser ? DOODLY_RBAC.currentUser() : null; } catch (e) { return null; } }
+  function isRealUser() { var u = rbacUser(); try { return !!(u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")); } catch (e) { return false; } }
+  function emptyMine() { var u = rbacUser() || {}; return { id: ME, name: u.name || "You", mobile: u.phone || "", balance: 0, trialCredited: false, trialPurchased: false, txns: [] }; }
 
   /* ---------- config (admin-editable) ---------- */
   function defaultCfg() { return { enabled: true, amount: 200, eligiblePlans: ["p30", "p90"], expiryDays: null, startDate: null, endDate: null, rechargeEnabled: true, rechargeMin: 100, rechargeMax: 100000, presets: [100, 250, 500, 1000, 2000, 5000] }; }
@@ -26,7 +32,21 @@ window.DOODLY_WALLET = (function () {
   function wallets() { try { var a = JSON.parse(localStorage.getItem("doodly-wallets") || "null"); return Array.isArray(a) ? a : seed(); } catch (e) { return []; } }
   function setWallets(a) { try { localStorage.setItem("doodly-wallets", JSON.stringify(a)); } catch (e) {} }
   function find(id) { return wallets().find(function (w) { return w.id === id; }) || null; }
-  function meWallet() { var w = find(ME); if (!w) { var all = wallets(); w = { id: ME, name: "You", mobile: "", balance: 0, trialCredited: false, trialPurchased: localStorage.getItem("doodly-trial-purchased") === "1", txns: [] }; all.unshift(w); setWallets(all); } return w; }
+  function meWallet() {
+    if (isRealUser()) return _mine || emptyMine();   // real customer → real (hydrated) or empty, NEVER the demo seed
+    var w = find(ME); if (!w) { var all = wallets(); w = { id: ME, name: "You", mobile: "", balance: 0, trialCredited: false, trialPurchased: localStorage.getItem("doodly-trial-purchased") === "1", txns: [] }; all.unshift(w); setWallets(all); } return w;
+  }
+  /* Real customer → load the actual wallet (balance + transactions) from the backend. */
+  async function hydrateMine() {
+    if (!isRealUser() || !window.DOODLY_API) return;
+    try {
+      var r = await window.DOODLY_API.get("/api/wallet");
+      var u = rbacUser() || {};
+      _mine = { id: ME, name: u.name || "You", mobile: u.phone || "", balance: Math.round((r && r.balancePaise || 0) / 100), trialCredited: false, trialPurchased: false,
+        txns: ((r && r.transactions) || []).map(function (t) { return { id: t.id, ref: t.reference, date: t.createdAt, kind: t.type === "CREDIT" ? "credit" : "debit", type: String(t.kind || "").toLowerCase(), amount: Math.round((t.amountPaise || 0) / 100), desc: t.description || "", balanceAfter: Math.round((t.balanceAfterPaise || 0) / 100), by: "" }; }) };
+    } catch (e) { _mine = emptyMine(); }             // failed → empty, NEVER demo
+    try { refreshPanel(); } catch (e) {}
+  }
   function genRef() { var s = "WTX-"; for (var i = 0; i < 6; i++) s += "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ"[Math.floor(Math.random() * 34)]; return s; }
 
   function seed() {
@@ -604,5 +624,5 @@ window.DOODLY_WALLET = (function () {
     render();
   }
 
-  return { config: config, setConfig: setConfig, promoActive: promoActive, balance: balance, summary: summary, metrics: function () { return walletMetrics(meWallet()); }, meWallet: meWallet, creditTrialCashback: creditTrialCashback, eligible: function (planId) { return eligible(meWallet(), planId); }, applyAtCheckout: applyAtCheckout, useAtCheckout: useAtCheckout, recharge: recharge, openAddMoney: openAddMoney, setFrozen: setFrozen, analytics: analytics, mountPanel: mountPanel, mountAdmin: mountAdmin, planLabel: planLabel, creditReferral: creditReferral, reverseReferral: reverseReferral, balanceOf: function (id) { var w = find(id); return w ? w.balance : 0; } };
+  return { config: config, setConfig: setConfig, promoActive: promoActive, balance: balance, summary: summary, metrics: function () { return walletMetrics(meWallet()); }, meWallet: meWallet, hydrateMine: hydrateMine, creditTrialCashback: creditTrialCashback, eligible: function (planId) { return eligible(meWallet(), planId); }, applyAtCheckout: applyAtCheckout, useAtCheckout: useAtCheckout, recharge: recharge, openAddMoney: openAddMoney, setFrozen: setFrozen, analytics: analytics, mountPanel: mountPanel, mountAdmin: mountAdmin, planLabel: planLabel, creditReferral: creditReferral, reverseReferral: reverseReferral, balanceOf: function (id) { var w = find(id); return w ? w.balance : 0; } };
 })();
