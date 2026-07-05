@@ -162,8 +162,8 @@ window.DOODLY_CART = (function () {
     }
     if (foot) foot.style.display = "";
     if (body) body.innerHTML = cart.map((i, idx) => itemCard(i, idx)).join("");
-    mountCartPincode();
-    renderCartSched();
+    // Pincode serviceability + first-delivery scheduling live on the checkout page,
+    // not in this drawer — keep the drawer to the cart + summary only.
     const t = totals();
     setMoney(".cs-subtotal", t.subtotal);
     const saveRow = drawer.querySelector(".row.save"); if (saveRow) saveRow.style.display = t.savings > 0 ? "" : "none";
@@ -264,9 +264,6 @@ window.DOODLY_CART = (function () {
         <button class="cart-close" aria-label="Close cart">${icon("x", 18) || "✕"}</button></div>
       <div class="cart-body"></div>
       <div class="cart-foot">
-        <div class="cart-pincode" id="cartPincode"></div>
-        <div class="cart-gate" id="cartGate" hidden></div>
-        <div class="cart-sched" id="cartSched"></div>
         <div class="cart-sum">
           <div class="row"><span>Subtotal</span><b class="cs-subtotal">₹0</b></div>
           <div class="row save"><span>Savings</span><b class="cs-savings">₹0</b></div>
@@ -282,8 +279,7 @@ window.DOODLY_CART = (function () {
     backdrop.addEventListener("click", close);
     drawer.querySelector(".cart-close").addEventListener("click", close);
     drawer.querySelector(".cart-checkout").addEventListener("click", () => {
-      const PC = window.DOODLY_PINCODE;
-      if (PC && !PC.isServiceable()) { applyGate(); const inp = drawer.querySelector("#cartPincode .pc-input"); if (inp) inp.focus(); return; }
+      // Serviceability is confirmed on the checkout page's address step.
       window.location.href = "/checkout.html";
     });
     // delegated item controls
