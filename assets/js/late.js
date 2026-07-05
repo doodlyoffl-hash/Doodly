@@ -486,15 +486,38 @@ window.DOODLY_LATE = (function () {
     render();
   }
 
+  /* Delivery-quality stats for a REAL signed-in customer, computed from their own
+     hydrated deliveries (window.DOODLY_DATA._rawDeliveries) vs the 7:00 AM promise.
+     Never uses the demo late-tracking dataset. */
+  function realHistory() {
+    var raw = (window.DOODLY_DATA && window.DOODLY_DATA._rawDeliveries) || [];
+    var PROMISE_MIN = 7 * 60;                                 // 07:00
+    var delivered = raw.filter(function (d) { return d.status === "DELIVERED" && d.deliveredAt; });
+    var late = 0, sum = 0, cnt = 0;
+    delivered.forEach(function (d) {
+      var t = new Date(d.deliveredAt);
+      if (!isNaN(t.getTime())) { var mins = t.getHours() * 60 + t.getMinutes(); sum += mins; cnt++; if (mins > PROMISE_MIN) late++; }
+    });
+    return { total: raw.length, onTime: Math.max(0, delivered.length - late), late: late, apologies: late, avgTime: cnt ? fmtClock(Math.round(sum / cnt)) : "—" };
+  }
+  function isRealCustomer() {
+    try { var u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null"); return !!(u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")); } catch (e) { return false; }
+  }
+
   /* ---------- embeddable customer delivery-quality stats (account page) ---------- */
   function mountCustomer(host, name) {
     if (!host) return;
-    var h = customerHistory(name || CUSTOMERS[0]);
+    // Real signed-in customer → their OWN records; demo/exploration only → sample.
+    var real = isRealCustomer();
+    var h = real ? realHistory() : customerHistory(name || CUSTOMERS[0]);
     var card = function (l, v, tone) { return '<div class="lt-cstat ' + (tone || "") + '"><b>' + v + '</b><span>' + l + '</span></div>'; };
+    var note;
+    if (real && !h.total) note = '<p class="muted-sm">Your delivery quality will appear here once your deliveries begin.</p>';
+    else if (h.late) note = '<p class="muted-sm">We sent ' + h.apologies + ' apology message' + (h.apologies === 1 ? "" : "s") + ' for deliveries after our 7:00 AM promise. We\'re working to do better.</p>';
+    else note = '<p class="muted-sm">Every delivery arrived before our 7:00 AM promise. 🥛</p>';
     host.innerHTML = '<div class="lt-custbox"><div class="lt-custh">Your delivery quality <span class="muted-sm">— last 30 days</span></div>' +
       '<div class="lt-cstats">' + card("Deliveries", h.total) + card("On-time", h.onTime, "ok") + card("Late", h.late, h.late ? "bad" : "") + card("Avg time", h.avgTime) + card("Apologies", h.apologies) + '</div>' +
-      (h.late ? '<p class="muted-sm">We sent ' + h.apologies + ' apology message' + (h.apologies === 1 ? "" : "s") + ' for deliveries after our 7:00 AM promise. We\'re working to do better.</p>' : '<p class="muted-sm">Every delivery arrived before our 7:00 AM promise. 🥛</p>') +
-      '</div>';
+      note + '</div>';
   }
 
   return {
