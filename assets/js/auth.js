@@ -244,6 +244,7 @@ window.DOODLY_AUTH = (function () {
 
     // live validation
     scope.querySelectorAll(".fl-field input").forEach((inp) => {
+      if (/Referral/i.test(inp.getAttribute("data-rule") || "")) return;   // referral field is validated against the backend (below)
       const field = inp.closest(".fl-field");
       inp.addEventListener("blur", () => { if (inp.value.trim()) { const [ok, m] = validate(inp); setState(field, ok, m); } });
       inp.addEventListener("input", () => {
@@ -251,6 +252,32 @@ window.DOODLY_AUTH = (function () {
         else if (inp.value.trim()) { const [ok] = validate(inp); field.classList.toggle("is-valid", ok); }
       });
     });
+
+    // Referral code (signup): auto-fill from ?ref= and validate in real time via the backend.
+    (function wireReferral() {
+      const ref = form.querySelector('input[data-rule*="Referral"]');
+      if (!ref) return;
+      const field = ref.closest(".fl-field");
+      const err = field ? field.querySelector(".fl-err") : null;
+      const setMsg = (ok, msg) => {
+        if (field) { field.classList.remove("is-error", "is-valid"); if (msg) field.classList.add(ok ? "is-valid" : "is-error"); }
+        if (err) { err.textContent = msg || ""; err.style.color = ok ? "#1c6b3a" : ""; }
+      };
+      try { const m = new URLSearchParams(location.search).get("ref"); if (m) ref.value = m.trim().toUpperCase(); } catch (e) {}
+      let t;
+      const check = () => {
+        const code = ref.value.trim().toUpperCase(); ref.value = code;
+        if (!code) { setMsg(true, ""); return; }
+        if (!window.DOODLY_API) return;
+        window.DOODLY_API.get("/api/referral/validate?code=" + encodeURIComponent(code)).then((r) => {
+          if (r && r.valid) setMsg(true, "✓ " + (r.referrerName ? r.referrerName + " referred you — you'll both benefit!" : "Valid referral code!"));
+          else setMsg(false, (r && r.reason) || "Invalid referral code.");
+        }).catch(() => {});
+      };
+      ref.addEventListener("input", () => { ref.value = ref.value.toUpperCase(); clearTimeout(t); t = setTimeout(check, 450); });
+      ref.addEventListener("blur", check);
+      if (ref.value) check();   // validate a prefilled ?ref= code immediately
+    })();
 
     // ripple + submit
     const btn = form.querySelector(".btn-auth");
@@ -460,6 +487,8 @@ window.DOODLY_AUTH = (function () {
     const email = (emailInp ? String(emailInp.value || "").trim() : val(2)).toLowerCase();
     const pwInp = form.querySelector('input[type="password"]');
     const password = pwInp ? String(pwInp.value || "") : "";
+    const refInp = form.querySelector('input[data-rule*="Referral"]');
+    const referralCode = refInp ? String(refInp.value || "").trim().toUpperCase() : "";
 
     // arrived mid-purchase (e.g. trial quick-order)? continue to checkout after joining
     const fromOrder = /[?&]order=/.test(location.search);
@@ -467,7 +496,7 @@ window.DOODLY_AUTH = (function () {
 
     if (window.DOODLY_API) {
       try {
-        await window.DOODLY_API.post("/api/register", { name: name, email: email, phone: phone || undefined, password: password });
+        await window.DOODLY_API.post("/api/register", { name: name, email: email, phone: phone || undefined, password: password, referralCode: referralCode || undefined });
         const res = await tokenSignIn(email, password);
         if (res && res.user && RB) { if (RB.setRealRole) RB.setRealRole("customer"); if (RB.returnToSelf) RB.returnToSelf(); if (RB.recordLogin) RB.recordLogin(true); }
         succeed(form); return;                            // account exists either way — welcome in

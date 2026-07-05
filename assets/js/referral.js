@@ -325,7 +325,18 @@ window.DOODLY_REFERRAL = (function () {
         if (eb && em) { eb.addEventListener("click", function (e) { e.stopPropagation(); em.hidden = !em.hidden; }); document.addEventListener("click", function () { em.hidden = true; }); em.querySelectorAll("[data-x]").forEach(function (b) { b.addEventListener("click", function () { exportReport(b.dataset.x); em.hidden = true; }); }); }
       }
       if (st.tab === "settings" && isSuper()) {
-        var sv = host.querySelector("#rfSaveCfg"); if (sv) sv.addEventListener("click", function () { saveCfg({ enabled: host.querySelector("#rfEnabled").checked, amount: +host.querySelector("#rfAmount").value || 100, minDays: +host.querySelector("#rfMinDays").value || 30 }); audit("referral.config", "enabled=" + host.querySelector("#rfEnabled").checked + " amount=" + host.querySelector("#rfAmount").value + " minDays=" + host.querySelector("#rfMinDays").value); toast("Referral settings saved"); render(); });
+        var sv = host.querySelector("#rfSaveCfg"); if (sv) sv.addEventListener("click", function () {
+          var enabled = host.querySelector("#rfEnabled").checked, amount = +host.querySelector("#rfAmount").value || 100, minDays = +host.querySelector("#rfMinDays").value || 30;
+          saveCfg({ enabled: enabled, amount: amount, minDays: minDays });   // local mirror for instant UI
+          audit("referral.config", "enabled=" + enabled + " amount=" + amount + " minDays=" + minDays);
+          // persist to the real ReferralConfig (this is what the live customer flow reads)
+          if (window.DOODLY_API) {
+            DOODLY_API.post("/api/admin/referrals", { action: "config", enabled: enabled, rewardAmountPaise: Math.round(amount * 100), minPlanDays: minDays })
+              .then(function () { toast("Referral settings saved ✓"); })
+              .catch(function (e) { toast((e && e.message) || "Couldn't save to the server."); });
+          } else { toast("Referral settings saved"); }
+          render();
+        });
       }
     }
     function exportReport(kind) {
@@ -339,6 +350,13 @@ window.DOODLY_REFERRAL = (function () {
     }
     function dl(href, name) { var a = document.createElement("a"); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
     render();
+    // load the REAL ReferralConfig from the backend so the panel shows live policy values
+    if (window.DOODLY_API) {
+      DOODLY_API.get("/api/admin/referrals?view=dashboard").then(function (r) {
+        var cf = r && r.meta && r.meta.config;
+        if (cf) { saveCfg({ enabled: cf.enabled, amount: Math.round((cf.rewardAmountPaise || 10000) / 100), minDays: cf.minPlanDays || 30 }); render(); }
+      }).catch(function () {});
+    }
   }
 
   /* ---------- policy content ---------- */

@@ -11,8 +11,87 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { creditReferralReward, reverseTxn } from "@/lib/wallet/service";
+import { notify } from "@/lib/notifications/dispatch";
 
 interface Actor { actorId?: string; actorRole?: string }
+
+// ---------------------------------------------------------------- code generation + lookup
+const CODE_AB = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"; // unambiguous — no 0/O/1/I
+function randomCode(len: number) {
+  let s = ""; for (let i = 0; i < len; i++) s += CODE_AB[Math.floor(Math.random() * CODE_AB.length)];
+  return "DOODLY" + s;
+}
+/** A short, unguessable, unique referral code — DOODLY + 5 chars (e.g. DOODLY8F4XK). */
+export async function generateUniqueReferralCode(): Promise<string> {
+  for (let i = 0; i < 12; i++) {
+    const code = randomCode(i < 8 ? 5 : 6);
+    const clash = await db.user.findUnique({ where: { referralCode: code }, select: { id: true } });
+    if (!clash) return code;
+  }
+  return "DOODLY" + Date.now().toString(36).toUpperCase().slice(-6);
+}
+/** Lazily upgrade a legacy (cuid) code to the DOODLY format; returns the shareable code. */
+export async function ensureReferralCode(userId: string, current: string | null | undefined): Promise<string> {
+  if (current && /^DOODLY[0-9A-Z]{4,}$/.test(current)) return current;
+  const code = await generateUniqueReferralCode();
+  await db.user.update({ where: { id: userId }, data: { referralCode: code } }).catch(() => {});
+  return code;
+}
+/** Resolve the referrer behind a referral code (case-insensitive, exact match). */
+export async function findReferrerByCode(code: string) {
+  const c = (code || "").trim();
+  if (!c) return null;
+  return db.user.findFirst({
+    where: { role: "CUSTOMER", referralCode: { equals: c, mode: "insensitive" } },
+    select: { id: true, name: true, email: true, phone: true, referralCode: true },
+  });
+}
+/** After a referred customer's qualifying subscription is PAID, credit the referrer — idempotent,
+ *  eligibility-gated, never throws. Ties the reward to the specific PAID qualifying (30-day+)
+ *  subscription, so a Trial Pack or short plan never triggers it. */
+export async function maybeAwardReferralForPaidOrder(refereeId: string, opts: { subscriptionId?: string | null; orderId?: string | null }, actor: Actor = {}) {
+  try {
+    if (!opts.subscriptionId) return { credited: false as const };
+    const referee = await db.user.findUnique({ where: { id: refereeId }, select: { referredById: true } });
+    if (!referee?.referredById) return { credited: false as const };
+    const cfg = await getReferralConfig();
+    if (!cfg.enabled) return { credited: false as const };
+    const existing = await db.referralReward.findUnique({ where: { refereeId } });
+    if (existing) return { credited: false as const };   // already credited or voided — never re-award
+    const sub = await db.subscription.findFirst({
+      where: { id: opts.subscriptionId, userId: refereeId, plan: { days: { gte: cfg.minPlanDays } }, status: { in: ["ACTIVE", "COMPLETED"] } },
+      select: { id: true },
+    });
+    if (!sub) return { credited: false as const };   // this paid order isn't a qualifying subscription
+    return await creditReferralReward({ referrerId: referee.referredById, refereeId, amountPaise: cfg.rewardAmountPaise, triggerOrderId: opts.orderId ?? undefined, triggerSubscriptionId: sub.id, actorId: actor.actorId, actorRole: actor.actorRole });
+  } catch { return { credited: false as const }; }
+}
+/** Award variant for the gateway paths (payment verify / webhook) where we only have the
+ *  buyer id — gates on the buyer having a qualifying (30-day+) ACTIVE subscription. Idempotent,
+ *  never throws. Trial-only customers (no qualifying subscription) never trigger a reward. */
+export async function maybeAwardReferralForUser(refereeId: string, actor: Actor = {}) {
+  try {
+    const referee = await db.user.findUnique({ where: { id: refereeId }, select: { referredById: true } });
+    if (!referee?.referredById) return { credited: false as const };
+    const cfg = await getReferralConfig();
+    if (!cfg.enabled) return { credited: false as const };
+    const existing = await db.referralReward.findUnique({ where: { refereeId } });
+    if (existing) return { credited: false as const };
+    const sub = await db.subscription.findFirst({ where: { userId: refereeId, plan: { days: { gte: cfg.minPlanDays } }, status: { in: ["ACTIVE", "COMPLETED"] } }, select: { id: true } });
+    if (!sub) return { credited: false as const };
+    return await creditReferralReward({ referrerId: referee.referredById, refereeId, amountPaise: cfg.rewardAmountPaise, triggerSubscriptionId: sub.id, actorId: actor.actorId, actorRole: actor.actorRole });
+  } catch { return { credited: false as const }; }
+}
+/** Notify the referrer that a friend registered with their code (in-app + opted-in channels). */
+export async function notifyReferrerFriendJoined(referrerId: string, friendName: string | null) {
+  try {
+    const cfg = await getReferralConfig();
+    await notify(referrerId, {
+      title: "A friend joined DOODLY 🎉",
+      body: `${friendName || "Someone"} signed up with your referral code. You'll earn ₹${Math.round(cfg.rewardAmountPaise / 100)} when they start a ${cfg.minPlanDays}-day (or longer) subscription.`,
+    });
+  } catch { /* non-blocking */ }
+}
 
 const DEFAULTS = { enabled: true, rewardAmountPaise: 10000, minPlanDays: 30, maxPerReferrer: null as number | null };
 

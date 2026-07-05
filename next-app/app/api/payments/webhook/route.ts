@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhookSignature } from "@/lib/razorpay";
 import { db } from "@/lib/db";
 import { syncFromOrderPayment, recordWebhook } from "@/lib/payments/service";
+import { maybeAwardReferralForUser } from "@/lib/referrals/service";
 import { notify, notifyOrderConfirmed } from "@/lib/notifications/dispatch";
 
 export const runtime = "nodejs";
@@ -49,6 +50,8 @@ export async function POST(req: NextRequest) {
         if (op?.orderId) {
           const flip = await db.order.updateMany({ where: { id: op.orderId, status: { not: "PAID" } }, data: { status: "PAID" } }).catch(() => ({ count: 0 }));
           if (flip.count > 0) { try { await notifyOrderConfirmed(op.userId, { number: num(op.orderId) }); } catch { /* non-blocking */ } }
+          // referral reward — credit the referrer if this buyer now has a qualifying subscription (idempotent, non-blocking)
+          await maybeAwardReferralForUser(op.userId, { actorRole: "system" });
         }
         const ledgerId = op ? await syncFromOrderPayment(op.id).catch(() => null) : null;
         await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: p.id, paymentId: ledgerId ?? undefined, processed: true }).catch(() => {});

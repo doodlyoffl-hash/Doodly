@@ -714,6 +714,11 @@ window.DOODLY_ACCOUNT = (function () {
      Real referral programme for the signed-in customer (code, share link,
      friends who joined, wallet earned) from /api/account/referrals — replaces
      the localStorage demo panel. */
+  function refStatusBadge(s) {
+    s = s || "Registered";
+    var c = /Credited/.test(s) ? "green" : /Qualifying/.test(s) ? "blue" : /Pending/.test(s) ? "amber" : /Cancelled/.test(s) ? "red" : "grey";
+    return '<span class="badge ' + c + '">' + esc(s) + "</span>";
+  }
   function wireReferrals() {
     if ((document.body.dataset.route || "") !== "account/referrals" || !me()) return;
     var host = document.getElementById("referralPanelMount"); if (!host) return;
@@ -729,24 +734,35 @@ window.DOODLY_ACCOUNT = (function () {
             '<div class="rf-codelbl">Your referral code</div><div class="rf-code">' + esc(d.code || "—") + '</div>' +
             '<div class="rf-link"><input id="acRfLink" readonly value="' + esc(url) + '"><button class="btn btn-ghost sm" id="acRfCopyLink">' + icon("copy", 15) + ' Copy link</button></div>' +
             '<div class="rf-share">' +
+              '<button class="rf-sbtn" id="acRfShare" hidden>' + icon("share", 15) + ' Share</button>' +
               '<button class="rf-sbtn" id="acRfCopyCode">' + icon("copy", 15) + ' Copy code</button>' +
               '<a class="rf-sbtn wa" href="https://wa.me/?text=' + msg + '" target="_blank" rel="noopener">' + icon("chat", 15) + ' WhatsApp</a>' +
               '<a class="rf-sbtn" href="sms:?&body=' + msg + '">' + icon("msg", 15) + ' SMS</a>' +
               '<a class="rf-sbtn" href="mailto:?subject=' + encodeURIComponent("Try DOODLY fresh milk") + '&body=' + msg + '">' + icon("mail", 15) + ' Email</a>' +
             '</div>' +
-            '<p class="rf-policy">Earn ₹100 when a friend subscribes to a 30-day or longer plan. <a class="link" href="/referral-policy.html">Terms apply</a>.</p>' +
+            '<p class="rf-policy">Earn ' + inr((d.policy && d.policy.rewardAmountPaise) || 10000) + ' when a friend subscribes to a ' + ((d.policy && d.policy.minPlanDays) || 30) + '-day or longer plan. <a class="link" href="/referral-policy.html">Terms apply</a>.</p>' +
           '</div>' +
           '<div class="rf-stats">' +
             '<div class="rf-stat"><div class="rf-stat-v">' + (d.referredCount || 0) + '</div><div class="rf-stat-l">Friends joined</div></div>' +
+            '<div class="rf-stat"><div class="rf-stat-v">' + (d.successfulCount || 0) + '</div><div class="rf-stat-l">Successful</div></div>' +
+            '<div class="rf-stat"><div class="rf-stat-v">' + (d.pendingCount || 0) + '</div><div class="rf-stat-l">Pending</div></div>' +
             '<div class="rf-stat green"><div class="rf-stat-v">' + inr(d.earningsPaise || 0) + '</div><div class="rf-stat-l">Wallet earned</div></div>' +
           '</div>' +
         '</div>' +
         '<div class="panel"><div class="panel-head"><h3>Friends you referred</h3></div><div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Friend</th><th>Joined</th><th>Status</th></tr></thead><tbody>' +
-          (friends.length ? friends.map(function (f) { return '<tr><td><b>' + esc(f.name) + '</b></td><td>' + fmtD(f.joinedAt) + '</td><td><span class="badge green">Joined</span></td></tr>'; }).join("") : '<tr><td colspan="3" class="muted-sm" style="padding:16px">No referrals yet — share your code to start earning.</td></tr>') +
+          (friends.length ? friends.map(function (f) { return '<tr><td><b>' + esc(f.name) + '</b></td><td>' + fmtD(f.joinedAt) + '</td><td>' + refStatusBadge(f.status) + '</td></tr>'; }).join("") : '<tr><td colspan="3" class="muted-sm" style="padding:16px">No referrals yet — share your code to start earning.</td></tr>') +
         '</tbody></table></div></div></div></div>';
       var copy = function (t) { try { navigator.clipboard.writeText(t); } catch (e) {} };
       var cc = host.querySelector("#acRfCopyCode"); if (cc) cc.addEventListener("click", function () { copy(d.code || ""); toast("Code copied ✓"); });
       var cl = host.querySelector("#acRfCopyLink"); if (cl) cl.addEventListener("click", function () { copy(url); toast("Link copied ✓"); });
+      // Native Share API (mobile + supported browsers) → OS share sheet
+      var sh = host.querySelector("#acRfShare");
+      if (sh && navigator.share) {
+        sh.hidden = false;
+        sh.addEventListener("click", function () {
+          navigator.share({ title: "Join me on DOODLY", text: "Fresh A2 buffalo milk delivered every morning. Use my code " + (d.code || "") + " when you subscribe:", url: url }).catch(function () {});
+        });
+      }
     }).catch(function (e) { host.innerHTML = '<div class="notice warn">Couldn\'t load your referrals: ' + esc(e.message || "offline") + "</div>"; });
   }
 

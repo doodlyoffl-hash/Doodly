@@ -6,6 +6,7 @@ import { z } from "zod";
 import { verifyPaymentSignature } from "@/lib/razorpay";
 import { db } from "@/lib/db";
 import { creditTrialCashback } from "@/lib/wallet/service";
+import { maybeAwardReferralForUser } from "@/lib/referrals/service";
 import { syncFromOrderPayment } from "@/lib/payments/service";
 import { notifyOrderConfirmed } from "@/lib/notifications/dispatch";
 
@@ -47,6 +48,8 @@ export async function POST(req: NextRequest) {
     await syncFromOrderPayment(payment.id).catch((e) => console.error("payment.ledgerSync", (e as Error)?.message));
     try { cashback = await creditTrialCashback({ userId: payment.userId }); }
     catch (e) { console.error("payment.cashback", (e as Error)?.message); }
+    // referral reward — credit the referrer if this buyer now has a qualifying subscription (non-blocking)
+    await maybeAwardReferralForUser(payment.userId, { actorRole: "system" });
   }
 
   return NextResponse.json({ verified: true, cashback });
