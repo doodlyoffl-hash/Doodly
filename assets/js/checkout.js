@@ -76,8 +76,11 @@ window.DOODLY_CHECKOUT = (function () {
     return `<div class="co-empty">${icon("box", 34)}<h3>Your cart is empty</h3><p>Add a fresh bottle to get started.</p><a class="btn btn-primary" href="/products/milk.html">Browse milk</a></div>`;
   }
   function addressPaneHTML() {
+    // Start EMPTY — no pre-filled/sample addresses. Signed-in customers get their
+    // saved addresses via hydrateAddresses(); everyone adds via "Add new address".
     return `<h2 class="co-h">Delivery address</h2>
-      <div class="co-cards co-addrs">${ADDR.map((a, i) => addrCard(a, i)).join("")}
+      <div class="co-cards co-addrs">
+        <div class="co-addr-empty" style="grid-column:1/-1;padding:14px;color:var(--ink-3);font-size:.9rem">Add your delivery address and drop a pin so we deliver to the right doorstep.</div>
         <button type="button" class="co-addr co-addnew js-addaddr">${icon("plus", 22)}<span>Add new address</span></button></div>
       <div class="co-pinblock"><div class="co-h" style="font-size:1.04rem;margin-top:18px">Confirm delivery pincode</div>
         <div id="coPincodeHost"></div>
@@ -630,8 +633,38 @@ window.DOODLY_CHECKOUT = (function () {
         <button class="btn btn-primary btn-lg co-modal-save">Save address</button></div>`;
     document.body.appendChild(m);
     const close = () => m.classList.remove("show");
+    const errBox = document.createElement("p");
+    errBox.style.cssText = "color:var(--danger,#c0392b);font-size:.84rem;margin:8px 16px 0"; errBox.hidden = true;
+    m.querySelector(".co-modal-save").before(errBox);
     m.addEventListener("click", (e) => { if (e.target === m || e.target.closest(".co-modal-x")) close(); });
-    m.querySelector(".co-modal-save").addEventListener("click", close);
+    m.querySelector(".co-modal-save").addEventListener("click", () => {
+      const vals = [].map.call(m.querySelectorAll(".co-input"), (i) => (i.value || "").trim());
+      const name = vals[0], phone = vals[1], flat = vals[2], area = vals[3], city = vals[4], pin = vals[5];
+      if (!name || !flat || !/^\d{6}$/.test(pin)) {
+        errBox.hidden = false; errBox.textContent = "Please add your name, address and a valid 6-digit PIN code.";
+        return;
+      }
+      // Add the address card so it APPEARS + is selected (empty until the customer adds one).
+      const box = mount && mount.querySelector(".co-addrs");
+      if (box) {
+        const empty = box.querySelector(".co-addr-empty"); if (empty) empty.remove();
+        const idx = box.querySelectorAll(".co-addr[data-addr]").length;
+        const line = [flat, area, city].filter(Boolean).join(", ") + " " + pin;
+        const tmp = document.createElement("div");
+        tmp.innerHTML = addrCard(["Home", name, line, phone, pin], idx);
+        const card = tmp.firstElementChild;
+        box.querySelectorAll(".co-addr.sel").forEach((c) => c.classList.remove("sel"));
+        card.classList.add("sel");
+        const addBtn = box.querySelector(".co-addnew");
+        if (addBtn) box.insertBefore(card, addBtn); else box.appendChild(card);
+        state.addr = idx; state.addrId = null;
+        if (window.DOODLY_PINCODE && pin) {
+          window.DOODLY_PINCODE.setPin(pin);
+          const ph = mount.querySelector("#coPincodeHost"); if (ph) window.DOODLY_PINCODE.mountChecker(ph, { compact: true });
+        }
+      }
+      close();
+    });
     requestAnimationFrame(() => m.classList.add("show"));
   }
 
