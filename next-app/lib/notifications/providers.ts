@@ -65,11 +65,12 @@ export async function sendEmail(to: string | null | undefined, subject: string, 
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({ from: EMAIL_FROM(), to, subject, html, text }),
     });
+    const j = (await res.json().catch(() => ({}))) as { id?: string; message?: string; name?: string };
     if (!res.ok) {
-      log.error("notify.email", "Resend rejected the message", { to, status: res.status });
-      return { ok: false, error: `resend-${res.status}` };
+      const reason = String(j?.message || j?.name || "").slice(0, 140);
+      log.error("notify.email", "Resend rejected the message", { to, status: res.status, reason });
+      return { ok: false, error: `resend-${res.status}${reason ? ":" + reason : ""}` };
     }
-    const j = (await res.json().catch(() => ({}))) as { id?: string };
     return { ok: true, ref: j?.id };
   } catch (e) {
     log.error("notify.email", (e as Error)?.message ?? "send failed", { to });

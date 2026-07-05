@@ -23,7 +23,9 @@ async function send(to: string, subject: string, html: string, text: string) {
       body: JSON.stringify({ from: FROM, to, subject, html, text }),
     });
     if (!res.ok) {
-      log.error("email", "Resend rejected the message", { to, subject, status: res.status });
+      const j = (await res.json().catch(() => ({}))) as { message?: string; name?: string };
+      const reason = String(j?.message || j?.name || "").slice(0, 200);
+      log.error("email", "Resend rejected the message", { to, subject, status: res.status, reason });
       return { delivered: false as const };
     }
     return { delivered: true as const };
