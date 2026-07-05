@@ -403,8 +403,8 @@ window.DOODLY_MANIFEST = (function () {
     ]},
     "account/notifications": { surface:"account", title:"Notifications", blocks:[ head("Notifications","Delivery updates, reminders and rewards."), { type:"feed", dataset:"notifications" } ]},
     "account/profile": { surface:"account", title:"Profile", blocks:[ head("Profile","Your personal details."), { type:"form", cols:2, fields:[
-      { label:"Full name", placeholder:"Ananya Reddy" },{ label:"Phone", type:"tel", placeholder:"+91 98480 11234" },
-      { label:"Email", type:"email", placeholder:"ananya.r@example.com" },{ label:"Area", placeholder:"Jubilee Hills" } ], submit:"Save profile" } ]},
+      { label:"Full name", placeholder:"e.g. Ravi Kumar" },{ label:"Phone", type:"tel", placeholder:"+91 98765 43210" },
+      { label:"Email", type:"email", placeholder:"you@example.com" },{ label:"Area", placeholder:"e.g. Benz Circle, Vijayawada" } ], submit:"Save profile" } ]},
     "account/settings": { surface:"account", title:"Settings", blocks:[
       head("Settings","Preferences, notifications and account."),
       { type:"tabs", items:["General","Notifications","Security","Billing"], panels:[

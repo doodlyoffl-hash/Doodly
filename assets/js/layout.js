@@ -867,7 +867,7 @@
             '<label class="dac-f"><span>Email</span><input class="input" id="dac-email" type="email" placeholder="name@email.com"></label>' +
           '</div>' +
           '<div class="dac-row">' +
-            '<label class="dac-f"><span>Area / locality</span><input class="input" id="dac-area" placeholder="Jubilee Hills"></label>' +
+            '<label class="dac-f"><span>Area / locality</span><input class="input" id="dac-area" placeholder="e.g. Benz Circle, Vijayawada"></label>' +
             '<label class="dac-f"><span>Plan</span><select class="input" id="dac-plan">' + opt(["Trial", "7-Day", "30-Day", "90-Day"], "Trial") + '</select></label>' +
           '</div>' +
           '<label class="dac-f"><span>Status</span><select class="input" id="dac-status">' + opt(["Active", "Paused", "Trial", "Churned"], "Active") + '</select></label>' +
