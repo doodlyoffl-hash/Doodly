@@ -39,6 +39,7 @@ window.DOODLY_RBAC = (function () {
     ["reports", "Reports", "Growth"], ["searchInsights", "Search Insights", "Growth"], ["referrals", "Referrals", "Growth", ["approve", "reverse"]], ["blogs", "Blogs", "Content"], ["cms", "CMS", "Content"], ["brandStory", "Brand Story", "Content"], ["help", "Help Center", "Content"], ["notifications", "Notifications", "Content"],
     ["support", "Support Tickets", "System"], ["chatSupport", "Chat Support", "System"], ["users", "User Management", "System"], ["roles", "Roles & Permissions", "System"], ["permissions", "Permissions", "System"], ["auditLogs", "Audit Logs", "System"], ["gst", "GST Management", "System", ["config"]], ["settings", "Settings", "System"],
     ["careers", "Careers", "People"],
+    ["employees", "Employees", "HR"], ["hrDashboard", "HR Dashboard", "HR"], ["attendance", "Attendance", "HR"], ["payroll", "Payroll", "HR"], ["leave", "Leave", "HR"],
   ];
   const moduleMeta = (k) => MODULES.find((m) => m[0] === k);
   const LEVEL_ACTIONS = { view: ["view"], manage: ["view", "create", "edit", "export"], full: ["view", "create", "edit", "export", "delete"] };
@@ -53,7 +54,7 @@ window.DOODLY_RBAC = (function () {
     support: { dashboard: "view", customers: "view", orders: "manage", subscriptions: "view", support: "full" },
     operations: { dashboard: "view", deliveries: "full", drivers: "manage", routes: "manage", serviceableAreas: "manage", deliverySettings: "manage", inventory: "view", reports: "view" },
     procurement: { dashboard: "view", farmers: "manage", procurement: "full", quality: "view", reports: "view" },
-    accountant: { dashboard: "view", revenue: "view", expenses: "manage", wallet: "full", payments: "full", billing: "manage", reports: "manage", coupons: "view" },
+    accountant: { dashboard: "view", revenue: "view", expenses: "manage", wallet: "full", payments: "full", billing: "manage", reports: "manage", coupons: "view", employees: "view", hrDashboard: "view", attendance: "view", payroll: "full", leave: "view" },
     inventory: { dashboard: "view", inventory: "full", bottleInventory: "full", reports: "view" },
     quality: { dashboard: "view", quality: "full", procurement: "view", reports: "view" },
     marketing: { dashboard: "view", coupons: "full", offers: "full", blogs: "full", cms: "manage", notifications: "manage", reports: "view" },

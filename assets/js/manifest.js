@@ -45,6 +45,7 @@ window.DOODLY_MANIFEST = (function () {
       { h:"Content", items:[["Blogs","/admin/blogs.html","edit"],["CMS","/admin/cms.html","clipboard"],["Brand Story","/admin/brand-story.html","edit"],["Help Center","/admin/help-center.html","help"],["Notifications","/admin/notifications.html","bell"]] },
       { h:"System", items:[["Support Tickets","/admin/support.html","msg"],["Chat Support","/admin/chat-support.html","msg"],["User Management","/admin/users.html","users"],["Roles & Permissions","/admin/roles.html","lock"],["Permissions","/admin/permissions.html","lock"],["Audit Logs","/admin/audit-logs.html","eye"],["GST Management","/admin/gst.html","percent"],["Settings","/admin/settings.html","settings"]] },
       { h:"People", items:[["Careers","/admin/careers.html","users"]] },
+      { h:"Human Resources", items:[["HR Dashboard","/admin/hr-dashboard.html","chart"],["Employees","/admin/employees.html","users"]] },
     ],
     driver: [
       { h:"Today", items:[["Dashboard","/driver/dashboard.html","home"],["Today's Route","/driver/route.html","route"],["Deliveries","/driver/deliveries.html","truck"]] },
@@ -511,6 +512,8 @@ window.DOODLY_MANIFEST = (function () {
     "admin/audit-logs": { surface:"admin", title:"Audit Logs", blocks:[ head("Audit Logs","A live record of every sensitive action — logins, role switches, user & permission changes."), { type:"auditLog" } ]},
     "admin/chat-support": { surface:"admin", title:"Chat Support", blocks:[ head("AI Chat Support","Manage Doodly Assistant conversations — active, resolved and escalated chats, satisfaction, response time, canned responses and the knowledge base."), { type:"chatSupport" } ]},
     "admin/users": { surface:"admin", title:"User Management", blocks:[ head("User Management","Create staff, assign roles, lock or disable accounts. Deletes are soft."), { type:"userStats" }, { type:"userManagement" } ]},
+    "admin/hr-dashboard": { surface:"admin", title:"HR Dashboard", blocks:[ head("Human Resources","Headcount, attendance, payroll and advances at a glance."), { type:"hrDashboard" } ]},
+    "admin/employees": { surface:"admin", title:"Employees", blocks:[ head("Employee Master","Manage staff records, employment details and identity documents."), { type:"hrEmployees" } ]},
     "admin/permissions": { surface:"admin", title:"Permissions", blocks:[ head("Permissions","Fine-grained, per-module access for every role. Changes apply instantly."), { type:"permissionMatrix" } ]},
     "admin/settings": { surface:"admin", title:"Settings", blocks:[ head("Settings","Platform configuration — general, notifications and security. Saved to the DOODLY database and applied where used. Super Admin edits; others view."), { type:"settingsBoard" } ]},
     "admin/careers": { surface:"admin", title:"Careers", blocks:[ head("Careers — Applications","Every job application submitted from the website — review, rate, move through the hiring pipeline and download resumes.",[{label:"Export",kind:"btn-ghost",icon:"download"}]), { type:"careersBoard" } ]},

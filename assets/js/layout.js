@@ -5129,6 +5129,8 @@
     // maps address manager (customer) + delivery executive portal
     if (window.DOODLY_MAPS) { const am = $("#addressManagerMount"); if (am && !realCust) window.DOODLY_MAPS.mountAddressManager(am); }
     if (window.DOODLY_DELIVERY) { const dp = $("#deliveryPortalMount"); if (dp) window.DOODLY_DELIVERY.mountPortal(dp); }
+    // HR / Payroll (admin): Employee Master + HR dashboard
+    if (window.DOODLY_HR) { const hd = $("#hrDashboardMount"); if (hd) window.DOODLY_HR.mountDashboard(hd); const he = $("#hrEmployeesMount"); if (he) window.DOODLY_HR.mount(he); }
     // invoice download + page-head actions (real CSV / friendly feedback) — wired once
     if (!document.body.dataset.invWired) {
       document.body.dataset.invWired = "1";

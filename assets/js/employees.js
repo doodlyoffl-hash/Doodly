@@ -1,0 +1,194 @@
+/* =============================================================
+   DOODLY HR → Employee Master + HR Dashboard (DOODLY_HR)
+   Admin UI, fully backend-driven via /api/admin/employees. No demo
+   data. Mounts: #hrEmployeesMount (board), #hrDashboardMount (KPIs).
+   ============================================================= */
+window.DOODLY_HR = (function () {
+  "use strict";
+  var API = function () { return window.DOODLY_API; };
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+  var inr = function (p) { return "₹" + (Math.round(Number(p) || 0) / 100).toLocaleString("en-IN"); };
+  var icon = function (n, s) { try { return window.DOODLY_BLOCKS ? window.DOODLY_BLOCKS.icon(n, s || 16) : ""; } catch (e) { return ""; } };
+  var toast = function (m) { try { if (window.dacToast) return window.dacToast(m); if (window.DOODLY_PINCODE && DOODLY_PINCODE.toast) DOODLY_PINCODE.toast(m); } catch (e) {} };
+  var fmtD = function (iso) { try { return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }); } catch (e) { return "—"; } };
+  var can = function (a) { try { return !window.DOODLY_RBAC || DOODLY_RBAC.can("employees", a); } catch (e) { return true; } };
+
+  var ROLES = ["DELIVERY_EXECUTIVE", "SUPPORT", "OPERATIONS", "PROCUREMENT", "INVENTORY", "QUALITY", "MARKETING", "ACCOUNTANT", "ADMIN", "SUPER_ADMIN"];
+  var DEPARTMENTS = ["Delivery", "Procurement", "Production", "Quality", "Inventory", "Customer Support", "Finance", "Marketing", "Operations", "Administration"];
+  var EMP_TYPES = [["FULL_TIME", "Full Time"], ["PART_TIME", "Part Time"], ["CONTRACT", "Contract"], ["INTERNSHIP", "Internship"]];
+  var EMP_STATUS = [["ACTIVE", "Active"], ["ON_LEAVE", "On Leave"], ["RESIGNED", "Resigned"], ["TERMINATED", "Terminated"]];
+  var statusBadge = function (s) { var c = s === "ACTIVE" ? "green" : s === "ON_LEAVE" ? "amber" : "red"; var l = (EMP_STATUS.filter(function (x) { return x[0] === s; })[0] || [s, s])[1]; return '<span class="badge ' + c + '">' + esc(l) + "</span>"; };
+
+  /* ---------------- Employee board ---------------- */
+  function mount(host) {
+    if (!host) return;
+    hrStyles();
+    var st = { q: "", department: "", status: "", data: null };
+    function load() {
+      var qs = "?" + [st.q ? "q=" + encodeURIComponent(st.q) : "", st.department ? "department=" + encodeURIComponent(st.department) : "", st.status ? "status=" + st.status : ""].filter(Boolean).join("&");
+      host.querySelector("#hrBody").innerHTML = '<div class="panel panel-pad"><div class="sk-line skeleton w40"></div><div class="sk-line skeleton"></div></div>';
+      API().get("/api/admin/employees" + qs).then(function (r) { st.data = r; renderList(); })
+        .catch(function (e) { host.querySelector("#hrBody").innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn\'t load employees.") + "</div>"; });
+    }
+    function shell() {
+      host.innerHTML =
+        '<div class="hr-strip" id="hrStrip"></div>' +
+        '<div class="exp-frow" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0">' +
+          '<input class="input" id="hrQ" placeholder="Search name, code, phone, designation…" value="' + esc(st.q) + '" style="flex:1;min-width:200px">' +
+          '<select class="input" id="hrDept" style="max-width:180px"><option value="">All departments</option>' + DEPARTMENTS.map(function (d) { return '<option' + (st.department === d ? " selected" : "") + ">" + d + "</option>"; }).join("") + "</select>" +
+          '<select class="input" id="hrStatus" style="max-width:160px"><option value="">All status</option>' + EMP_STATUS.map(function (s) { return '<option value="' + s[0] + '"' + (st.status === s[0] ? " selected" : "") + ">" + s[1] + "</option>"; }).join("") + "</select>" +
+          (can("create") ? '<button class="btn btn-primary sm" id="hrAdd">' + icon("plus", 14) + " Add employee</button>" : "") +
+        "</div><div id=\"hrBody\"></div>";
+      host.querySelector("#hrQ").addEventListener("input", function () { st.q = this.value; clearTimeout(st._t); st._t = setTimeout(load, 350); });
+      host.querySelector("#hrDept").addEventListener("change", function () { st.department = this.value; load(); });
+      host.querySelector("#hrStatus").addEventListener("change", function () { st.status = this.value; load(); });
+      var add = host.querySelector("#hrAdd"); if (add) add.addEventListener("click", function () { openForm(null, load); });
+    }
+    function renderList() {
+      var d = st.data, items = d.items || [];
+      var strip = host.querySelector("#hrStrip");
+      strip.innerHTML = '<div class="hr-kpis">' +
+        kpi("Total", d.stats.total) + kpi("Active", d.stats.active, "green") + kpi("On leave", d.stats.onLeave, "amber") +
+        kpi("Departments", (d.stats.byDept || []).length) + "</div>";
+      var rows = items.length ? items.map(function (e) {
+        return '<tr data-id="' + e.id + '"><td><b>' + esc(e.employeeCode) + "</b></td><td>" + esc(e.name) + '<div class="muted-sm">' + esc(e.designation) + "</div></td>" +
+          "<td>" + esc(e.department) + "</td><td>" + esc(e.phone || "—") + "</td><td>" + esc((EMP_TYPES.filter(function (t) { return t[0] === e.employmentType; })[0] || ["", e.employmentType])[1]) + "</td>" +
+          "<td>" + statusBadge(e.status) + "</td><td>" + fmtD(e.dateOfJoining) + '</td><td><button class="btn btn-ghost sm hr-open" data-id="' + e.id + '">View</button></td></tr>';
+      }).join("") : '<tr><td colspan="8" class="muted-sm" style="padding:18px">No employees yet — add your first with “Add employee”.</td></tr>';
+      host.querySelector("#hrBody").innerHTML = '<div class="panel"><div class="panel-pad" style="padding-top:0"><div class="table-wrap"><table class="tbl"><thead><tr><th>Code</th><th>Employee</th><th>Department</th><th>Phone</th><th>Type</th><th>Status</th><th>Joined</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div>" +
+        '<div class="muted-sm" style="margin-top:10px">' + (d.total || 0) + " employee" + (d.total === 1 ? "" : "s") + "</div></div></div>";
+      host.querySelectorAll(".hr-open").forEach(function (b) { b.addEventListener("click", function () { openDetail(b.dataset.id, load); }); });
+    }
+    shell(); load();
+  }
+
+  function kpi(l, v, tone) { return '<div class="hr-kpi ' + (tone || "") + '"><b>' + esc(v) + "</b><span>" + esc(l) + "</span></div>"; }
+
+  /* ---------------- Add / Edit form ---------------- */
+  function fld(id, label, val, o) {
+    o = o || {};
+    var req = o.req ? ' <span style="color:#c0392b">*</span>' : "";
+    if (o.type === "select") return '<label class="dac-f"><span>' + label + req + '</span><select class="input" id="' + id + '">' + (o.options || []).map(function (op) { var v = op[0] !== undefined ? op[0] : op, t = op[1] !== undefined ? op[1] : op; return '<option value="' + esc(v) + '"' + (String(val) === String(v) ? " selected" : "") + ">" + esc(t) + "</option>"; }).join("") + "</select></label>";
+    return '<label class="dac-f"><span>' + label + req + '</span><input class="input" id="' + id + '" type="' + (o.type || "text") + '" value="' + esc(val || "") + '" placeholder="' + esc(o.ph || "") + '"' + (o.maxlength ? ' maxlength="' + o.maxlength + '"' : "") + "></label>";
+  }
+  function openForm(emp, done, managers) {
+    if (!managers) { API().get("/api/admin/employees?view=managers").then(function (r) { openForm(emp, done, r.managers || []); }).catch(function () { openForm(emp, done, []); }); return; }
+    var e = emp || {}, editing = !!emp;
+    var mgrOpts = [["", "— None —"]].concat((managers || []).filter(function (m) { return m.id !== e.id; }).map(function (m) { return [m.id, m.code + " · " + m.name]; }));
+    var body = '<div class="na-form hr-form">' +
+      '<div class="na-sec">Basic information</div>' +
+      '<div class="dac-row">' + fld("e-name", "Full name", e.name, { req: true, maxlength: 80 }) + fld("e-phone", "Mobile number", e.phone, { req: true, type: "tel", maxlength: 20 }) + "</div>" +
+      '<div class="dac-row">' + fld("e-email", "Email", e.email, { type: "email", maxlength: 120 }) + fld("e-altPhone", "Alternate mobile", e.altPhone, { type: "tel", maxlength: 20 }) + "</div>" +
+      '<div class="dac-row">' + fld("e-dob", "Date of birth", (e.dob || "").slice(0, 10), { type: "date" }) + fld("e-gender", "Gender", e.gender, { type: "select", options: [["", "—"], "Male", "Female", "Other"] }) + "</div>" +
+      '<div class="dac-row">' + fld("e-blood", "Blood group", e.bloodGroup, { maxlength: 5, ph: "O+" }) + fld("e-emgName", "Emergency contact name", e.emergencyName, { maxlength: 80 }) + "</div>" +
+      fld("e-emgPhone", "Emergency contact number", e.emergencyPhone, { type: "tel", maxlength: 20 }) +
+      '<div class="na-sec">Employment details</div>' +
+      '<div class="dac-row">' + fld("e-dept", "Department", e.department, { req: true, type: "select", options: DEPARTMENTS }) + fld("e-desig", "Designation", e.designation, { req: true, maxlength: 80 }) + "</div>" +
+      '<div class="dac-row">' + fld("e-type", "Employment type", e.employmentType || "FULL_TIME", { type: "select", options: EMP_TYPES }) + fld("e-doj", "Date of joining", (e.dateOfJoining || "").slice(0, 10), { req: true, type: "date" }) + "</div>" +
+      '<div class="dac-row">' + fld("e-role", "Login role (access)", e.role || "SUPPORT", { type: "select", options: ROLES.map(function (r) { return [r, r.replace(/_/g, " ")]; }) }) + fld("e-mgr", "Reporting manager", e.reportingManagerId, { type: "select", options: mgrOpts }) + "</div>" +
+      '<div class="dac-row">' + fld("e-loc", "Work location", e.workLocation, { maxlength: 120, ph: "Vijayawada" }) + fld("e-status", "Status", e.status || "ACTIVE", { type: "select", options: EMP_STATUS }) + "</div>" +
+      '<div class="na-sec">Identity & bank ' + (e.piiVisible === false ? '<span class="muted-sm">(masked — no permission)</span>' : "") + "</div>" +
+      '<div class="dac-row">' + fld("e-aadhaar", "Aadhaar number", idv(e, "aadhaar"), { maxlength: 20 }) + fld("e-pan", "PAN number", idv(e, "pan"), { maxlength: 12 }) + "</div>" +
+      '<div class="dac-row">' + fld("e-dl", "Driving licence", idv(e, "drivingLicence"), { maxlength: 30 }) + fld("e-bank", "Bank account number", idv(e, "bankAccount"), { maxlength: 30 }) + "</div>" +
+      '<div class="dac-row">' + fld("e-ifsc", "IFSC code", (e.identity || {}).ifsc, { maxlength: 20 }) + fld("e-bankName", "Bank name", (e.identity || {}).bankName, { maxlength: 60 }) + "</div>" +
+      fld("e-upi", "UPI ID (optional)", (e.identity || {}).upiId, { maxlength: 60 }) +
+      '<div class="na-sec">Documents</div>' +
+      '<div class="hr-docs" id="e-docs"><p class="muted-sm">Photo & document uploads (Aadhaar/PAN/bank proof) appear here once file storage is configured. All other fields save now.</p></div>' +
+      '<div id="e-err" style="display:none;color:#b3261e;font-size:.85rem;font-weight:600;margin:8px 0"></div>' +
+      '<div class="na-actions" style="position:sticky;bottom:-16px;background:#fff;padding:12px 0;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #eee"><button class="btn btn-ghost sm" id="e-cancel">Cancel</button><button class="btn btn-primary sm" id="e-save">' + (editing ? "Save changes" : "Add employee") + "</button></div></div>";
+    var m = modal(editing ? "Edit employee — " + esc(e.employeeCode || "") : "Add employee", body);
+    var ov = m.ov, close = m.close, q = function (s) { return ov.querySelector(s); }, g = function (s) { var el = q(s); return el ? (el.value || "").trim() : ""; };
+    q("#e-cancel").addEventListener("click", close);
+    q("#e-save").addEventListener("click", function () {
+      var err = q("#e-err"); err.style.display = "none";
+      var req = [["#e-name", "full name"], ["#e-phone", "mobile number"], ["#e-dept", "department"], ["#e-desig", "designation"], ["#e-doj", "date of joining"]];
+      for (var i = 0; i < req.length; i++) { if (!g(req[i][0])) { err.style.display = "block"; err.textContent = "Please fill in the " + req[i][1] + "."; q(req[i][0]).focus(); return; } }
+      var payload = {
+        name: g("#e-name"), phone: g("#e-phone"), email: g("#e-email") || undefined, altPhone: g("#e-altPhone") || undefined,
+        dob: g("#e-dob") || undefined, gender: g("#e-gender") || undefined, bloodGroup: g("#e-blood") || undefined,
+        emergencyName: g("#e-emgName") || undefined, emergencyPhone: g("#e-emgPhone") || undefined,
+        department: g("#e-dept"), designation: g("#e-desig"), employmentType: g("#e-type"), dateOfJoining: g("#e-doj"),
+        role: g("#e-role"), reportingManagerId: g("#e-mgr") || undefined, workLocation: g("#e-loc") || undefined, status: g("#e-status"),
+        aadhaar: pii(g("#e-aadhaar")), pan: pii(g("#e-pan")), drivingLicence: pii(g("#e-dl")), bankAccount: pii(g("#e-bank")),
+        ifsc: g("#e-ifsc") || undefined, bankName: g("#e-bankName") || undefined, upiId: g("#e-upi") || undefined,
+      };
+      var btn = this; btn.disabled = true;
+      var reqP = editing ? API().patch("/api/admin/employees/" + e.id, payload) : API().post("/api/admin/employees", payload);
+      reqP.then(function () { toast(editing ? "Employee updated ✓" : "Employee added ✓"); close(); if (done) done(); })
+        .catch(function (er) { btn.disabled = false; err.style.display = "block"; err.textContent = (er && er.message) || "Please check the fields."; });
+    });
+  }
+  // masked identity values must not be re-saved as the mask; blank them so the API keeps the stored value
+  function idv(e, k) { var v = (e.identity || {})[k]; return v && /•/.test(v) ? "" : v; }
+  function pii(v) { return v && !/•/.test(v) ? v : undefined; }
+
+  /* ---------------- Detail view ---------------- */
+  function openDetail(id, done) {
+    var m = modal("Employee", '<div class="panel panel-pad"><div class="sk-line skeleton w40"></div><div class="sk-line skeleton"></div></div>');
+    API().get("/api/admin/employees/" + id).then(function (r) {
+      var e = r.employee, id2 = (e.identity || {});
+      var row = function (k, v) { return v ? '<div class="row"><span class="k">' + esc(k) + '</span><span class="v">' + esc(v) + "</span></div>" : ""; };
+      m.ov.querySelector(".dac-body").innerHTML =
+        '<div class="hr-detail">' +
+        '<div class="hr-dhead"><div><b>' + esc(e.name) + "</b> · " + esc(e.employeeCode) + '<div class="muted-sm">' + esc(e.designation) + " — " + esc(e.department) + "</div></div>" + statusBadge(e.status) + "</div>" +
+        '<div class="deflist">' + row("Phone", e.phone) + row("Email", e.email) + row("Employment type", e.employmentType) + row("Date of joining", fmtD(e.dateOfJoining)) + row("Reporting manager", e.reportingManager && e.reportingManager.name) + row("Work location", e.workLocation) + row("Login role", e.role) + "</div>" +
+        '<p class="exp-block-h" style="margin-top:14px">Personal</p><div class="deflist">' + row("Date of birth", e.dob && fmtD(e.dob)) + row("Gender", e.gender) + row("Blood group", e.bloodGroup) + row("Emergency", [e.emergencyName, e.emergencyPhone].filter(Boolean).join(" · ")) + "</div>" +
+        '<p class="exp-block-h" style="margin-top:14px">Identity & bank ' + (e.piiVisible ? "" : '<span class="muted-sm">(masked)</span>') + '</p><div class="deflist">' + row("Aadhaar", id2.aadhaar) + row("PAN", id2.pan) + row("Driving licence", id2.drivingLicence) + row("Bank account", id2.bankAccount) + row("IFSC", id2.ifsc) + row("Bank", id2.bankName) + row("UPI", id2.upiId) + "</div>" +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">' +
+          (can("edit") ? '<button class="btn btn-primary sm" id="d-edit">Edit</button>' : "") +
+          (can("edit") ? '<button class="btn btn-ghost sm" id="d-leave">Mark on leave</button><button class="btn btn-ghost sm" id="d-active">Mark active</button>' : "") +
+          (can("delete") ? '<button class="btn btn-ghost sm" id="d-del" style="color:#b3261e">Remove</button>' : "") +
+        "</div></div>";
+      var q = function (s) { return m.ov.querySelector(s); };
+      if (q("#d-edit")) q("#d-edit").addEventListener("click", function () { m.close(); openForm(e, done); });
+      if (q("#d-leave")) q("#d-leave").addEventListener("click", function () { setStatus(e.id, "ON_LEAVE", m, done); });
+      if (q("#d-active")) q("#d-active").addEventListener("click", function () { setStatus(e.id, "ACTIVE", m, done); });
+      if (q("#d-del")) q("#d-del").addEventListener("click", function () { if (confirm("Remove " + e.name + "? Their staff account is disabled.")) API().del("/api/admin/employees/" + e.id).then(function () { toast("Employee removed"); m.close(); if (done) done(); }).catch(function (er) { toast((er && er.message) || "Couldn't remove."); }); });
+    }).catch(function (er) { m.ov.querySelector(".dac-body").innerHTML = '<div class="notice warn">' + esc((er && er.message) || "Couldn't load.") + "</div>"; });
+  }
+  function setStatus(id, status, m, done) { API().patch("/api/admin/employees/" + id, { action: "status", status: status }).then(function () { toast("Status updated ✓"); m.close(); if (done) done(); }).catch(function (e) { toast((e && e.message) || "Couldn't update."); }); }
+
+  /* ---------------- HR dashboard ---------------- */
+  function mountDashboard(host) {
+    if (!host) return;
+    hrStyles();
+    host.innerHTML = '<div class="panel panel-pad"><div class="sk-line skeleton w40"></div><div class="sk-line skeleton"></div></div>';
+    API().get("/api/admin/employees?view=dashboard").then(function (r) {
+      var k = r.kpis, cards = [
+        ["Total employees", k.total], ["Present today", k.presentToday, "green"], ["Absent today", k.absentToday, "amber"], ["On leave", k.onLeave, "amber"],
+        ["Payroll pending", k.payslipsPending], ["Advances outstanding", inr(k.advancesOutstandingPaise)], ["Resigned / exited", k.resigned, "red"], ["Active", k.active, "green"],
+      ];
+      var dept = (r.byDepartment || []);
+      host.innerHTML = '<div class="hr-kpis big">' + cards.map(function (c) { return kpi(c[0], c[1], c[2]); }).join("") + "</div>" +
+        '<div class="panel" style="margin-top:16px"><div class="panel-head"><h3>Department-wise headcount</h3></div><div class="panel-pad">' +
+        (dept.length ? '<div class="table-wrap"><table class="tbl"><thead><tr><th>Department</th><th>Employees</th></tr></thead><tbody>' + dept.map(function (d) { return "<tr><td>" + esc(d.department) + "</td><td><b>" + d.count + "</b></td></tr>"; }).join("") + "</tbody></table></div>" : '<p class="muted-sm">No employees yet.</p>') +
+        '</div></div><p class="muted-sm" style="margin-top:10px">Attendance, leave, salary, advances and payroll are managed under Human Resources → their sections.</p>';
+    }).catch(function (e) { host.innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load the HR dashboard.") + "</div>"; });
+  }
+
+  /* ---------------- helpers ---------------- */
+  function modal(title, body) {
+    if (window.dacStyles) window.dacStyles();
+    var ov = document.createElement("div"); ov.className = "dac-ov";
+    ov.innerHTML = '<div class="dac-modal" role="dialog" aria-modal="true" style="max-width:720px"><div class="dac-head"><h3>' + title + '</h3><button class="dac-x" aria-label="Close">&times;</button></div><div class="dac-body">' + body + "</div></div>";
+    document.body.appendChild(ov);
+    var close = function () { ov.remove(); };
+    ov.addEventListener("click", function (e) { if (e.target === ov) close(); });
+    ov.querySelector(".dac-x").addEventListener("click", close);
+    return { ov: ov, close: close };
+  }
+  function hrStyles() {
+    if (document.getElementById("hrStyles")) return;
+    var s = document.createElement("style"); s.id = "hrStyles";
+    s.textContent =
+      ".hr-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.hr-kpis.big{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}" +
+      ".hr-kpi{background:#fff;border:1px solid #e6e9e6;border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:2px}.hr-kpi b{font-family:'Fraunces',serif;font-size:1.5rem;color:var(--forest,#0f3d2e)}.hr-kpi span{font-size:.8rem;color:#6b7c72;font-weight:600}" +
+      ".hr-kpi.green b{color:#1c6b3a}.hr-kpi.amber b{color:#a15b12}.hr-kpi.red b{color:#b3261e}" +
+      ".hr-form .na-sec{font-family:'Fraunces',serif;color:var(--forest,#0f3d2e);font-size:1rem;font-weight:600;margin:18px 0 10px;padding-top:14px;border-top:1px solid #eee}.hr-form .na-sec:first-child{border-top:none;padding-top:0;margin-top:0}" +
+      ".hr-form .dac-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.hr-form .input{width:100%}@media(max-width:600px){.hr-form .dac-row{grid-template-columns:1fr}}" +
+      ".hr-dhead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}";
+    document.head.appendChild(s);
+  }
+
+  return { mount: mount, mountDashboard: mountDashboard };
+})();
