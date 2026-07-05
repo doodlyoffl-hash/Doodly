@@ -191,6 +191,7 @@ model User {
   preference      CustomerPreference?                  // CRM: notification + delivery preferences
   puzzleAttempts  PuzzleAttempt[]                      // Monthly Puzzle Challenge participations
   puzzleWins      PuzzleWinner[]                       // Monthly Puzzle Challenge wins
+  employeeProfile EmployeeProfile? @relation("EmployeeUser")   // HR: staff employment profile (1:1)
 }
 
 enum UserStatus {
@@ -2677,4 +2678,252 @@ model PuzzleWinner {
   notes          String?                            // e.g. manual-award reason
 
   @@index([userId])
+}
+
+// ============================================================
+// HR / PAYROLL — Employee profile (1:1 on User), attendance,
+// salary structure, advances, payroll, and leave. Reuses User +
+// Role for identity/access and AuditLog for the audit trail; all
+// money is paise (int). No duplicate identity tables.
+// ============================================================
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+}
+enum EmploymentStatus {
+  ACTIVE
+  ON_LEAVE
+  RESIGNED
+  TERMINATED
+}
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  PAID_LEAVE
+  SICK_LEAVE
+  WEEKLY_OFF
+  HOLIDAY
+  WFH
+}
+enum AttendanceSource {
+  MANUAL
+  GPS
+  BIOMETRIC
+  QR
+}
+enum LeaveType {
+  CASUAL
+  SICK
+  EARNED
+  MATERNITY
+  EMERGENCY
+  LOSS_OF_PAY
+}
+enum LeaveStatus {
+  PENDING
+  MANAGER_APPROVED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+enum AdvanceStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+enum PayslipStatus {
+  DRAFT
+  FINALIZED
+  PAID
+}
+
+model EmployeeProfile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation("EmployeeUser", fields: [userId], references: [id])
+  employeeCode       String   @unique
+  photoUrl           String?
+  altPhone           String?
+  dob                DateTime?
+  gender             String?
+  bloodGroup         String?
+  emergencyName      String?
+  emergencyPhone     String?
+  department         String
+  designation        String
+  employmentType     EmploymentType   @default(FULL_TIME)
+  dateOfJoining      DateTime
+  reportingManagerId String?
+  reportingManager   EmployeeProfile? @relation("EmpManager", fields: [reportingManagerId], references: [id])
+  reports            EmployeeProfile[] @relation("EmpManager")
+  workLocation       String?
+  status             EmploymentStatus @default(ACTIVE)
+  aadhaar            String?
+  pan                String?
+  drivingLicence     String?
+  bankAccount        String?
+  ifsc               String?
+  bankName           String?
+  upiId              String?
+  documents          Json?
+  notes              String?
+  deletedAt          DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @default(now()) @updatedAt
+
+  salaryStructures   SalaryStructure[]
+  attendance         Attendance[]
+  leaves             LeaveRequest[]
+  leaveBalances      LeaveBalance[]
+  advances           SalaryAdvance[]
+  payslips           Payslip[]
+  @@index([department, status])
+  @@index([deletedAt])
+}
+
+model SalaryStructure {
+  id               String   @id @default(cuid())
+  employeeId       String
+  employee         EmployeeProfile @relation(fields: [employeeId], references: [id])
+  effectiveFrom    DateTime @default(now())
+  basicPaise       Int      @default(0)
+  hraPaise         Int      @default(0)
+  conveyancePaise  Int      @default(0)
+  specialPaise     Int      @default(0)
+  otherEarnPaise   Int      @default(0)
+  ptPaise          Int      @default(0)
+  otherDeductPaise Int      @default(0)
+  note             String?
+  active           Boolean  @default(true)
+  createdById      String?
+  createdAt        DateTime @default(now())
+  @@index([employeeId, effectiveFrom])
+}
+
+model Attendance {
+  id            String   @id @default(cuid())
+  employeeId    String
+  employee      EmployeeProfile @relation(fields: [employeeId], references: [id])
+  date          DateTime
+  status        AttendanceStatus @default(PRESENT)
+  checkIn       DateTime?
+  checkOut      DateTime?
+  workedMins    Int      @default(0)
+  overtimeMins  Int      @default(0)
+  source        AttendanceSource @default(MANUAL)
+  note          String?
+  correctedById String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
+  @@unique([employeeId, date])
+  @@index([date])
+}
+
+model LeaveRequest {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  employeeId    String
+  employee      EmployeeProfile @relation(fields: [employeeId], references: [id])
+  type          LeaveType
+  startDate     DateTime
+  endDate       DateTime
+  days          Float
+  reason        String?
+  attachmentUrl String?
+  status        LeaveStatus @default(PENDING)
+  managerId     String?
+  managerAt     DateTime?
+  hrId          String?
+  hrAt          DateTime?
+  rejectReason  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
+  @@index([employeeId, status])
+  @@index([status, createdAt])
+}
+
+model LeaveBalance {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   EmployeeProfile @relation(fields: [employeeId], references: [id])
+  year       Int
+  type       LeaveType
+  allotted   Float    @default(0)
+  used       Float    @default(0)
+  @@unique([employeeId, year, type])
+}
+
+model SalaryAdvance {
+  id               String   @id @default(cuid())
+  code             String   @unique
+  employeeId       String
+  employee         EmployeeProfile @relation(fields: [employeeId], references: [id])
+  requestDate      DateTime @default(now())
+  amountPaise      Int
+  reason           String?
+  requestedById    String?
+  status           AdvanceStatus @default(PENDING)
+  approvedById     String?
+  approvalDate     DateTime?
+  rejectReason     String?
+  recoveryMethod   String   @default("SALARY")
+  installments     Int      @default(1)
+  installmentPaise Int      @default(0)
+  recoveredPaise   Int      @default(0)
+  remainingPaise   Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now()) @updatedAt
+  recoveries       AdvanceRecovery[]
+  @@index([employeeId, status])
+}
+
+model AdvanceRecovery {
+  id          String   @id @default(cuid())
+  advanceId   String
+  advance     SalaryAdvance @relation(fields: [advanceId], references: [id])
+  payslipId   String?
+  payslip     Payslip? @relation(fields: [payslipId], references: [id])
+  amountPaise Int
+  createdAt   DateTime @default(now())
+  @@index([advanceId])
+}
+
+model Payslip {
+  id                  String   @id @default(cuid())
+  code                String   @unique
+  employeeId          String
+  employee            EmployeeProfile @relation(fields: [employeeId], references: [id])
+  month               String
+  workingDays         Int      @default(0)
+  presentDays         Float    @default(0)
+  paidLeaveDays       Float    @default(0)
+  absentDays          Float    @default(0)
+  overtimeMins        Int      @default(0)
+  basicPaise          Int      @default(0)
+  hraPaise            Int      @default(0)
+  conveyancePaise     Int      @default(0)
+  specialPaise        Int      @default(0)
+  incentivePaise      Int      @default(0)
+  overtimePaise       Int      @default(0)
+  bonusPaise          Int      @default(0)
+  otherEarnPaise      Int      @default(0)
+  advanceRecoverPaise Int      @default(0)
+  ptPaise             Int      @default(0)
+  otherDeductPaise    Int      @default(0)
+  grossPaise          Int      @default(0)
+  deductionsPaise     Int      @default(0)
+  netPaise            Int      @default(0)
+  status              PayslipStatus @default(DRAFT)
+  generatedById       String?
+  generatedAt         DateTime @default(now())
+  paidAt              DateTime?
+  pdfUrl              String?
+  note                String?
+  recoveries          AdvanceRecovery[]
+  @@unique([employeeId, month])
+  @@index([month, status])
 }
