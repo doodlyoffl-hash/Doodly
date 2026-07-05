@@ -11,6 +11,7 @@ import { hashPassword } from "@/lib/auth/password";
 import { reqContext } from "@/lib/auth/request";
 import { audit } from "@/lib/auth/audit";
 import { rateLimit } from "@/lib/auth/ratelimit";
+import { sendWelcomeEmail } from "@/lib/auth/email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +55,7 @@ export const POST = route("auth.register", async (req: NextRequest) => {
   });
 
   await audit({ userId: user.id, actorRole: "customer", action: "auth.register", target: user.id, ctx });
+  if (user.email) { try { await sendWelcomeEmail(user.email, user.name); } catch { /* non-blocking */ } }
 
   return ok({ id: user.id, name: user.name, email: user.email, role: "customer" }, { status: 201 });
 });

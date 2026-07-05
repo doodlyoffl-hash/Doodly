@@ -33,6 +33,23 @@ async function send(to: string, subject: string, html: string, text: string) {
   }
 }
 
+export function sendWelcomeEmail(to: string, name?: string | null) {
+  const subject = "Welcome to DOODLY 🥛";
+  const hi = name ? `Hi ${name},` : "Hi,";
+  const text = `${hi}\n\nWelcome to DOODLY — farm-fresh A2 buffalo milk, delivered in glass bottles before 7:00 AM.\n\nStart a subscription or try a one-time pack from your dashboard, and we'll take it from there.\n\n— Team DOODLY`;
+  const html = `
+    <div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:480px;margin:auto;color:#1c2722">
+      <h2 style="color:#0F3D2E">Welcome to DOODLY 🥛</h2>
+      <p>${hi}</p>
+      <p>You're in. DOODLY brings you <strong>farm-fresh A2 buffalo milk</strong> in glass bottles, delivered <strong>before 7:00 AM</strong>.</p>
+      <p style="margin:22px 0">
+        <a href="https://www.doodly.in/account/dashboard.html" style="background:#1FAE66;color:#fff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:700">Go to your dashboard</a>
+      </p>
+      <p style="color:#6b7b73;font-size:13px">Fresh, honest milk — every morning. — Team DOODLY</p>
+    </div>`;
+  return send(to, subject, html, text);
+}
+
 export function sendPasswordResetEmail(to: string, resetUrl: string, name?: string | null) {
   const subject = "Reset your DOODLY password";
   const hi = name ? `Hi ${name},` : "Hi,";

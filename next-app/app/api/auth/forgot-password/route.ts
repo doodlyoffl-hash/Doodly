@@ -33,8 +33,11 @@ export const POST = route("auth.forgot", async (req: NextRequest) => {
     await db.passwordResetToken.create({
       data: { userId: user.id, tokenHash: hashToken(rawToken), expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS) },
     });
+    // Point at the deployed STATIC storefront (no clean URLs → needs .html).
+    // NEXT_PUBLIC_SITE_URL must be the storefront origin (e.g. https://www.doodly.in),
+    // NOT the backend, or the link would 404 on the backend host.
     const base = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || req.nextUrl.origin;
-    const resetUrl = `${base}/reset-password?token=${rawToken}`;
+    const resetUrl = `${base}/reset-password.html?token=${rawToken}`;
     const sent = await sendPasswordResetEmail(user.email!, resetUrl, user.name);
     if (!sent.delivered) log.info("auth.forgot", "reset link (dev fallback)", { resetUrl });
     await audit({ userId: user.id, actorRole: "customer", action: "auth.forgot_password", target: user.id, ctx });

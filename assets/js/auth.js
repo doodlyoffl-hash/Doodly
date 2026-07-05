@@ -277,15 +277,11 @@ window.DOODLY_AUTH = (function () {
         });
         if (firstBad) { shake(firstBad); firstBad.querySelector("input").focus(); return; }
       }
-      // audit OTP verification + password reset where applicable
-      try {
-        const RB0 = window.DOODLY_RBAC, route0 = (document.body && document.body.dataset.route) || "";
-        if (RB0 && RB0.audit) {
-          if (otp) RB0.audit("auth.otp_verified", "OTP verified");
-          if (/forgot-password|reset|new-password/.test(route0)) RB0.audit("auth.password_reset", "Password reset completed");
-        }
-      } catch (e) {}
+      // audit OTP verification (the password-reset audit fires on real success inside resolveReset)
+      try { const RB0 = window.DOODLY_RBAC; if (RB0 && RB0.audit && otp) RB0.audit("auth.otp_verified", "OTP verified"); } catch (e) {}
       const authRoute = (document.body && document.body.dataset.route) || "";
+      if (authRoute === "forgot-password") { resolveForgot(form); return; }  // real backend: email a reset link
+      if (authRoute === "reset-password" || authRoute === "new-password") { resolveReset(form); return; }  // real backend: set the new password from the token
       if (form.dataset.loginRole) { resolveCustomerLogin(form); return; }   // customer portal → real backend sign-in, then navigate
       if (form.dataset.adminLogin) { resolveAdminLogin(form); return; }     // staff portal → real backend sign-in (demo fallback on localhost)
       if (authRoute === "delivery/login") { resolveDeliveryLogin(form); return; }   // executive portal → real sign-in, role-gated
@@ -489,6 +485,55 @@ window.DOODLY_AUTH = (function () {
     succeed(form);
   }
 
+  /** Forgot password: ask the backend to email a single-use reset link. Always
+      shows the same generic confirmation (the backend never reveals whether the
+      account exists — no enumeration). */
+  async function resolveForgot(form) {
+    const emailInp = form.querySelector('input[type="email"]') || form.querySelector(".fl-field input");
+    const email = emailInp ? String(emailInp.value || "").trim().toLowerCase() : "";
+    if (!email) return showCustomerAuthError(form, "Please enter your email.");
+    const btn = form.querySelector(".btn-auth"); const label = btn ? btn.textContent : "";
+    const done = () => { if (btn) { btn.disabled = false; btn.textContent = label; } };
+    if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+    const note = "If an account exists for " + email + ", we've emailed a reset link. Check your inbox (and spam).";
+    try {
+      if (window.DOODLY_API) await window.DOODLY_API.post("/api/forgot-password", { email: email });
+      try { if (window.DOODLY_RBAC && DOODLY_RBAC.audit) DOODLY_RBAC.audit("auth.forgot_password", "Requested a password reset link"); } catch (e) {}
+      done(); showCustomerAuthNote(form, note, true);
+    } catch (err) {
+      done();
+      if (err && err.status === 429) return showCustomerAuthError(form, "Too many attempts — please try again in a minute.");
+      if (err && err.status === 422) return showCustomerAuthError(form, "Please enter a valid email address.");
+      // backend returns a generic 200 for real emails; a network error lands here.
+      if (!isLocalhost() && window.DOODLY_API) return showCustomerAuthError(form, "Couldn't send the reset link right now. Please try again shortly.");
+      showCustomerAuthNote(form, note, true);
+    }
+  }
+
+  /** Reset password: set a new password using the token from the emailed link. */
+  async function resolveReset(form) {
+    const token = new URLSearchParams(location.search).get("token") || "";
+    const pwInps = [...form.querySelectorAll('input[type="password"]')];
+    const pw = pwInps[0] ? String(pwInps[0].value || "") : "";
+    const confirm = pwInps[1] ? String(pwInps[1].value || "") : pw;
+    if (!token) return showCustomerAuthError(form, "This reset link is invalid or has expired. Please request a new one.");
+    if (pw.length < 8) return showCustomerAuthError(form, "Use at least 8 characters for your new password.");
+    if (pw !== confirm) return showCustomerAuthError(form, "The two passwords don't match.");
+    const btn = form.querySelector(".btn-auth"); const label = btn ? btn.textContent : "";
+    if (btn) { btn.disabled = true; btn.textContent = "Updating…"; }
+    try {
+      if (window.DOODLY_API) await window.DOODLY_API.post("/api/reset-password", { token: token, password: pw });
+      try { if (window.DOODLY_RBAC && DOODLY_RBAC.audit) DOODLY_RBAC.audit("auth.password_reset", "Password reset completed"); } catch (e) {}
+      showCustomerAuthNote(form, "Your password has been updated. Redirecting you to sign in…", true);
+      setTimeout(function () { location.href = "/login.html"; }, 1500);
+    } catch (err) {
+      if (btn) { btn.disabled = false; btn.textContent = label; }
+      if (err && err.status === 429) return showCustomerAuthError(form, "Too many attempts — please try again in a minute.");
+      if (err && (err.status === 400 || err.status === 422)) return showCustomerAuthError(form, (err.message) || "This reset link is invalid or has expired. Please request a new one.");
+      showCustomerAuthError(form, (err && err.message) || "Couldn't reset your password right now. Please try again.");
+    }
+  }
+
   function showCustomerAuthError(form, msg) {
     let box = form.querySelector("#authErr");
     if (!box) {
@@ -497,8 +542,22 @@ window.DOODLY_AUTH = (function () {
       const btn = form.querySelector(".btn-auth");
       if (btn) form.insertBefore(box, btn); else form.appendChild(box);
     }
+    box.classList.remove("auth-ok");
     box.hidden = false; box.textContent = msg;
     shake(form.querySelector(".btn-auth") || form);
+  }
+
+  /** Non-error inline notice (success/info) — reuses the #authErr slot with a green variant. */
+  function showCustomerAuthNote(form, msg, ok) {
+    let box = form.querySelector("#authErr");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "authErr"; box.setAttribute("role", "status"); box.setAttribute("aria-live", "polite");
+      const btn = form.querySelector(".btn-auth");
+      if (btn) form.insertBefore(box, btn); else form.appendChild(box);
+    }
+    box.className = "auth-err" + (ok ? " auth-ok" : "");
+    box.hidden = false; box.textContent = msg;
   }
 
   /* ---------- session: logout + configurable idle auto-logout ---------- */

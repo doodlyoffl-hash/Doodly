@@ -338,9 +338,9 @@ window.DOODLY_MANIFEST = (function () {
       fields:[{ label:"Full name", placeholder:"Your name" },{ label:"Phone", type:"tel", placeholder:"+91 …" },{ label:"Email", type:"email", placeholder:"you@email.com" },{ label:"Password", type:"password", placeholder:"Create a password" }],
       submit:"Create account", terms:true, alt:["Already have an account?","Log in","/login.html"] }},
     "forgot-password": { surface:"auth", title:"Forgot password", auth:{
-      title:"Reset your password", sub:"Enter your phone or email and we'll send you a code.",
-      fields:[{ label:"Phone or email", placeholder:"+91 98480 11234" }],
-      submit:"Send reset code", alt:["Remembered it?","Back to log in","/login.html"] }},
+      title:"Reset your password", sub:"Enter your account email and we'll send you a reset link.",
+      fields:[{ label:"Email", type:"email", placeholder:"you@example.com" }],
+      submit:"Send reset link", alt:["Remembered it?","Back to log in","/login.html"] }},
     "otp": { surface:"auth", title:"Verify OTP", auth:{
       title:"Enter the code", sub:"We sent a 6-digit code to your phone. It expires in 10 minutes.",
       otp:true, submit:"Verify & continue", resend:true, alt:["Wrong number?","Go back","/login.html"] }},

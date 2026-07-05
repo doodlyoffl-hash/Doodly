@@ -39,6 +39,7 @@
 .auth-demo { border: none; background: var(--mint-soft, #E4F6EC); color: var(--leaf-600, #169A57); font: inherit; font-size: 11.5px; font-weight: 600; border-radius: 6px; padding: 1px 6px; cursor: pointer; }
 .auth-demo:hover { background: var(--leaf, #1FAE66); color: #fff; }
 .auth-err { background: color-mix(in srgb, var(--danger, #c0392b) 12%, transparent); color: var(--danger, #c0392b); border-radius: 10px; padding: 9px 12px; font-size: 13px; font-weight: 600; margin-top: 4px; }
+.auth-err.auth-ok { background: color-mix(in srgb, var(--leaf, #1FAE66) 15%, transparent); color: var(--forest, #0F3D2E); }
 .auth-2fa { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-3, #8a958f); margin-top: 12px; }
 .auth-guest { display: block; text-align: center; margin-top: 12px; font-size: 13.5px; font-weight: 600; color: var(--ink-2, #5a6b63); }
 .auth-guest:hover { color: var(--forest, #0F3D2E); }
