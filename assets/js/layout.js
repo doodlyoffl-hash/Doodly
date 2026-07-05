@@ -5176,22 +5176,26 @@
     resetAccountToUser(D, cu);                            // wipe the demo seed BEFORE any fetch
 
     const get = (p) => API.get(p).catch(() => null);
+    // Generous safety cap — the endpoints work but a cold start can be slow; the
+    // banner must only fire on a GENUINE failure, never a slow-but-successful load.
     const guard = (ms) => new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms));
-    // Fetch the profile FIRST so we can tell an expired/revoked session (401) apart
-    // from a network blip: a bad session forces re-login, a blip shows empty states.
+    // Fire ALL requests CONCURRENTLY (total wait ≈ the slowest one, not the sum).
+    // The profile call gates: it throws on 401 → we can force re-login vs. a blip.
+    const summaryP = API.get("/api/account/summary");
+    const restP = Promise.all([ get("/api/orders?limit=100"), get("/api/deliveries"), get("/api/invoices"), get("/api/bottles"), get("/api/account/referrals"), get("/api/account/notifications") ]);
     let summaryRes;
     try {
-      summaryRes = await Promise.race([API.get("/api/account/summary"), guard(6000)]);
+      summaryRes = await Promise.race([summaryP, guard(15000)]);
     } catch (e) {
       if (e && (e.code === "unauthorized" || e.status === 401)) { accountSessionExpired(); return; }
-      D.__offline = true; return;                        // offline / timeout → empty + banner (NOT demo)
+      D.__offline = true; return;                        // real timeout / offline → empty + banner (NOT demo)
     }
     const summary = summaryRes && summaryRes.summary;
     if (!summary) { D.__offline = true; return; }        // no profile → empty + banner (NOT demo)
 
-    // core ok → fetch the rest best-effort (a failing section just stays empty)
+    // profile ok → collect the rest (already in flight, best-effort; a failing section just stays empty)
     let rest;
-    try { rest = await Promise.race([ Promise.all([ get("/api/orders?limit=100"), get("/api/deliveries"), get("/api/invoices"), get("/api/bottles"), get("/api/account/referrals"), get("/api/account/notifications") ]), guard(6000) ]); }
+    try { rest = await Promise.race([restP, guard(15000)]); }
     catch (e) { rest = [null, null, null, null, null, null]; }
     const orders = rest[0] && rest[0].orders, deliveries = rest[1] && rest[1].deliveries, invoices = rest[2] && rest[2].invoices, bottles = rest[3], referral = rest[4] && rest[4].referral, notifs = rest[5] && rest[5].notifications;
 
