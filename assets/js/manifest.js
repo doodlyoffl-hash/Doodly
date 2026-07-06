@@ -33,6 +33,7 @@ window.DOODLY_MANIFEST = (function () {
       { h:"Bottles & money", items:[["Bottle Tracking","/account/bottles.html","bottle"],["Wallet","/account/wallet.html","wallet"],["Invoices","/account/invoices.html","receipt"]] },
       { h:"Rewards", items:[["Referrals","/account/referrals.html","gift"],["Rewards","/account/rewards.html","award"],["Support","/account/support.html","msg"],["Help Center","/help.html","help"]] },
       { h:"Account", items:[["Addresses","/account/addresses.html","pin"],["Notifications","/account/notifications.html","bell"],["Profile","/account/profile.html","user"],["Settings","/account/settings.html","settings"]] },
+      { h:"Workplace", hrOnly:true, items:[["My HR","/account/my-hr.html","users"]] },
     ],
     admin: [
       { h:"Overview", items:[["Dashboard","/admin/dashboard.html","chart"]] },
@@ -399,6 +400,7 @@ window.DOODLY_MANIFEST = (function () {
     "account/profile": { surface:"account", title:"Profile", blocks:[ head("Profile","Your personal details."), { type:"form", cols:2, fields:[
       { label:"Full name", placeholder:"e.g. Vivek Devineni" },{ label:"Phone", type:"tel", placeholder:"+91 91177 99143" },
       { label:"Email", type:"email", placeholder:"you@example.com" },{ label:"Area", placeholder:"e.g. Benz Circle, Vijayawada" } ], submit:"Save profile" } ]},
+    "account/my-hr": { surface:"account", title:"My HR", blocks:[ head("My HR","Your attendance, salary slips, leave and advances."), { type:"hrSelf" } ]},
     "account/settings": { surface:"account", title:"Settings", blocks:[
       head("Settings","Preferences, notifications and account."),
       { type:"tabs", items:["General","Notifications","Security","Billing"], panels:[

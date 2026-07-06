@@ -437,14 +437,14 @@
   function sidebar(surface) {
     const RB = window.DOODLY_RBAC;
     // admin surface is RBAC-filtered to the active role; unauthorized modules are hidden completely
-    let navGroups = M.nav[surface].map(g => ({ h: g.h, items: g.items }));
+    let navGroups = M.nav[surface].map(g => ({ h: g.h, items: g.items, hrOnly: g.hrOnly }));
     let roleLabel = SURFACE_ROLE[surface];
     if (surface === "admin" && RB) {
       navGroups = RB.filterNav(M.nav[surface].map(g => ({ h: g.h, items: g.items })));
       roleLabel = RB.label(RB.activeRole());
     }
     const groups = navGroups.map(g => `
-      <div class="sb-group"><div class="sb-h">${g.h}</div>
+      <div class="sb-group${g.hrOnly ? " sb-hr-only" : ""}"${g.hrOnly ? ' hidden' : ""}><div class="sb-h">${g.h}</div>
         ${g.items.map(([label, href, ic]) =>
           /sign\s*out|log\s*out/i.test(label)
             ? `<button type="button" class="sb-link sb-signout" data-logout>${icon(ic || "logout", 18)}<span>${label}</span></button>`
@@ -5130,7 +5130,19 @@
     if (window.DOODLY_MAPS) { const am = $("#addressManagerMount"); if (am && !realCust) window.DOODLY_MAPS.mountAddressManager(am); }
     if (window.DOODLY_DELIVERY) { const dp = $("#deliveryPortalMount"); if (dp) window.DOODLY_DELIVERY.mountPortal(dp); }
     // HR / Payroll (admin): Employee Master + HR dashboard
-    if (window.DOODLY_HR) { const hd = $("#hrDashboardMount"); if (hd) window.DOODLY_HR.mountDashboard(hd); const he = $("#hrEmployeesMount"); if (he) window.DOODLY_HR.mount(he); const ha = $("#hrAttendanceMount"); if (ha) window.DOODLY_HR.mountAttendance(ha); const hl = $("#hrLeaveMount"); if (hl) window.DOODLY_HR.mountLeave(hl); const hav = $("#hrAdvancesMount"); if (hav) window.DOODLY_HR.mountAdvances(hav); const hpr = $("#hrPayrollMount"); if (hpr) window.DOODLY_HR.mountPayroll(hpr); }
+    if (window.DOODLY_HR) { const hd = $("#hrDashboardMount"); if (hd) window.DOODLY_HR.mountDashboard(hd); const he = $("#hrEmployeesMount"); if (he) window.DOODLY_HR.mount(he); const ha = $("#hrAttendanceMount"); if (ha) window.DOODLY_HR.mountAttendance(ha); const hl = $("#hrLeaveMount"); if (hl) window.DOODLY_HR.mountLeave(hl); const hav = $("#hrAdvancesMount"); if (hav) window.DOODLY_HR.mountAdvances(hav); const hpr = $("#hrPayrollMount"); if (hpr) window.DOODLY_HR.mountPayroll(hpr); const hse = $("#hrSelfMount"); if (hse) window.DOODLY_HR.mountSelf(hse); }
+    // reveal the employee-only "My HR" nav group once we know the signed-in user has an EmployeeProfile
+    try {
+      var hrOnlyGroups = document.querySelectorAll(".sb-hr-only");
+      if (hrOnlyGroups.length && window.DOODLY_API) {
+        var showHr = function (yes) { hrOnlyGroups.forEach(function (g) { g.hidden = !yes; }); };
+        var empCache = sessionStorage.getItem("doodly-emp");
+        if (empCache != null) showHr(empCache === "1");
+        else if (!window.DOODLY_GUARD || !DOODLY_GUARD.isLoggedIn || DOODLY_GUARD.isLoggedIn()) {
+          window.DOODLY_API.get("/api/account/hr?view=summary").then(function (r) { var is = r && r.isEmployee ? "1" : "0"; sessionStorage.setItem("doodly-emp", is); showHr(is === "1"); }).catch(function () {});
+        }
+      }
+    } catch (e) {}
     // invoice download + page-head actions (real CSV / friendly feedback) — wired once
     if (!document.body.dataset.invWired) {
       document.body.dataset.invWired = "1";

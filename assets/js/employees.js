@@ -39,6 +39,13 @@ window.DOODLY_HR = (function () {
   var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   var monthLabel = function (ym) { var p = ym.split("-"); return MONTHS[Number(p[1]) - 1] + " " + p[0]; };
   var thisMonth = function () { var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
+  var csvCell = function (v) { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  function downloadCSV(name, headers, rows) {
+    if (!rows || !rows.length) { toast("Nothing to export"); return; }
+    var lines = [headers.map(csvCell).join(",")].concat(rows.map(function (r) { return r.map(csvCell).join(","); }));
+    var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8" }));
+    a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
 
   /* ---------------- Employee board ---------------- */
   function mount(host) {
@@ -234,11 +241,12 @@ window.DOODLY_HR = (function () {
       '<select class="input" id="atDept" style="max-width:180px"><option value="">All departments</option>' + DEPARTMENTS.map(function (d) { return "<option>" + d + "</option>"; }).join("") + "</select>" +
       '<input class="input" id="atQ" placeholder="Search employee…" style="flex:1;min-width:160px">' +
       (canA("edit") ? '<button class="btn btn-ghost sm" id="atBulk">Bulk mark…</button>' : "") +
-      '</div><div id="atCounts"></div><div id="atBody" style="margin-top:12px"></div>';
+      '<button class="btn btn-ghost sm" id="atCsv">Export CSV</button></div><div id="atCounts"></div><div id="atBody" style="margin-top:12px"></div>';
     host.querySelector("#atDate").addEventListener("change", function () { st.date = this.value; load(); });
     host.querySelector("#atDept").addEventListener("change", function () { st.department = this.value; load(); });
     host.querySelector("#atQ").addEventListener("input", function () { st.q = this.value; clearTimeout(st._t); st._t = setTimeout(load, 350); });
     var bulk = host.querySelector("#atBulk"); if (bulk) bulk.addEventListener("click", openBulk);
+    host.querySelector("#atCsv").addEventListener("click", function () { downloadCSV("doodly-attendance-" + st.date + ".csv", ["Code", "Employee", "Department", "Status", "OT (min)"], ((st.data && st.data.rows) || []).map(function (r) { return [r.employeeCode, r.name, r.department, r.status || "Unmarked", r.overtimeMins || 0]; })); });
     function renderReg() {
       var d = st.data, c = d.counts;
       host.querySelector("#atCounts").innerHTML = '<div class="hr-kpis">' + kpi("Present", c.present, "green") + kpi("Absent", c.absent, "red") + kpi("On leave", c.leave, "amber") + kpi("Off/Holiday", c.off) + kpi("Unmarked", c.unmarked) + "</div>";
@@ -282,10 +290,11 @@ window.DOODLY_HR = (function () {
       '<select class="input" id="lvStatus" style="max-width:180px"><option value="">All status</option>' + LEAVE_STATUS.map(function (s) { return '<option value="' + s[0] + '">' + s[1] + "</option>"; }).join("") + "</select>" +
       '<input class="input" id="lvQ" placeholder="Search code / employee…" style="flex:1;min-width:160px">' +
       (canL("edit") ? '<button class="btn btn-primary sm" id="lvNew">' + icon("plus", 14) + " New request</button>" : "") +
-      '</div><div id="lvBody"></div>';
+      '<button class="btn btn-ghost sm" id="lvCsv">Export CSV</button></div><div id="lvBody"></div>';
     host.querySelector("#lvStatus").addEventListener("change", function () { st.status = this.value; load(); });
     host.querySelector("#lvQ").addEventListener("input", function () { st.q = this.value; clearTimeout(st._t); st._t = setTimeout(load, 350); });
     var nw = host.querySelector("#lvNew"); if (nw) nw.addEventListener("click", function () { openNewLeave(load); });
+    host.querySelector("#lvCsv").addEventListener("click", function () { downloadCSV("doodly-leave.csv", ["Leave", "Employee", "Emp Code", "Department", "Type", "From", "To", "Days", "Status"], ((st.data && st.data.rows) || []).map(function (r) { return [r.code, r.name, r.employeeCode, r.department, leaveTypeLabel(r.type), r.startDate.slice(0, 10), r.endDate.slice(0, 10), r.days, r.status]; })); });
     function renderList() {
       var d = st.data, rows = (d.rows || []).map(function (r) {
         var canDecide = canL("edit") && (r.status === "PENDING" || r.status === "MANAGER_APPROVED");
@@ -357,10 +366,11 @@ window.DOODLY_HR = (function () {
       host.querySelector("#avBody").innerHTML = '<div class="panel panel-pad"><div class="sk-line skeleton"></div></div>';
       API().get("/api/admin/salary" + qs).then(function (r) { st.data = r; render(); }).catch(function (e) { host.querySelector("#avBody").innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load advances.") + "</div>"; });
     }
-    host.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px"><select class="input" id="avStatus" style="max-width:160px"><option value="">All status</option>' + ADV_STATUS.map(function (s) { return '<option value="' + s[0] + '">' + s[1] + "</option>"; }).join("") + '</select><input class="input" id="avQ" placeholder="Search code / employee…" style="flex:1;min-width:160px">' + (canP("edit") ? '<button class="btn btn-primary sm" id="avNew">' + icon("plus", 14) + " New advance</button>" : "") + '</div><div id="avCounts"></div><div id="avBody" style="margin-top:12px"></div>';
+    host.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px"><select class="input" id="avStatus" style="max-width:160px"><option value="">All status</option>' + ADV_STATUS.map(function (s) { return '<option value="' + s[0] + '">' + s[1] + "</option>"; }).join("") + '</select><input class="input" id="avQ" placeholder="Search code / employee…" style="flex:1;min-width:160px">' + (canP("edit") ? '<button class="btn btn-primary sm" id="avNew">' + icon("plus", 14) + " New advance</button>" : "") + '<button class="btn btn-ghost sm" id="avCsv">Export CSV</button></div><div id="avCounts"></div><div id="avBody" style="margin-top:12px"></div>';
     host.querySelector("#avStatus").addEventListener("change", function () { st.status = this.value; load(); });
     host.querySelector("#avQ").addEventListener("input", function () { st.q = this.value; clearTimeout(st._t); st._t = setTimeout(load, 350); });
     var nw = host.querySelector("#avNew"); if (nw) nw.addEventListener("click", function () { openNewAdvance(load); });
+    host.querySelector("#avCsv").addEventListener("click", function () { downloadCSV("doodly-advances.csv", ["Advance", "Employee", "Emp Code", "Department", "Amount", "Installments", "Recovered", "Remaining", "Status"], ((st.data && st.data.rows) || []).map(function (a) { return [a.code, a.name, a.employeeCode, a.department, a.amountPaise / 100, a.installments, a.recoveredPaise / 100, a.remainingPaise / 100, a.status]; })); });
     function render() {
       var d = st.data;
       host.querySelector("#avCounts").innerHTML = '<div class="hr-kpis">' + kpi("Pending", d.stats.pending, "amber") + kpi("Outstanding", rup(d.stats.outstandingPaise)) + "</div>";
@@ -403,12 +413,13 @@ window.DOODLY_HR = (function () {
       host.querySelector("#pyBody").innerHTML = '<div class="panel panel-pad"><div class="sk-line skeleton"></div></div>';
       API().get("/api/admin/payroll" + qs).then(function (r) { st.data = r; render(); }).catch(function (e) { host.querySelector("#pyBody").innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load payroll.") + "</div>"; });
     }
-    host.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px"><label class="dac-f" style="margin:0"><span>Month</span><input class="input" type="month" id="pyMonth" value="' + st.month + '"></label><select class="input" id="pyStatus" style="max-width:150px"><option value="">All status</option><option value="DRAFT">Draft</option><option value="FINALIZED">Finalized</option><option value="PAID">Paid</option></select><input class="input" id="pyQ" placeholder="Search employee…" style="flex:1;min-width:150px">' + (canP("edit") ? '<button class="btn btn-primary sm" id="pyGen">Generate payroll</button>' : "") + '<button class="btn btn-ghost sm" id="pyBank">Bank report</button></div><div id="pyCounts"></div><div id="pyBody" style="margin-top:12px"></div>';
+    host.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px"><label class="dac-f" style="margin:0"><span>Month</span><input class="input" type="month" id="pyMonth" value="' + st.month + '"></label><select class="input" id="pyStatus" style="max-width:150px"><option value="">All status</option><option value="DRAFT">Draft</option><option value="FINALIZED">Finalized</option><option value="PAID">Paid</option></select><input class="input" id="pyQ" placeholder="Search employee…" style="flex:1;min-width:150px">' + (canP("edit") ? '<button class="btn btn-primary sm" id="pyGen">Generate payroll</button>' : "") + '<button class="btn btn-ghost sm" id="pyBank">Bank report</button><button class="btn btn-ghost sm" id="pyCsv">Export CSV</button></div><div id="pyCounts"></div><div id="pyBody" style="margin-top:12px"></div>';
     host.querySelector("#pyMonth").addEventListener("change", function () { st.month = this.value; load(); });
     host.querySelector("#pyStatus").addEventListener("change", function () { st.status = this.value; load(); });
     host.querySelector("#pyQ").addEventListener("input", function () { st.q = this.value; clearTimeout(st._t); st._t = setTimeout(load, 350); });
     var gen = host.querySelector("#pyGen"); if (gen) gen.addEventListener("click", function () { if (!confirm("Generate payroll for all active employees for " + monthLabel(st.month) + "? Existing drafts are recalculated.")) return; var b = this; b.disabled = true; API().post("/api/admin/payroll", { action: "generate", month: st.month }).then(function (r) { toast("Generated " + r.generated + " payslip(s)" + (r.skipped ? ", " + r.skipped + " skipped (no salary structure)" : "")); b.disabled = false; load(); }).catch(function (e) { b.disabled = false; toast((e && e.message) || "Couldn't generate."); }); });
     host.querySelector("#pyBank").addEventListener("click", function () { openBank(st.month); });
+    host.querySelector("#pyCsv").addEventListener("click", function () { downloadCSV("doodly-payroll-" + st.month + ".csv", ["Slip", "Employee", "Emp Code", "Department", "Gross", "Deductions", "Net", "Status"], ((st.data && st.data.rows) || []).map(function (p) { return [p.code, p.name, p.employeeCode, p.department, p.grossPaise / 100, p.deductionsPaise / 100, p.netPaise / 100, p.status]; })); });
     function render() {
       var d = st.data, s = d.stats;
       host.querySelector("#pyCounts").innerHTML = '<div class="hr-kpis">' + kpi("Payslips", s.count) + kpi("Gross", rup(s.grossPaise)) + kpi("Deductions", rup(s.deductionsPaise), "amber") + kpi("Net payable", rup(s.netPaise), "green") + "</div>";
@@ -458,5 +469,109 @@ window.DOODLY_HR = (function () {
     w.document.close(); setTimeout(function () { w.print(); }, 300);
   }
 
-  return { mount: mount, mountDashboard: mountDashboard, mountAttendance: mountAttendance, mountLeave: mountLeave, mountAdvances: mountAdvances, mountPayroll: mountPayroll };
+  /* ---------------- Employee self-service (account surface) ---------------- */
+  function selfStyles() {
+    if (document.getElementById("hsStyles")) return;
+    var s = document.createElement("style"); s.id = "hsStyles";
+    s.textContent =
+      ".hs-hero{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;background:linear-gradient(135deg,#0f3d2e,#1c6b3a);color:#fff;border-radius:16px;padding:20px 22px;margin-bottom:16px}.hs-name{font-family:'Fraunces',serif;font-size:1.35rem;font-weight:600}.hs-hero .muted-sm,.hs-since{color:#cfe6d8!important}" +
+      ".hs-tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid #e6e9e6;margin-bottom:16px}.hs-tab{background:none;border:none;padding:10px 14px;font-weight:600;font-size:.9rem;color:#6b7c72;cursor:pointer;border-bottom:2px solid transparent}.hs-tab.active{color:var(--forest,#0f3d2e);border-bottom-color:var(--forest,#0f3d2e)}" +
+      ".hs-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}" +
+      ".bal{background:#fff;border:1px solid #e6e9e6;border-radius:14px;padding:14px 16px}.bal b{font-family:'Fraunces',serif;font-size:1.4rem;color:var(--forest,#0f3d2e)}.bal .lbl{font-size:.8rem;color:#54635b;font-weight:600}.bal .sub{font-size:.72rem;color:#9aa89f;margin-top:2px}";
+    document.head.appendChild(s);
+  }
+  function mountSelf(host) {
+    if (!host) return; hrStyles(); selfStyles();
+    var fmtD = function (iso) { try { return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }); } catch (e) { return iso; } };
+    var fmtDShort = function (iso) { try { return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" }); } catch (e) { return iso; } };
+    host.innerHTML = '<div id="hsBody"><div class="panel panel-pad"><div class="sk-line skeleton"></div></div></div>';
+    var body = host.querySelector("#hsBody");
+    API().get("/api/account/hr?view=summary").then(function (r) {
+      if (!r || !r.isEmployee) { body.innerHTML = '<div class="panel panel-pad" style="text-align:center;padding:44px 20px"><div style="font-size:2rem">👋</div><h3 style="font-family:\'Fraunces\',serif;margin:10px 0 6px">For DOODLY team members</h3><p class="muted-sm" style="max-width:440px;margin:0 auto">This space shows your attendance, salary slips, leave balance and advances. It appears here once HR adds you to the DOODLY team.</p></div>'; return; }
+      renderShell(r);
+    }).catch(function (e) { body.innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load your HR details.") + "</div>"; });
+
+    function renderShell(sum) {
+      var e = sum.employee;
+      var tabs = [["overview", "Overview"], ["attendance", "Attendance"], ["payslips", "Salary slips"], ["leave", "Leave"], ["advances", "Advances"]];
+      body.innerHTML = '<div class="hs-hero"><div><div class="hs-name">' + esc(e.name || "") + '</div><div class="muted-sm">' + esc(e.code + " · " + (e.designation || "—") + " · " + (e.department || "—")) + '</div></div><div class="hs-since">Joined ' + fmtD(e.doj) + "</div></div>" +
+        '<div class="hs-tabs">' + tabs.map(function (t) { return '<button class="hs-tab" data-tab="' + t[0] + '">' + t[1] + "</button>"; }).join("") + '</div><div id="hsTab"></div>';
+      var tabHost = body.querySelector("#hsTab"), tabEls = body.querySelectorAll(".hs-tab");
+      var R = { overview: ovw, attendance: att, payslips: pay, leave: lv, advances: adv };
+      function go(name) { tabEls.forEach(function (b) { b.classList.toggle("active", b.dataset.tab === name); }); R[name](tabHost, sum); }
+      tabEls.forEach(function (b) { b.addEventListener("click", function () { go(b.dataset.tab); }); });
+      go("overview");
+    }
+    function ovw(h, sum) {
+      var lp = sum.latestPayslip;
+      var payCard = lp ? '<div class="bal"><b>' + rup(lp.netPaise) + '</b><div class="lbl">Latest net salary</div><div class="sub">' + monthLabel(lp.month) + " · " + (lp.status === "PAID" ? "Paid" : "Finalized") + "</div></div>" : '<div class="bal"><b>—</b><div class="lbl">Latest salary</div><div class="sub">No slips yet</div></div>';
+      var advCard = '<div class="bal"><b>' + rup(sum.advances.outstandingPaise) + '</b><div class="lbl">Advance outstanding</div><div class="sub">' + sum.advances.active + " active</div></div>";
+      var balCards = ((sum.leaveBalances && sum.leaveBalances.balances) || []).map(function (b) { return '<div class="bal"><b>' + b.remaining + '</b><div class="lbl">' + leaveTypeLabel(b.type) + ' leave</div><div class="sub">' + b.used + " used of " + b.allotted + "</div></div>"; }).join("");
+      h.innerHTML = '<div class="hs-cards">' + payCard + advCard + balCards + "</div>";
+    }
+    function att(h) {
+      h.innerHTML = '<div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:12px"><label class="dac-f" style="margin:0"><span>Month</span><input class="input" type="month" id="hsAtMonth" value="' + thisMonth() + '"></label></div><div id="hsAtCal"><div class="panel panel-pad"><div class="sk-line skeleton"></div></div></div>';
+      function load(mo) {
+        var cal = h.querySelector("#hsAtCal"); cal.innerHTML = '<div class="panel panel-pad"><div class="sk-line skeleton"></div></div>';
+        API().get("/api/account/hr?view=attendance&month=" + mo).then(function (r) {
+          var c = r.calendar, cells = c.days.map(function (d) { return '<div class="cal-cell ' + (d.status ? "s-" + d.status : "") + '"><span>' + d.day + "</span>" + (d.status ? "<small>" + attShort(d.status) + "</small>" : "") + "</div>"; }).join(""), s = c.summary;
+          cal.innerHTML = '<div class="cal-grid">' + cells + '</div><div class="hr-kpis" style="margin-top:12px">' + kpi("Present", s.present, "green") + kpi("Absent", s.absent, "red") + kpi("Leave", s.paidLeave + s.sickLeave, "amber") + kpi("Off", s.weeklyOff + s.holiday) + kpi("OT (h)", Math.round(s.overtimeMins / 60 * 10) / 10) + "</div>";
+        }).catch(function (e) { cal.innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load.") + "</div>"; });
+      }
+      h.querySelector("#hsAtMonth").addEventListener("change", function () { load(this.value); });
+      load(thisMonth());
+    }
+    function pay(h) {
+      h.innerHTML = '<div class="panel panel-pad"><div class="sk-line skeleton"></div></div>';
+      API().get("/api/account/hr?view=payslips").then(function (r) {
+        var rows = (r.payslips || []).map(function (p) { return "<tr><td><b>" + esc(p.code) + "</b></td><td>" + monthLabel(p.month) + "</td><td>" + rup(p.grossPaise) + "</td><td>" + rup(p.deductionsPaise) + "</td><td><b>" + rup(p.netPaise) + "</b></td><td>" + psBadge(p.status) + '</td><td><button class="btn btn-ghost sm hs-slip" data-id="' + p.id + '">View</button></td></tr>'; }).join("");
+        h.innerHTML = rows ? '<div class="panel"><div class="panel-pad" style="padding-top:0"><div class="table-wrap"><table class="tbl"><thead><tr><th>Slip</th><th>Month</th><th>Gross</th><th>Deductions</th><th>Net</th><th>Status</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div></div></div>" : '<div class="panel panel-pad muted-sm">No salary slips yet. They appear here once your payroll is finalized.</div>';
+        h.querySelectorAll(".hs-slip").forEach(function (b) { b.addEventListener("click", function () { openSelfSlip(b.dataset.id); }); });
+      }).catch(function (e) { h.innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load.") + "</div>"; });
+    }
+    function openSelfSlip(id) {
+      var m = modal("Salary slip", '<div class="panel panel-pad"><div class="sk-line skeleton"></div></div>');
+      API().get("/api/account/hr?view=payslip&id=" + id).then(function (r) { var d = r.payslip; m.ov.querySelector(".dac-body").innerHTML = slipHtml(d) + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="btn btn-ghost sm" id="ssClose">Close</button><button class="btn btn-primary sm" id="ssPrint">Print / PDF</button></div>'; m.ov.querySelector("#ssClose").addEventListener("click", m.close); m.ov.querySelector("#ssPrint").addEventListener("click", function () { printSlip(d); }); }).catch(function (e) { m.ov.querySelector(".dac-body").innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load.") + "</div>"; });
+    }
+    function lv(h) {
+      h.innerHTML = '<div style="display:flex;justify-content:flex-end;margin-bottom:12px"><button class="btn btn-primary sm" id="hsApply">Apply for leave</button></div><div id="hsLvBal" class="hs-cards" style="margin-bottom:14px"></div><div id="hsLvList"><div class="panel panel-pad"><div class="sk-line skeleton"></div></div></div>';
+      h.querySelector("#hsApply").addEventListener("click", function () { openApply(loadLv); });
+      function loadLv() {
+        API().get("/api/account/hr?view=leave").then(function (r) {
+          h.querySelector("#hsLvBal").innerHTML = ((r.balances && r.balances.balances) || []).map(function (b) { return '<div class="bal"><b>' + b.remaining + '</b><div class="lbl">' + leaveTypeLabel(b.type) + '</div><div class="sub">' + b.used + " / " + b.allotted + "</div></div>"; }).join("");
+          var rows = (r.requests || []).map(function (q) { return "<tr><td><b>" + esc(q.code) + "</b></td><td>" + leaveTypeLabel(q.type) + "</td><td>" + fmtDShort(q.startDate) + " – " + fmtDShort(q.endDate) + "</td><td>" + q.days + "</td><td>" + leaveStatusBadge(q.status) + "</td></tr>"; }).join("");
+          h.querySelector("#hsLvList").innerHTML = rows ? '<div class="panel"><div class="panel-pad" style="padding-top:0"><div class="table-wrap"><table class="tbl"><thead><tr><th>Code</th><th>Type</th><th>Dates</th><th>Days</th><th>Status</th></tr></thead><tbody>' + rows + "</tbody></table></div></div></div>" : '<div class="panel panel-pad muted-sm">No leave requests yet.</div>';
+        }).catch(function (e) { h.querySelector("#hsLvList").innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load.") + "</div>"; });
+      }
+      loadLv();
+    }
+    function openApply(done) {
+      var body = '<div class="hr-form"><label class="dac-f"><span>Leave type</span><select class="input" id="alType">' + LEAVE_TYPES.map(function (t) { return '<option value="' + t[0] + '">' + t[1] + "</option>"; }).join("") + "</select></label>" +
+        '<div class="dac-row"><label class="dac-f"><span>From <span style="color:#c0392b">*</span></span><input class="input" type="date" id="alFrom"></label><label class="dac-f"><span>To <span style="color:#c0392b">*</span></span><input class="input" type="date" id="alTo"></label></div>' +
+        '<div class="muted-sm" id="alDays" style="margin:-4px 0 8px"></div><label class="dac-f"><span>Reason</span><textarea class="input" id="alReason" rows="2" maxlength="500"></textarea></label>' +
+        '<div id="alErr" style="display:none;color:#b3261e;font-size:.85rem;font-weight:600;margin:6px 0"></div><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px"><button class="btn btn-ghost sm" id="alCancel">Cancel</button><button class="btn btn-primary sm" id="alSave">Submit request</button></div></div>';
+      var m = modal("Apply for leave", body), q = function (s) { return m.ov.querySelector(s); };
+      function days() { var f = q("#alFrom").value, t = q("#alTo").value; if (f && t) { var n = Math.round((new Date(t) - new Date(f)) / 86400000) + 1; q("#alDays").textContent = n > 0 ? n + " day" + (n === 1 ? "" : "s") + " requested" : ""; } }
+      q("#alFrom").addEventListener("change", days); q("#alTo").addEventListener("change", days);
+      q("#alCancel").addEventListener("click", m.close);
+      q("#alSave").addEventListener("click", function () {
+        var err = q("#alErr"); err.style.display = "none";
+        var f = q("#alFrom").value, t = q("#alTo").value;
+        if (!f || !t) { err.style.display = "block"; err.textContent = "Please choose both dates."; return; }
+        if (new Date(t) < new Date(f)) { err.style.display = "block"; err.textContent = "End date can't be before the start date."; return; }
+        this.disabled = true;
+        API().post("/api/account/hr", { action: "apply-leave", type: q("#alType").value, startDate: f, endDate: t, reason: q("#alReason").value || undefined })
+          .then(function () { toast("Leave request submitted ✓"); m.close(); if (done) done(); }).catch(function (e) { err.style.display = "block"; err.textContent = (e && e.message) || "Couldn't submit."; q("#alSave").disabled = false; });
+      });
+    }
+    function adv(h) {
+      h.innerHTML = '<div class="panel panel-pad"><div class="sk-line skeleton"></div></div>';
+      API().get("/api/account/hr?view=advances").then(function (r) {
+        var rows = (r.advances || []).map(function (a) { return "<tr><td><b>" + esc(a.code) + "</b></td><td>" + rup(a.amountPaise) + "</td><td>" + a.installments + " × " + rup(a.installmentPaise) + "</td><td>" + rup(a.remainingPaise) + "</td><td>" + advBadge(a.status) + "</td></tr>"; }).join("");
+        h.innerHTML = rows ? '<div class="panel"><div class="panel-pad" style="padding-top:0"><div class="table-wrap"><table class="tbl"><thead><tr><th>Code</th><th>Amount</th><th>Recovery</th><th>Remaining</th><th>Status</th></tr></thead><tbody>' + rows + "</tbody></table></div></div></div>" : '<div class="panel panel-pad muted-sm">No salary advances. Advances are requested through your manager or HR.</div>';
+      }).catch(function (e) { h.innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load.") + "</div>"; });
+    }
+  }
+
+  return { mount: mount, mountDashboard: mountDashboard, mountAttendance: mountAttendance, mountLeave: mountLeave, mountAdvances: mountAdvances, mountPayroll: mountPayroll, mountSelf: mountSelf };
 })();
