@@ -35,36 +35,27 @@ async function send(to: string, subject: string, html: string, text: string) {
   }
 }
 
-export function sendWelcomeEmail(to: string, name?: string | null) {
-  const subject = "Welcome to DOODLY 🥛";
-  const hi = name ? `Hi ${name},` : "Hi,";
-  const text = `${hi}\n\nWelcome to DOODLY — farm-fresh A2 buffalo milk, delivered in glass bottles before 7:00 AM.\n\nStart a subscription or try a one-time pack from your dashboard, and we'll take it from there.\n\n— Team DOODLY`;
-  const html = `
-    <div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:480px;margin:auto;color:#1c2722">
-      <h2 style="color:#0F3D2E">Welcome to DOODLY 🥛</h2>
-      <p>${hi}</p>
-      <p>You're in. DOODLY brings you <strong>farm-fresh A2 buffalo milk</strong> in glass bottles, delivered <strong>before 7:00 AM</strong>.</p>
-      <p style="margin:22px 0">
-        <a href="https://www.doodly.in/account/dashboard.html" style="background:#1FAE66;color:#fff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:700">Go to your dashboard</a>
-      </p>
-      <p style="color:#6b7b73;font-size:13px">Fresh, honest milk — every morning. — Team DOODLY</p>
-    </div>`;
-  return send(to, subject, html, text);
-}
+/* All transactional emails now use the premium DOODLY email design system
+   (lib/email/templates). Each sender renders a branded template → send(). */
+import * as T from "@/lib/email/templates";
+const fire = (to: string, e: T.Email) => send(to, e.subject, e.html, e.text);
 
-export function sendPasswordResetEmail(to: string, resetUrl: string, name?: string | null) {
-  const subject = "Reset your DOODLY password";
-  const hi = name ? `Hi ${name},` : "Hi,";
-  const text = `${hi}\n\nReset your DOODLY password using the link below (valid for 1 hour):\n${resetUrl}\n\nIf you didn't request this, you can safely ignore this email.`;
-  const html = `
-    <div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:480px;margin:auto;color:#1c2722">
-      <h2 style="color:#0F3D2E">Reset your password</h2>
-      <p>${hi}</p>
-      <p>We received a request to reset your DOODLY password. This link is valid for <strong>1 hour</strong>.</p>
-      <p style="margin:24px 0">
-        <a href="${resetUrl}" style="background:#1FAE66;color:#fff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:700">Reset password</a>
-      </p>
-      <p style="color:#6b7b73;font-size:13px">If you didn't request this, you can safely ignore this email.</p>
-    </div>`;
-  return send(to, subject, html, text);
-}
+export const sendWelcomeEmail = (to: string, name?: string | null) => fire(to, T.welcome(name));
+export const sendPasswordResetEmail = (to: string, resetUrl: string, name?: string | null) => fire(to, T.passwordReset(resetUrl, name));
+export const sendVerifyEmail = (to: string, code: string, name?: string | null) => fire(to, T.verifyEmail(code, name));
+export const sendLoginOtp = (to: string, code: string, name?: string | null) => fire(to, T.loginOtp(code, name));
+export const sendOrderConfirmation = (to: string, d: T.OrderData) => fire(to, T.orderConfirmation(d));
+export const sendPaymentSuccess = (to: string, d: Parameters<typeof T.paymentSuccess>[0]) => fire(to, T.paymentSuccess(d));
+export const sendPaymentFailed = (to: string, d: Parameters<typeof T.paymentFailed>[0]) => fire(to, T.paymentFailed(d));
+export const sendSubscriptionActivated = (to: string, d: Parameters<typeof T.subscriptionActivated>[0]) => fire(to, T.subscriptionActivated(d));
+export const sendTrialPack = (to: string, d: Parameters<typeof T.trialPack>[0]) => fire(to, T.trialPack(d));
+export const sendWalletCredit = (to: string, d: Parameters<typeof T.walletCredit>[0]) => fire(to, T.walletCredit(d));
+export const sendReferralReward = (to: string, d: Parameters<typeof T.referralReward>[0]) => fire(to, T.referralReward(d));
+export const sendDeliveryTomorrow = (to: string, d: Parameters<typeof T.deliveryTomorrow>[0]) => fire(to, T.deliveryTomorrow(d));
+export const sendOutForDelivery = (to: string, d: Parameters<typeof T.outForDelivery>[0]) => fire(to, T.outForDelivery(d));
+export const sendDelivered = (to: string, d: Parameters<typeof T.delivered>[0]) => fire(to, T.delivered(d));
+export const sendBottleReturn = (to: string, d: Parameters<typeof T.bottleReturn>[0]) => fire(to, T.bottleReturn(d));
+export const sendInvoiceEmail = (to: string, d: Parameters<typeof T.invoiceEmail>[0]) => fire(to, T.invoiceEmail(d));
+export const sendSupportTicket = (to: string, d: Parameters<typeof T.supportTicket>[0]) => fire(to, T.supportTicket(d));
+export const sendPuzzleChallenge = (to: string, d: Parameters<typeof T.puzzleChallenge>[0]) => fire(to, T.puzzleChallenge(d));
+export const sendPromo = (to: string, d: Parameters<typeof T.promo>[0]) => fire(to, T.promo(d));
