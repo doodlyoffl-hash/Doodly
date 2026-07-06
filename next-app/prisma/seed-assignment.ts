@@ -6,6 +6,8 @@
    Run:  npx tsx prisma/seed-assignment.ts
 */
 import { PrismaClient } from "@prisma/client";
+import { assertNotProd } from "./_seedGuard";
+assertNotProd("prisma/seed-assignment.ts");
 const db = new PrismaClient();
 
 async function main() {

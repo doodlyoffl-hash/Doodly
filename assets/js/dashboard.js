@@ -390,8 +390,27 @@ window.DOODLY_DASHBOARD = (function () {
   }
 
   /* ============================================================ UI */
+  /* A REAL signed-in admin (real cuid + token, not the localhost demo persona) must
+     never see the deterministic demo metric series below as if it were live. Until
+     real aggregation is wired from the per-module /stats endpoints, show an honest
+     empty state that links to the backend-driven modules — never fabricated numbers. */
+  function isRealUser() { try { var u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null"); return !!(u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")); } catch (e) { return false; } }
+  function emptyDashboard() {
+    return '<div class="dash"><div class="panel panel-pad" style="text-align:center;padding:44px 22px">' +
+      '<div style="font-size:2rem">📊</div>' +
+      '<h3 style="font-family:\'Fraunces\',serif;margin:10px 0 6px">Your live dashboard</h3>' +
+      '<p class="muted-sm" style="max-width:470px;margin:0 auto 16px">Revenue, orders, deliveries and customer metrics appear here as real business activity comes in. Open any module below to see your live records.</p>' +
+      '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">' +
+      '<a class="btn btn-primary sm" href="/admin/orders.html">Orders</a>' +
+      '<a class="btn btn-ghost sm" href="/admin/customers.html">Customers</a>' +
+      '<a class="btn btn-ghost sm" href="/admin/revenue.html">Revenue</a>' +
+      '<a class="btn btn-ghost sm" href="/admin/deliveries.html">Deliveries</a>' +
+      '<a class="btn btn-ghost sm" href="/admin/reports.html">Reports</a>' +
+      '</div></div></div>';
+  }
   function mount(host) {
     if (!host) return;
+    if (isRealUser()) { host.innerHTML = emptyDashboard(); return; }
     var st = { filter: "today", custom: { from: addDays(todayStr(), -7), to: todayStr() }, refreshSec: 0, lastUpdated: new Date(), drill: null, testRes: null };
     if (host._dashTimer) { clearInterval(host._dashTimer); host._dashTimer = null; }
 

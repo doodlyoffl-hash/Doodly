@@ -5,6 +5,8 @@
    Run:  npx tsx prisma/seed-bottles.ts
 */
 import { PrismaClient, type BottleStage } from "@prisma/client";
+import { assertNotProd } from "./_seedGuard";
+assertNotProd("prisma/seed-bottles.ts");
 const db = new PrismaClient();
 
 // capacityMl -> stage -> opening qty  (available totals 1,280; awaiting = 418)

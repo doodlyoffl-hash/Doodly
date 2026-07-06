@@ -10,7 +10,9 @@ import { PrismaClient, type PermLevel, type Role, type OrderEventType } from "@p
 import bcrypt from "bcryptjs";
 import { products, variants, plans } from "../config/catalogue";
 import { DEFAULT_MATRIX } from "../lib/rbac";
+import { assertNotProd } from "./_seedGuard";
 
+assertNotProd("prisma/seed.ts");
 const db = new PrismaClient();
 
 // Every RBAC module (used to expand super_admin's "*" into explicit grants).

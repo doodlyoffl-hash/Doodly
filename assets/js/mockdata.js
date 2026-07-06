@@ -6,7 +6,7 @@
 window.DOODLY_DATA = (function () {
   const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
 
-  return {
+  const data = {
     inr,
 
     /* ---- the signed-in customer (demo) ---- */
@@ -232,4 +232,21 @@ window.DOODLY_DATA = (function () {
       { emoji: "📦", cat: "Product", title: "Building a subscription you can pause anytime", excerpt: "How vacation mode and emergency skip actually work.", meta: "4 min · 20 May 2026" },
     ],
   };
+
+  /* PRODUCTION SAFETY — a REAL signed-in user (real cuid + token, NOT the localhost
+     "static-" exploration persona) must never see demo records. Empty every demo
+     record array at the source so any admin/staff/driver module that is un-wired,
+     still loading, or offline shows an honest EMPTY state instead of fabricated
+     rows. Structural bits (inr, blog posts) are kept; the demo persona keeps all. */
+  try {
+    const u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null");
+    const realUser = !!(u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token"));
+    if (realUser) {
+      ["orders", "deliveries", "trackTimeline", "bottleLedger", "wallet", "invoices", "addresses", "notifications", "referrals", "tickets",
+        "customers", "adminOrders", "drivers", "routes", "farmers", "procurement", "quality", "inventory", "bottleInv", "payments", "coupons", "adminTickets", "audit",
+        "driverStops", "driverCompleted", "adminKpis", "revenueBars", "driverKpis"].forEach((k) => { if (Array.isArray(data[k])) data[k] = []; });
+    }
+  } catch (e) { /* no localStorage → treat as demo persona */ }
+
+  return data;
 })();

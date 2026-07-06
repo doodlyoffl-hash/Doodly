@@ -4,6 +4,8 @@
    Run:  npx tsx prisma/seed-delivery.ts
 */
 import { PrismaClient } from "@prisma/client";
+import { assertNotProd } from "./_seedGuard";
+assertNotProd("prisma/seed-delivery.ts");
 const db = new PrismaClient();
 
 const ZONES: { name: string; executive: string; pins: [string, string][] }[] = [
