@@ -298,10 +298,15 @@ window.DOODLY_AUTH = (function () {
       } else {
         fields.forEach((field) => {
           const inp = field.querySelector("input"); if (!inp) return;
+          if (/Referral/i.test(inp.getAttribute("data-rule") || "")) return;   // referral is OPTIONAL — never required (validated separately, below)
           const [ok, m] = validate(inp);
           setState(field, ok, m);
           if (!ok && !firstBad) firstBad = field;
         });
+        // Referral code: blank is always fine. Only block if a code was ENTERED and it
+        // failed the live backend validation (the /api/register call re-checks too).
+        const refF = form.querySelector('input[data-rule*="Referral"]');
+        if (refF && refF.value.trim() && !firstBad) { const rf = refF.closest(".fl-field"); if (rf && rf.classList.contains("is-error")) firstBad = rf; }
         if (firstBad) { shake(firstBad); firstBad.querySelector("input").focus(); return; }
       }
       // audit OTP verification (the password-reset audit fires on real success inside resolveReset)

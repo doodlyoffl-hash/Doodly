@@ -348,6 +348,7 @@
           <span class="fl-valid">${checkSvg}</span>
           ${isPwd ? `<button type="button" class="fl-eye" aria-label="Show password">${eyeSvg}</button>` : ""}
           <span class="fl-err" aria-live="polite"></span>
+          ${f.hint ? `<span class="fl-hint" style="display:block;font-size:.78rem;color:#8a9691;margin:4px 2px 0;line-height:1.35">${f.hint}</span>` : ""}
         </div>`;
       }).join("");
     }

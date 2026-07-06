@@ -337,7 +337,7 @@ window.DOODLY_MANIFEST = (function () {
       back:["/login.html","Back to login options"] }},
     "signup": { surface:"auth", title:"Create account", auth:{
       title:"Start tomorrow morning", sub:"Create your account and set up your first delivery.",
-      fields:[{ label:"Full name", placeholder:"Your name" },{ label:"Phone", type:"tel", placeholder:"+91 …" },{ label:"Email", type:"email", placeholder:"you@email.com" },{ label:"Password", type:"password", placeholder:"Create a password" },{ label:"Have a Referral Code?", placeholder:"Optional — e.g. DOODLY8F4XK" }],
+      fields:[{ label:"Full name", placeholder:"Your name" },{ label:"Phone", type:"tel", placeholder:"+91 …" },{ label:"Email", type:"email", placeholder:"you@email.com" },{ label:"Password", type:"password", placeholder:"Create a password" },{ label:"Have a Referral Code? (Optional)", placeholder:"Optional — e.g. DOODLY8F4XK", hint:"Enter a referral code if someone invited you. You can leave this blank if you don't have one." }],
       submit:"Create account", terms:true, alt:["Already have an account?","Log in","/login.html"] }},
     "forgot-password": { surface:"auth", title:"Forgot password", auth:{
       title:"Reset your password", sub:"Enter your account email and we'll send you a reset link.",

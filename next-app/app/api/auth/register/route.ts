@@ -27,7 +27,10 @@ const schema = z.object({
     .optional()
     .or(z.literal("").transform(() => undefined)),
   password: passwordSchema,
-  referralCode: z.string().trim().toUpperCase().max(20).optional().or(z.literal("").transform(() => undefined)),
+  // Accept both the short DOODLY-format codes and legacy 25-char cuid codes (User.referralCode
+  // defaults to cuid()); blank/absent → undefined (referral is OPTIONAL). Validity is checked
+  // against the DB below, not by length — so a real code is never rejected for its format.
+  referralCode: z.string().trim().toUpperCase().max(40).optional().or(z.literal("").transform(() => undefined)),
 });
 
 export const POST = route("auth.register", async (req: NextRequest) => {
