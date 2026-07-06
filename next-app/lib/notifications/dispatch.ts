@@ -21,6 +21,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { log } from "@/lib/logger";
 import { sendEmail, sendSMS, sendWhatsApp, channelStatus, type SendResult } from "./providers";
+import * as T from "@/lib/email/templates";
 
 type Chan = "SMS" | "WHATSAPP" | "PUSH" | "EMAIL" | "IN_APP";
 
@@ -47,18 +48,9 @@ function toSpec(v: boolean | ChannelSpec | undefined, on: boolean): ChannelSpec 
 
 interface DeliverPlan { email: boolean; sms: ChannelSpec | null; whatsapp: ChannelSpec | null }
 
-function escapeHtml(s: string) {
-  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
-}
-
-/** Minimal branded HTML wrapper for a plain notification body. */
+/** Premium branded HTML for a plain notification body (DOODLY email design system). */
 function defaultHtml(title: string, body: string) {
-  return `
-    <div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:480px;margin:auto;color:#1c2722">
-      <h2 style="color:#0F3D2E;margin:0 0 8px">${escapeHtml(title)}</h2>
-      <p style="font-size:15px;line-height:1.55">${escapeHtml(body)}</p>
-      <p style="color:#6b7b73;font-size:12px;margin-top:22px">DOODLY · Farm-fresh A2 milk, before 7:00 AM</p>
-    </div>`;
+  return T.notificationHtml(title, body);
 }
 
 type Prefs = { emailOptIn: boolean; smsOptIn: boolean; whatsappOptIn: boolean } | null;
@@ -202,35 +194,40 @@ export async function drainPending(limit = 200) {
 // (MSG91_SMS_TEMPLATES / MSG91_WHATSAPP_TEMPLATES) and the `vars` order must
 // match the registered DLT/WhatsApp template placeholders. See docs/MSG91-SETUP.md.
 
-/** Order placed → confirmation across in-app + opted channels. */
+/** Order placed → confirmation across in-app + opted channels. Email = branded template. */
 export function notifyOrderConfirmed(userId: string, o: { number: string }) {
+  const title = "Order confirmed 🎉";
+  const body = `Your DOODLY order ${o.number} is confirmed. Fresh A2 milk will reach you before 7:00 AM. Track it anytime in your dashboard.`;
   return notify(userId, {
-    title: "Order confirmed 🎉",
-    body: `Your DOODLY order ${o.number} is confirmed. Fresh A2 milk will reach you before 7:00 AM. Track it anytime in your dashboard.`,
+    title, body,
     email: true,
+    emailSubject: `Order ${o.number} confirmed 🎉`,
+    emailHtml: T.notificationHtml(title, body, { label: "Track Order", href: "/account/tracking.html" }, "✅"),
     sms: { template: "order_confirmed", vars: [o.number] },
     whatsapp: { template: "order_confirmed", vars: [o.number] },
   });
 }
 
-/** Executive marked the stop en route. */
+/** Executive marked the stop en route. Email = branded "Out for delivery" template. */
 export function notifyOutForDelivery(userId: string) {
+  const e = T.outForDelivery({});
   return notify(userId, {
     title: "Out for delivery 🚚",
     body: "Your DOODLY delivery is on the way and will reach you before 7:00 AM. Please keep your bottle crate ready.",
-    email: true,
+    email: true, emailSubject: e.subject, emailHtml: e.html,
     sms: { template: "out_for_delivery" },
     whatsapp: { template: "out_for_delivery" },
   });
 }
 
-/** Stop completed. */
+/** Stop completed. Email = branded "Delivered" template (bottle-return + rate CTA). */
 export function notifyDelivered(userId: string, d: { bottles?: number } = {}) {
   const b = d.bottles && d.bottles > 0 ? ` We collected ${d.bottles} empty bottle${d.bottles > 1 ? "s" : ""}.` : "";
+  const e = T.delivered({ bottles: d.bottles });
   return notify(userId, {
     title: "Delivered ✅",
     body: `Your DOODLY milk has been delivered.${b} Thank you for choosing farm-fresh A2. Rate today's delivery in the app.`,
-    email: true,
+    email: true, emailSubject: e.subject, emailHtml: e.html,
     sms: { template: "delivered" },
     whatsapp: { template: "delivered" },
   });

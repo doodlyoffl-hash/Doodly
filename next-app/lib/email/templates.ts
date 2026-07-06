@@ -9,6 +9,16 @@ export interface Email { subject: string; html: string; text: string }
 const url = (p: string) => (/^https?:/.test(p) ? p : SITE + p);
 const hi = (n?: string | null) => (n ? `Hi ${n.split(" ")[0]},` : "Hi there,");
 
+/* Generic branded notification email — used by notify()'s email path so EVERY
+   transactional notification email carries the DOODLY design, even without a
+   bespoke template. Renders the title as a hero headline + the body in a card. */
+export function notificationHtml(title: string, body: string, cta?: { label: string; href: string }, emoji = "🥛"): string {
+  return compose(title, [
+    hero({ emoji, title }),
+    card(`${para(esc(body))}${cta ? `<div style="text-align:center;margin-top:18px">${button(cta.label, url(cta.href))}</div>` : ""}`),
+  ]);
+}
+
 /* ---------- Welcome ---------- */
 export function welcome(name?: string | null): Email {
   const html = compose("Welcome to DOODLY — farm-fresh A2 buffalo milk, before 7 AM.", [
