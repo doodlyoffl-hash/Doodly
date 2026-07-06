@@ -25,6 +25,13 @@ export const C = {
 const FONT = "'Segoe UI',Helvetica,Arial,-apple-system,BlinkMacSystemFont,sans-serif";
 export const SITE = "https://www.doodly.in";
 export const LOGO = SITE + "/assets/img/logo.png"; // green "Doodly" wordmark + "Pure | Fresh | Honest"
+/* Real DOODLY social + contact (source of truth: assets/js/data.js). */
+export const SOCIAL = {
+  instagram: "https://www.instagram.com/doodlyoffl?igsh=MWVvZXk3a3JseXJqYw==",
+  facebook: "https://www.facebook.com/share/18ioyH5qRY/?mibextid=wwXIfr",
+  whatsapp: "https://wa.me/919429692738",
+};
+export const CONTACT = { email: "doodlyoffl@gmail.com", phone: "+91 91177 99143", phoneTel: "+919117799143", hours: "Mon–Sat, 8 AM – 8 PM" };
 
 export const esc = (s: unknown) =>
   String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
@@ -175,13 +182,17 @@ export function footer(): string {
   <tr><td class="px" style="padding:26px 34px 8px;text-align:center">
     <a href="${SITE}" style="text-decoration:none"><img src="${LOGO}" alt="DOODLY — Pure · Fresh · Honest" width="146" style="width:146px;max-width:146px;height:auto;border:0;display:inline-block" /></a>
     <div style="height:16px"></div>
-    <div>${["📷 Instagram", "👍 Facebook", "💬 WhatsApp"].map((s) => `<span style="font-size:13px;color:${C.muted};padding:0 10px">${s}</span>`).join("")}</div>
+    <div>${[["Instagram", "📷", SOCIAL.instagram], ["Facebook", "👍", SOCIAL.facebook], ["WhatsApp", "💬", SOCIAL.whatsapp]].map(
+      (s) => `<a href="${s[2]}" target="_blank" rel="noopener noreferrer" aria-label="DOODLY on ${s[0]}" style="font-size:13px;color:${C.muted};text-decoration:none;padding:0 10px">${s[1]}&nbsp;${s[0]}</a>`,
+    ).join("")}</div>
     <div style="height:14px"></div>
     <div style="line-height:1.9">${links.map((l) => link(l[0], l[1])).join(`<span style="color:#CBD6CF">·</span>`)}</div>
     <div style="height:14px"></div>
-    <div class="dk-mut" style="font-size:12px;color:${C.muted};line-height:1.7">
-      support@doodly.in &nbsp;·&nbsp; +91 91177 99143<br>
-      Delivered fresh, before 7:00 AM &nbsp;·&nbsp; Vijayawada
+    <div class="dk-mut" style="font-size:12px;color:${C.muted};line-height:1.8">
+      <a href="mailto:${CONTACT.email}" style="color:${C.muted};text-decoration:none">${CONTACT.email}</a> &nbsp;·&nbsp;
+      <a href="tel:${CONTACT.phoneTel}" style="color:${C.muted};text-decoration:none">${CONTACT.phone}</a> &nbsp;·&nbsp;
+      <a href="${SOCIAL.whatsapp}" target="_blank" rel="noopener noreferrer" style="color:${C.muted};text-decoration:none">WhatsApp</a><br>
+      ${CONTACT.hours} &nbsp;·&nbsp; Fresh delivery before 7:00 AM &nbsp;·&nbsp; Vijayawada
     </div>
     <div style="height:16px"></div>
     <div class="dk-mut" style="font-size:11px;color:#9AAAA1">
