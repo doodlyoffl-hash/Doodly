@@ -913,7 +913,7 @@
       '<div class="dac-card" role="dialog" aria-modal="true" aria-label="Add customer">' +
         '<div class="dac-hd"><h3>Add customer</h3><button class="dac-x" type="button" aria-label="Close">&times;</button></div>' +
         '<form class="dac-bd" autocomplete="off">' +
-          '<label class="dac-f"><span>Full name <i class="req">*</i></span><input class="input" id="dac-name" placeholder="e.g. Ananya Reddy"></label>' +
+          '<label class="dac-f"><span>Full name <i class="req">*</i></span><input class="input" id="dac-name" placeholder="e.g. Anil Sharma"></label>' +
           '<div class="dac-row">' +
             '<label class="dac-f"><span>Mobile</span><input class="input" id="dac-mobile" inputmode="numeric" placeholder="10-digit number"></label>' +
             '<label class="dac-f"><span>Email</span><input class="input" id="dac-email" type="email" placeholder="name@email.com"></label>' +
@@ -1936,8 +1936,8 @@
       '<div class="dac-card" role="dialog" aria-modal="true" aria-label="Add driver">' +
         '<div class="dac-hd"><h3>Add delivery executive</h3><button class="dac-x" type="button" aria-label="Close">&times;</button></div>' +
         '<form class="dac-bd" autocomplete="off">' +
-          '<label class="dac-f"><span>Full name <i class="req">*</i></span><input class="input" id="dad-name" placeholder="Ramesh Kumar"></label>' +
-          '<div class="dac-row"><label class="dac-f"><span>Email <i class="req">*</i></span><input class="input" id="dad-email" placeholder="driver@doodly.in"></label>' +
+          '<label class="dac-f"><span>Full name <i class="req">*</i></span><input class="input" id="dad-name" placeholder="e.g. Anil Sharma"></label>' +
+          '<div class="dac-row"><label class="dac-f"><span>Email <i class="req">*</i></span><input class="input" id="dad-email" placeholder="name@example.com"></label>' +
             '<label class="dac-f"><span>Mobile</span><input class="input" id="dad-phone" placeholder="+91…"></label></div>' +
           '<div class="dac-row"><label class="dac-f"><span>Employee ID</span><input class="input" id="dad-emp" placeholder="DRV-02"></label>' +
             '<label class="dac-f"><span>Vehicle no.</span><input class="input" id="dad-veh" placeholder="AP16 CD 1234"></label></div>' +

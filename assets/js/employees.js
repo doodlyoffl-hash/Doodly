@@ -147,7 +147,7 @@ window.DOODLY_HR = (function () {
   function fld(id, label, val, o) {
     o = o || {};
     var req = o.req ? ' <span style="color:#c0392b">*</span>' : "";
-    if (o.type === "select") return '<label class="dac-f"><span>' + label + req + '</span><select class="input" id="' + id + '">' + (o.options || []).map(function (op) { var v = op[0] !== undefined ? op[0] : op, t = op[1] !== undefined ? op[1] : op; return '<option value="' + esc(v) + '"' + (String(val) === String(v) ? " selected" : "") + ">" + esc(t) + "</option>"; }).join("") + "</select></label>";
+    if (o.type === "select") return '<label class="dac-f"><span>' + label + req + '</span><select class="input" id="' + id + '">' + (o.options || []).map(function (op) { var v = Array.isArray(op) ? op[0] : op, t = Array.isArray(op) ? (op[1] != null ? op[1] : op[0]) : op; return '<option value="' + esc(v) + '"' + (String(val) === String(v) ? " selected" : "") + ">" + esc(t) + "</option>"; }).join("") + "</select></label>";
     return '<label class="dac-f"><span>' + label + req + '</span><input class="input" id="' + id + '" type="' + (o.type || "text") + '" value="' + esc(val || "") + '" placeholder="' + esc(o.ph || "") + '"' + (o.maxlength ? ' maxlength="' + o.maxlength + '"' : "") + "></label>";
   }
   function openForm(emp, done, managers) {
