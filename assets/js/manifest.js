@@ -45,7 +45,7 @@ window.DOODLY_MANIFEST = (function () {
       { h:"Content", items:[["Blogs","/admin/blogs.html","edit"],["CMS","/admin/cms.html","clipboard"],["Brand Story","/admin/brand-story.html","edit"],["Help Center","/admin/help-center.html","help"],["Notifications","/admin/notifications.html","bell"]] },
       { h:"System", items:[["Support Tickets","/admin/support.html","msg"],["Chat Support","/admin/chat-support.html","msg"],["User Management","/admin/users.html","users"],["Roles & Permissions","/admin/roles.html","lock"],["Permissions","/admin/permissions.html","lock"],["Audit Logs","/admin/audit-logs.html","eye"],["GST Management","/admin/gst.html","percent"],["Settings","/admin/settings.html","settings"]] },
       { h:"People", items:[["Careers","/admin/careers.html","users"]] },
-      { h:"Human Resources", items:[["HR Dashboard","/admin/hr-dashboard.html","chart"],["Employees","/admin/employees.html","users"],["Attendance","/admin/attendance.html","check"],["Leave","/admin/leave.html","calendar"]] },
+      { h:"Human Resources", items:[["HR Dashboard","/admin/hr-dashboard.html","chart"],["Employees","/admin/employees.html","users"],["Attendance","/admin/attendance.html","check"],["Leave","/admin/leave.html","calendar"],["Salary Advances","/admin/advances.html","coins"],["Payroll","/admin/payroll.html","receipt"]] },
     ],
     driver: [
       { h:"Today", items:[["Dashboard","/driver/dashboard.html","home"],["Today's Route","/driver/route.html","route"],["Deliveries","/driver/deliveries.html","truck"]] },
@@ -516,6 +516,8 @@ window.DOODLY_MANIFEST = (function () {
     "admin/employees": { surface:"admin", title:"Employees", blocks:[ head("Employee Master","Manage staff records, employment details and identity documents."), { type:"hrEmployees" } ]},
     "admin/attendance": { surface:"admin", title:"Attendance", blocks:[ head("Attendance","Daily register, corrections, bulk marking and monthly calendar."), { type:"hrAttendance" } ]},
     "admin/leave": { surface:"admin", title:"Leave", blocks:[ head("Leave Management","Apply, approve and track staff leave and balances."), { type:"hrLeave" } ]},
+    "admin/advances": { surface:"admin", title:"Salary Advances", blocks:[ head("Salary Advances","Request, approve and recover staff salary advances."), { type:"hrAdvances" } ]},
+    "admin/payroll": { surface:"admin", title:"Payroll", blocks:[ head("Payroll","Generate monthly payroll, salary slips and bank transfer reports."), { type:"hrPayroll" } ]},
     "admin/permissions": { surface:"admin", title:"Permissions", blocks:[ head("Permissions","Fine-grained, per-module access for every role. Changes apply instantly."), { type:"permissionMatrix" } ]},
     "admin/settings": { surface:"admin", title:"Settings", blocks:[ head("Settings","Platform configuration — general, notifications and security. Saved to the DOODLY database and applied where used. Super Admin edits; others view."), { type:"settingsBoard" } ]},
     "admin/careers": { surface:"admin", title:"Careers", blocks:[ head("Careers — Applications","Every job application submitted from the website — review, rate, move through the hiring pipeline and download resumes.",[{label:"Export",kind:"btn-ghost",icon:"download"}]), { type:"careersBoard" } ]},

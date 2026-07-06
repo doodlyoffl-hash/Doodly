@@ -29,6 +29,16 @@ window.DOODLY_HR = (function () {
   var leaveStatusBadge = function (s) { var c = s === "APPROVED" ? "green" : (s === "REJECTED" || s === "CANCELLED") ? "red" : s === "MANAGER_APPROVED" ? "blue" : "amber"; return '<span class="badge ' + c + '">' + (LEAVE_STATUS.filter(function (x) { return x[0] === s; })[0] || [s, s])[1] + "</span>"; };
   var canA = function (a) { try { return !window.DOODLY_RBAC || DOODLY_RBAC.can("attendance", a); } catch (e) { return true; } };
   var canL = function (a) { try { return !window.DOODLY_RBAC || DOODLY_RBAC.can("leave", a); } catch (e) { return true; } };
+  var canP = function (a) { try { return !window.DOODLY_RBAC || DOODLY_RBAC.can("payroll", a); } catch (e) { return true; } };
+  var toPaise = function (v) { return Math.round((parseFloat(v) || 0) * 100); };
+  var rup = function (p) { return "₹" + (Math.round(Number(p) || 0) / 100).toLocaleString("en-IN"); };
+  var ADV_STATUS = [["PENDING", "Pending"], ["APPROVED", "Approved"], ["REJECTED", "Rejected"], ["COMPLETED", "Completed"]];
+  var advBadge = function (s) { var c = s === "APPROVED" ? "blue" : s === "COMPLETED" ? "green" : s === "REJECTED" ? "red" : "amber"; return '<span class="badge ' + c + '">' + (ADV_STATUS.filter(function (x) { return x[0] === s; })[0] || [s, s])[1] + "</span>"; };
+  var PS_STATUS = { DRAFT: ["amber", "Draft"], FINALIZED: ["blue", "Finalized"], PAID: ["green", "Paid"] };
+  var psBadge = function (s) { var m = PS_STATUS[s] || ["grey", s]; return '<span class="badge ' + m[0] + '">' + m[1] + "</span>"; };
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  var monthLabel = function (ym) { var p = ym.split("-"); return MONTHS[Number(p[1]) - 1] + " " + p[0]; };
+  var thisMonth = function () { var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
 
   /* ---------------- Employee board ---------------- */
   function mount(host) {
@@ -147,11 +157,13 @@ window.DOODLY_HR = (function () {
         '<p class="exp-block-h" style="margin-top:14px">Identity & bank ' + (e.piiVisible ? "" : '<span class="muted-sm">(masked)</span>') + '</p><div class="deflist">' + row("Aadhaar", id2.aadhaar) + row("PAN", id2.pan) + row("Driving licence", id2.drivingLicence) + row("Bank account", id2.bankAccount) + row("IFSC", id2.ifsc) + row("Bank", id2.bankName) + row("UPI", id2.upiId) + "</div>" +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">' +
           (can("edit") ? '<button class="btn btn-primary sm" id="d-edit">Edit</button>' : "") +
+          (canP("edit") ? '<button class="btn btn-ghost sm" id="d-salary">Salary structure</button>' : "") +
           (can("edit") ? '<button class="btn btn-ghost sm" id="d-leave">Mark on leave</button><button class="btn btn-ghost sm" id="d-active">Mark active</button>' : "") +
           (can("delete") ? '<button class="btn btn-ghost sm" id="d-del" style="color:#b3261e">Remove</button>' : "") +
         "</div></div>";
       var q = function (s) { return m.ov.querySelector(s); };
       if (q("#d-edit")) q("#d-edit").addEventListener("click", function () { m.close(); openForm(e, done); });
+      if (q("#d-salary")) q("#d-salary").addEventListener("click", function () { m.close(); openStructure(e.id, e.employeeCode); });
       if (q("#d-leave")) q("#d-leave").addEventListener("click", function () { setStatus(e.id, "ON_LEAVE", m, done); });
       if (q("#d-active")) q("#d-active").addEventListener("click", function () { setStatus(e.id, "ACTIVE", m, done); });
       if (q("#d-del")) q("#d-del").addEventListener("click", function () { if (confirm("Remove " + e.name + "? Their staff account is disabled.")) API().del("/api/admin/employees/" + e.id).then(function () { toast("Employee removed"); m.close(); if (done) done(); }).catch(function (er) { toast((er && er.message) || "Couldn't remove."); }); });
@@ -200,7 +212,11 @@ window.DOODLY_HR = (function () {
       ".hr-dhead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}" +
       ".att-sel{padding:6px 8px;font-size:.85rem}" +
       ".cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.cal-cell{aspect-ratio:1;border:1px solid #eee;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.75rem;background:#fafdfa;color:#33413a}.cal-cell span{font-weight:700}.cal-cell small{font-size:.62rem;opacity:.85}" +
-      ".cal-cell.s-PRESENT,.cal-cell.s-WFH{background:#e8f6ec;border-color:#bfe6cb}.cal-cell.s-ABSENT{background:#fdece9;border-color:#f3c6bd}.cal-cell.s-PAID_LEAVE,.cal-cell.s-SICK_LEAVE{background:#fff5e0;border-color:#f0dca8}.cal-cell.s-WEEKLY_OFF,.cal-cell.s-HOLIDAY{background:#eef2f7;border-color:#d6dde6}.cal-cell.s-HALF_DAY{background:#eaf3ff;border-color:#c4dbf5}";
+      ".cal-cell.s-PRESENT,.cal-cell.s-WFH{background:#e8f6ec;border-color:#bfe6cb}.cal-cell.s-ABSENT{background:#fdece9;border-color:#f3c6bd}.cal-cell.s-PAID_LEAVE,.cal-cell.s-SICK_LEAVE{background:#fff5e0;border-color:#f0dca8}.cal-cell.s-WEEKLY_OFF,.cal-cell.s-HOLIDAY{background:#eef2f7;border-color:#d6dde6}.cal-cell.s-HALF_DAY{background:#eaf3ff;border-color:#c4dbf5}" +
+      ".slip-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:560px){.slip-cols{grid-template-columns:1fr}}" +
+      ".exp-block-h{font-family:'Fraunces',serif;color:var(--forest,#0f3d2e);font-size:.95rem;font-weight:600;margin:0 0 8px}" +
+      ".deflist{border:1px solid #eee;border-radius:10px;overflow:hidden}.deflist .row{display:flex;justify-content:space-between;padding:8px 12px;font-size:.88rem;border-bottom:1px solid #f2f2f2}.deflist .row:last-child{border-bottom:none}.deflist .k{color:#54635b}.deflist .v{font-weight:700;color:#1f2d26}" +
+      ".slip-net{margin-top:14px;background:#e8f6ec;border:1px solid #bfe6cb;border-radius:12px;padding:14px 16px;text-align:right;font-size:1.05rem;color:#14432e}.slip-net b{font-family:'Fraunces',serif;font-size:1.35rem;margin-left:8px}";
     document.head.appendChild(s);
   }
 
@@ -305,5 +321,142 @@ window.DOODLY_HR = (function () {
     load();
   }
 
-  return { mount: mount, mountDashboard: mountDashboard, mountAttendance: mountAttendance, mountLeave: mountLeave };
+  /* ---------------- Salary structure ---------------- */
+  function openStructure(employeeId, code) {
+    var m = modal("Salary structure — " + esc(code || ""), '<div class="panel panel-pad"><div class="sk-line skeleton"></div></div>');
+    API().get("/api/admin/salary?view=structure&employeeId=" + employeeId).then(function (r) {
+      var s = r.structure || {};
+      var f = function (id, label, v) { return '<label class="dac-f"><span>' + label + ' (₹)</span><input class="input" id="' + id + '" type="number" min="0" step="1" value="' + (v != null ? Math.round(v / 100) : "") + '"></label>'; };
+      m.ov.querySelector(".dac-body").innerHTML = '<div class="hr-form">' +
+        '<div class="na-sec">Earnings (monthly)</div><div class="dac-row">' + f("s-basic", "Basic", s.basicPaise) + f("s-hra", "HRA", s.hraPaise) + "</div>" +
+        '<div class="dac-row">' + f("s-conv", "Conveyance", s.conveyancePaise) + f("s-spec", "Special allowance", s.specialPaise) + "</div>" + f("s-other", "Other earnings", s.otherEarnPaise) +
+        '<div class="na-sec">Deductions</div><div class="dac-row">' + f("s-pt", "Professional tax", s.ptPaise) + f("s-od", "Other deductions", s.otherDeductPaise) + "</div>" +
+        '<div class="notice" id="s-preview" style="margin-top:12px"></div><div id="s-err" style="display:none;color:#b3261e;font-size:.85rem;font-weight:600;margin:6px 0"></div>' +
+        (canP("edit") ? '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px"><button class="btn btn-ghost sm" id="s-cancel">Close</button><button class="btn btn-primary sm" id="s-save">Save structure</button></div>' : '<p class="muted-sm">View only.</p>') + "</div>";
+      var q = function (x) { return m.ov.querySelector(x); }, g = function (x) { return toPaise(q(x).value); };
+      function preview() { var gross = g("#s-basic") + g("#s-hra") + g("#s-conv") + g("#s-spec") + g("#s-other"), ded = g("#s-pt") + g("#s-od"); q("#s-preview").innerHTML = "Gross <b>" + rup(gross) + "</b> · fixed deductions <b>" + rup(ded) + "</b> · take-home before attendance & advances <b>" + rup(gross - ded) + "</b>"; }
+      ["#s-basic", "#s-hra", "#s-conv", "#s-spec", "#s-other", "#s-pt", "#s-od"].forEach(function (x) { if (q(x)) q(x).addEventListener("input", preview); });
+      preview();
+      if (q("#s-cancel")) q("#s-cancel").addEventListener("click", m.close);
+      if (q("#s-save")) q("#s-save").addEventListener("click", function () {
+        var err = q("#s-err"); err.style.display = "none";
+        if (g("#s-basic") <= 0) { err.style.display = "block"; err.textContent = "Basic salary is required."; return; }
+        this.disabled = true;
+        API().post("/api/admin/salary", { action: "structure", employeeId: employeeId, basicPaise: g("#s-basic"), hraPaise: g("#s-hra"), conveyancePaise: g("#s-conv"), specialPaise: g("#s-spec"), otherEarnPaise: g("#s-other"), ptPaise: g("#s-pt"), otherDeductPaise: g("#s-od") })
+          .then(function () { toast("Salary structure saved ✓"); m.close(); }).catch(function (e) { err.style.display = "block"; err.textContent = (e && e.message) || "Couldn't save."; q("#s-save").disabled = false; });
+      });
+    }).catch(function (e) { m.ov.querySelector(".dac-body").innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load.") + "</div>"; });
+  }
+
+  /* ---------------- Salary advances ---------------- */
+  function mountAdvances(host) {
+    if (!host) return; hrStyles();
+    var st = { status: "", q: "", data: null };
+    function load() {
+      var qs = "?view=advances" + (st.status ? "&status=" + st.status : "") + (st.q ? "&q=" + encodeURIComponent(st.q) : "");
+      host.querySelector("#avBody").innerHTML = '<div class="panel panel-pad"><div class="sk-line skeleton"></div></div>';
+      API().get("/api/admin/salary" + qs).then(function (r) { st.data = r; render(); }).catch(function (e) { host.querySelector("#avBody").innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load advances.") + "</div>"; });
+    }
+    host.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px"><select class="input" id="avStatus" style="max-width:160px"><option value="">All status</option>' + ADV_STATUS.map(function (s) { return '<option value="' + s[0] + '">' + s[1] + "</option>"; }).join("") + '</select><input class="input" id="avQ" placeholder="Search code / employee…" style="flex:1;min-width:160px">' + (canP("edit") ? '<button class="btn btn-primary sm" id="avNew">' + icon("plus", 14) + " New advance</button>" : "") + '</div><div id="avCounts"></div><div id="avBody" style="margin-top:12px"></div>';
+    host.querySelector("#avStatus").addEventListener("change", function () { st.status = this.value; load(); });
+    host.querySelector("#avQ").addEventListener("input", function () { st.q = this.value; clearTimeout(st._t); st._t = setTimeout(load, 350); });
+    var nw = host.querySelector("#avNew"); if (nw) nw.addEventListener("click", function () { openNewAdvance(load); });
+    function render() {
+      var d = st.data;
+      host.querySelector("#avCounts").innerHTML = '<div class="hr-kpis">' + kpi("Pending", d.stats.pending, "amber") + kpi("Outstanding", rup(d.stats.outstandingPaise)) + "</div>";
+      var rows = (d.rows || []).map(function (a) {
+        var canDecide = canP("edit") && a.status === "PENDING";
+        return "<tr><td><b>" + esc(a.code) + "</b></td><td>" + esc(a.name) + '<div class="muted-sm">' + esc(a.employeeCode + " · " + a.department) + "</div></td><td>" + rup(a.amountPaise) + "</td><td>" + a.installments + " × " + rup(a.installmentPaise) + "</td><td>" + rup(a.remainingPaise) + "</td><td>" + advBadge(a.status) + "</td><td>" + (canDecide ? '<button class="btn btn-primary sm av-ok" data-id="' + a.id + '">Approve</button> <button class="btn btn-ghost sm av-no" data-id="' + a.id + '" style="color:#b3261e">Reject</button>' : (a.reason ? '<span class="muted-sm">' + esc(a.reason) + "</span>" : "")) + "</td></tr>";
+      }).join("");
+      host.querySelector("#avBody").innerHTML = '<div class="panel"><div class="panel-pad" style="padding-top:0"><div class="table-wrap"><table class="tbl"><thead><tr><th>Code</th><th>Employee</th><th>Amount</th><th>Recovery</th><th>Remaining</th><th>Status</th><th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="7" class="muted-sm" style="padding:16px">No advances.</td></tr>') + "</tbody></table></div></div></div>";
+      host.querySelectorAll(".av-ok").forEach(function (b) { b.addEventListener("click", function () { decide(b.dataset.id, "approve"); }); });
+      host.querySelectorAll(".av-no").forEach(function (b) { b.addEventListener("click", function () { var w = prompt("Reason for rejection:"); if (w === null) return; decide(b.dataset.id, "reject", w); }); });
+    }
+    function decide(id, decision, reason) { API().post("/api/admin/salary", { action: "decide", id: id, decision: decision, reason: reason || undefined }).then(function () { toast(decision === "approve" ? "Advance approved ✓" : "Advance rejected"); load(); }).catch(function (e) { toast((e && e.message) || "Couldn't update."); }); }
+    function openNewAdvance(done) {
+      API().get("/api/admin/employees?pageSize=500").then(function (r) {
+        var opts = (r.items || []).map(function (e) { return '<option value="' + e.id + '">' + esc(e.employeeCode + " · " + e.name) + "</option>"; }).join("");
+        var body = '<div class="hr-form"><label class="dac-f"><span>Employee <span style="color:#c0392b">*</span></span><select class="input" id="avEmp">' + opts + "</select></label>" +
+          '<div class="dac-row"><label class="dac-f"><span>Amount (₹) <span style="color:#c0392b">*</span></span><input class="input" type="number" id="avAmt" min="1"></label><label class="dac-f"><span>Recover over (installments)</span><input class="input" type="number" id="avInst" min="1" max="24" value="1"></label></div>' +
+          '<label class="dac-f"><span>Reason</span><textarea class="input" id="avReason" rows="2" maxlength="500"></textarea></label><div id="avErr" style="display:none;color:#b3261e;font-size:.85rem;font-weight:600;margin:6px 0"></div>' +
+          '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px"><button class="btn btn-ghost sm" id="avCancel">Cancel</button><button class="btn btn-primary sm" id="avSave">Submit advance</button></div></div>';
+        var m = modal("New salary advance", body), q = function (s) { return m.ov.querySelector(s); };
+        q("#avCancel").addEventListener("click", m.close);
+        q("#avSave").addEventListener("click", function () {
+          var err = q("#avErr"); err.style.display = "none";
+          var amt = toPaise(q("#avAmt").value); if (!q("#avEmp").value || amt <= 0) { err.style.display = "block"; err.textContent = "Employee and a valid amount are required."; return; }
+          this.disabled = true;
+          API().post("/api/admin/salary", { action: "advance", employeeId: q("#avEmp").value, amountPaise: amt, installments: parseInt(q("#avInst").value) || 1, reason: q("#avReason").value || undefined })
+            .then(function () { toast("Advance created ✓"); m.close(); if (done) done(); }).catch(function (e) { err.style.display = "block"; err.textContent = (e && e.message) || "Couldn't create."; q("#avSave").disabled = false; });
+        });
+      }).catch(function () { toast("Couldn't load employees."); });
+    }
+    load();
+  }
+
+  /* ---------------- Payroll ---------------- */
+  function mountPayroll(host) {
+    if (!host) return; hrStyles();
+    var st = { month: thisMonth(), status: "", q: "", data: null };
+    function load() {
+      var qs = "?view=list&month=" + st.month + (st.status ? "&status=" + st.status : "") + (st.q ? "&q=" + encodeURIComponent(st.q) : "");
+      host.querySelector("#pyBody").innerHTML = '<div class="panel panel-pad"><div class="sk-line skeleton"></div></div>';
+      API().get("/api/admin/payroll" + qs).then(function (r) { st.data = r; render(); }).catch(function (e) { host.querySelector("#pyBody").innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load payroll.") + "</div>"; });
+    }
+    host.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px"><label class="dac-f" style="margin:0"><span>Month</span><input class="input" type="month" id="pyMonth" value="' + st.month + '"></label><select class="input" id="pyStatus" style="max-width:150px"><option value="">All status</option><option value="DRAFT">Draft</option><option value="FINALIZED">Finalized</option><option value="PAID">Paid</option></select><input class="input" id="pyQ" placeholder="Search employee…" style="flex:1;min-width:150px">' + (canP("edit") ? '<button class="btn btn-primary sm" id="pyGen">Generate payroll</button>' : "") + '<button class="btn btn-ghost sm" id="pyBank">Bank report</button></div><div id="pyCounts"></div><div id="pyBody" style="margin-top:12px"></div>';
+    host.querySelector("#pyMonth").addEventListener("change", function () { st.month = this.value; load(); });
+    host.querySelector("#pyStatus").addEventListener("change", function () { st.status = this.value; load(); });
+    host.querySelector("#pyQ").addEventListener("input", function () { st.q = this.value; clearTimeout(st._t); st._t = setTimeout(load, 350); });
+    var gen = host.querySelector("#pyGen"); if (gen) gen.addEventListener("click", function () { if (!confirm("Generate payroll for all active employees for " + monthLabel(st.month) + "? Existing drafts are recalculated.")) return; var b = this; b.disabled = true; API().post("/api/admin/payroll", { action: "generate", month: st.month }).then(function (r) { toast("Generated " + r.generated + " payslip(s)" + (r.skipped ? ", " + r.skipped + " skipped (no salary structure)" : "")); b.disabled = false; load(); }).catch(function (e) { b.disabled = false; toast((e && e.message) || "Couldn't generate."); }); });
+    host.querySelector("#pyBank").addEventListener("click", function () { openBank(st.month); });
+    function render() {
+      var d = st.data, s = d.stats;
+      host.querySelector("#pyCounts").innerHTML = '<div class="hr-kpis">' + kpi("Payslips", s.count) + kpi("Gross", rup(s.grossPaise)) + kpi("Deductions", rup(s.deductionsPaise), "amber") + kpi("Net payable", rup(s.netPaise), "green") + "</div>";
+      var rows = (d.rows || []).map(function (p) {
+        var acts = '<button class="btn btn-ghost sm py-view" data-id="' + p.id + '">Slip</button>';
+        if (canP("edit")) { if (p.status === "DRAFT") acts += ' <button class="btn btn-ghost sm py-fin" data-id="' + p.id + '">Finalize</button>'; if (p.status === "FINALIZED") acts += ' <button class="btn btn-primary sm py-pay" data-id="' + p.id + '">Mark paid</button>'; }
+        return "<tr><td><b>" + esc(p.code) + "</b></td><td>" + esc(p.name) + '<div class="muted-sm">' + esc(p.employeeCode + " · " + p.department) + "</div></td><td>" + rup(p.grossPaise) + "</td><td>" + rup(p.deductionsPaise) + "</td><td><b>" + rup(p.netPaise) + "</b></td><td>" + psBadge(p.status) + "</td><td>" + acts + "</td></tr>";
+      }).join("");
+      host.querySelector("#pyBody").innerHTML = '<div class="panel"><div class="panel-pad" style="padding-top:0"><div class="table-wrap"><table class="tbl"><thead><tr><th>Slip</th><th>Employee</th><th>Gross</th><th>Deductions</th><th>Net</th><th>Status</th><th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="7" class="muted-sm" style="padding:16px">No payslips for ' + monthLabel(st.month) + ' — click “Generate payroll”.</td></tr>') + "</tbody></table></div></div></div>";
+      host.querySelectorAll(".py-view").forEach(function (b) { b.addEventListener("click", function () { openSlip(b.dataset.id); }); });
+      host.querySelectorAll(".py-fin").forEach(function (b) { b.addEventListener("click", function () { act(b.dataset.id, "finalize"); }); });
+      host.querySelectorAll(".py-pay").forEach(function (b) { b.addEventListener("click", function () { if (confirm("Mark this salary as paid? This records the advance recovery and notifies the employee.")) act(b.dataset.id, "pay"); }); });
+    }
+    function act(id, action) { API().post("/api/admin/payroll", { action: action, id: id }).then(function () { toast(action === "pay" ? "Marked paid ✓ — employee notified" : "Finalized ✓"); load(); }).catch(function (e) { toast((e && e.message) || "Couldn't update."); }); }
+    function openSlip(id) {
+      var m = modal("Salary slip", '<div class="panel panel-pad"><div class="sk-line skeleton"></div></div>');
+      API().get("/api/admin/payroll?view=detail&id=" + id).then(function (r) { var d = r.payslip; m.ov.querySelector(".dac-body").innerHTML = slipHtml(d) + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="btn btn-ghost sm" id="slClose">Close</button><button class="btn btn-primary sm" id="slPrint">Print / PDF</button></div>'; m.ov.querySelector("#slClose").addEventListener("click", m.close); m.ov.querySelector("#slPrint").addEventListener("click", function () { printSlip(d); }); }).catch(function (e) { m.ov.querySelector(".dac-body").innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load.") + "</div>"; });
+    }
+    function openBank(month) {
+      var m = modal("Bank transfer report — " + monthLabel(month), '<div class="panel panel-pad"><div class="sk-line skeleton"></div></div>');
+      API().get("/api/admin/payroll?view=bank&month=" + month).then(function (r) {
+        var rows = (r.rows || []).map(function (x) { return "<tr><td>" + esc(x.employeeCode) + "</td><td>" + esc(x.name) + "</td><td>" + esc(x.bank || "—") + "</td><td>" + esc(x.account || "—") + "</td><td>" + esc(x.ifsc || "—") + "</td><td><b>" + rup(x.netPaise) + "</b></td></tr>"; }).join("");
+        m.ov.querySelector(".dac-body").innerHTML = '<p class="muted-sm">Finalized + paid payslips only.</p><div class="table-wrap"><table class="tbl"><thead><tr><th>Code</th><th>Name</th><th>Bank</th><th>Account</th><th>IFSC</th><th>Net</th></tr></thead><tbody>' + (rows || '<tr><td colspan="6" class="muted-sm" style="padding:16px">No finalized payslips.</td></tr>') + '</tbody><tfoot><tr><td colspan="5" style="text-align:right"><b>Total</b></td><td><b>' + rup(r.total) + "</b></td></tr></tfoot></table></div>";
+      }).catch(function (e) { m.ov.querySelector(".dac-body").innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load.") + "</div>"; });
+    }
+    load();
+  }
+  function slipHtml(d) {
+    var e = d.earnings, ded = d.deductions, row = function (l, v) { return '<div class="row"><span class="k">' + l + '</span><span class="v">' + rup(v) + "</span></div>"; };
+    var er = row("Basic", e.basicPaise) + (e.hraPaise ? row("HRA", e.hraPaise) : "") + (e.conveyancePaise ? row("Conveyance", e.conveyancePaise) : "") + (e.specialPaise ? row("Special allowance", e.specialPaise) : "") + (e.overtimePaise ? row("Overtime", e.overtimePaise) : "") + (e.bonusPaise ? row("Bonus", e.bonusPaise) : "") + (e.incentivePaise ? row("Incentive", e.incentivePaise) : "") + (e.otherEarnPaise ? row("Other", e.otherEarnPaise) : "");
+    var dr = (ded.advanceRecoverPaise ? row("Advance recovery", ded.advanceRecoverPaise) : "") + (ded.ptPaise ? row("Professional tax", ded.ptPaise) : "") + (ded.otherDeductPaise ? row("Other deductions", ded.otherDeductPaise) : "") || '<div class="row"><span class="k">—</span><span class="v">₹0</span></div>';
+    return '<div class="hr-dhead"><div><b>' + esc(d.employee.name || "") + "</b> · " + esc(d.employee.code) + '<div class="muted-sm">' + esc(d.employee.designation + " — " + d.employee.department) + '</div></div><div style="text-align:right">' + psBadge(d.status) + '<div class="muted-sm">' + monthLabel(d.month) + "</div></div></div>" +
+      '<div class="muted-sm" style="margin:6px 0 12px">Payable days ' + (Math.round((d.attendance.workingDays - d.attendance.absentDays) * 10) / 10) + " of " + d.attendance.workingDays + " · OT " + Math.round(d.attendance.overtimeMins / 60 * 10) / 10 + 'h</div><div class="slip-cols">' +
+      '<div><p class="exp-block-h">Earnings</p><div class="deflist">' + er + '<div class="row" style="font-weight:800;border-top:1px solid #eee"><span class="k">Gross</span><span class="v">' + rup(d.grossPaise) + '</span></div></div></div><div><p class="exp-block-h">Deductions</p><div class="deflist">' + dr + '<div class="row" style="font-weight:800;border-top:1px solid #eee"><span class="k">Total</span><span class="v">' + rup(d.deductionsPaise) + "</span></div></div></div></div>" +
+      '<div class="slip-net">Net pay <b>' + rup(d.netPaise) + "</b></div>";
+  }
+  function printSlip(d) {
+    var w = window.open("", "_blank"); if (!w) { toast("Allow pop-ups to print the slip"); return; }
+    var e = d.earnings, ded = d.deductions;
+    var earn = [["Basic", e.basicPaise], ["HRA", e.hraPaise], ["Conveyance", e.conveyancePaise], ["Special", e.specialPaise], ["Overtime", e.overtimePaise], ["Bonus", e.bonusPaise], ["Incentive", e.incentivePaise], ["Other", e.otherEarnPaise]].filter(function (x) { return x[1]; });
+    var dd = [["Advance recovery", ded.advanceRecoverPaise], ["Professional tax", ded.ptPaise], ["Other", ded.otherDeductPaise]].filter(function (x) { return x[1]; });
+    var n = Math.max(earn.length, dd.length), tr = "";
+    for (var i = 0; i < n; i++) tr += "<tr><td>" + (earn[i] ? earn[i][0] : "") + "</td><td>" + (earn[i] ? rup(earn[i][1]) : "") + "</td><td>" + (dd[i] ? dd[i][0] : "") + "</td><td>" + (dd[i] ? rup(dd[i][1]) : "") + "</td></tr>";
+    tr += '<tr class="tot"><td>Gross</td><td>' + rup(d.grossPaise) + "</td><td>Total</td><td>" + rup(d.deductionsPaise) + "</td></tr>";
+    w.document.write('<html><head><title>Payslip ' + esc(d.code) + '</title><style>body{font-family:system-ui,Arial;padding:28px;color:#16241c}h1{font-size:1.3rem;margin:0}.hd{display:flex;justify-content:space-between;border-bottom:2px solid #0f3d2e;padding-bottom:10px;margin-bottom:14px}table{width:100%;border-collapse:collapse;margin-bottom:14px}td{padding:6px 8px;border-bottom:1px solid #eee}th{text-align:left;padding:6px 8px;background:#e8f6ec}.tot td{font-weight:800;background:#f6faf6}.net{font-size:1.2rem;font-weight:800;text-align:right;background:#e8f6ec;padding:12px;border-radius:8px}</style></head><body><div class="hd"><div><h1>DOODLY — Salary Slip</h1><div>' + monthLabel(d.month) + " · " + esc(d.code) + '</div></div><div style="text-align:right"><b>' + esc(d.employee.name || "") + "</b><br>" + esc(d.employee.code) + "<br>" + esc(d.employee.designation) + "</div></div>" +
+      "<table><thead><tr><th>Earnings</th><th></th><th>Deductions</th><th></th></tr></thead><tbody>" + tr + '</tbody></table><div class="net">Net Pay: ' + rup(d.netPaise) + '</div><p style="margin-top:20px;font-size:.78rem;color:#888">Computer-generated payslip — no signature required.</p></body></html>');
+    w.document.close(); setTimeout(function () { w.print(); }, 300);
+  }
+
+  return { mount: mount, mountDashboard: mountDashboard, mountAttendance: mountAttendance, mountLeave: mountLeave, mountAdvances: mountAdvances, mountPayroll: mountPayroll };
 })();

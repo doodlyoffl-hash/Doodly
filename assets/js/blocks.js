@@ -1131,6 +1131,8 @@ window.DOODLY_BLOCKS = (function () {
   R.hrEmployees = () => `<div class="reveal" id="hrEmployeesMount"></div>`;
   R.hrAttendance = () => `<div class="reveal" id="hrAttendanceMount"></div>`;
   R.hrLeave = () => `<div class="reveal" id="hrLeaveMount"></div>`;
+  R.hrAdvances = () => `<div class="reveal" id="hrAdvancesMount"></div>`;
+  R.hrPayroll = () => `<div class="reveal" id="hrPayrollMount"></div>`;
   R.deliveryAnalytics = () => {
     const zones = (D().deliveryZones || []);
     const k = [["Today's deliveries","248"],["Completed","204"],["Pending","38"],["Delayed","6"],["Avg delivery time","11 min"],["Bottle collection","94%"],["Customer rating","4.8★"],["Distance covered","612 km"]]
