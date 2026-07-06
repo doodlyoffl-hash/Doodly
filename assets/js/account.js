@@ -586,37 +586,39 @@ window.DOODLY_ACCOUNT = (function () {
       }
     }
 
-    // live delivery map — destination on a real Google map (SVG fallback with no
-    // key; only once the address has a dropped pin) PLUS, while the delivery is
-    // en route, the executive's live GPS marker moving toward you.
+    // live delivery map — destination (from the geocoded delivery address) drawn
+    // instantly, PLUS the executive's live GPS marker moving toward you while the
+    // delivery is en route. Works keyless (SVG map); upgrades to real tiles when a
+    // Google Maps key is configured. Everything comes from /api/account/tracking.
     var mapCard = document.querySelector(".content .media-card");
     if (mapCard && window.DOODLY_MAPS && DOODLY_MAPS.trackMap) {
-      API().get("/api/addresses").then(function (r) {
-        var list = (r && r.addresses) || [];
-        var a = list.filter(function (x) { return x.lat != null && x.lng != null; }).sort(function (x, y) { return (y.isDefault ? 1 : 0) - (x.isDefault ? 1 : 0); })[0];
-        if (!a) return;   // no geocoded address yet → keep the placeholder
-        mapCard.style.padding = "0"; mapCard.style.minHeight = "220px"; mapCard.innerHTML = '<div id="trkMap" style="width:100%;height:220px;border-radius:14px;overflow:hidden"></div>';
-        var trkHost = document.getElementById("trkMap");
-        var dest = { lat: a.lat, lng: a.lng, label: a.label || "Delivery address" };
-        DOODLY_MAPS.trackMap(trkHost, { dest: dest });   // destination first (instant)
-
-        // Poll the executive's live position while the delivery is still active today.
-        if (missed || st === "DELIVERED") return;
-        var _trk = null;
-        function stop() { if (_trk) { clearInterval(_trk); _trk = null; } }
-        function ago(ts) { if (!ts) return ""; var s = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 1000)); return s < 60 ? "updated " + s + "s ago" : "updated " + Math.round(s / 60) + "m ago"; }
-        function poll() {
-          if (!document.body.contains(trkHost)) { stop(); return; }   // left the page → stop
-          API().get("/api/account/tracking").then(function (res) {
-            var t = res || {};
-            if (t.enRoute && t.driver) {
-              DOODLY_MAPS.trackMap(trkHost, { dest: dest, driver: { lat: t.driver.lat, lng: t.driver.lng }, driverLabel: (t.driver.name || "Your delivery") + " is on the way", updatedText: ago(t.driver.lastSeenAt) });
-            }
-            if (!t.active || t.status === "DELIVERED") stop();   // finished for today → stop
-          }).catch(function () {});
-        }
-        poll(); _trk = setInterval(poll, 20000);
-      }).catch(function () {});
+      var _trk = null;
+      var stopTrk = function () { if (_trk) { clearInterval(_trk); _trk = null; } };
+      var ago = function (ts) { if (!ts) return ""; var s = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 1000)); return s < 60 ? "updated " + s + "s ago" : "updated " + Math.round(s / 60) + "m ago"; };
+      var ensureHost = function () {
+        var h = document.getElementById("trkMap");
+        if (!h) { mapCard.style.padding = "0"; mapCard.style.minHeight = "220px"; mapCard.innerHTML = '<div id="trkMap" style="width:100%;height:220px;border-radius:14px;overflow:hidden"></div>'; h = document.getElementById("trkMap"); }
+        return h;
+      };
+      var renderMap = function (t) {
+        var dst = t && t.dest && t.dest.lat != null ? t.dest : null;
+        var drv = t && t.enRoute && t.driver && t.driver.lat != null && t.driver.lng != null ? t.driver : null;
+        if (!dst && !drv) return false;                       // nothing locatable yet → keep the placeholder
+        var host = ensureHost();
+        var opts = { dest: dst ? { lat: dst.lat, lng: dst.lng, label: dst.label || "Delivery address" } : { lat: drv.lat, lng: drv.lng, label: "Your delivery" } };
+        if (drv) { opts.driver = { lat: drv.lat, lng: drv.lng }; opts.driverLabel = (drv.name || "Your delivery") + " is on the way"; opts.updatedText = ago(drv.lastSeenAt); }
+        DOODLY_MAPS.trackMap(host, opts);
+        return true;
+      };
+      var poll = function () {
+        var h = document.getElementById("trkMap");
+        if (h && !document.body.contains(h)) { stopTrk(); return; }   // left the page → stop
+        API().get("/api/account/tracking").then(function (t) {
+          renderMap(t);
+          if (!t || !t.active || t.status === "DELIVERED") stopTrk();  // finished for today → stop polling (map stays)
+        }).catch(function () {});
+      };
+      poll(); _trk = setInterval(poll, 20000);
     }
   }
 

@@ -11,6 +11,7 @@ import { requireUserId } from "@/lib/auth/authorize";
 import { reqContext } from "@/lib/auth/request";
 import { audit } from "@/lib/auth/audit";
 import { addressFields, assertServiceable, buildAddressData, cleanStr, LOCATION_KEYS } from "@/lib/addresses/helpers";
+import { geocodeAddress } from "@/lib/geo/geocode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +46,11 @@ export const PATCH = route("addresses.update", async (req: NextRequest, { params
     const sp = await assertServiceable(pincode);
     data = buildAddressData(body, sp);
     data.pincode = pincode;
+    // No pin dropped → best-effort keyless geocode so tracking has a destination.
+    if (data.lat == null || data.lng == null) {
+      const geo = await geocodeAddress({ ...data, pincode });
+      if (geo) { data.lat = geo.lat; data.lng = geo.lng; }
+    }
   } else {
     // simple partial (set default / edit note / label / contact) — no location touch
     data = {};

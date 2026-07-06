@@ -10,6 +10,7 @@ import { requireUserId } from "@/lib/auth/authorize";
 import { reqContext } from "@/lib/auth/request";
 import { audit } from "@/lib/auth/audit";
 import { addressFields, assertServiceable, buildAddressData } from "@/lib/addresses/helpers";
+import { geocodeAddress } from "@/lib/geo/geocode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +34,14 @@ export const POST = route("addresses.create", async (req: NextRequest) => {
 
   // pincode must be inside DOODLY's serviceable area (also gives us area/city/state/zone)
   const sp = await assertServiceable(body.pincode);
-  const data = buildAddressData(body as Record<string, unknown>, sp);
+  const data = buildAddressData(body as Record<string, unknown>, sp) as Record<string, unknown> & { lat?: number | null; lng?: number | null };
+
+  // No pin dropped (no Google key / manual entry) → best-effort keyless geocode so
+  // live delivery tracking has a destination. Never blocks the save on failure.
+  if (data.lat == null || data.lng == null) {
+    const geo = await geocodeAddress({ ...(data as Record<string, unknown>), pincode: body.pincode });
+    if (geo) { data.lat = geo.lat; data.lng = geo.lng; }
+  }
 
   const count = await db.address.count({ where: { userId } });
   const makeDefault = body.isDefault || count === 0;
