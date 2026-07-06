@@ -105,25 +105,40 @@ window.DOODLY_BLOCKS = (function () {
     ? `<a class="btn ${a.kind||"btn-ghost"}" href="${a.href}">${a.icon?icon(a.icon,16):""}${a.label}</a>`
     : `<button type="button" class="btn ${a.kind||"btn-ghost"} js-headaction" data-action="${a.label}">${a.icon?icon(a.icon,16):""}${a.label}</button>`;
 
+  /* Designed empty state for a customer table when it has no records at all
+     (the DataTable shows this instead of the generic "no results" when the
+     source is empty and no filter is active). ctas = [[label, href, primary?]]. */
+  function emptyState(ic, title, body, ctas) {
+    var btns = (ctas || []).map(function (c) { return '<a class="btn ' + (c[2] ? "btn-primary" : "btn-ghost") + ' sm" href="' + c[1] + '">' + c[0] + "</a>"; }).join("");
+    return '<div class="dt-empty dt-empty-cta">' + icon(ic, 26) + "<p>" + title + "</p><span>" + body + "</span>" +
+      (btns ? '<div class="dte-actions" style="display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap">' + btns + "</div>" : "") + "</div>";
+  }
+
   /* =============================================================
      TABLE registry — dataset -> {title, cols, row}
      ============================================================= */
   const TABLES = {
     orders: { title:"Order history", cols:["Order","Date","Items","Amount","Status"],
-      row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.date, r.item, `<span class="strong">${inr(r.amount)}</span>`, badge(r.status)] },
+      row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.date, r.item, `<span class="strong">${inr(r.amount)}</span>`, badge(r.status)],
+      empty: emptyState("box","No orders yet","When you place your first DOODLY order it'll appear here with its status and invoice.",[["Browse products","/products.html",1],["Start a subscription","/subscriptions.html",0]]) },
     deliveries: { title:"Deliveries", cols:["Order","Date","Slot","Products","Executive","Status"],
       row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.date, r.time, r.item, r.driver, badge(r.status)],
-      empty:`<div class="dt-empty dt-empty-cta">${icon("truck",26)}<p>No deliveries yet</p><span>Your upcoming milk deliveries will appear here once you place an order or start a subscription.</span><div class="dte-actions" style="display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap"><a class="btn btn-primary sm" href="/products.html">Browse products</a><a class="btn btn-ghost sm" href="/subscriptions.html">Subscribe now</a></div></div>` },
+      empty: emptyState("truck","No deliveries yet","Your upcoming milk deliveries will appear here once you place an order or start a subscription.",[["Browse products","/products.html",1],["Subscribe now","/subscriptions.html",0]]) },
     bottleLedger: { title:"Bottle ledger", cols:["Date","Type","Qty","Note","Balance"],
-      row:(r)=>[r.date, badge(r.type), `<span class="strong">${r.qty}</span>`, r.note, r.bal] },
+      row:(r)=>[r.date, badge(r.type), `<span class="strong">${r.qty}</span>`, r.note, r.bal],
+      empty: emptyState("bottle","No bottle activity yet","Every bottle we deliver and collect is tracked here, along with your refundable deposit.",[["Start a subscription","/subscriptions.html",1]]) },
     wallet: { title:"Transactions", cols:["Date","Description","Amount"],
-      row:(r)=>[r.date, r.desc, `<span class="strong" style="color:${r.credit?'var(--leaf-600)':'var(--ink)'}">${r.amount}</span>`] },
+      row:(r)=>[r.date, r.desc, `<span class="strong" style="color:${r.credit?'var(--leaf-600)':'var(--ink)'}">${r.amount}</span>`],
+      empty: emptyState("wallet","No transactions yet","Your wallet credits, payments and refunds will appear here. Add money to get started.") },
     invoices: { title:"Invoices", cols:["Invoice","Date","Amount","Tax","Status",""],
-      row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.date, `<span class="strong">${inr(r.amount)}</span>`, r.gst, badge(r.status), `<a class="link" href="/invoice.html?id=${encodeURIComponent(r.id)}" aria-label="View invoice ${r.id}">${icon("eye",16)} View</a> <button class="link js-invoice-dl" data-inv="${r.id}" data-date="${r.date}" data-amt="${r.amount}" data-gst="${r.gst}" aria-label="Download invoice ${r.id}">${icon("download",16)}</button>`] },
+      row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.date, `<span class="strong">${inr(r.amount)}</span>`, r.gst, badge(r.status), `<a class="link" href="/invoice.html?id=${encodeURIComponent(r.id)}" aria-label="View invoice ${r.id}">${icon("eye",16)} View</a> <button class="link js-invoice-dl" data-inv="${r.id}" data-date="${r.date}" data-amt="${r.amount}" data-gst="${r.gst}" aria-label="Download invoice ${r.id}">${icon("download",16)}</button>`],
+      empty: emptyState("receipt","No invoices yet","Invoices are generated automatically after each paid order — you'll be able to view and download them here.",[["Browse products","/products.html",1]]) },
     referrals: { title:"Your referrals", cols:["Friend","Date","Status","Reward"],
-      row:(r)=>[r.name, r.date, badge(r.status), `<span class="strong">${r.reward}</span>`] },
+      row:(r)=>[r.name, r.date, badge(r.status), `<span class="strong">${r.reward}</span>`],
+      empty: emptyState("gift","No referrals yet","Share your referral code above — when a friend subscribes, you both earn wallet rewards.") },
     tickets: { title:"Support tickets", cols:["Ticket","Subject","Date","Status"],
-      row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.subject, r.date, badge(r.status)] },
+      row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.subject, r.date, badge(r.status)],
+      empty: emptyState("msg","No support tickets","Raise a request and it'll appear here so you can track our reply. We're happy to help.",[["Contact support","/contact.html",1],["Help Center","/help.html",0]]) },
     customers: { title:"Customers", cols:["ID","Customer","Area","Plan","Since","Status"],
       row:(r)=>[`<span class="cell-id">${r.id}</span>`, userCell(r.initials,r.name), r.area, r.plan, r.since, badge(r.status)] },
     adminOrders: { title:"Orders", cols:["Order","Customer","Items","Amount","Payment","Status"],
