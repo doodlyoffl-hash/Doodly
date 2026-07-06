@@ -44,50 +44,30 @@ window.DOODLY_DASHBOARD = (function () {
   function r(di, salt) { return rnd((di * 2654435761) ^ ((salt || 1) * 40503)); }
 
   var BASE_DI = diDays("2025-01-01");
-  /* live drift: nudges "today" metrics on each manual/auto refresh so the board visibly updates */
-  var liveBoost = 0;
+  /* Live data: a REAL daily series + point figures fetched from /api/admin/dashboard,
+     cached here so the EXISTING renderers show live DB numbers (empty DB → zeros).
+     The old procedural drift is retired — refresh re-fetches real data. */
+  var REAL = null, POINT = null, liveBoost = 0;
+  function loadReal(done) {
+    var API = window.DOODLY_API;
+    if (!API || !API.get) { if (done) done(); return; }
+    API.get("/api/admin/dashboard").then(function (d) {
+      if (d && d.series) { REAL = {}; d.series.forEach(function (rr) { REAL[rr.date] = rr; }); }
+      POINT = (d && d.point) || null;
+      aggCache = {}; cumCache = {};
+      if (done) done();
+    }).catch(function () { if (done) done(); });
+  }
 
-  /* ---------- the daily metric series (one record per calendar day) ---------- */
-  function day(dateStr) {
-    var di = diDays(dateStr); var d = parse(dateStr); var dow = d.getDay();
-    var weekend = (dow === 0 || dow === 6) ? 1.12 : dow === 1 ? 1.05 : 1.0;
-    var growth = Math.max(0.8, Math.min(1.6, 1 + (di - BASE_DI) * 0.0006));
-    var noise = 0.9 + r(di, 1) * 0.18;
-    var orders = Math.round(300 * weekend * growth * noise);
-    var avg = 560 + r(di, 2) * 150;
-    var revenue = Math.round(orders * avg / 10) * 10;
-    var cancelled = Math.round(orders * (0.015 + r(di, 3) * 0.02));
-    var completed = Math.round(orders * (0.9 + r(di, 4) * 0.05));
-    if (completed + cancelled > orders) completed = orders - cancelled;
-    var pending = Math.max(0, orders - completed - cancelled);
-    var failed = Math.round(orders * (0.008 + r(di, 5) * 0.012));
-    var delayed = Math.round(orders * (0.02 + r(di, 6) * 0.025));
-    var milkCollected = Math.round(orders * 1.05 + 180 + r(di, 7) * 140);
-    var milkDelivered = Math.round(orders * 0.97);
-    var payments = Math.round(revenue * (0.94 + r(di, 8) * 0.045));
-    var refCount = Math.round(r(di, 9) * 5);
-    var rec = {
-      date: dateStr, orders: orders, revenue: revenue, completed: completed, cancelled: cancelled, pending: pending,
-      newCustomers: Math.round(orders * 0.05 * (0.8 + r(di, 10) * 0.6)),
-      deliveries: completed + pending, deliveriesCompleted: completed, deliveriesFailed: failed, deliveriesDelayed: delayed,
-      bottlesReturned: Math.round(completed * (0.85 + r(di, 11) * 0.1)),
-      milkCollected: milkCollected, milkDelivered: milkDelivered,
-      farmers: 10 + Math.round(r(di, 12) * 4), qualityChecks: 10 + Math.round(r(di, 13) * 3),
-      paymentsReceived: payments, outstandingDelta: revenue - payments,
-      referralCount: refCount, referralRewards: refCount * 100,
-      walletUsed: Math.round(revenue * 0.03 * (0.5 + r(di, 14))), gst: Math.round(revenue * 0.03),
-      b2bRevenue: Math.round(revenue * 0.18), routes: 4 + Math.round(r(di, 15) * 4)
-    };
-    return rec;
+  /* ---------- the daily metric series (one REAL record per calendar day) ---------- */
+  function zeroRec(dateStr) {
+    return { date: dateStr, orders: 0, revenue: 0, completed: 0, cancelled: 0, pending: 0, newCustomers: 0,
+      deliveries: 0, deliveriesCompleted: 0, deliveriesFailed: 0, deliveriesDelayed: 0, bottlesReturned: 0,
+      milkCollected: 0, milkDelivered: 0, farmers: (POINT ? POINT.farmers : 0), qualityChecks: 0, paymentsReceived: 0,
+      outstandingDelta: 0, referralCount: 0, referralRewards: 0, walletUsed: 0, gst: 0, b2bRevenue: 0, routes: (POINT ? POINT.routes : 0) };
   }
-  function withLive(rec) {
-    if (!liveBoost || rec.date !== todayStr()) return rec;
-    var c = Object.assign({}, rec);
-    c.orders += liveBoost; c.completed += Math.round(liveBoost * 0.7); c.revenue += liveBoost * 615;
-    c.paymentsReceived += liveBoost * 590; c.deliveries += liveBoost; c.deliveriesCompleted += Math.round(liveBoost * 0.7);
-    c.milkCollected += liveBoost; c.newCustomers += Math.round(liveBoost * 0.3);
-    return c;
-  }
+  function day(dateStr) { return (REAL && REAL[dateStr]) ? REAL[dateStr] : zeroRec(dateStr); }
+  function withLive(rec) { return rec; }   // real data — no procedural drift
 
   function curDay() { return withLive(day(todayStr())); } // today's live figure (includes refresh boost)
 
@@ -106,22 +86,20 @@ window.DOODLY_DASHBOARD = (function () {
 
   /* ---------- point-in-time figures (as of today) ---------- */
   var cumCache = {};
-  function totalCustomers() {
-    var t = todayStr(); if (cumCache[t]) return cumCache[t];
-    var base = 2000, s = addDays(t, -364), sum = 0; var arr = series(s, t);
-    arr.forEach(function (d) { sum += d.newCustomers; });
-    cumCache[t] = base + sum; return cumCache[t];
+  function totalCustomers() { return POINT ? (POINT.totalCustomers || 0) : 0; }
+  function custSplit() {
+    var p = POINT || {}; var total = p.totalCustomers || 0, active = p.activeSubs || 0, trial = p.trialSubs || 0, paused = p.pausedSubs || 0;
+    return { total: total, active: active, trial: trial, paused: paused, churned: Math.max(0, total - active - trial - paused) };
   }
-  function custSplit() { var tot = totalCustomers(); var active = Math.round(tot * 0.82), trial = Math.round(tot * 0.05), paused = Math.round(tot * 0.07); return { total: tot, active: active, trial: trial, paused: paused, churned: tot - active - trial - paused }; }
   function inventory() { try { return (window.DOODLY_DATA && window.DOODLY_DATA.inventory) || []; } catch (e) { return []; } }
   function lowStock() { return inventory().filter(function (i) { var t = (i.status && i.status[1]) || ""; return t === "Low" || t === "Reorder"; }); }
   function inventoryUnits() { return inventory().reduce(function (s, i) { return s + (Number(i.stock) || 0); }, 0); }
-  function b2b() { try { return window.DOODLY_B2B; } catch (e) { return null; } }
-  function b2bOutstanding() { try { var os = b2b().orders().filter(function (o) { return !o.deleted && o.status !== "Cancelled"; }); return os.reduce(function (s, o) { return s + Math.max(0, (o.total || 0) - (Number(o.paid) || 0)); }, 0); } catch (e) { return 0; } }
-  function b2bOrdersCount() { try { return b2b().orders().filter(function (o) { return !o.deleted && o.status !== "Cancelled"; }).length; } catch (e) { return 0; } }
-  function execsActive() { try { var s = JSON.parse(localStorage.getItem("doodly-assign") || "null"); if (s && s.executives) return s.executives.filter(function (e) { return /Out For Delivery|Accepted|Assigned|Available/i.test(e.status || ""); }).length; } catch (e) {} return 6; }
-  function pendingDeliveriesNow() { return curDay().pending + 40; }
-  function outstandingNow() { var synth = 0; var s = addDays(todayStr(), -30); series(s, todayStr()).forEach(function (d) { synth += d.outstandingDelta; }); return Math.round(synth * 0.45) + b2bOutstanding(); }
+  function b2b() { return null; }   // dashboard reads B2B via the real endpoint (POINT), not the client store
+  function b2bOutstanding() { return POINT ? (POINT.b2bOutstandingPaise || 0) / 100 : 0; }
+  function b2bOrdersCount() { return POINT ? (POINT.b2bOrders || 0) : 0; }
+  function execsActive() { return POINT ? (POINT.activeExecs || 0) : 0; }
+  function pendingDeliveriesNow() { var c = curDay(); return Math.max(0, (c.deliveries || 0) - (c.deliveriesCompleted || 0)); }
+  function outstandingNow() { return POINT ? (POINT.outstandingPaise || 0) / 100 : 0; }   // real: unpaid B2C orders + B2B outstanding
 
   /* ---------- quick-filter ranges ---------- */
   function rangeFor(filter, custom) {
@@ -233,34 +211,12 @@ window.DOODLY_DASHBOARD = (function () {
     var plan = status[1] === "Trial" ? PLANS[0] : PLANS[1 + Math.floor(r(i, 22) * 3)];
     return { id: "C-" + (4000 + i), name: FIRST[i % FIRST.length] + " " + LAST[(i * 7) % LAST.length], area: AREAS[(i * 3) % AREAS.length], plan: plan[0], price: plan[1], status: status, joined: addDays(todayStr(), -Math.floor(r(i, 23) * 400)) };
   }
-  function customersList(filter, n) {
-    n = n || 60; var out = []; for (var i = 0; i < 400 && out.length < n; i++) { var c = customer(i); var s = c.status[1]; if (filter === "active" && s !== "Active") continue; if (filter === "trial" && s !== "Trial") continue; if (filter === "new" && diDays(c.joined) < diDays(addDays(todayStr(), -7))) continue; out.push(c); } return out; }
-  function txns(from, to, limit) {
-    limit = limit || 80; var out = []; var s = to; var guard = 0;
-    while (s >= from && out.length < limit && guard < 800) {
-      var di = diDays(s); var perDay = Math.min(8, day(s).orders);
-      for (var i = 0; i < perDay && out.length < limit; i++) {
-        var ci = (di + i) % 400; var c = customer(ci); var methods = ["UPI", "Card", "Wallet", "Netbanking"]; var stt = r(di, 30 + i);
-        out.push({ id: "pay_" + di.toString(36) + i, date: s, customer: c.name, plan: c.plan, method: methods[Math.floor(r(di, 40 + i) * 4)], amount: c.price + Math.round(r(di, 50 + i) * 400), status: stt < 0.93 ? ["green", "Captured"] : stt < 0.97 ? ["amber", "Pending"] : ["red", "Failed"] });
-      }
-      s = addDays(s, -1); guard++;
-    }
-    return out;
-  }
-  function ordersList(from, to, status, limit) {
-    limit = limit || 80; var out = []; var s = to, guard = 0;
-    while (s >= from && out.length < limit && guard < 800) {
-      var di = diDays(s); var per = Math.min(8, day(s).orders);
-      for (var i = 0; i < per && out.length < limit; i++) {
-        var ci = (di + i * 3) % 400; var c = customer(ci); var stt = r(di, 60 + i);
-        var os = stt < 0.9 ? ["green", "Completed"] : stt < 0.96 ? ["amber", "Pending"] : ["red", "Cancelled"];
-        if (status && os[1].toLowerCase() !== status) continue;
-        out.push({ id: "DOO-" + (di % 100000) + i, date: s, customer: c.name, item: c.plan + " · " + (1 + Math.floor(r(di, 70 + i) * 2)) + "× milk", amount: c.price, status: os });
-      }
-      s = addDays(s, -1); guard++;
-    }
-    return out;
-  }
+  // Drill-down record LISTS come from the real modules (each drill-down links there via
+  // its href). We don't synthesise per-record rows here — real totals show in the modal
+  // header; the list is empty until wired to per-record endpoints (module link meanwhile).
+  function customersList(filter, n) { return []; }
+  function txns(from, to, limit) { return []; }
+  function ordersList(from, to, status, limit) { return []; }
   function drillData(key, rg) {
     var badge = function (a) { return '<span class="badge ' + (a[0]) + '">' + esc(a[1]) + '</span>'; };
     var a = agg(rg.from, rg.to);
@@ -390,57 +346,8 @@ window.DOODLY_DASHBOARD = (function () {
   }
 
   /* ============================================================ UI */
-  /* A REAL signed-in admin (real cuid + token, not the localhost demo persona) must
-     never see the deterministic demo metric series below as if it were live. Until
-     real aggregation is wired from the per-module /stats endpoints, show an honest
-     empty state that links to the backend-driven modules — never fabricated numbers. */
-  function isRealUser() { try { var u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null"); return !!(u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")); } catch (e) { return false; } }
-  function emptyDashboard() {
-    return '<div class="dash"><div class="panel panel-pad" style="text-align:center;padding:44px 22px">' +
-      '<div style="font-size:2rem">📊</div>' +
-      '<h3 style="font-family:\'Fraunces\',serif;margin:10px 0 6px">Your live dashboard</h3>' +
-      '<p class="muted-sm" style="max-width:470px;margin:0 auto 16px">Revenue, orders, deliveries and customer metrics appear here as real business activity comes in. Open any module below to see your live records.</p>' +
-      '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">' +
-      '<a class="btn btn-primary sm" href="/admin/orders.html">Orders</a>' +
-      '<a class="btn btn-ghost sm" href="/admin/customers.html">Customers</a>' +
-      '<a class="btn btn-ghost sm" href="/admin/revenue.html">Revenue</a>' +
-      '<a class="btn btn-ghost sm" href="/admin/deliveries.html">Deliveries</a>' +
-      '<a class="btn btn-ghost sm" href="/admin/reports.html">Reports</a>' +
-      '</div></div></div>';
-  }
-  function kpiCard(label, value, sub, href) {
-    var inner = '<span style="font-size:.8rem;color:#6b7c72;font-weight:600">' + esc(label) + '</span>' +
-      '<b style="font-family:\'Fraunces\',serif;font-size:1.55rem;color:var(--forest,#0f3d2e);line-height:1.1">' + esc(value) + '</b>' +
-      (sub ? '<span style="font-size:.72rem;color:#9aa89f">' + esc(sub) + '</span>' : "");
-    var style = 'background:#fff;border:1px solid #e6e9e6;border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:4px;text-decoration:none';
-    return href ? '<a href="' + href + '" style="' + style + '">' + inner + '</a>' : '<div style="' + style + '">' + inner + '</div>';
-  }
-  function realDashHtml(d) {
-    var r = d.revenue || {}, o = d.orders || {}, s = d.subscriptions || {}, c = d.customers || {}, dl = d.deliveriesToday || {}, b = d.bottlesToday || {};
-    var cards = [
-      kpiCard("Revenue · this month", compactINR((r.monthPaise || 0) / 100), "Total " + compactINR((r.totalPaise || 0) / 100), "/admin/revenue.html"),
-      kpiCard("Orders · this month", num(o.month || 0), (o.pending || 0) + " pending · " + num(o.total || 0) + " all-time", "/admin/orders.html"),
-      kpiCard("Active subscriptions", num(s.active || 0), "", "/admin/subscriptions.html"),
-      kpiCard("Customers", num(c.total || 0), "+" + num(c.newThisMonth || 0) + " this month", "/admin/customers.html"),
-      kpiCard("Deliveries today", num(dl.delivered || 0) + " / " + num(dl.total || 0), (dl.pending || 0) + " pending", "/admin/deliveries.html"),
-      kpiCard("Bottles today", num(b.out || 0) + " out · " + num(b["in"] || 0) + " in", "", "/admin/bottle-inventory.html"),
-    ].join("");
-    return '<div class="dash"><div style="margin-bottom:12px"><h3 style="font-family:\'Fraunces\',serif;margin:0">Live overview</h3><p class="muted-sm" style="margin:2px 0 0">Real-time figures from your DOODLY database.</p></div>' +
-      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">' + cards + '</div></div>';
-  }
-  function realDashboard(host) {
-    var API = window.DOODLY_API;
-    if (!API) { host.innerHTML = emptyDashboard(); return; }
-    host.innerHTML = '<div class="dash"><div class="panel panel-pad"><div class="sk-line skeleton"></div><div class="sk-line skeleton" style="width:60%"></div></div></div>';
-    API.get("/api/admin/dashboard").then(function (d) {
-      if (!d) { host.innerHTML = emptyDashboard(); return; }
-      var hasData = (d.orders && d.orders.total) || (d.customers && d.customers.total) || (d.revenue && d.revenue.totalPaise) || (d.subscriptions && d.subscriptions.active) || (d.deliveriesToday && d.deliveriesToday.total);
-      host.innerHTML = hasData ? realDashHtml(d) : emptyDashboard();   // no records yet → honest empty state
-    }).catch(function () { host.innerHTML = emptyDashboard(); });
-  }
   function mount(host) {
     if (!host) return;
-    if (isRealUser()) { realDashboard(host); return; }
     var st = { filter: "today", custom: { from: addDays(todayStr(), -7), to: todayStr() }, refreshSec: 0, lastUpdated: new Date(), drill: null, testRes: null };
     if (host._dashTimer) { clearInterval(host._dashTimer); host._dashTimer = null; }
 
@@ -565,7 +472,7 @@ window.DOODLY_DASHBOARD = (function () {
 
     function setRefresh() {
       if (host._dashTimer) { clearInterval(host._dashTimer); host._dashTimer = null; }
-      if (st.refreshSec > 0) host._dashTimer = setInterval(function () { liveBoost += 3 + Math.floor(Math.random() * 7); aggCache = {}; st.lastUpdated = new Date(); softRefresh(); }, st.refreshSec * 1000);
+      if (st.refreshSec > 0) host._dashTimer = setInterval(function () { st.lastUpdated = new Date(); loadReal(softRefresh); }, st.refreshSec * 1000);
     }
     function softRefresh() { var sy = window.scrollY; render(); window.scrollTo(0, sy); } // re-render, preserve scroll + open drill
 
@@ -575,7 +482,7 @@ window.DOODLY_DASHBOARD = (function () {
       if (from) from.addEventListener("change", function () { st.custom.from = from.value; aggCache = {}; render(); });
       if (to) to.addEventListener("change", function () { st.custom.to = to.value; aggCache = {}; render(); });
       var ref = host.querySelector("#dash-ref"); if (ref) ref.addEventListener("change", function () { st.refreshSec = +ref.value; setRefresh(); });
-      var rb = host.querySelector("#dash-refresh"); if (rb) rb.addEventListener("click", function () { liveBoost += 3 + Math.floor(Math.random() * 7); aggCache = {}; st.lastUpdated = new Date(); render(); toast("Dashboard refreshed"); });
+      var rb = host.querySelector("#dash-refresh"); if (rb) rb.addEventListener("click", function () { st.lastUpdated = new Date(); loadReal(function () { render(); toast("Dashboard refreshed"); }); });
       var test = host.querySelector("#dash-test"); if (test) test.addEventListener("click", function () { st.testRes = runTests(); aggCache = {}; render(); toast("Tests: " + st.testRes.passed + "/" + st.testRes.total); });
       var csv = host.querySelector("#dash-csv"); if (csv) csv.addEventListener("click", function () { exportCSV(range); });
       var xls = host.querySelector("#dash-xls"); if (xls) xls.addEventListener("click", function () { exportXLS(range); });
@@ -591,7 +498,8 @@ window.DOODLY_DASHBOARD = (function () {
     document.removeEventListener("keydown", escClose); document.addEventListener("keydown", escClose);
     function exportChart(key, range) { var def = chartDefs(range).find(function (d) { return d.key === key; }); if (!def || !def.pts) { toast("Chart exported"); return; } var rows = [[def.title, range.label], ["Period", "Value"]].concat(def.pts.map(function (p) { return [p.x, p.y]; })); download("chart-" + key + ".csv", rows.map(function (r2) { return r2.join(","); }).join("\n"), "text/csv"); }
 
-    render();
+    render();          // paint immediately (zeros), then fill with real data
+    loadReal(render);  // fetch live DB series + point figures, then re-render
   }
 
   return {
