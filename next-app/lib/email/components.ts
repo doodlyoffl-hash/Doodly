@@ -24,6 +24,7 @@ export const C = {
 };
 const FONT = "'Segoe UI',Helvetica,Arial,-apple-system,BlinkMacSystemFont,sans-serif";
 export const SITE = "https://www.doodly.in";
+export const LOGO = SITE + "/assets/img/logo.png"; // green "Doodly" wordmark + "Pure | Fresh | Honest"
 
 export const esc = (s: unknown) =>
   String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
@@ -62,14 +63,14 @@ ${inner}
 
 /* ---- brand header: wordmark + tagline over a soft sunrise gradient ---- */
 export function header(): string {
-  return `<tr><td style="background:${C.forest};background:linear-gradient(135deg,${C.forest} 0%,${C.deepBlue} 100%);border-radius:18px 18px 0 0;padding:30px 34px 26px" class="px">
+  return `<tr><td style="background:${C.forest};background:linear-gradient(135deg,${C.forest} 0%,${C.deepBlue} 100%);border-radius:18px 18px 0 0;padding:28px 34px 26px" class="px">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
       <td align="left" style="vertical-align:middle">
-        <span style="font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;color:${C.white};letter-spacing:.5px">Doodly</span>
-        <div style="height:5px"></div>
-        <span style="font-size:12px;font-weight:600;color:${C.goldSoft};letter-spacing:2px;text-transform:uppercase">Pure by Choice.</span>
+        <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:${C.white};border-radius:12px;padding:12px 18px">
+          <a href="${SITE}" style="text-decoration:none"><img src="${LOGO}" alt="DOODLY — Pure · Fresh · Honest" width="156" style="display:block;width:156px;max-width:156px;height:auto;border:0" /></a>
+        </td></tr></table>
       </td>
-      <td align="right" style="vertical-align:middle;font-size:26px">🌅</td>
+      <td align="right" style="vertical-align:middle;font-size:28px">🌅</td>
     </tr></table>
   </td></tr>
   <tr><td style="height:6px;background:linear-gradient(90deg,${C.gold} 0%,${C.goldSoft} 50%,${C.gold} 100%);font-size:0;line-height:0">&nbsp;</td></tr>`;
@@ -172,9 +173,7 @@ export function footer(): string {
   const links = [["Products", "/products.html"], ["Subscriptions", "/subscriptions.html"], ["Help Centre", "/help.html"], ["Farmers", "/farmers.html"], ["Bottle Returns", "/bottle-return.html"], ["Careers", "/careers.html"]];
   return `<tr><td style="height:8px"></td></tr>
   <tr><td class="px" style="padding:26px 34px 8px;text-align:center">
-    <span style="font-family:Georgia,serif;font-size:20px;font-weight:700;color:${C.forest}" class="dk-ink">Doodly</span>
-    <div style="height:4px"></div>
-    <div class="dk-mut" style="font-size:12px;color:${C.muted};letter-spacing:2px;text-transform:uppercase">Pure by Choice.</div>
+    <a href="${SITE}" style="text-decoration:none"><img src="${LOGO}" alt="DOODLY — Pure · Fresh · Honest" width="146" style="width:146px;max-width:146px;height:auto;border:0;display:inline-block" /></a>
     <div style="height:16px"></div>
     <div>${["📷 Instagram", "👍 Facebook", "💬 WhatsApp"].map((s) => `<span style="font-size:13px;color:${C.muted};padding:0 10px">${s}</span>`).join("")}</div>
     <div style="height:14px"></div>
