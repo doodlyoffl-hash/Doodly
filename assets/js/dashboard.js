@@ -408,9 +408,39 @@ window.DOODLY_DASHBOARD = (function () {
       '<a class="btn btn-ghost sm" href="/admin/reports.html">Reports</a>' +
       '</div></div></div>';
   }
+  function kpiCard(label, value, sub, href) {
+    var inner = '<span style="font-size:.8rem;color:#6b7c72;font-weight:600">' + esc(label) + '</span>' +
+      '<b style="font-family:\'Fraunces\',serif;font-size:1.55rem;color:var(--forest,#0f3d2e);line-height:1.1">' + esc(value) + '</b>' +
+      (sub ? '<span style="font-size:.72rem;color:#9aa89f">' + esc(sub) + '</span>' : "");
+    var style = 'background:#fff;border:1px solid #e6e9e6;border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:4px;text-decoration:none';
+    return href ? '<a href="' + href + '" style="' + style + '">' + inner + '</a>' : '<div style="' + style + '">' + inner + '</div>';
+  }
+  function realDashHtml(d) {
+    var r = d.revenue || {}, o = d.orders || {}, s = d.subscriptions || {}, c = d.customers || {}, dl = d.deliveriesToday || {}, b = d.bottlesToday || {};
+    var cards = [
+      kpiCard("Revenue · this month", compactINR((r.monthPaise || 0) / 100), "Total " + compactINR((r.totalPaise || 0) / 100), "/admin/revenue.html"),
+      kpiCard("Orders · this month", num(o.month || 0), (o.pending || 0) + " pending · " + num(o.total || 0) + " all-time", "/admin/orders.html"),
+      kpiCard("Active subscriptions", num(s.active || 0), "", "/admin/subscriptions.html"),
+      kpiCard("Customers", num(c.total || 0), "+" + num(c.newThisMonth || 0) + " this month", "/admin/customers.html"),
+      kpiCard("Deliveries today", num(dl.delivered || 0) + " / " + num(dl.total || 0), (dl.pending || 0) + " pending", "/admin/deliveries.html"),
+      kpiCard("Bottles today", num(b.out || 0) + " out · " + num(b["in"] || 0) + " in", "", "/admin/bottle-inventory.html"),
+    ].join("");
+    return '<div class="dash"><div style="margin-bottom:12px"><h3 style="font-family:\'Fraunces\',serif;margin:0">Live overview</h3><p class="muted-sm" style="margin:2px 0 0">Real-time figures from your DOODLY database.</p></div>' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">' + cards + '</div></div>';
+  }
+  function realDashboard(host) {
+    var API = window.DOODLY_API;
+    if (!API) { host.innerHTML = emptyDashboard(); return; }
+    host.innerHTML = '<div class="dash"><div class="panel panel-pad"><div class="sk-line skeleton"></div><div class="sk-line skeleton" style="width:60%"></div></div></div>';
+    API.get("/api/admin/dashboard").then(function (d) {
+      if (!d) { host.innerHTML = emptyDashboard(); return; }
+      var hasData = (d.orders && d.orders.total) || (d.customers && d.customers.total) || (d.revenue && d.revenue.totalPaise) || (d.subscriptions && d.subscriptions.active) || (d.deliveriesToday && d.deliveriesToday.total);
+      host.innerHTML = hasData ? realDashHtml(d) : emptyDashboard();   // no records yet → honest empty state
+    }).catch(function () { host.innerHTML = emptyDashboard(); });
+  }
   function mount(host) {
     if (!host) return;
-    if (isRealUser()) { host.innerHTML = emptyDashboard(); return; }
+    if (isRealUser()) { realDashboard(host); return; }
     var st = { filter: "today", custom: { from: addDays(todayStr(), -7), to: todayStr() }, refreshSec: 0, lastUpdated: new Date(), drill: null, testRes: null };
     if (host._dashTimer) { clearInterval(host._dashTimer); host._dashTimer = null; }
 
