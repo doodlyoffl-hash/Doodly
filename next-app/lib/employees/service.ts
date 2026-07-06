@@ -12,6 +12,7 @@ import { audit } from "@/lib/auth/audit";
 import { reqContext } from "@/lib/auth/request";
 import type { NextRequest } from "next/server";
 import { Errors } from "@/lib/http";
+import { signedUrl, isStorageConfigured } from "@/lib/storage/hr-docs";
 
 export interface Actor { actorId?: string; actorRole?: string; ip?: string | null }
 
@@ -90,19 +91,22 @@ export async function employeeDetail(id: string, includePii: boolean) {
     },
   });
   if (!e || e.deletedAt) throw Errors.notFound("Employee not found.");
-  const docs = (e.documents as unknown[] | null) ?? [];
+  // Documents are sensitive PII proofs → signed URLs only for callers who can edit employees (HR/admin).
+  const rawDocs = (Array.isArray(e.documents) ? e.documents : []) as Array<{ label?: string; name?: string; path?: string; type?: string; size?: number; uploadedAt?: string }>;
+  const docs = await Promise.all(rawDocs.map(async (d) => ({ ...d, url: includePii && d.path ? await signedUrl(d.path) : null })));
+  const photoSignedUrl = await signedUrl(e.photoUrl);
   const identity = includePii
     ? { aadhaar: e.aadhaar, pan: e.pan, drivingLicence: e.drivingLicence, bankAccount: e.bankAccount, ifsc: e.ifsc, bankName: e.bankName, upiId: e.upiId }
     : { aadhaar: mask(e.aadhaar), pan: mask(e.pan), drivingLicence: mask(e.drivingLicence), bankAccount: mask(e.bankAccount), ifsc: e.ifsc, bankName: e.bankName, upiId: e.upiId };
   return {
     id: e.id, employeeCode: e.employeeCode, userId: e.userId,
     name: e.user.name, email: e.user.email, phone: e.user.phone, role: e.user.role, userStatus: e.user.status,
-    photoUrl: e.photoUrl, altPhone: e.altPhone, dob: e.dob?.toISOString() ?? null, gender: e.gender, bloodGroup: e.bloodGroup,
+    photoUrl: e.photoUrl, photoSignedUrl, altPhone: e.altPhone, dob: e.dob?.toISOString() ?? null, gender: e.gender, bloodGroup: e.bloodGroup,
     emergencyName: e.emergencyName, emergencyPhone: e.emergencyPhone,
     department: e.department, designation: e.designation, employmentType: e.employmentType, dateOfJoining: e.dateOfJoining.toISOString(),
     reportingManagerId: e.reportingManagerId, reportingManager: e.reportingManager ? { id: e.reportingManager.id, code: e.reportingManager.employeeCode, name: e.reportingManager.user.name } : null,
     workLocation: e.workLocation, status: e.status, notes: e.notes,
-    identity, documents: docs, piiVisible: includePii,
+    identity, documents: docs, piiVisible: includePii, storageConfigured: isStorageConfigured(),
     salary: e.salaryStructures[0] ?? null,
     createdAt: e.createdAt.toISOString(),
   };

@@ -46,6 +46,57 @@ window.DOODLY_HR = (function () {
     var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8" }));
     a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
   }
+  // authenticated multipart upload (DOODLY_API only does JSON) — same base + bearer + envelope
+  function apiUpload(method, path, formData) {
+    var b = (window.DOODLY_API && window.DOODLY_API.base) ? window.DOODLY_API.base() : "";
+    var h = {}; try { var t = localStorage.getItem("doodly-token"); if (t) h["Authorization"] = "Bearer " + t; } catch (e) {}
+    return fetch(b + path, { method: method || "POST", credentials: "include", headers: h, body: formData }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (j) {
+        if (!res.ok || (j && j.ok === false)) throw new Error((j && (j.error || j.message)) || ("Upload failed (HTTP " + res.status + ")"));
+        return j && Object.prototype.hasOwnProperty.call(j, "data") ? j.data : j;
+      });
+    });
+  }
+  var initials = function (n) { return (n || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w[0]; }).join("").toUpperCase() || "?"; };
+  var kb = function (b) { return b >= 1048576 ? (Math.round(b / 104857.6) / 10) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB"; };
+  function docItemHtml(d) {
+    var view = d.url ? '<a class="link" href="' + esc(d.url) + '" target="_blank" rel="noopener">View</a> ' : "";
+    return '<div class="hr-docitem" data-path="' + esc(d.path) + '"><span class="hr-docmeta">' + esc(d.label || "Document") + "<small>" + esc(d.name || "") + (d.size ? " · " + kb(d.size) : "") + "</small></span><span>" + view + '<button type="button" class="link hr-docdel" style="color:#b3261e" data-path="' + esc(d.path) + '">Remove</button></span></div>';
+  }
+  function docsSectionHtml(e, editing) {
+    if (!editing || !e.id) return '<p class="muted-sm">Save the employee first, then reopen this record to add a photo and documents.</p>';
+    if (e.storageConfigured === false) return '<p class="muted-sm">Photo &amp; document uploads (Aadhaar/PAN/bank proof) turn on once Supabase Storage is configured. All other fields save now.</p>';
+    var av = e.photoSignedUrl ? '<img src="' + esc(e.photoSignedUrl) + '" alt="">' : '<span>' + esc(initials(e.name)) + "</span>";
+    var docs = ((e.documents || []).map(docItemHtml).join("")) || '<p class="muted-sm" id="e-doc-empty">No documents uploaded yet.</p>';
+    return '<div class="hr-photo"><div class="hr-avatar" id="e-photo-prev">' + av + '</div><label class="btn btn-ghost sm" style="cursor:pointer">Upload photo<input type="file" id="e-photo-input" accept="image/png,image/jpeg,image/webp" hidden></label></div>' +
+      '<div id="e-doc-list">' + docs + "</div>" +
+      '<div class="hr-docadd"><input class="input" id="e-doc-label" placeholder="Label (e.g. Aadhaar card)" maxlength="60"><label class="btn btn-ghost sm" style="cursor:pointer" id="e-doc-pick">Choose file<input type="file" id="e-doc-input" accept="image/png,image/jpeg,image/webp,application/pdf" hidden></label><button type="button" class="btn btn-primary sm" id="e-doc-add" disabled>Upload</button></div>' +
+      '<p class="muted-sm" style="margin-top:6px">PNG, JPG, WEBP or PDF · up to 5 MB · stored privately, shown to HR/Admin only.</p>';
+  }
+  function wireDocs(q, e, editing) {
+    if (!editing || !e.id || e.storageConfigured === false) return;
+    var pInput = q("#e-photo-input");
+    if (pInput) pInput.addEventListener("change", function () {
+      var f = this.files && this.files[0]; if (!f) return;
+      var fd = new FormData(); fd.append("file", f);
+      var prev = q("#e-photo-prev"); prev.innerHTML = '<span style="font-size:.7rem">…</span>';
+      apiUpload("POST", "/api/admin/employees/" + e.id + "/photo", fd).then(function (r) { prev.innerHTML = r && r.url ? '<img src="' + r.url + '" alt="">' : '<span>' + initials(e.name) + "</span>"; toast("Photo updated ✓"); }).catch(function (err) { prev.innerHTML = '<span>' + initials(e.name) + "</span>"; toast((err && err.message) || "Upload failed."); });
+    });
+    var dInput = q("#e-doc-input"), addBtn = q("#e-doc-add"), picker = q("#e-doc-pick");
+    if (dInput) dInput.addEventListener("change", function () { var f = this.files && this.files[0]; if (addBtn) addBtn.disabled = !f; if (picker && f) picker.textContent = f.name.slice(0, 24); });
+    if (addBtn) addBtn.addEventListener("click", function () {
+      var f = dInput.files && dInput.files[0]; if (!f) return;
+      var fd = new FormData(); fd.append("file", f); fd.append("label", (q("#e-doc-label").value || "").trim());
+      addBtn.disabled = true; addBtn.textContent = "Uploading…";
+      apiUpload("POST", "/api/admin/employees/" + e.id + "/documents", fd).then(function (r) {
+        var list = q("#e-doc-list"); var empty = q("#e-doc-empty"); if (empty) empty.remove();
+        list.insertAdjacentHTML("beforeend", docItemHtml(r.document)); bindDel(q("#e-doc-list .hr-docdel[data-path=\"" + r.document.path.replace(/"/g, '\\"') + "\"]"));
+        q("#e-doc-label").value = ""; dInput.value = ""; if (picker) picker.textContent = "Choose file"; addBtn.textContent = "Upload"; toast("Document added ✓");
+      }).catch(function (err) { addBtn.disabled = false; addBtn.textContent = "Upload"; toast((err && err.message) || "Upload failed."); });
+    });
+    function bindDel(btn) { if (!btn) return; btn.addEventListener("click", function () { if (!confirm("Remove this document?")) return; var path = btn.getAttribute("data-path"); apiUpload("DELETE", "/api/admin/employees/" + e.id + "/documents?path=" + encodeURIComponent(path), undefined).then(function () { var item = q('#e-doc-list .hr-docitem[data-path="' + path.replace(/"/g, '\\"') + '"]'); if (item) item.remove(); toast("Removed"); }).catch(function (err) { toast((err && err.message) || "Couldn't remove."); }); }); }
+    (q("#e-doc-list") ? q("#e-doc-list").querySelectorAll(".hr-docdel") : []).forEach(function (b) { bindDel(b); });
+  }
 
   /* ---------------- Employee board ---------------- */
   function mount(host) {
@@ -120,13 +171,14 @@ window.DOODLY_HR = (function () {
       '<div class="dac-row">' + fld("e-dl", "Driving licence", idv(e, "drivingLicence"), { maxlength: 30 }) + fld("e-bank", "Bank account number", idv(e, "bankAccount"), { maxlength: 30 }) + "</div>" +
       '<div class="dac-row">' + fld("e-ifsc", "IFSC code", (e.identity || {}).ifsc, { maxlength: 20 }) + fld("e-bankName", "Bank name", (e.identity || {}).bankName, { maxlength: 60 }) + "</div>" +
       fld("e-upi", "UPI ID (optional)", (e.identity || {}).upiId, { maxlength: 60 }) +
-      '<div class="na-sec">Documents</div>' +
-      '<div class="hr-docs" id="e-docs"><p class="muted-sm">Photo & document uploads (Aadhaar/PAN/bank proof) appear here once file storage is configured. All other fields save now.</p></div>' +
+      '<div class="na-sec">Photo & documents</div>' +
+      '<div class="hr-docs" id="e-docs">' + docsSectionHtml(e, editing) + "</div>" +
       '<div id="e-err" style="display:none;color:#b3261e;font-size:.85rem;font-weight:600;margin:8px 0"></div>' +
       '<div class="na-actions" style="position:sticky;bottom:-16px;background:#fff;padding:12px 0;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #eee"><button class="btn btn-ghost sm" id="e-cancel">Cancel</button><button class="btn btn-primary sm" id="e-save">' + (editing ? "Save changes" : "Add employee") + "</button></div></div>";
     var m = modal(editing ? "Edit employee — " + esc(e.employeeCode || "") : "Add employee", body);
     var ov = m.ov, close = m.close, q = function (s) { return ov.querySelector(s); }, g = function (s) { var el = q(s); return el ? (el.value || "").trim() : ""; };
     q("#e-cancel").addEventListener("click", close);
+    wireDocs(q, e, editing);
     q("#e-save").addEventListener("click", function () {
       var err = q("#e-err"); err.style.display = "none";
       var req = [["#e-name", "full name"], ["#e-phone", "mobile number"], ["#e-dept", "department"], ["#e-desig", "designation"], ["#e-doj", "date of joining"]];
@@ -223,7 +275,10 @@ window.DOODLY_HR = (function () {
       ".slip-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:560px){.slip-cols{grid-template-columns:1fr}}" +
       ".exp-block-h{font-family:'Fraunces',serif;color:var(--forest,#0f3d2e);font-size:.95rem;font-weight:600;margin:0 0 8px}" +
       ".deflist{border:1px solid #eee;border-radius:10px;overflow:hidden}.deflist .row{display:flex;justify-content:space-between;padding:8px 12px;font-size:.88rem;border-bottom:1px solid #f2f2f2}.deflist .row:last-child{border-bottom:none}.deflist .k{color:#54635b}.deflist .v{font-weight:700;color:#1f2d26}" +
-      ".slip-net{margin-top:14px;background:#e8f6ec;border:1px solid #bfe6cb;border-radius:12px;padding:14px 16px;text-align:right;font-size:1.05rem;color:#14432e}.slip-net b{font-family:'Fraunces',serif;font-size:1.35rem;margin-left:8px}";
+      ".slip-net{margin-top:14px;background:#e8f6ec;border:1px solid #bfe6cb;border-radius:12px;padding:14px 16px;text-align:right;font-size:1.05rem;color:#14432e}.slip-net b{font-family:'Fraunces',serif;font-size:1.35rem;margin-left:8px}" +
+      ".hr-photo{display:flex;align-items:center;gap:12px;margin-bottom:12px}.hr-avatar{width:64px;height:64px;border-radius:50%;background:#e8f6ec;border:1px solid #cfe6d8;display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none}.hr-avatar img{width:100%;height:100%;object-fit:cover}.hr-avatar span{font-family:'Fraunces',serif;font-size:1.2rem;color:var(--forest,#0f3d2e)}" +
+      ".hr-docitem{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 12px;border:1px solid #eee;border-radius:10px;margin-bottom:6px;font-size:.88rem}.hr-docmeta{display:flex;flex-direction:column}.hr-docmeta small{color:#9aa89f;font-size:.72rem}" +
+      ".hr-docadd{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}.hr-docadd .input{flex:1;min-width:160px}";
     document.head.appendChild(s);
   }
 
