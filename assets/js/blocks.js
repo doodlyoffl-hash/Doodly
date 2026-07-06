@@ -111,8 +111,9 @@ window.DOODLY_BLOCKS = (function () {
   const TABLES = {
     orders: { title:"Order history", cols:["Order","Date","Items","Amount","Status"],
       row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.date, r.item, `<span class="strong">${inr(r.amount)}</span>`, badge(r.status)] },
-    deliveries: { title:"Deliveries", cols:["ID","Date","Time","Item","Driver","Status"],
-      row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.date, r.time, r.item, r.driver, badge(r.status)] },
+    deliveries: { title:"Deliveries", cols:["Order","Date","Slot","Products","Executive","Status"],
+      row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.date, r.time, r.item, r.driver, badge(r.status)],
+      empty:`<div class="dt-empty dt-empty-cta">${icon("truck",26)}<p>No deliveries yet</p><span>Your upcoming milk deliveries will appear here once you place an order or start a subscription.</span><div class="dte-actions" style="display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap"><a class="btn btn-primary sm" href="/products.html">Browse products</a><a class="btn btn-ghost sm" href="/subscriptions.html">Subscribe now</a></div></div>` },
     bottleLedger: { title:"Bottle ledger", cols:["Date","Type","Qty","Note","Balance"],
       row:(r)=>[r.date, badge(r.type), `<span class="strong">${r.qty}</span>`, r.note, r.bal] },
     wallet: { title:"Transactions", cols:["Date","Description","Amount"],

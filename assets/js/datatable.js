@@ -204,7 +204,12 @@ window.DOODLY_TABLE = (function () {
       var body = host.querySelector("#dtBody");
       body.innerHTML = slice.map(function (it) { return "<tr>" + it.cells.map(function (c) { return "<td>" + c + "</td>"; }).join("") + "</tr>"; }).join("");
       var empty = host.querySelector("#dtEmpty");
-      empty.innerHTML = total ? "" : '<div class="dt-empty">' + ic("search", 24) + '<p>No results found</p><span>' + (hasActive() ? "Try adjusting your search or filters." : "Nothing here yet.") + '</span>' + (hasActive() ? '<button class="btn btn-ghost sm" id="dtEmptyClear">Clear all</button>' : "") + "</div>";
+      // Source genuinely empty (no rows + no active filter) → a designed per-dataset empty
+      // state when the table defines one (e.g. Deliveries); a filter that matches nothing
+      // still shows the generic "no results / adjust filters" message.
+      empty.innerHTML = total ? ""
+        : (!hasActive() && cfg && cfg.empty) ? cfg.empty
+        : '<div class="dt-empty">' + ic("search", 24) + '<p>No results found</p><span>' + (hasActive() ? "Try adjusting your search or filters." : "Nothing here yet.") + '</span>' + (hasActive() ? '<button class="btn btn-ghost sm" id="dtEmptyClear">Clear all</button>' : "") + "</div>";
       var ec = host.querySelector("#dtEmptyClear"); if (ec) ec.addEventListener("click", clearAll);
       renderChips();
       if (pager) renderPager(total, pages, start, slice.length);

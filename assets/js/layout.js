@@ -5286,8 +5286,9 @@
     const fmtTime = (iso) => { const x = dOf(iso); if (!x) return "—"; let h = x.getHours(); const ap = h < 12 ? "AM" : "PM"; h = h % 12 || 12; return h + ":" + String(x.getMinutes()).padStart(2,"0") + " " + ap; };
     const titleCase = (v) => String(v || "").toLowerCase().replace(/_/g," ").replace(/\b\w/g, (c) => c.toUpperCase());
     const initialsOf = (nm) => String(nm || "").trim().split(/\s+/).map((w) => w[0] || "").slice(0,2).join("").toUpperCase() || "•";
-    const DEL_STATUS = (st) => st === "DELIVERED" ? ["green","Delivered"] : st === "SKIPPED" ? ["red","Skipped"] : st === "FAILED" ? ["red","Failed"]
-      : (st === "OUT_FOR_DELIVERY" || st === "ON_THE_WAY" || st === "REACHED") ? ["amber","Out for delivery"] : ["amber","Scheduled"];
+    const DEL_STATUS = (st) => st === "DELIVERED" ? ["green","Delivered"] : st === "SKIPPED" ? ["grey","Skipped"] : st === "FAILED" ? ["red","Failed"]
+      : (st === "OUT_FOR_DELIVERY" || st === "ON_THE_WAY" || st === "REACHED") ? ["amber","Out for delivery"]
+      : st === "ASSIGNED" ? ["blue","Assigned"] : (st === "ACCEPTED" || st === "PACKED") ? ["blue","Preparing"] : ["amber","Scheduled"];
     const ORD_STATUS = (o) => o.cancelled ? ["red","Cancelled"] : o.paymentStatus === "REFUNDED" ? ["red","Refunded"] : o.fulfilment === "DELIVERED" ? ["grey","Completed"] : ["green","Active"];
     const PAY_STATUS = (st) => st === "PAID" ? ["green","Paid"] : st === "FAILED" ? ["red","Failed"] : st === "REFUNDED" ? ["grey","Refunded"] : ["amber","Pending"];
     const BOTTLE = { ISSUED:["green","Issued"], RETURNED:["blue","Returned"], LOST:["red","Lost"], DEPOSIT_CHARGED:["amber","Deposit"], REFUND:["green","Refund"], DEPOSIT_REFUNDED:["green","Refund"] };
@@ -5310,7 +5311,7 @@
 
     /* ---- orders / deliveries / invoices / bottle ledger / referrals ---- */
     if (orders) D.orders = orders.map((o) => ({ id: o.number || o.id, _id: o.id, date: fmtFull(o.createdAt), item: o.itemsSummary || "—", amount: Math.round((o.totalPaise || 0) / 100), status: ORD_STATUS(o) }));
-    if (deliveries) D.deliveries = deliveries.map((dv) => ({ id: dv.id, date: fmtRel(dv.date), time: dv.deliveredAt ? fmtTime(dv.deliveredAt) : (dv.slot ? titleCase(dv.slot) : fmtTime(dv.date)), item: "—", driver: dv.driver ? dv.driver.name : "—", status: DEL_STATUS(dv.status) }));
+    if (deliveries) D.deliveries = deliveries.map((dv) => ({ id: dv.orderRef || dv.planName || ("#" + String(dv.id).slice(-6).toUpperCase()), _id: dv.id, date: fmtRel(dv.date), time: dv.deliveredAt ? fmtTime(dv.deliveredAt) : (dv.slot || "—"), item: dv.itemsSummary || dv.planName || "—", driver: dv.driver ? dv.driver.name : "—", status: DEL_STATUS(dv.status) }));
     if (invoices) D.invoices = invoices.map((iv) => ({ id: iv.number || iv.id, date: fmtFull(iv.issuedAt), amount: Math.round(((iv.order && iv.order.totalPaise) || 0) / 100), gst: "incl. GST", status: PAY_STATUS(iv.order && iv.order.status), pdfUrl: iv.pdfUrl || null }));
     if (bottles && bottles.ledger) {
       const asc = bottles.ledger.slice().reverse(); let bal = 0;
