@@ -59,43 +59,85 @@ const delivWhere = { OR: [{ subscription: { userId: U } }, { order: { userId: U 
 
 if (!CONFIRM) { console.log("\nDry run only. Re-run with --confirm to delete.\n"); await db.$disconnect(); process.exit(0); }
 
-const del = async (label, fn) => { try { const r = await fn(); console.log("   ✓ " + label.padEnd(30) + (r?.count ?? 0)); } catch (e) { console.log("   · " + label.padEnd(30) + "skip (" + String(e.message || "").split("\n")[0].slice(0, 60) + ")"); } };
+const del = async (label, fn) => { try { const r = await fn(); console.log("   ✓ " + label.padEnd(26) + (r?.count ?? 0)); } catch (e) { console.log("   ✗ " + label.padEnd(26) + "ERR " + (e.code || "") + " " + ((e.meta && (e.meta.field_name || e.meta.modelName)) || "") + " :: " + String(e.message || "").split("\n").pop().trim().slice(0, 70)); } };
+
+// createdById (admin who created a row) can point at a demo staff user → null it so it
+// doesn't block that user's deletion; route.driverId → null (routes are shared infra).
+console.log("\nNulling admin/back-references to demo users:");
+for (const m of ["walletTxn", "subscriptionBilling", "paymentRecord", "business", "businessOrder", "businessInvoice", "businessPricing"]) await del("null " + m + ".createdById", () => db[m].updateMany({ where: { createdById: U }, data: { createdById: null } }));
+await del("null route.driverId", () => db.route.updateMany({ where: { driverId: { in: driverIds } }, data: { driverId: null } }));
 
 console.log("\nDeleting (children → parents):");
-await del("bottleLedger", () => db.bottleLedger.deleteMany({ where: { delivery: delivWhere } }));
-await del("deliveryIssue", () => db.deliveryIssue.deleteMany({ where: { delivery: delivWhere } }));
+// delivery + assignment graph
+await del("bottleLedger", () => db.bottleLedger.deleteMany({ where: { OR: [{ delivery: delivWhere }, { userId: U }] } }));
+await del("deliveryIssue", () => db.deliveryIssue.deleteMany({ where: { OR: [{ delivery: delivWhere }, { driverId: { in: driverIds } }] } }));
 await del("assignmentQueue", () => db.assignmentQueue.deleteMany({ where: { delivery: delivWhere } }));
 await del("deliveryAssignment", () => db.deliveryAssignment.deleteMany({ where: { OR: [{ delivery: delivWhere }, { driverId: { in: driverIds } }] } }));
 await del("assignmentLog", () => db.assignmentLog.deleteMany({ where: { driverId: { in: driverIds } } }));
+await del("tripHistory", () => db.tripHistory.deleteMany({ where: { driverId: { in: driverIds } } }));
 await del("deliveries", () => db.delivery.deleteMany({ where: delivWhere }));
+// order graph
 await del("orderEvent", () => db.orderEvent.deleteMany({ where: orderWhere }));
 await del("invoice", () => db.invoice.deleteMany({ where: orderWhere }));
 await del("payment", () => db.payment.deleteMany({ where: orderWhere }));
 await del("orderItem", () => db.orderItem.deleteMany({ where: orderWhere }));
 await del("orders", () => db.order.deleteMany({ where: { userId: U } }));
+// B2B (Business*) graph — note the Prisma accessors are db.business* NOT db.b2b*
+await del("businessInvoiceEvent", () => db.businessInvoiceEvent.deleteMany({ where: { invoice: { businessId: { in: bizIds } } } }));
+await del("businessInvoice", () => db.businessInvoice.deleteMany({ where: { businessId: { in: bizIds } } }));
+await del("businessPayment", () => db.businessPayment.deleteMany({ where: { order: { businessId: { in: bizIds } } } }));
+await del("businessOrderEvent", () => db.businessOrderEvent.deleteMany({ where: { order: { businessId: { in: bizIds } } } }));
+await del("businessOrderItem", () => db.businessOrderItem.deleteMany({ where: { order: { businessId: { in: bizIds } } } }));
+await del("businessOrder", () => db.businessOrder.deleteMany({ where: { businessId: { in: bizIds } } }));
+await del("businessPricingHistory", () => db.businessPricingHistory.deleteMany({ where: { pricing: { businessId: { in: bizIds } } } }));
+await del("businessPricing", () => db.businessPricing.deleteMany({ where: { businessId: { in: bizIds } } }));
+await del("business", () => db.business.deleteMany({ where: { id: { in: bizIds } } }));
+// subscription + wallet + billing + payment-ledger graph
+await del("walletTxn", () => db.walletTxn.deleteMany({ where: { userId: U } }));
+await del("trialCashback", () => db.trialCashback.deleteMany({ where: { userId: U } }));
+await del("referralReward", () => db.referralReward.deleteMany({ where: { OR: [{ referrerId: U }, { refereeId: U }] } }));
+await del("billingItem", () => db.billingItem.deleteMany({ where: { billing: { subscription: { userId: U } } } }));
+await del("billingPaymentAttempt", () => db.billingPaymentAttempt.deleteMany({ where: { billing: { subscription: { userId: U } } } }));
+await del("billingEvent", () => db.billingEvent.deleteMany({ where: { billing: { subscription: { userId: U } } } }));
+await del("subscriptionBilling", () => db.subscriptionBilling.deleteMany({ where: { userId: U } }));
+await del("paymentEvent", () => db.paymentEvent.deleteMany({ where: { payment: { userId: U } } }));
+await del("paymentRefund", () => db.paymentRefund.deleteMany({ where: { payment: { userId: U } } }));
+await del("paymentLedgerAttempt", () => db.paymentLedgerAttempt.deleteMany({ where: { payment: { userId: U } } }));
+await del("paymentRecord", () => db.paymentRecord.deleteMany({ where: { userId: U } }));
+await del("puzzleWinner", () => db.puzzleWinner.deleteMany({ where: { userId: U } }));
+await del("puzzleAttempt", () => db.puzzleAttempt.deleteMany({ where: { userId: U } }));
+await del("subscriptionEvent", () => db.subscriptionEvent.deleteMany({ where: { subscription: { userId: U } } }));
+await del("autopaySubscription", () => db.autopaySubscription.deleteMany({ where: { subscription: { userId: U } } }));
 await del("subscriptionItem", () => db.subscriptionItem.deleteMany({ where: { subscription: { userId: U } } }));
+await del("recurringPaymentMethod", () => db.recurringPaymentMethod.deleteMany({ where: { userId: U } }));
 await del("subscriptions", () => db.subscription.deleteMany({ where: { userId: U } }));
+// driver
 await del("deliveryCapacity", () => db.deliveryCapacity.deleteMany({ where: { driverId: { in: driverIds } } }));
 await del("executiveStatus", () => db.executiveStatus.deleteMany({ where: { driverId: { in: driverIds } } }));
 await del("drivers", () => db.driver.deleteMany({ where: { userId: U } }));
+// farmers + procurement
 await del("qualityTest", () => db.qualityTest.deleteMany({ where: { procurement: { farmerId: { in: farmerIds } } } }));
 await del("procurement", () => db.procurement.deleteMany({ where: { farmerId: { in: farmerIds } } }));
 await del("farmers", () => db.farmer.deleteMany({ where: { id: { in: farmerIds } } }));
-await del("b2bOrderItem", () => db.b2BOrderItem.deleteMany({ where: { order: { businessId: { in: bizIds } } } }));
-await del("b2bInvoice", () => db.b2BInvoice.deleteMany({ where: { businessId: { in: bizIds } } }));
-await del("b2bOrder", () => db.b2BOrder.deleteMany({ where: { businessId: { in: bizIds } } }));
-await del("b2bPricing", () => db.b2BPricing.deleteMany({ where: { businessId: { in: bizIds } } }));
-await del("businesses", () => db.business.deleteMany({ where: { id: { in: bizIds } } }));
+// remaining user-scoped
 await del("address", () => db.address.deleteMany({ where: { userId: U } }));
 await del("notification", () => db.notification.deleteMany({ where: { userId: U } }));
 await del("customerPreference", () => db.customerPreference.deleteMany({ where: { userId: U } }));
 await del("loginHistory", () => db.loginHistory.deleteMany({ where: { userId: U } }));
+await del("userRoleAssignment", () => db.userRoleAssignment.deleteMany({ where: { userId: U } }));
+await del("review", () => db.review.deleteMany({ where: { userId: U } }));
+await del("customerNote", () => db.customerNote.deleteMany({ where: { userId: U } }));
+await del("customerEvent", () => db.customerEvent.deleteMany({ where: { userId: U } }));
+await del("offerRedemption", () => db.offerRedemption.deleteMany({ where: { userId: U } }));
+await del("couponRedemption", () => db.couponRedemption.deleteMany({ where: { userId: U } }));
+await del("passwordResetToken", () => db.passwordResetToken.deleteMany({ where: { userId: U } }));
 await del("supportMessage", () => db.supportMessage.deleteMany({ where: { ticket: { customerId: U } } }));
 await del("supportTicket", () => db.supportTicket.deleteMany({ where: { customerId: U } }));
 await del("chatMessage", () => db.chatMessage.deleteMany({ where: { session: { customerId: U } } }));
 await del("chatSession", () => db.chatSession.deleteMany({ where: { customerId: U } }));
-await del("referral", () => db.referral.deleteMany({ where: { OR: [{ referrerId: U }, { refereeId: U }] } }));
+await del("employeeProfile", () => db.employeeProfile.deleteMany({ where: { userId: U } }));
 await del("auditLog", () => db.auditLog.deleteMany({ where: { userId: U } }));
 await del("USERS", () => db.user.deleteMany({ where: { id: U } }));
-console.log("\nPurge complete. Re-run the dry run to confirm 0 demo records remain.\n");
+const remaining = await db.user.count({ where: { id: U } });
+console.log("\n" + (remaining === 0 ? "✓ Purge complete — 0 demo users remain." : "⚠ " + remaining + " demo users still blocked (see errors above)."));
 await db.$disconnect();
