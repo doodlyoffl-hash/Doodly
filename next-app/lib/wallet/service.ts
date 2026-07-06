@@ -19,6 +19,8 @@ import {
   evaluateTrialCashback, computeWalletApply, generateReference,
   DEFAULT_CASHBACK_RULES, type CashbackRules,
 } from "./engine";
+import { emailIfOptedIn } from "@/lib/notifications/dispatch";
+import * as T from "@/lib/email/templates";
 
 interface Actor { actorId?: string; actorRole?: string }
 
@@ -142,7 +144,7 @@ export async function rechargeWallet(args: { userId: string; amountPaise: number
  */
 export async function creditTrialCashback(args: { userId: string; subscriptionId?: string; targetPlanSlug?: string } & Actor) {
   const { userId, subscriptionId, actorId } = args;
-  return withRetry(() =>
+  const result = await withRetry(() =>
     db.$transaction(async (tx) => {
       const rules = await getCashbackRules(tx);
 
@@ -201,6 +203,12 @@ export async function creditTrialCashback(args: { userId: string; subscriptionId
       return { credited: true, amountPaise: decision.amountPaise, balancePaise, reference: txn.reference };
     }, TX),
   );
+  // Branded "wallet credit" email (opt-in respected) once the ₹200 cashback is credited.
+  if (result?.credited) {
+    const amt = "₹" + Math.round(((result as { amountPaise?: number }).amountPaise || 0) / 100);
+    await emailIfOptedIn(userId, (name) => T.walletCredit({ name, amount: amt, reason: "Trial Pack cashback" }));
+  }
+  return result;
 }
 
 // ---------- Customer wallet ----------
@@ -302,7 +310,7 @@ export async function creditReferralReward(args: { referrerId: string; refereeId
   const amountPaise = args.amountPaise && args.amountPaise > 0 ? args.amountPaise : DEFAULT_REFERRAL_PAISE;
   if (!args.referrerId || !args.refereeId) throw new Error("referrerId and refereeId are required");
   if (args.referrerId === args.refereeId) throw new Error("A customer cannot refer themselves.");
-  return withRetry(() =>
+  const result = await withRetry(() =>
     db.$transaction(async (tx) => {
       const existing = await tx.referralReward.findUnique({ where: { refereeId: args.refereeId } });
       if (existing?.status === "CREDITED") return { credited: false, reason: "already_rewarded" as const };
@@ -320,6 +328,12 @@ export async function creditReferralReward(args: { referrerId: string; refereeId
       return { credited: true, amountPaise, balancePaise, reference: txn.reference };
     }, TX),
   );
+  // Branded "referral reward" celebration email (opt-in respected) once credited.
+  if (result?.credited) {
+    const friend = await db.user.findUnique({ where: { id: args.refereeId }, select: { name: true } }).then((u) => u?.name || undefined).catch(() => undefined);
+    await emailIfOptedIn(args.referrerId, (name) => T.referralReward({ name, amount: "₹" + Math.round(amountPaise / 100), friend }));
+  }
+  return result;
 }
 
 /** Reverse a previous txn (creates the opposite entry). Guarded against double-reversal. */

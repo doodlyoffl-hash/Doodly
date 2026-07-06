@@ -148,6 +148,26 @@ export async function notify(userId: string, opts: NotifyOpts) {
 }
 
 /**
+ * Send a branded email to a user IF they've opted in (default on) and email is
+ * live. Standalone (writes no notification row) — for events that already created
+ * their own in-app row (e.g. wallet credits). `build(name)` lets the template use
+ * the recipient's name. Never throws.
+ */
+export async function emailIfOptedIn(userId: string, build: (name: string | null) => { subject: string; html: string; text: string }) {
+  try {
+    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true, name: true } });
+    if (!user?.email) return;
+    const pref = await db.customerPreference.findUnique({ where: { userId }, select: { emailOptIn: true } });
+    if (pref && !pref.emailOptIn) return;          // customer opted out of email
+    if (!channelStatus().email) return;            // no email provider configured
+    const e = build(user.name);
+    await sendEmail(user.email, e.subject, e.html, e.text);
+  } catch (e) {
+    log.error("notify.emailIfOptedIn", (e as Error)?.message ?? "failed", { userId });
+  }
+}
+
+/**
  * Drain the backlog: deliver every PENDING notification on its own channel.
  * Idempotent (only picks PENDING; each row ends terminal). Cron-driven.
  * Only touches rows from the last 7 days as a safety net against stuck rows.
