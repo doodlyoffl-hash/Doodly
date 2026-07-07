@@ -372,7 +372,7 @@ window.DOODLY_MANIFEST = (function () {
       { type:"customerSub" },
       { type:"table", dataset:"orders", toolbar:false, pager:false },
     ]},
-    "account/orders": { surface:"account", title:"My Orders", blocks:[ head("My Orders","Every order you've placed with DOODLY.",[{label:"New subscription",kind:"btn-primary",href:"/subscriptions.html",icon:"plus"}]), tbl("orders",{filters:["All","Active","Completed","Refunded"]}) ]},
+    "account/orders": { surface:"account", title:"My Orders", blocks:[ head("My Orders","Every order you've placed with DOODLY.",[{label:"New subscription",kind:"btn-primary",href:"/subscriptions.html",icon:"plus"}]), tbl("orders",{filters:["All","Active","Completed","Refunded"]}), { type:"reviewsPanel" } ]},
     "account/subscription": { surface:"account", title:"My Subscription", blocks:[
       head("My Subscription","Manage your plan, bottle size and delivery.",[{label:"Pause",kind:"btn-ghost",href:"/account/vacation.html",icon:"pause"}]),
       { type:"columns", cols:2, items:[ { type:"subSchedule" }, { type:"autopaySettings" } ]},

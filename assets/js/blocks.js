@@ -747,6 +747,7 @@ window.DOODLY_BLOCKS = (function () {
   R.loyaltyProgram = () => `<div id="loyaltyMount"></div>`;
   R.loyaltyCard = () => `<div id="loyaltyCardMount"></div>`;
   R.loyaltyAdmin = () => `<div id="loyaltyAdminMount"></div>`;
+  R.reviewsPanel = () => `<div id="reviewsPanelMount"></div>`;
   R.lateCustomerStats = () => `<div id="lateCustomerMount"></div>`;
 
   /* ---------- Monthly Puzzle Challenge (built by puzzle.js) ---------- */

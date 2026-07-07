@@ -1598,10 +1598,12 @@ model Review {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id])
-  target    String                                 // "milk","delivery","driver"
+  target    String                                 // "milk","delivery","driver" or a product slug
   rating    Int                                    // 1..5
   comment   String?
+  orderId   String?  @unique                       // verified review: the delivered order it reviews (one review per order)
   createdAt DateTime @default(now())
+  @@index([userId, createdAt])
 }
 
 // ----------------------------------------------------------------

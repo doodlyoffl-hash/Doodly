@@ -218,6 +218,7 @@ window.DOODLY_LOYALTY = (function () {
       ["🥳", "DOODLY anniversary", "+" + fmtNum(er.anniversary) + " pts"],
       ["🧩", "Play the monthly puzzle", "+" + fmtNum(er.puzzlePlay) + " pts"],
       ["🏆", "Win the monthly puzzle", "+" + fmtNum(er.puzzleWin) + " pts"],
+      ["⭐", "Verified review (per delivered order)", "+" + fmtNum(er.review) + " pts"],
       ["✅", "Complete your profile", "+" + fmtNum(er.profile) + " pts"],
     ];
     return '<section class="panel lp-earn"><div class="panel-head"><h3>Earn more points</h3></div><div class="panel-pad"><div class="lp-earn-grid">' +
@@ -294,6 +295,72 @@ window.DOODLY_LOYALTY = (function () {
       btn.addEventListener("click", function () {
         var body = btn.nextElementSibling; if (!body) return;
         var open = body.hidden; body.hidden = !open; btn.setAttribute("aria-expanded", String(open)); btn.classList.toggle("is-open", open);
+      });
+    });
+  }
+
+  /* ============================================================
+     VERIFIED REVIEWS PANEL  (#reviewsPanelMount, on My Orders)
+     Rate delivered orders → earn points. Server verifies ownership,
+     payment and delivery; one review per order (DB-enforced).
+     ============================================================ */
+  function mountReviews() {
+    var host = document.getElementById("reviewsPanelMount"); if (!host) return;
+    if (!signedInCustomer() || !API()) { host.innerHTML = ""; return; }
+    API().get("/api/account/reviews").then(function (d) {
+      d = d || {}; var reviewable = d.reviewable || [], reviews = d.reviews || [];
+      if (!reviewable.length && !reviews.length) { host.innerHTML = ""; return; }   // nothing to rate yet — stay quiet
+      var stars = function (n) { var s = ""; for (var i = 1; i <= 5; i++) s += '<span class="lr-star' + (i <= n ? " on" : "") + '">★</span>'; return s; };
+      host.innerHTML =
+        '<section class="panel lr-panel"><div class="panel-head"><h3>Rate your deliveries</h3>' +
+          (d.pointsPerReview ? '<span class="lr-earntag">⭐ +' + fmtNum(d.pointsPerReview) + ' points per review</span>' : '') + '</div>' +
+        '<div class="panel-pad">' +
+          (reviewable.length
+            ? reviewable.map(function (o) {
+                return '<div class="lr-item" data-order="' + esc(o.orderId) + '">' +
+                  '<div class="lr-item-info"><b>' + esc(o.number) + '</b><span class="muted-sm">' + esc(o.label) + ' · ' + esc(fmtDate(o.placedAt)) + '</span></div>' +
+                  '<div class="lr-stars" role="radiogroup" aria-label="Rating">' +
+                    [1,2,3,4,5].map(function (i) { return '<button type="button" class="lr-pick" data-v="' + i + '" aria-label="' + i + ' star">★</button>'; }).join("") + '</div>' +
+                  '<input type="text" class="lr-comment" maxlength="1000" placeholder="Anything to add? (optional)">' +
+                  '<button type="button" class="btn btn-primary sm lr-submit" disabled>Submit review</button>' +
+                '</div>';
+              }).join("")
+            : '<p class="muted-sm" style="margin:0">All your delivered orders are reviewed — thank you! 🥛</p>') +
+          (reviews.length
+            ? '<div class="lr-done"><div class="lr-done-h">Your reviews</div>' +
+              reviews.slice(0, 8).map(function (r) {
+                return '<div class="lr-done-row"><span class="lr-done-stars">' + stars(r.rating) + '</span><span class="lr-done-t">' + esc(r.target || "") + (r.comment ? ' — “' + esc(r.comment) + '”' : '') + '</span><span class="muted-sm">' + esc(fmtDate(r.createdAt)) + '</span></div>';
+              }).join("") + '</div>'
+            : '') +
+        '</div></section>';
+      wireReviewItems(host);
+    }).catch(function () { host.innerHTML = ""; });
+  }
+
+  function wireReviewItems(host) {
+    host.querySelectorAll(".lr-item").forEach(function (item) {
+      var rating = 0;
+      var picks = item.querySelectorAll(".lr-pick"), submit = item.querySelector(".lr-submit");
+      picks.forEach(function (b) {
+        b.addEventListener("click", function () {
+          rating = Number(b.dataset.v);
+          picks.forEach(function (x) { x.classList.toggle("on", Number(x.dataset.v) <= rating); });
+          submit.disabled = false;
+        });
+      });
+      submit.addEventListener("click", function () {
+        if (!rating) return;
+        submit.disabled = true; submit.textContent = "Submitting…";
+        API().post("/api/account/reviews", { orderId: item.dataset.order, rating: rating, comment: item.querySelector(".lr-comment").value.trim() })
+          .then(function (res) {
+            var pts = res && res.pointsAwarded;
+            toast(pts ? "Thanks for your review — +" + fmtNum(pts) + " points! ⭐" : "Thanks for your review! ⭐");
+            _sum = null; mountReviews(); mountCard();
+          })
+          .catch(function (e) {
+            submit.disabled = false; submit.textContent = "Submit review";
+            toast((e && e.message) || "Couldn't submit the review.");
+          });
       });
     });
   }
@@ -484,7 +551,7 @@ window.DOODLY_LOYALTY = (function () {
   }
 
   /* ---------------- entry ---------------- */
-  function mountAll() { try { mountCard(); } catch (e) {} try { mountProgram(); } catch (e) {} try { mountAdmin(); } catch (e) {} }
+  function mountAll() { try { mountCard(); } catch (e) {} try { mountProgram(); } catch (e) {} try { mountReviews(); } catch (e) {} try { mountAdmin(); } catch (e) {} }
 
-  return { mountAll: mountAll, mountCard: mountCard, mountProgram: mountProgram, mountAdmin: mountAdmin, reload: function () { _sum = null; return load(true); } };
+  return { mountAll: mountAll, mountCard: mountCard, mountProgram: mountProgram, mountReviews: mountReviews, mountAdmin: mountAdmin, reload: function () { _sum = null; return load(true); } };
 })();
