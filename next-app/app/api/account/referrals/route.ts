@@ -52,7 +52,7 @@ export const GET = route("account.referrals", async (req: NextRequest) => {
   return ok({
     referral: {
       code,
-      shareUrl: `${base}/register?ref=${code}`,
+      shareUrl: `${base}/signup.html?ref=${code}`,   // canonical registration page (extensionless /signup 404s)
       referredCount: friends.length,
       successfulCount,
       pendingCount,

@@ -1,5 +1,9 @@
 {
   "redirects": [
     { "source": "/next-app/:path*", "destination": "/", "permanent": false }
+  ],
+  "rewrites": [
+    { "source": "/signup", "destination": "/signup.html" },
+    { "source": "/register", "destination": "/register.html" }
   ]
 }

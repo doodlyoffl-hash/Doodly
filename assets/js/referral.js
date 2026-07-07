@@ -58,7 +58,7 @@ window.DOODLY_REFERRAL = (function () {
   }
   function myCode() { return codeFor(ME); }
   function referrerOfCode(code) { var m = codes(); for (var k in m) if (m[k] === code) return k; return null; }
-  function link(code) { return "https://doodly.in/signup?ref=" + (code || myCode()); }
+  function link(code) { return "https://doodly.in/signup.html?ref=" + (code || myCode()); }
 
   /* ---------- seed demo data ---------- */
   var _seeded = false;

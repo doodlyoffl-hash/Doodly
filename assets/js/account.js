@@ -733,7 +733,7 @@ window.DOODLY_ACCOUNT = (function () {
     host.innerHTML = '<div class="panel panel-pad"><div class="sk-line skeleton w40"></div><div class="sk-line skeleton"></div></div>';
     API().get("/api/account/referrals").then(function (r) {
       var d = r.referral || {};
-      var url = d.shareUrl || ("/signup?ref=" + (d.code || ""));
+      var url = d.shareUrl || ("/signup.html?ref=" + (d.code || ""));
       var msg = encodeURIComponent("Join me on DOODLY for fresh A2 buffalo milk! Use my code " + (d.code || "") + " when you subscribe: " + url);
       var friends = d.friends || [];
       host.innerHTML =
