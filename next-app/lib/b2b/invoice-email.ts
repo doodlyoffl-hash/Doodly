@@ -70,6 +70,15 @@ function buildEmailData(d: Detail, links: { view: string; download: string }): T
   };
 }
 
+/** Render the exact branded invoice email ({subject, html, text}) for an invoice id.
+    Used by the send flow and the admin "Download Email HTML" preview. */
+export async function renderInvoiceEmailById(id: string): Promise<{ subject: string; html: string; text: string } | null> {
+  const d = await getInvoiceDetail(id);
+  if (!d) return null;
+  const links = await invoiceLinks(id);
+  return T.businessInvoiceEmail(buildEmailData(d, links));
+}
+
 // ---- audit trail (reuses BusinessInvoiceEvent) ----
 async function logEmailEvent(invoiceId: string, type: "email" | "email_failed" | "email_skipped", note: string, actorId?: string, actorRole?: string) {
   try { await db.businessInvoiceEvent.create({ data: { invoiceId, type, note: note.slice(0, 400), byId: actorId ?? null, byRole: actorRole ?? null } }); }

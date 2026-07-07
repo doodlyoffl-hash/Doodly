@@ -218,6 +218,7 @@ function InvoiceRowView({ iv, open, onToggle, flash, onChanged }: { iv: InvoiceR
                 <div className="flex flex-wrap gap-2">
                   <button disabled={busy} onClick={printPdf} className="rounded-full border border-mint-soft px-3 py-1.5 text-xs font-semibold text-forest disabled:opacity-50">Print</button>
                   <a href={`/api/b2b/invoices/${iv.id}/pdf?dl=1`} target="_blank" rel="noopener noreferrer" className="rounded-full border border-mint-soft px-3 py-1.5 text-xs font-semibold text-forest">Download PDF</a>
+                  <a href={`/api/b2b/invoices/${iv.id}/email-html`} target="_blank" rel="noopener noreferrer" className="rounded-full border border-mint-soft px-3 py-1.5 text-xs font-semibold text-forest">Email HTML</a>
                   {d.status !== "VOID" && <button disabled={busy} onClick={() => patch({ action: "resend-email" }, "Invoice email sent")} className="rounded-full border border-leaf px-3 py-1.5 text-xs font-semibold text-forest disabled:opacity-50">{d.email?.status === "SENT" ? "Resend email" : "Send email"}</button>}
                   {d.status !== "VOID" && <button disabled={busy} onClick={() => { if (confirm("Void this invoice? This cannot be undone.")) patch({ action: "void" }, "Invoice voided"); }} className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 disabled:opacity-50">Void invoice</button>}
                 </div>
