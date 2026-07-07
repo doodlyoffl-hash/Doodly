@@ -324,7 +324,14 @@ window.DOODLY_MANIFEST = (function () {
 
     /* ===== AUTH ===== */
     "login": { surface:"auth", title:"Log in", auth:{
-      chooser:true, title:"Welcome to DOODLY", sub:"Choose how you'd like to sign in." }},
+      title:"Customer login", sub:"Manage your subscriptions, orders, deliveries, invoices and account.",
+      fields:[{ label:"Mobile number or email", placeholder:"+91 98480 11234" },{ label:"Password", type:"password", placeholder:"••••••••" }],
+      submit:"Log in", otpLink:true, forgot:true, guest:true, loginRole:"customer", dest:"/account/dashboard.html",
+      alt:["New to DOODLY?","Create an account","/signup.html"],
+      secondaryLinks:[
+        { q:"Looking for the delivery app?", label:"Executive login", href:"/delivery/login.html" },
+        { q:"Working at DOODLY?", label:"Admin & Staff login", href:"/login/admin.html" },
+      ] }},
     "login/customer": { surface:"auth", title:"Customer Login", auth:{
       title:"Customer login", sub:"Manage your subscriptions, orders, deliveries, invoices and account.",
       fields:[{ label:"Mobile number or email", placeholder:"+91 98480 11234" },{ label:"Password", type:"password", placeholder:"••••••••" }],

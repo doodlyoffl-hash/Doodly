@@ -387,6 +387,7 @@
         ${a.otpLink ? `<a class="btn-google auth-otp-link" href="/otp.html">${icon("phone", 18)} Log in with OTP</a>` : ""}
         ${a.terms ? `<p class="auth-terms">By continuing you agree to our <a href="/terms.html">Terms</a> &amp; <a href="/privacy.html">Privacy Policy</a>.</p>` : ""}
         ${a.alt ? `<p class="auth-alt">${a.alt[0]} <a href="${a.alt[2]}${/^\/(login|signup)/.test(a.alt[2]) ? carry : ""}">${a.alt[1]}</a></p>` : ""}
+        ${(a.secondaryLinks && a.secondaryLinks.length) ? `<div class="auth-secondary">${a.secondaryLinks.map((s) => `<p class="auth-alt">${s.q} <a href="${s.href}">${s.label} &rarr;</a></p>`).join("")}</div>` : ""}
         ${extras}
       </form>`;
 

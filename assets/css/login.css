@@ -46,4 +46,9 @@
 .auth-backlink { display: block; text-align: center; margin-top: 10px; font-size: 13px; font-weight: 600; color: var(--leaf-600, #169A57); }
 .auth-backlink:hover { text-decoration: underline; }
 
+/* Subtle, clearly-separated secondary logins (Executive + Admin/Staff) beneath
+   the customer form — styled like the existing "Executive login" alt link. */
+.auth-secondary { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px; }
+.auth-secondary .auth-alt { margin: 0; }
+
 @media (prefers-reduced-motion: reduce) { .lc-card, .lc-cta svg { transition: none !important; } }
