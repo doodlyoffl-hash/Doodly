@@ -40,6 +40,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         return NextResponse.json({ ok: true, result: await logInvoiceAction(params.id, "pdf", a) });
       case "export":
         return NextResponse.json({ ok: true, result: await logInvoiceAction(params.id, "export", a) });
+      case "resend-email": {
+        if (role !== "super_admin") return NextResponse.json({ error: "Only a Super Admin can resend invoice emails." }, { status: 403 });
+        const { sendBusinessInvoiceEmail } = await import("@/lib/b2b/invoice-email");
+        const result = await sendBusinessInvoiceEmail(params.id, { force: true, actorId: a.actorId, actorRole: role });
+        return NextResponse.json({ ok: result.ok, result });
+      }
       default:
         return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }

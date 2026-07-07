@@ -26,6 +26,9 @@ const TWILIO_SMS_FROM = () => env("TWILIO_SMS_FROM"); // +1XXXXXXXXXX or a Messa
 const TWILIO_WA_FROM = () => env("TWILIO_WHATSAPP_FROM"); // whatsapp:+14155238886
 
 export type SendResult = { ok: boolean; skipped?: boolean; ref?: string; error?: string };
+/** A file attachment for Resend: `content` is base64-encoded bytes. */
+export type EmailAttachment = { filename: string; content: string; contentType?: string };
+export type EmailOptions = { attachments?: EmailAttachment[]; replyTo?: string };
 /** A message to send on SMS/WhatsApp: free `text` (Twilio) + optional MSG91 template. */
 export type ChannelMsg = { text: string; template?: string | null; vars?: string[] };
 
@@ -52,7 +55,7 @@ export function toE164(phone?: string | null): string | null {
 }
 
 // ------------------------------------------------------------------ Email (Resend)
-export async function sendEmail(to: string | null | undefined, subject: string, html: string, text: string): Promise<SendResult> {
+export async function sendEmail(to: string | null | undefined, subject: string, html: string, text: string, opts?: EmailOptions): Promise<SendResult> {
   if (!to) return { ok: false, skipped: true, error: "no-email-address" };
   const key = RESEND_KEY();
   if (!key) {
@@ -60,10 +63,15 @@ export async function sendEmail(to: string | null | undefined, subject: string, 
     return { ok: false, skipped: true, error: "email-provider-not-configured" };
   }
   try {
+    const payload: Record<string, unknown> = { from: EMAIL_FROM(), to, subject, html, text };
+    if (opts?.replyTo) payload.reply_to = opts.replyTo;
+    if (opts?.attachments?.length) {
+      payload.attachments = opts.attachments.map((a) => ({ filename: a.filename, content: a.content, ...(a.contentType ? { content_type: a.contentType } : {}) }));
+    }
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: EMAIL_FROM(), to, subject, html, text }),
+      body: JSON.stringify(payload),
     });
     const j = (await res.json().catch(() => ({}))) as { id?: string; message?: string; name?: string };
     if (!res.ok) {

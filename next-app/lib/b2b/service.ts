@@ -311,22 +311,28 @@ export async function recordPayment(args: { orderId: string; amountPaise: number
 }
 
 export async function generateInvoice(args: { orderId: string } & Actor) {
-  return withRetry(() =>
+  const { inv, created } = await withRetry(() =>
     db.$transaction(async (tx) => {
       const existing = await tx.businessInvoice.findUnique({ where: { orderId: args.orderId } });
-      if (existing) return existing;
+      if (existing) return { inv: existing, created: false };
       const order = await tx.businessOrder.findUnique({ where: { id: args.orderId }, select: { businessId: true, taxPaise: true, paymentTerm: true } });
       if (!order) throw new Error("Order not found");
       const year = new Date().getFullYear();
       const number = formatInvoiceNumber(year, await nextSeq(tx, `b2binvoice:${year}`));
       const due = new Date();
       due.setDate(due.getDate() + (order.paymentTerm === "WEEKLY" ? 7 : order.paymentTerm === "MONTHLY" ? 30 : order.paymentTerm === "CREDIT" ? 15 : 0));
-      const inv = await tx.businessInvoice.create({ data: { number, orderId: args.orderId, businessId: order.businessId, gstPaise: order.taxPaise, status: "ISSUED", dueDate: due, createdById: args.actorId } });
-      await logEvent(tx, args.orderId, "INVOICE", { byId: args.actorId, note: `Invoice ${inv.number}` });
-      await tx.businessInvoiceEvent.create({ data: { invoiceId: inv.id, type: "created", note: `Invoice ${inv.number} issued`, byId: args.actorId, byRole: args.actorRole } });
-      return inv;
+      const row = await tx.businessInvoice.create({ data: { number, orderId: args.orderId, businessId: order.businessId, gstPaise: order.taxPaise, status: "ISSUED", dueDate: due, createdById: args.actorId } });
+      await logEvent(tx, args.orderId, "INVOICE", { byId: args.actorId, note: `Invoice ${row.number}` });
+      await tx.businessInvoiceEvent.create({ data: { invoiceId: row.id, type: "created", note: `Invoice ${row.number} issued`, byId: args.actorId, byRole: args.actorRole } });
+      return { inv: row, created: true };
     }, TX),
   );
+  // Auto-send the branded invoice email + PDF only for a freshly created invoice
+  // (never on the idempotent re-return). Dynamic import breaks the import cycle.
+  if (created) {
+    try { const m = await import("./invoice-email"); await m.autoSendOnCreate(inv.id, { actorId: args.actorId, actorRole: args.actorRole }); } catch { /* logged inside */ }
+  }
+  return inv;
 }
 
 // ---------- reports ----------

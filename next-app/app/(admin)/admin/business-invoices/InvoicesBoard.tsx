@@ -18,6 +18,8 @@ async function api(url: string, init?: RequestInit) {
 
 const PAY_TONE: Record<string, string> = { PAID: "bg-leaf text-white", PARTIAL: "bg-amber-50 text-amber-700", PENDING: "bg-blue-50 text-blue-700", OVERDUE: "bg-red-50 text-red-700", VOID: "bg-gray-100 text-gray-500" };
 const ST_TONE: Record<string, string> = { ISSUED: "bg-blue-50 text-blue-700", PARTIAL: "bg-amber-50 text-amber-700", PAID: "bg-leaf text-white", VOID: "bg-gray-100 text-gray-500" };
+const EMAIL_TONE: Record<string, string> = { SENT: "bg-leaf text-white", PENDING: "bg-blue-50 text-blue-700", FAILED: "bg-red-50 text-red-700", SKIPPED: "bg-gray-100 text-gray-500" };
+const emailLabel = (s: string) => ({ SENT: "Sent", PENDING: "Pending", FAILED: "Failed", SKIPPED: "Skipped" }[s] ?? s);
 const Pill = ({ s, map }: { s: string; map: Record<string, string> }) => <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${map[s] ?? "bg-gray-100 text-gray-600"}`}>{s[0] + s.slice(1).toLowerCase()}</span>;
 
 type Tab = "dashboard" | "invoices" | "create" | "reports";
@@ -214,12 +216,28 @@ function InvoiceRowView({ iv, open, onToggle, flash, onChanged }: { iv: InvoiceR
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  <button disabled={busy} onClick={printPdf} className="rounded-full border border-mint-soft px-3 py-1.5 text-xs font-semibold text-forest disabled:opacity-50">Print / Download PDF</button>
+                  <button disabled={busy} onClick={printPdf} className="rounded-full border border-mint-soft px-3 py-1.5 text-xs font-semibold text-forest disabled:opacity-50">Print</button>
+                  <a href={`/api/b2b/invoices/${iv.id}/pdf?dl=1`} target="_blank" rel="noopener noreferrer" className="rounded-full border border-mint-soft px-3 py-1.5 text-xs font-semibold text-forest">Download PDF</a>
+                  {d.status !== "VOID" && <button disabled={busy} onClick={() => patch({ action: "resend-email" }, "Invoice email sent")} className="rounded-full border border-leaf px-3 py-1.5 text-xs font-semibold text-forest disabled:opacity-50">{d.email?.status === "SENT" ? "Resend email" : "Send email"}</button>}
                   {d.status !== "VOID" && <button disabled={busy} onClick={() => { if (confirm("Void this invoice? This cannot be undone.")) patch({ action: "void" }, "Invoice voided"); }} className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 disabled:opacity-50">Void invoice</button>}
                 </div>
                 {d.status !== "VOID" && <EditMeta d={d} busy={busy} onSave={(patchBody) => patch({ action: "update", patch: patchBody }, "Invoice updated")} />}
+                {d.email && (
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-ink-3">Invoice email</p>
+                    <div className="mt-1.5 rounded-xl border border-mint-soft bg-white p-3 text-xs">
+                      <div className="flex items-center justify-between"><span className="font-semibold text-forest">Delivery status</span><span className={`rounded-full px-2.5 py-0.5 font-bold ${EMAIL_TONE[d.email.status] ?? "bg-gray-100 text-gray-600"}`}>{emailLabel(d.email.status)}</span></div>
+                      {d.email.to && <div className="mt-1 flex justify-between"><span className="text-ink-3">Sent to</span><span className="text-ink-2">{d.email.to}</span></div>}
+                      {d.email.sentAt && <div className="flex justify-between"><span className="text-ink-3">Sent at</span><span className="text-ink-2">{fmtDT(d.email.sentAt)}</span></div>}
+                      {d.email.messageId && <div className="flex justify-between gap-2"><span className="text-ink-3">Message ID</span><span className="truncate font-mono text-ink-2" title={d.email.messageId}>{d.email.messageId}</span></div>}
+                      {d.email.retryCount > 0 && <div className="flex justify-between"><span className="text-ink-3">Attempts</span><span className="text-ink-2">{d.email.retryCount}</span></div>}
+                      {d.email.error && <p className="mt-1 text-red-600">{d.email.error}</p>}
+                      {!d.business.email && <p className="mt-1 text-amber-700">No email on file for this business — add one on the business, then resend.</p>}
+                    </div>
+                  </div>
+                )}
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wide text-ink-3">Audit trail</p>
+                  <p className="text-xs font-bold uppercase tracking-wide text-ink-3">Audit trail &amp; email history</p>
                   <ol className="mt-1.5 max-h-48 space-y-1 overflow-y-auto">
                     {d.events.map((e) => <li key={e.id} className="rounded-lg border border-mint-soft bg-white px-3 py-1.5 text-xs"><div className="flex justify-between"><span className="font-semibold text-forest">{e.type[0].toUpperCase() + e.type.slice(1)}{e.byRole ? ` · ${e.byRole}` : ""}</span><span className="text-ink-3">{fmtDT(e.createdAt)}</span></div>{e.note && <p className="text-ink-2">{e.note}</p>}</li>)}
                   </ol>

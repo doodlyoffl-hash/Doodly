@@ -2219,9 +2219,19 @@ model BusinessInvoice {
   terms       String?
   createdById String?
   issuedAt    DateTime         @default(now())
+  // --- invoice-email delivery tracking (auto-sent on creation via Resend) ---
+  // Latest attempt snapshot; the full per-attempt history lives in
+  // BusinessInvoiceEvent rows of type "email" / "email_failed".
+  emailStatus     String    @default("PENDING")   // PENDING | SENT | FAILED | SKIPPED
+  emailTo         String?                          // address the invoice was sent to
+  emailSentAt     DateTime?                         // last successful send
+  emailMessageId  String?                          // Resend message id (provider ref)
+  emailRetryCount Int       @default(0)             // number of attempts made
+  emailError      String?                          // last failure reason (truncated)
   events      BusinessInvoiceEvent[]
   @@index([status])
   @@index([businessId])
+  @@index([emailStatus])
 }
 
 // Invoice audit trail / status history (created, payment, void, updated, pdf, export).

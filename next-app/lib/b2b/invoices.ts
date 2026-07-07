@@ -55,6 +55,7 @@ function shapeRow(inv: InvWithOrder) {
     totalPaise: o.totalPaise, paidPaise: o.paidPaise, gstPaise: inv.gstPaise,
     itemsSummary: o.items.map((i) => `${i.quantity} ${i.unit} ${i.productName}`).slice(0, 3).join(", "),
     lastUpdated: (inv.events.at(-1)?.createdAt ?? inv.issuedAt).toISOString(),
+    emailStatus: inv.emailStatus, emailSentAt: inv.emailSentAt?.toISOString() ?? null,
   };
 }
 
@@ -117,11 +118,12 @@ export async function getInvoiceDetail(id: string) {
     id: inv.id, number: inv.number, status: inv.status, dueDate: inv.dueDate?.toISOString() ?? null, voidedAt: inv.voidedAt?.toISOString() ?? null,
     notes: inv.notes, terms: inv.terms, issuedAt: inv.issuedAt.toISOString(), gstPaise: inv.gstPaise,
     paymentStatus: paymentStatusOf(o.totalPaise, o.paidPaise, inv.dueDate, inv.status),
-    order: { code: o.code, deliveryDate: o.deliveryDate.toISOString(), subtotalPaise: o.subtotalPaise, discountPaise: o.discountPaise, taxPaise: o.taxPaise, totalPaise: o.totalPaise, paidPaise: o.paidPaise, paymentTerm: o.paymentTerm },
+    order: { code: o.code, deliveryDate: o.deliveryDate.toISOString(), deliveryTime: o.deliveryTime, subtotalPaise: o.subtotalPaise, discountPaise: o.discountPaise, taxPaise: o.taxPaise, totalPaise: o.totalPaise, paidPaise: o.paidPaise, paymentTerm: o.paymentTerm },
     business: { code: o.business.code, name: o.business.name, gst: o.business.gst, pan: o.business.pan, contactPerson: o.business.contactPerson, mobile: o.business.mobile, email: o.business.email, line1: o.business.line1, city: o.business.city, state: o.business.state, pincode: o.business.pincode, billingAddress: o.business.billingAddress },
     items: o.items.map((i) => ({ id: i.id, productName: i.productName, quantity: i.quantity, unit: i.unit, unitPricePaise: i.unitPricePaise, lineTotalPaise: i.lineTotalPaise })),
     payments: o.payments.map((p) => ({ id: p.id, amountPaise: p.amountPaise, method: p.method, reference: p.reference, createdAt: p.createdAt.toISOString() })),
     events: inv.events.map((e) => ({ id: e.id, type: e.type, note: e.note, byRole: e.byRole, createdAt: e.createdAt.toISOString() })),
+    email: { status: inv.emailStatus, to: inv.emailTo, sentAt: inv.emailSentAt?.toISOString() ?? null, messageId: inv.emailMessageId, retryCount: inv.emailRetryCount, error: inv.emailError },
   };
 }
 
@@ -136,7 +138,7 @@ export async function uninvoicedOrders() {
 }
 
 export async function createInvoiceForOrder(args: { orderId: string; dueDate?: string; notes?: string; terms?: string } & Actor) {
-  return withRetry(() =>
+  const inv = await withRetry(() =>
     db.$transaction(async (tx) => {
       const existing = await tx.businessInvoice.findUnique({ where: { orderId: args.orderId }, select: { id: true } });
       if (existing) throw new Error("This order already has an invoice.");
@@ -146,11 +148,15 @@ export async function createInvoiceForOrder(args: { orderId: string; dueDate?: s
       const year = new Date().getFullYear();
       const number = formatInvoiceNumber(year, await nextSeq(tx, `b2binvoice:${year}`));
       const due = args.dueDate ? new Date(args.dueDate) : dueDateFor(order.paymentTerm, new Date());
-      const inv = await tx.businessInvoice.create({ data: { number, orderId: args.orderId, businessId: order.businessId, gstPaise: order.taxPaise, status: "ISSUED", dueDate: due, notes: clean(args.notes), terms: clean(args.terms), createdById: args.actorId } });
-      await logInvoiceEvent(tx, inv.id, "created", { note: `Invoice ${number} issued`, actorId: args.actorId, actorRole: args.actorRole, ip: args.ip });
-      return inv;
+      const created = await tx.businessInvoice.create({ data: { number, orderId: args.orderId, businessId: order.businessId, gstPaise: order.taxPaise, status: "ISSUED", dueDate: due, notes: clean(args.notes), terms: clean(args.terms), createdById: args.actorId } });
+      await logInvoiceEvent(tx, created.id, "created", { note: `Invoice ${number} issued`, actorId: args.actorId, actorRole: args.actorRole, ip: args.ip });
+      return created;
     }, TX),
   );
+  // Auto-send the branded invoice email + PDF attachment (idempotent, never throws).
+  // Dynamic import avoids a static circular dependency with lib/b2b/invoice-email.
+  try { const m = await import("./invoice-email"); await m.autoSendOnCreate(inv.id, { actorId: args.actorId, actorRole: args.actorRole }); } catch { /* logged inside */ }
+  return inv;
 }
 
 export async function updateInvoice(id: string, patch: { dueDate?: string | null; notes?: string; terms?: string }, actor: Actor) {

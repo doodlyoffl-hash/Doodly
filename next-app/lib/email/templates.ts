@@ -182,6 +182,87 @@ export function invoiceEmail(d: { name?: string | null; invoiceNo: string; amoun
   return { subject: `Invoice ${d.invoiceNo} — DOODLY`, html, text: `${hi(d.name)} Your DOODLY invoice ${d.invoiceNo} for ${d.amount} is ready. Download: ${url(d.downloadUrl)}` };
 }
 
+/* ---------- B2B Business Invoice (rich, PDF attached) ---------- */
+function payBadge(status: string): string {
+  const s = String(status || "").toUpperCase();
+  const map: Record<string, [string, string]> = {
+    PAID: [C.green, "Paid"], PARTIAL: [C.gold, "Partially Paid"], PENDING: [C.deepBlue, "Pending"],
+    OVERDUE: ["#C0392B", "Overdue"], VOID: ["#C0392B", "Void"], CREDIT: [C.deepBlue, "On Credit"],
+  };
+  const [col, label] = map[s] || [C.deepBlue, status || "Pending"];
+  return `<span style="display:inline-block;padding:6px 16px;border-radius:999px;background:${col}1A;color:${col};font-size:13px;font-weight:700;letter-spacing:.02em">${esc(label)}</span>`;
+}
+
+export interface BusinessInvoiceEmailData {
+  business: { name: string; code: string; contactPerson?: string | null; mobile?: string | null; email?: string | null; gst?: string | null; billingAddress?: string | null };
+  invoice: { number: string; orderCode: string; date: string; paymentStatus: string; paymentMethod?: string | null; paymentTerm?: string | null };
+  delivery: { date?: string | null; slot?: string | null; address?: string | null };
+  items: { name: string; qty?: string; amount: string }[];
+  totals: { label: string; value: string; strong?: boolean }[];
+  grandTotal: string;
+  viewUrl: string;
+  downloadUrl: string;
+}
+
+export function businessInvoiceEmail(d: BusinessInvoiceEmailData): Email {
+  const b = d.business, inv = d.invoice, del = d.delivery;
+  const html = compose(`Invoice ${inv.number} from DOODLY — ${d.grandTotal}`, [
+    hero({
+      emoji: "🧾",
+      title: "Thank You for Your Business Order!",
+      subtitle: `Your invoice has been generated successfully. Thank you for choosing DOODLY as your trusted dairy partner.`,
+    }),
+
+    // Invoice + payment status
+    card(`${heading("Invoice Details")}
+      ${infoRow("Invoice Number", inv.number, true)}
+      ${infoRow("Order Number", inv.orderCode)}
+      ${infoRow("Invoice Date", inv.date)}
+      ${inv.paymentTerm ? infoRow("Payment Term", inv.paymentTerm) : ""}
+      ${inv.paymentMethod ? infoRow("Payment Method", inv.paymentMethod) : ""}
+      <div style="height:12px"></div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td style="font-size:14px;color:${C.muted}" class="dk-mut">Payment Status</td>
+        <td align="right">${payBadge(inv.paymentStatus)}</td>
+      </tr></table>`),
+
+    // Order summary (line items + totals)
+    card(`${heading("Order Summary")}${orderSummary({ items: d.items, totals: d.totals })}`),
+
+    // Business (billed to)
+    card(`${heading("Billed To")}
+      ${infoRow("Business", b.name, true)}
+      ${infoRow("Business ID", b.code)}
+      ${b.contactPerson ? infoRow("Contact Person", b.contactPerson) : ""}
+      ${b.mobile ? infoRow("Mobile", b.mobile) : ""}
+      ${b.email ? infoRow("Email", b.email) : ""}
+      ${b.gst ? infoRow("GST Number", b.gst) : ""}
+      ${b.billingAddress ? infoRow("Billing Address", b.billingAddress) : ""}`, { bg: C.cream }),
+
+    // Delivery
+    ...(del.date || del.slot || del.address ? [card(`${heading("Delivery")}
+      ${del.date ? infoRow("Delivery Date", del.date) : ""}
+      ${del.slot ? infoRow("Time Slot", del.slot) : ""}
+      ${del.address ? infoRow("Delivery Address", del.address) : ""}`)] : []),
+
+    // PDF note + CTAs
+    card(`${para(`📎 <b style="color:${C.forest}">Your invoice PDF is attached</b> to this email for your records.`)}
+      <div style="height:8px"></div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td align="center" style="padding:4px">${button("Download Invoice", url(d.downloadUrl))}</td>
+        <td align="center" style="padding:4px">${button("View Invoice", url(d.viewUrl), "gold")}</td>
+      </tr></table>
+      <div style="height:6px"></div>
+      <div style="text-align:center;font-size:13px">
+        <a href="${url("/contact.html")}" style="color:${C.forest};text-decoration:none;font-weight:600;padding:0 10px">Contact Support</a>
+        <span style="color:#CBD6CF">·</span>
+        <a href="${url("/contact.html")}" style="color:${C.forest};text-decoration:none;font-weight:600;padding:0 10px">Order Again</a>
+      </div>`),
+  ]);
+  const text = `Thank you for your business order!\n\nInvoice ${inv.number} (Order ${inv.orderCode}) dated ${inv.date}.\nBilled to: ${b.name} (${b.code}).\nGrand Total: ${d.grandTotal} — Payment status: ${inv.paymentStatus}.\n${del.date ? `Delivery: ${del.date}${del.slot ? " · " + del.slot : ""}\n` : ""}\nYour invoice PDF is attached. Download: ${url(d.downloadUrl)}\n\nThank you for choosing DOODLY as your trusted dairy partner.`;
+  return { subject: `Invoice ${inv.number} — DOODLY (${d.grandTotal})`, html, text };
+}
+
 /* ---------- Password Reset ---------- */
 export function passwordReset(resetUrl: string, name?: string | null): Email {
   const html = compose("Reset your DOODLY password (valid for 1 hour).", [

@@ -16,6 +16,8 @@ export interface InvoiceRow {
   gstPaise: number;
   itemsSummary: string;
   lastUpdated: string;
+  emailStatus: string;          // PENDING | SENT | FAILED | SKIPPED
+  emailSentAt: string | null;
 }
 
 export interface InvoicesListResponse {
@@ -44,11 +46,12 @@ export interface InvoiceDetail {
   issuedAt: string;
   gstPaise: number;
   paymentStatus: string;
-  order: { code: string; deliveryDate: string; subtotalPaise: number; discountPaise: number; taxPaise: number; totalPaise: number; paidPaise: number; paymentTerm: string };
+  order: { code: string; deliveryDate: string; deliveryTime?: string | null; subtotalPaise: number; discountPaise: number; taxPaise: number; totalPaise: number; paidPaise: number; paymentTerm: string };
   business: { code: string; name: string; gst: string | null; pan: string | null; contactPerson: string; mobile: string; email: string | null; line1: string; city: string; state: string; pincode: string; billingAddress: string | null };
   items: { id: string; productName: string; quantity: number; unit: string; unitPricePaise: number; lineTotalPaise: number }[];
   payments: { id: string; amountPaise: number; method: string; reference: string | null; createdAt: string }[];
   events: InvoiceEventRow[];
+  email: { status: string; to: string | null; sentAt: string | null; messageId: string | null; retryCount: number; error: string | null };
 }
 
 export interface InvoiceDetailResponse {
