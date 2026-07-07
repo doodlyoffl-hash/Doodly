@@ -264,6 +264,38 @@ export async function validateCouponForCart(code: string, cart: CartContext) {
   return validateCoupon(toRule(coupon), ctx);
 }
 
+/** Coupons the customer can currently SEE + apply at checkout, each with a
+    per-cart preview (discount when applicable, or the why-not message). Reuses
+    validateCouponForCart so eligibility / limits / first-order are DB-resolved. */
+export async function listAvailableCoupons(cart: CartContext) {
+  const now = cart.now ?? new Date();
+  const rows = await db.coupon.findMany({
+    where: {
+      deletedAt: null, active: true,
+      AND: [
+        { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
+        { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+        { OR: [{ eligibility: { not: "SPECIFIC" } }, ...(cart.userId ? [{ eligibleUserIds: { has: cart.userId } }] : [{ id: "__no_guest_specific__" }])] },
+      ],
+    },
+    orderBy: { createdAt: "desc" }, take: 24,
+  });
+  const coupons = [];
+  for (const c of rows) {
+    const preview = await validateCouponForCart(c.code, cart);
+    coupons.push({
+      code: c.code, name: c.name, description: c.description,
+      discountType: c.discountType, discountBps: c.discountBps, flatPaise: c.flatPaise,
+      maxDiscountPaise: c.maxDiscountPaise, minOrderPaise: c.minOrderPaise, firstOrderOnly: c.firstOrderOnly,
+      expiresAt: c.expiresAt ? c.expiresAt.toISOString() : null,
+      applicableProductSlugs: c.applicableProductSlugs, applicablePlanSlugs: c.applicablePlanSlugs,
+      applicable: preview.ok, discountPaise: preview.ok ? preview.discountPaise : 0, message: preview.message,
+    });
+  }
+  coupons.sort((a, b) => (Number(b.applicable) - Number(a.applicable)) || (b.discountPaise - a.discountPaise));
+  return { coupons };
+}
+
 /** Apply + record a redemption atomically. Idempotent per orderId. */
 export async function redeemCoupon(code: string, cart: CartContext, orderId: string | undefined, actor: Actor) {
   return db.$transaction(async (tx) => {
