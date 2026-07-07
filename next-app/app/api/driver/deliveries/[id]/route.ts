@@ -9,6 +9,7 @@ import { ok, parseBody, route, Errors } from "@/lib/http";
 import { requireUserId } from "@/lib/auth/authorize";
 import { reqContext } from "@/lib/auth/request";
 import { audit } from "@/lib/auth/audit";
+import { earn } from "@/lib/loyalty/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,7 +35,7 @@ export const PATCH = route("driver.delivery.update", async (req: NextRequest, { 
 
   const del = await db.delivery.findFirst({
     where: { id: params.id, driverId: driver.id },
-    select: { id: true, status: true, bottleCount: true, subscription: { select: { userId: true } }, order: { select: { userId: true } } },
+    select: { id: true, status: true, bottleCount: true, subscriptionId: true, subscription: { select: { userId: true } }, order: { select: { userId: true } } },
   });
   if (!del) throw Errors.notFound("Delivery not found on your route.");
 
@@ -62,6 +63,18 @@ export const PATCH = route("driver.delivery.update", async (req: NextRequest, { 
       const inn = body.bottlesIn ?? 0;
       if (out > 0) await db.bottleLedger.create({ data: { userId: custId, deliveryId: del.id, event: "ISSUED", qty: out } });
       if (inn > 0) await db.bottleLedger.create({ data: { userId: custId, deliveryId: del.id, event: "RETURNED", qty: inn } });
+
+      // DOODLY Pure Rewards (best-effort, idempotent): points for bottles returned +
+      // a 200-point bonus at every 12 consecutive DELIVERED stops on the subscription.
+      try {
+        if (inn > 0) await earn.bottleReturn(custId, del.id, inn);
+        if (del.subscriptionId) {
+          const seq = await db.delivery.findMany({ where: { subscriptionId: del.subscriptionId }, orderBy: { date: "asc" }, select: { status: true } });
+          let streak = 0;
+          for (let i = seq.length - 1; i >= 0; i--) { if (seq[i].status === "DELIVERED") streak++; else break; }
+          if (streak > 0 && streak % 12 === 0) await earn.deliveryStreak(custId, del.subscriptionId, streak / 12);
+        }
+      } catch { /* non-blocking */ }
     }
   }
 

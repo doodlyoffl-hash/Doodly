@@ -742,6 +742,11 @@ window.DOODLY_BLOCKS = (function () {
   R.customerSub = () => `<div class="reveal" id="custSubMount"></div>`;
   R.rewardsPanel = () => `<div class="reveal" id="rewardsPanelMount"></div>`;
   R.userStats = () => `<div class="reveal" id="userStatsMount"></div>`;
+
+  /* ---------- DOODLY Pure Rewards loyalty (built by loyalty.js) ---------- */
+  R.loyaltyProgram = () => `<div id="loyaltyMount"></div>`;
+  R.loyaltyCard = () => `<div id="loyaltyCardMount"></div>`;
+  R.loyaltyAdmin = () => `<div id="loyaltyAdminMount"></div>`;
   R.lateCustomerStats = () => `<div id="lateCustomerMount"></div>`;
 
   /* ---------- Monthly Puzzle Challenge (built by puzzle.js) ---------- */

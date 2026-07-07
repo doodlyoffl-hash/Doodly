@@ -9,6 +9,7 @@ import { creditTrialCashback } from "@/lib/wallet/service";
 import { maybeAwardReferralForUser } from "@/lib/referrals/service";
 import { syncFromOrderPayment } from "@/lib/payments/service";
 import { notifyOrderConfirmed } from "@/lib/notifications/dispatch";
+import { awardOrderPaid } from "@/lib/loyalty/service";
 
 const num = (id: string) => `DOO-${id.slice(-6).toUpperCase()}`;
 
@@ -50,6 +51,8 @@ export async function POST(req: NextRequest) {
     catch (e) { console.error("payment.cashback", (e as Error)?.message); }
     // referral reward — credit the referrer if this buyer now has a qualifying subscription (non-blocking)
     await maybeAwardReferralForUser(payment.userId, { actorRole: "system" });
+    // DOODLY Pure Rewards: order + subscription points (idempotent; webhook may also call this)
+    await awardOrderPaid(payment.userId, payment.orderId);
   }
 
   return NextResponse.json({ verified: true, cashback });

@@ -8,12 +8,13 @@ import { ok, parseBody, route, Errors } from "@/lib/http";
 import { requireUserId } from "@/lib/auth/authorize";
 import { reqContext } from "@/lib/auth/request";
 import { audit } from "@/lib/auth/audit";
+import { earn } from "@/lib/loyalty/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const SELECT = {
-  id: true, name: true, email: true, phone: true,
+  id: true, name: true, email: true, phone: true, dob: true,
   loyaltyPoints: true, walletPaise: true, referralCode: true,
   twoFactorOn: true, createdAt: true,
 } as const;
@@ -29,6 +30,9 @@ const patchSchema = z.object({
   name: z.string().trim().min(1, "Please enter your name").max(80).optional(),
   email: z.string().trim().toLowerCase().email("Enter a valid email").optional(),
   phone: z.string().trim().regex(/^[+]?[0-9\s-]{7,15}$/, "Enter a valid phone number")
+    .optional().or(z.literal("").transform(() => undefined)),
+  // Date of birth (YYYY-MM-DD) — powers the birthday reward. Blank clears it.
+  dob: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
     .optional().or(z.literal("").transform(() => undefined)),
 });
 
@@ -51,10 +55,13 @@ export const PATCH = route("account.profile.update", async (req: NextRequest) =>
       ...(body.name !== undefined ? { name: body.name } : {}),
       ...(body.email !== undefined ? { email: body.email } : {}),
       ...(body.phone !== undefined ? { phone: body.phone } : {}),
+      ...(body.dob !== undefined ? { dob: body.dob ? new Date(body.dob + "T00:00:00Z") : null } : {}),
     },
     select: SELECT,
   });
 
   await audit({ userId, actorRole: "customer", action: "account.profile.update", target: userId, ctx: reqContext(req) });
+  // DOODLY Pure Rewards: award the one-time profile-complete bonus once name+email+phone are all set. Idempotent.
+  if (profile.name && profile.email && profile.phone) { await earn.profileComplete(userId); }
   return ok({ profile });
 });

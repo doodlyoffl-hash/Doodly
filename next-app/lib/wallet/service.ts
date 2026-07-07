@@ -332,6 +332,9 @@ export async function creditReferralReward(args: { referrerId: string; refereeId
   if (result?.credited) {
     const friend = await db.user.findUnique({ where: { id: args.refereeId }, select: { name: true } }).then((u) => u?.name || undefined).catch(() => undefined);
     await emailIfOptedIn(args.referrerId, (name) => T.referralReward({ name, amount: "₹" + Math.round(amountPaise / 100), friend }));
+    // DOODLY Pure Rewards: bonus loyalty points to the referrer (idempotent per referee)
+    const { earn } = await import("@/lib/loyalty/service");
+    await earn.referral(args.referrerId, args.refereeId);
   }
   return result;
 }

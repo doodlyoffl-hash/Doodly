@@ -25,6 +25,7 @@ import { ApiError, Errors } from "@/lib/http";
 import { rateLimit } from "@/lib/auth/ratelimit";
 import type { ReqContext } from "@/lib/auth/request";
 import { log } from "@/lib/logger";
+import { earn } from "@/lib/loyalty/service";
 
 /* ---------------- campaign schedule (defaults; admin-editable) ---------------- */
 
@@ -308,6 +309,8 @@ export async function submitAttempt(userId: string, puzzleId: string, body: { mo
   }).catch(() => { throw Errors.conflict("This puzzle was already submitted."); });
 
   await audit({ userId, actorRole: "customer", action: "puzzle.complete", target: `${attempt.puzzle.title}: ${moves} moves in ${Math.round(durationMs / 1000)}s`, ctx });
+  // DOODLY Pure Rewards: participation points (idempotent per puzzle + customer)
+  await earn.puzzlePlay(userId, puzzleId);
 
   const [rank, lb] = await Promise.all([
     db.puzzleAttempt.count({
@@ -362,6 +365,8 @@ export async function ensureWinner(puzzleId: string) {
 
   await audit({ userId: pick.userId, actorRole: "system", action: "puzzle.winner_calculated", target: `${puzzle.title} (month ${puzzle.monthIndex}) — ${method}, ${pick.moves} moves` });
   await awardPrize(winner.id).catch((e) => log.error("puzzles", `award failed: ${(e as Error).message}`));
+  // DOODLY Pure Rewards: winner bonus points (the free 7-day plan is handled by awardPrize). Idempotent per puzzle.
+  await earn.puzzleWin(pick.userId, puzzleId).catch(() => {});
   await notifyWinnerDecided(puzzle.id).catch(() => {});
   return winner;
 }

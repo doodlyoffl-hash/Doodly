@@ -10,6 +10,7 @@ import { db } from "@/lib/db";
 import { syncFromOrderPayment, recordWebhook } from "@/lib/payments/service";
 import { maybeAwardReferralForUser } from "@/lib/referrals/service";
 import { notify, notifyOrderConfirmed } from "@/lib/notifications/dispatch";
+import { awardOrderPaid, earn } from "@/lib/loyalty/service";
 
 export const runtime = "nodejs";
 
@@ -52,6 +53,8 @@ export async function POST(req: NextRequest) {
           if (flip.count > 0) { try { await notifyOrderConfirmed(op.userId, { number: num(op.orderId) }); } catch { /* non-blocking */ } }
           // referral reward — credit the referrer if this buyer now has a qualifying subscription (idempotent, non-blocking)
           await maybeAwardReferralForUser(op.userId, { actorRole: "system" });
+          // DOODLY Pure Rewards: order + subscription points (idempotent; verify may also call this)
+          await awardOrderPaid(op.userId, op.orderId);
         }
         const ledgerId = op ? await syncFromOrderPayment(op.id).catch(() => null) : null;
         await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: p.id, paymentId: ledgerId ?? undefined, processed: true }).catch(() => {});
@@ -84,6 +87,14 @@ export async function POST(req: NextRequest) {
           where: { gatewaySubId: sub.id },
           data: { status: "ACTIVE", attempts: 0, nextRenewalAt: new Date(sub.current_end * 1000) },
         }).catch(() => {});
+        // DOODLY Pure Rewards: renewal points (idempotent per subscription + billing cycle)
+        try {
+          const ap = await db.autopaySubscription.findFirst({ where: { gatewaySubId: sub.id }, select: { subscriptionId: true } });
+          if (ap?.subscriptionId) {
+            const s = await db.subscription.findUnique({ where: { id: ap.subscriptionId }, select: { userId: true } });
+            if (s) await earn.renewal(s.userId, ap.subscriptionId, Math.floor(Number(sub.current_end) || 0));
+          }
+        } catch { /* non-blocking */ }
         await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: sub.id, processed: true }).catch(() => {});
         break;
       }

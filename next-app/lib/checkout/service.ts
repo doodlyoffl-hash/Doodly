@@ -20,6 +20,7 @@ import { resolveCheckoutPricing } from "@/lib/catalogue/service";
 import { createOrder as createRzpOrder, razorpayConfigured } from "@/lib/razorpay";
 import { applyWalletAtCheckout, creditTrialCashback } from "@/lib/wallet/service";
 import { maybeAwardReferralForPaidOrder } from "@/lib/referrals/service";
+import { earn } from "@/lib/loyalty/service";
 import { notifyOrderConfirmed } from "@/lib/notifications/dispatch";
 import { audit } from "@/lib/auth/audit";
 import type { ReqContext } from "@/lib/auth/request";
@@ -171,6 +172,9 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     if (plan) { try { cashback = await creditTrialCashback({ userId, targetPlanSlug: plan.slug, actorId: userId }); } catch { /* non-blocking */ } }
     // referral reward — if THIS buyer was referred and just paid for a qualifying (30-day+) plan (non-blocking)
     await maybeAwardReferralForPaidOrder(userId, { subscriptionId, orderId: order.id }, { actorId: userId, actorRole: "customer" });
+    // DOODLY Pure Rewards: points on the paid order + subscription bonus (idempotent per order/subscription)
+    await earn.order(userId, order.id, totalPaise);
+    if (subscriptionId && plan) await earn.subscribe(userId, subscriptionId, plan.days);
     await audit({ userId, actorRole: "customer", action: "order.placed", target: `${base.number} wallet ₹${totalPaise / 100}`, ctx });
     await notifyOrderConfirmed(userId, { number: base.number });   // in-app + email/SMS/WhatsApp (per opt-in + provider), non-blocking
     return { ...base, paid: true, method: "wallet", cashback };

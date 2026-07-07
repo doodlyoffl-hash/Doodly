@@ -154,7 +154,10 @@ model User {
   referredById  String?
   referredBy    User?    @relation("Referrals", fields: [referredById], references: [id])
   referrals     User[]   @relation("Referrals")
-  loyaltyPoints Int      @default(0)
+  loyaltyPoints Int      @default(0)              // DOODLY Pure Rewards: available (redeemable) balance — cache of unexpired ledger lots
+  loyaltyLifetimeEarned  Int @default(0)          // lifetime points ever earned (drives tier; never decreases)
+  loyaltyLifetimeRedeemed Int @default(0)         // lifetime points redeemed to wallet
+  dob           DateTime?                         // date of birth (optional) — enables the birthday reward
   notes         String?                          // admin-only notes
   tags          String[]                         // e.g. ["premium","fragile-door"]
   createdAt     DateTime @default(now())
@@ -169,6 +172,7 @@ model User {
   bottleLedger  BottleLedger[]
   recurringMethods RecurringPaymentMethod[]
   walletTxns    WalletTxn[]
+  loyaltyLedger LoyaltyLedger[]                    // DOODLY Pure Rewards: per-lot points ledger
   reviews       Review[]
   notifications Notification[]
   driver        Driver?
@@ -930,6 +934,82 @@ model CashbackConfig {
   eligiblePlanSlugs String[] @default(["p30", "p90"])    // 30-Day Morning Ritual, 90-Day Nourish Plan
   expiryDays        Int?                                 // null = wallet credit never expires
   updatedAt         DateTime @updatedAt
+}
+
+// ===== DOODLY Pure Rewards — loyalty programme =====
+// Admin-configurable loyalty rules (singleton). Every earning rate, redemption
+// ratio, tier threshold and expiry window lives here so the whole policy is
+// tunable with no code change. The programme can be globally switched off.
+model LoyaltyConfig {
+  id                  String   @id @default("singleton")
+  enabled             Boolean  @default(true)
+
+  // ---- earning rates (points) ----
+  pointsPerHundred    Int      @default(10)               // points per ₹100 spent (paid order value)
+  earnRegistration    Int      @default(50)               // one-time on account creation
+  earnProfile         Int      @default(25)               // one-time when profile complete (name+email+phone)
+  earnSubscribe30     Int      @default(300)              // subscribe to a 30-day (or longer, <90) plan
+  earnSubscribe90     Int      @default(1000)             // subscribe to a 90-day (or longer) plan
+  earnReferral        Int      @default(500)              // successful referral (referrer), after qualifying sub
+  earnBottleReturn    Int      @default(15)               // per glass bottle returned in good condition
+  earnRenewal         Int      @default(150)              // monthly subscription renewal
+  earnStreak12        Int      @default(200)              // 12 consecutive deliveries without pause
+  earnBirthday        Int      @default(250)              // annual birthday reward
+  earnAnniversary     Int      @default(1000)             // each DOODLY anniversary
+  earnPuzzlePlay      Int      @default(50)               // participate in the monthly puzzle
+  earnPuzzleWin       Int      @default(2500)             // win the monthly puzzle (free 7-day plan handled by puzzle engine)
+  earnReview          Int      @default(30)               // verified product review (once per delivered order)
+
+  // ---- redemption ----
+  redeemPointsPerRupee Int     @default(10)               // 10 points = ₹1 wallet credit
+  minRedeemPoints      Int     @default(100)              // minimum points per redemption
+
+  // ---- expiry ----
+  expiryDays          Int      @default(365)              // points valid 12 months from the date earned
+  remindDays          Int[]    @default([30, 7])          // send expiry reminders this many days before
+
+  // ---- tiers (JSON so thresholds + benefit copy are admin-tunable) ----
+  // [{ key, name, min, benefits:[...] }] — tier is derived from lifetime points earned
+  tiers               Json?
+
+  // ---- optional bonus campaign (Silver/Gold extra earning) ----
+  campaignMultiplier  Float    @default(1.0)              // 1.0 = off; 1.05 = +5% earning during a campaign
+  campaignEndsAt      DateTime?
+
+  updatedAt           DateTime @updatedAt
+  updatedBy           String?
+}
+
+// Append-only points ledger. Each EARN row is a "lot" carrying its own expiry
+// (expiresAt) and unconsumed balance (remaining); REDEEM and EXPIRE rows consume
+// lots oldest-first (FIFO). `reference` is UNIQUE → every earn/redeem event is
+// idempotent (webhook/retry safe), mirroring the WalletTxn ledger.
+model LoyaltyLedger {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  type            String                                  // EARN | REDEEM | EXPIRE | ADJUST | REVERSAL
+  kind            String                                  // registration|profile|order|subscribe30|subscribe90|referral|bottle|renewal|streak|birthday|anniversary|puzzle_play|puzzle_win|review|redemption|admin_adjust
+  points          Int                                     // always positive; `type` gives the direction
+  balanceAfter    Int       @default(0)                   // available balance snapshot after this row
+
+  // ---- lot tracking (EARN rows) ----
+  expiresAt       DateTime?                               // when this lot expires (EARN only)
+  remaining       Int       @default(0)                   // unconsumed points left in this lot (EARN only)
+
+  // ---- links / idempotency ----
+  reference       String    @unique                       // e.g. "earn:order:<id>", "earn:reg:<uid>", "redeem:<uid>:<n>"
+  description     String?
+  orderId         String?
+  subscriptionId  String?
+  walletTxnId     String?                                 // REDEEM → the WalletTxn that credited the wallet
+  reversedId      String?   @unique                       // REVERSAL → the ledger row it reverses
+  createdById     String?                                 // admin user id for manual adjust (null = system)
+  createdAt       DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, type, expiresAt])                      // expiry scan + available-balance calc
+  @@index([kind, createdAt])
 }
 
 model Payment {

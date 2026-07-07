@@ -13,6 +13,7 @@ import { audit } from "@/lib/auth/audit";
 import { rateLimit } from "@/lib/auth/ratelimit";
 import { sendWelcomeEmail } from "@/lib/auth/email";
 import { getReferralConfig, findReferrerByCode, generateUniqueReferralCode, notifyReferrerFriendJoined } from "@/lib/referrals/service";
+import { earn } from "@/lib/loyalty/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -78,6 +79,9 @@ export const POST = route("auth.register", async (req: NextRequest) => {
   });
 
   await audit({ userId: user.id, actorRole: "customer", action: "auth.register", target: referredById ? `${user.id} ref:${body.referralCode}` : user.id, ctx });
+  // DOODLY Pure Rewards: welcome points on sign-up (+ profile-complete if a phone was given). Idempotent.
+  await earn.registration(user.id);
+  if (body.phone) await earn.profileComplete(user.id);
   if (user.email) { try { await sendWelcomeEmail(user.email, user.name); } catch { /* non-blocking */ } }
   // let the referrer know a friend joined with their code (in-app + opted-in channels)
   if (referredById) { await notifyReferrerFriendJoined(referredById, user.name); }

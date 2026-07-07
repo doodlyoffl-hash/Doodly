@@ -36,7 +36,7 @@ window.DOODLY_RBAC = (function () {
     ["products", "Products", "Catalogue"], ["categories", "Categories", "Catalogue"], ["inventory", "Inventory", "Inventory", ["adjust"]], ["bottleInventory", "Bottle Inventory", "Inventory", ["adjust"]], ["deliverySettings", "Delivery Settings", "Operations"],
     ["deliveries", "Delivery Mgmt", "Operations", ["assign"]], ["assignment", "Auto Assignment", "Operations", ["override"]], ["serviceableAreas", "Serviceable Areas", "Operations"], ["drivers", "Drivers", "Operations"], ["routes", "Routes", "Operations"],
     ["farmers", "Farmers", "Supply"], ["procurement", "Procurement", "Supply"], ["quality", "Quality Testing", "Supply"],
-    ["reports", "Reports", "Growth"], ["searchInsights", "Search Insights", "Growth"], ["referrals", "Referrals", "Growth", ["approve", "reverse"]], ["blogs", "Blogs", "Content"], ["cms", "CMS", "Content"], ["brandStory", "Brand Story", "Content"], ["help", "Help Center", "Content"], ["notifications", "Notifications", "Content"],
+    ["reports", "Reports", "Growth"], ["searchInsights", "Search Insights", "Growth"], ["referrals", "Referrals", "Growth", ["approve", "reverse"]], ["loyalty", "Pure Rewards", "Growth", ["adjust"]], ["blogs", "Blogs", "Content"], ["cms", "CMS", "Content"], ["brandStory", "Brand Story", "Content"], ["help", "Help Center", "Content"], ["notifications", "Notifications", "Content"],
     ["support", "Support Tickets", "System"], ["chatSupport", "Chat Support", "System"], ["users", "User Management", "System"], ["roles", "Roles & Permissions", "System"], ["permissions", "Permissions", "System"], ["auditLogs", "Audit Logs", "System"], ["gst", "GST Management", "System", ["config"]], ["settings", "Settings", "System"],
     ["careers", "Careers", "People"],
     ["employees", "Employees", "HR"], ["hrDashboard", "HR Dashboard", "HR"], ["attendance", "Attendance", "HR"], ["leave", "Leave", "HR"], ["advances", "Salary Advances", "HR"], ["payroll", "Payroll", "HR"],
@@ -57,7 +57,7 @@ window.DOODLY_RBAC = (function () {
     accountant: { dashboard: "view", revenue: "view", expenses: "manage", wallet: "full", payments: "full", billing: "manage", reports: "manage", coupons: "view", employees: "view", hrDashboard: "view", attendance: "view", payroll: "full", advances: "full", leave: "view" },
     inventory: { dashboard: "view", inventory: "full", bottleInventory: "full", reports: "view" },
     quality: { dashboard: "view", quality: "full", procurement: "view", reports: "view" },
-    marketing: { dashboard: "view", coupons: "full", offers: "full", blogs: "full", cms: "manage", notifications: "manage", reports: "view" },
+    marketing: { dashboard: "view", coupons: "full", offers: "full", blogs: "full", cms: "manage", notifications: "manage", loyalty: "manage", reports: "view" },
     customer: {},
     delivery_executive: { dashboard: "view", deliveries: "manage", routes: "view" },
   };

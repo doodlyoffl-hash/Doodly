@@ -19,7 +19,7 @@ const LEVEL_ACTIONS: Record<string, string[]> = {
 const SPECIALS: Record<string, string[]> = { payments: ["refund", "approve"], billing: ["approve"], inventory: ["adjust"], bottleInventory: ["adjust"], deliveries: ["assign"] };
 
 const ADMIN_FULL: Record<string, Level> = {};
-["dashboard", "orders", "subscriptions", "billing", "customers", "payments", "revenue", "expenses", "wallet", "coupons", "offers", "products", "categories", "inventory", "bottleInventory", "deliverySettings", "deliveries", "serviceableAreas", "drivers", "routes", "farmers", "procurement", "quality", "reports", "blogs", "cms", "notifications", "support", "users", "roles", "auditLogs", "settings", "careers", "employees", "attendance", "payroll", "leave", "advances"].forEach((m) => (ADMIN_FULL[m] = "full"));
+["dashboard", "orders", "subscriptions", "billing", "customers", "payments", "revenue", "expenses", "wallet", "loyalty", "coupons", "offers", "products", "categories", "inventory", "bottleInventory", "deliverySettings", "deliveries", "serviceableAreas", "drivers", "routes", "farmers", "procurement", "quality", "reports", "blogs", "cms", "notifications", "support", "users", "roles", "auditLogs", "settings", "careers", "employees", "attendance", "payroll", "leave", "advances"].forEach((m) => (ADMIN_FULL[m] = "full"));
 Object.assign(ADMIN_FULL, { permissions: "", settings: "view", roles: "view", auditLogs: "view" });
 
 export const DEFAULT_MATRIX: Record<RoleKey, "*" | Record<string, Level>> = {
@@ -31,7 +31,7 @@ export const DEFAULT_MATRIX: Record<RoleKey, "*" | Record<string, Level>> = {
   accountant: { dashboard: "view", revenue: "view", payments: "full", billing: "manage", expenses: "full", wallet: "full", reports: "manage", coupons: "view", employees: "view", attendance: "view", payroll: "full", advances: "full", leave: "view" },
   inventory: { dashboard: "view", inventory: "full", bottleInventory: "full", reports: "view" },
   quality: { dashboard: "view", quality: "full", procurement: "view", reports: "view" },
-  marketing: { dashboard: "view", coupons: "full", offers: "full", blogs: "full", cms: "manage", notifications: "manage", reports: "view" },
+  marketing: { dashboard: "view", coupons: "full", offers: "full", blogs: "full", cms: "manage", notifications: "manage", loyalty: "manage", reports: "view" },
   customer: {},
   delivery_executive: { dashboard: "view", deliveries: "manage", routes: "view" },
 };
