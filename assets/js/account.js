@@ -334,7 +334,8 @@ window.DOODLY_ACCOUNT = (function () {
   var ADDR_LABELS = ["Home", "Office", "Apartment", "Friend & Family", "Other"];
   var NOTE_CHIPS = ["Ring the bell once.", "Leave at the security desk.", "Call before delivery.", "Beware of pets.", "Deliver to the back entrance."];
   var PHONE_RE = /^[+]?[0-9\s-]{7,15}$/;
-  function openAddAddress(host, editing, existing) {
+  function openAddAddress(host, editing, existing, opts) {
+    opts = opts || {};
     addrFormStyles();
     var e = editing || {};
     var prof = (window.DOODLY_DATA && window.DOODLY_DATA.me) || {};
@@ -461,7 +462,12 @@ window.DOODLY_ACCOUNT = (function () {
         if (geo.lat != null && geo.lng != null) { b.lat = geo.lat; b.lng = geo.lng; }
         var btn = this; btn.disabled = true;
         var reqP = editing ? API().patch("/api/addresses/" + editing.id, b) : API().post("/api/addresses", b);
-        reqP.then(function () { toast(editing ? "Address updated ✓" : "Address saved ✓"); close(); loadAddresses(host); })
+        reqP.then(function (res) {
+          // Shared component: when a caller (e.g. checkout) provides onSaved, hand
+          // it the saved address instead of reloading the account list.
+          if (typeof opts.onSaved === "function") { close(); opts.onSaved(res && res.address ? res.address : res); return; }
+          toast(editing ? "Address updated ✓" : "Address saved ✓"); close(); loadAddresses(host);
+        })
           .catch(function (er) { btn.disabled = false; showErr(er.message || "Please check the address fields."); });
       });
     });
@@ -906,5 +912,10 @@ window.DOODLY_ACCOUNT = (function () {
     try { wireSupport(); } catch (e) {}
     try { fillEmptyPanels(); } catch (e) {}
   }
-  return { mountAll: mountAll, openOrderDetail: openOrderDetail };
+  return {
+    mountAll: mountAll, openOrderDetail: openOrderDetail,
+    // Shared "Add / Edit address" form — reused by checkout so both flows use the
+    // SAME fields, validation, Google Maps, serviceable-pincode check and backend.
+    openAddressForm: function (opts) { opts = opts || {}; openAddAddress(opts.host || document.body, opts.editing || null, opts.existing || [], opts); },
+  };
 })();

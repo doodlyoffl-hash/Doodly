@@ -560,12 +560,14 @@ window.DOODLY_CHECKOUT = (function () {
       <span class="co-addr-line">${esc(loc)}</span>
       <span class="co-addr-phone">${icon(a.lat != null ? "pin" : "home", 13)} ${a.lat != null ? "Pinned location" : "Saved address"}</span></button>`;
   }
+  let _addrList = [];   // last-loaded saved addresses (shared with the address form's duplicate guard)
   function hydrateAddresses(preferId) {
     if (!meUser() || !window.DOODLY_API) return;      // demo/guest → keep the sample cards
     const box = mount && mount.querySelector(".co-addrs");
     if (!box) return;
     window.DOODLY_API.get("/api/addresses").then((r) => {
       const list = (r && r.addresses) || [];
+      _addrList = list;
       // Prefer the just-added/pinned address, then the default, then the first —
       // so pinning a new address selects THAT address (+ its pincode) and the step can continue.
       const sel = (preferId && list.filter((x) => x.id === preferId)[0]) || list.filter((x) => x.isDefault)[0] || list[0] || null;
@@ -585,6 +587,20 @@ window.DOODLY_CHECKOUT = (function () {
   function addAddressModal() {
     // guest/localhost demo keeps the lightweight sample modal
     if (!meUser()) return addAddressModalDemo();
+    // Signed-in customers get the SAME full "Add new address" form as
+    // Customer → Addresses (shared component — identical fields, validation,
+    // Google Maps pin, serviceable-pincode check and /api/addresses backend).
+    if (window.DOODLY_ACCOUNT && DOODLY_ACCOUNT.openAddressForm) {
+      DOODLY_ACCOUNT.openAddressForm({
+        existing: _addrList,
+        onSaved: function (addr) {
+          var id = addr && addr.id; if (id) state.addrId = id;
+          hydrateAddresses(id);   // select the just-added address (+ its pincode) and continue checkout
+        },
+      });
+      return;
+    }
+    // fallback (account module unavailable) — the previous lightweight modal
     let m = document.getElementById("coAddrModal");
     if (m) m.remove();
     m = document.createElement("div"); m.id = "coAddrModal"; m.className = "co-modal";
