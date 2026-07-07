@@ -318,7 +318,7 @@
      ============================================================ */
   function renderAuth() {
     const a = entry.auth;
-    const dest = a.dest || (a.otp ? "/account/dashboard.html" : ((a.submit && a.submit.match(/code|reset/i)) ? "/otp.html" : "/account/dashboard.html"));
+    const dest = a.dest || (a.otp ? "/" : ((a.submit && a.submit.match(/code|reset/i)) ? "/otp.html" : "/"));
     // preserve the return marker (?from= gated action, or ?order= mid-purchase) across
     // the login/signup pages so a guest who registers or switches forms still returns there
     const carry = /[?&](order|from)=/.test(location.search) ? location.search : "";

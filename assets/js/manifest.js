@@ -326,7 +326,7 @@ window.DOODLY_MANIFEST = (function () {
     "login": { surface:"auth", title:"Log in", auth:{
       title:"Customer login", sub:"Manage your subscriptions, orders, deliveries, invoices and account.",
       fields:[{ label:"Mobile number or email", placeholder:"+91 98480 11234" },{ label:"Password", type:"password", placeholder:"••••••••" }],
-      submit:"Log in", otpLink:true, forgot:true, guest:true, loginRole:"customer", dest:"/account/dashboard.html",
+      submit:"Log in", otpLink:true, forgot:true, guest:true, loginRole:"customer", dest:"/",
       alt:["New to DOODLY?","Create an account","/signup.html"],
       secondaryLinks:[
         { q:"Looking for the delivery app?", label:"Executive login", href:"/delivery/login.html" },
@@ -335,7 +335,7 @@ window.DOODLY_MANIFEST = (function () {
     "login/customer": { surface:"auth", title:"Customer Login", auth:{
       title:"Customer login", sub:"Manage your subscriptions, orders, deliveries, invoices and account.",
       fields:[{ label:"Mobile number or email", placeholder:"+91 98480 11234" },{ label:"Password", type:"password", placeholder:"••••••••" }],
-      submit:"Login as Customer", otpLink:true, forgot:true, guest:true, loginRole:"customer", dest:"/account/dashboard.html",
+      submit:"Login as Customer", otpLink:true, forgot:true, guest:true, loginRole:"customer", dest:"/",
       back:["/login.html","Back to login options"], alt:["New to DOODLY?","Create an account","/signup.html"] }},
     "login/admin": { surface:"auth", title:"Admin / Staff Login", auth:{
       title:"Admin & staff login", sub:"Authorized staff only — you'll be routed to your dashboard automatically.",
