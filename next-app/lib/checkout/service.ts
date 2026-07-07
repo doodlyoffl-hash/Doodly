@@ -69,35 +69,32 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
   if (totalPaise <= 0) throw Errors.badRequest("Invalid order amount.");
   const days = variant.type === "TRIAL" ? (variant.fixedDays ?? 1) : (plan?.days ?? 1);
 
-  /* ---- 2. serviceable-pincode check (only when coverage is configured) ---- */
-  const pincode = (input.address.pincode ?? "").trim();
+  /* ---- 2. delivery address — MANDATORY + server-validated (release-blocker).
+       An order can NEVER be placed without a valid delivery address. The customer
+       must have SAVED a real address (via the shared address form → /api/addresses);
+       checkout accepts ONLY its id and re-verifies ownership + completeness +
+       serviceability from the DB row — the client's fields/pincode are never
+       trusted (a manipulated request with no/foreign/incomplete address is
+       rejected here, before any order or payment is created). ---- */
+  if (!input.address || !input.address.id) {
+    throw Errors.badRequest("Please add or select a valid delivery address before proceeding to payment.");
+  }
+  const addr = await db.address.findFirst({
+    where: { id: input.address.id, userId },
+    select: { id: true, line1: true, city: true, pincode: true },
+  });
+  if (!addr) throw Errors.forbidden("That delivery address isn't on your account — please choose one of your saved addresses.");
+  if (!addr.line1 || !addr.city || !addr.pincode || !/^[1-9]\d{5}$/.test(addr.pincode)) {
+    throw Errors.badRequest("Your delivery address is incomplete — please edit it and add the missing details before checkout.");
+  }
+  const addressId = addr.id;
+  const pincode = addr.pincode;                      // serviceability uses the SAVED pincode, not the client's
+
+  /* ---- serviceable-pincode check against the saved address (when coverage set) ---- */
   const coverage = await db.serviceablePincode.count({ where: { enabled: true, deletedAt: null } });
   if (coverage > 0) {
-    const pin = pincode ? await db.serviceablePincode.findFirst({ where: { pincode, enabled: true, deletedAt: null } }) : null;
-    if (!pin) throw Errors.conflict(`We don't deliver to ${pincode || "that pincode"} yet — join the waitlist on the delivery page.`);
-  }
-
-  /* ---- 3. resolve or create the delivery address ---- */
-  let addressId: string;
-  if (input.address.id) {
-    const own = await db.address.findFirst({ where: { id: input.address.id, userId }, select: { id: true } });
-    if (!own) throw Errors.forbidden("That address belongs to a different account.");
-    addressId = own.id;
-  } else {
-    const line1 = (input.address.line1 ?? "").trim();
-    if (!line1 || !/^\d{6}$/.test(pincode)) throw Errors.badRequest("A delivery address with a 6-digit pincode is required.");
-    const existing = await db.address.findFirst({ where: { userId, line1, pincode }, select: { id: true } });
-    if (existing) addressId = existing.id;
-    else {
-      const created = await db.address.create({
-        data: {
-          userId, label: (input.address.label ?? "Home").slice(0, 30), line1: line1.slice(0, 200),
-          city: (input.address.city ?? "").slice(0, 60) || "—", pincode,
-          deliveryNote: [input.address.contactName, input.address.phone].filter(Boolean).join(" · ").slice(0, 120) || null,
-        },
-      });
-      addressId = created.id;
-    }
+    const pin = await db.serviceablePincode.findFirst({ where: { pincode, enabled: true, deletedAt: null } });
+    if (!pin) throw Errors.conflict(`Sorry! DOODLY does not currently deliver to ${pincode}. Please choose a serviceable delivery address.`);
   }
 
   /* ---- 4. create the order (+ items, event, subscription for plans) ---- */

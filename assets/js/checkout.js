@@ -82,6 +82,7 @@ window.DOODLY_CHECKOUT = (function () {
       <div class="co-cards co-addrs">
         <div class="co-addr-empty" style="grid-column:1/-1;padding:14px;color:var(--ink-3);font-size:.9rem">Add your delivery address and drop a pin so we deliver to the right doorstep.</div>
         <button type="button" class="co-addr co-addnew js-addaddr">${icon("plus", 22)}<span>Add new address</span></button></div>
+      <div class="dz-required" id="coAddrReq" hidden>Please add or select a valid delivery address before proceeding to payment.</div>
       <div class="co-pinblock"><div class="co-h" style="font-size:1.04rem;margin-top:18px">Confirm delivery pincode</div>
         <div id="coPincodeHost"></div>
         <div class="dz-required" id="coPinReq" hidden>This address isn't in our delivery area yet — pick a serviceable pincode to continue.</div></div>
@@ -278,6 +279,12 @@ window.DOODLY_CHECKOUT = (function () {
     return true; // netbanking / wallet: bank pre-selected
   }
   function serviceableOk() { const PC = window.DOODLY_PINCODE; return !PC || PC.isServiceable(); }
+  // A delivery address must be chosen before leaving the address step; a REAL saved
+  // address (state.addrId) is required to actually place the order. The backend
+  // re-validates independently — this is the UX guard, not the security boundary.
+  function addrChosen() { try { return !!state.addrId || state.addr != null; } catch (e) { return false; } }
+  function realAddrChosen() { try { return !!state.addrId; } catch (e) { return false; } }
+  function showAddrReq(show) { const el = mount && mount.querySelector("#coAddrReq"); if (!el) return; el.hidden = !show; if (show) el.scrollIntoView({ behavior: reduced() ? "auto" : "smooth", block: "center" }); }
   function showPinReq() {
     const r = mount.querySelector("#coPinReq"); if (r) { r.hidden = false; r.style.animation = "none"; void r.offsetWidth; r.style.animation = ""; }
     const h = mount.querySelector("#coPincodeHost"); if (h) h.scrollIntoView({ behavior: reduced() ? "auto" : "smooth", block: "center" });
@@ -292,7 +299,10 @@ window.DOODLY_CHECKOUT = (function () {
     if (!startOk()) { goto(2); showDateReq(); return; }                 // must have a start date
     if (!validateMethod()) { failure("We couldn't verify your payment details. Please check and try again."); return; }
     const me = coSignedIn();
-    if (me && window.DOODLY_API) { processing(); placeRealOrder(me); return; }   // REAL order into the backend
+    if (me && window.DOODLY_API) {
+      if (!realAddrChosen()) { goto(1); showAddrReq(true); return; }   // a SAVED delivery address is mandatory before payment
+      processing(); placeRealOrder(me); return;                       // REAL order into the backend
+    }
     // No guest / localhost bypass — an order can ONLY be placed by a signed-in customer.
     // Send guests to login (selections are preserved) and return them to checkout.
     failure("Please log in to your DOODLY account to place the order — your selections are saved.");
@@ -516,6 +526,7 @@ window.DOODLY_CHECKOUT = (function () {
       const dot = t.closest(".co-stepdot"); if (dot && !dot.disabled) { goto(Number(dot.dataset.goto)); return; }
       if (t.closest(".co-next")) {
         if (t.closest(".co-pay")) { pay(); return; }
+        if (state.step === 1 && !addrChosen()) { showAddrReq(true); return; }   // an address MUST be selected first
         if (state.step === 1 && !serviceableOk()) { showPinReq(); return; }   // pincode must be serviceable
         if (state.step === 2 && !startOk()) { showDateReq(); return; }        // need a valid start date
         goto(state.step + 1); return;
@@ -526,6 +537,7 @@ window.DOODLY_CHECKOUT = (function () {
         if (addr.dataset.addrId) state.addrId = addr.dataset.addrId;                // real saved address
         else { state.addr = Number(addr.dataset.addr); state.addrId = null; }        // demo card
         mount.querySelectorAll(".co-addr[data-addr], .co-addr[data-addr-id]").forEach((a) => a.classList.toggle("sel", a === addr));
+        showAddrReq(false);
         if (window.DOODLY_PINCODE && addr.dataset.pin) { window.DOODLY_PINCODE.setPin(addr.dataset.pin); const pinHost = mount.querySelector("#coPincodeHost"); if (pinHost) window.DOODLY_PINCODE.mountChecker(pinHost, { compact: true }); const r = mount.querySelector("#coPinReq"); if (r) r.hidden = window.DOODLY_PINCODE.isServiceable(); }
         return;
       }
@@ -572,6 +584,7 @@ window.DOODLY_CHECKOUT = (function () {
       // so pinning a new address selects THAT address (+ its pincode) and the step can continue.
       const sel = (preferId && list.filter((x) => x.id === preferId)[0]) || list.filter((x) => x.isDefault)[0] || list[0] || null;
       state.addrId = sel ? sel.id : null;
+      if (sel) showAddrReq(false);   // an address is selected — clear any "address required" prompt
       const cards = list.length
         ? list.map((a) => realAddrCard(a, sel && a.id === sel.id)).join("")
         : `<div class="co-addr-empty" style="grid-column:1/-1;padding:14px;color:var(--ink-3);font-size:.9rem">No saved addresses yet — add your delivery address and drop a pin for accurate delivery.</div>`;
