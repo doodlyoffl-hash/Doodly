@@ -345,6 +345,8 @@ window.DOODLY_B2B_PRICING = (function () {
 
   /* ---------- demo seed (only if no pricing set yet) ---------- */
   function seedIfEmpty() {
+    // Production: no demo negotiated pricing — real per-business prices only.
+    if (!(window.DOODLY_DEMO_ALLOWED && window.DOODLY_DEMO_ALLOWED())) return;
     if (localStorage.getItem("doodly-b2b-pricing")) return;
     try {
       var bs = (B2B() && B2B().businesses()) || []; if (!bs.length) return;

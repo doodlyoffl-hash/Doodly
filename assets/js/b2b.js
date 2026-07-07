@@ -149,6 +149,11 @@ window.DOODLY_B2B = (function () {
   /* ---------- seed ---------- */
   function seed() {
     setCounters({ business: 0, order: {}, invoice: {} });
+    // Production: never fabricate businesses/orders — start empty so B2B Orders,
+    // Business Invoices and B2B Pricing show real records or a clean empty state.
+    if (!(window.DOODLY_DEMO_ALLOWED && window.DOODLY_DEMO_ALLOWED())) {
+      setBusinesses([]); setOrders([]); return { businesses: [], orders: [] };
+    }
     var bz = [];
     [["Grand Park Hotel", "Hotel", "Mr. Suresh", "98480 22113", "Monthly Billing", 500],
      ["Brew & Co Café", "Café", "Ms. Divya", "90000 55221", "Weekly Billing", 300],

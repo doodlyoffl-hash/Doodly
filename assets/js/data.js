@@ -13,6 +13,50 @@
    Launch a product: set  status: "coming_soon" -> "available".
    ============================================================= */
 
+/* -------------------------------------------------------------
+   PRODUCTION SAFETY GATE — the single source of truth for the
+   question "may fabricated demo/seed data be shown?".
+   Returns TRUE only on a LOCAL DEV host with NO real user signed
+   in (the owner's local exploration persona). On the live domain,
+   or as soon as a real user with a token is present on ANY host,
+   it returns FALSE — so every seed()/mock()/demo builder in the
+   app refuses to invent rows and the UI falls back to real backend
+   data or a professional empty state.
+   • Computed fresh on every call → script load order never matters.
+   • Fails production-safe: if anything throws, demo is NOT allowed.
+   ------------------------------------------------------------- */
+window.DOODLY_DEMO_ALLOWED = function () {
+  try {
+    var host = (typeof location !== "undefined" && location.hostname ? location.hostname : "").toLowerCase();
+    var local = host === "" || host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1";
+    if (!local) return false;                       // live domain → never demo
+    var u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null");
+    var realUser = !!(u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token"));
+    return !realUser;                               // local + no real login → demo persona OK
+  } catch (e) { return false; }                     // fail safe → no demo
+};
+
+/* One-time cleanup of any demo/seed data that older builds persisted into
+   localStorage on this device, so a live visitor never sees stale fabricated
+   rows from before the production gate existed. Runs once per browser on a
+   live host; the local demo persona keeps its data. Only demo RECORD stores
+   are removed — legitimate config/settings and the signed-in session are kept
+   (GST rate slabs re-seed clean on next read). */
+(function purgeLegacyDemoData() {
+  try {
+    if (window.DOODLY_DEMO_ALLOWED()) return;                 // local exploration → keep demo
+    if (localStorage.getItem("doodly-demo-purged") === "1") return;
+    ["doodly-expenses", "doodly-gst-txns", "doodly-gst-configs",
+      "doodly-assign", "doodly-assistant-convos", "doodly-assistant-chat",
+      "doodly-b2b-businesses", "doodly-b2b-orders", "doodly-b2b-counters",
+      "doodly-b2b-pricing", "doodly-b2b-overrides", "doodly-b2bpricing-biz",
+      "doodly-b2b-price-history", "doodly-b2b-price-scheduled",
+      "doodly-late-overlay", "doodly-late-escalations",
+    ].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
+    localStorage.setItem("doodly-demo-purged", "1");
+  } catch (e) {}
+})();
+
 window.DOODLY = {
   brand: {
     name: "DOODLY",

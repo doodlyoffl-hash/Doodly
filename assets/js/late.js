@@ -59,6 +59,9 @@ window.DOODLY_LATE = (function () {
   var genCache = null, genKey = "";
   var delVer = 0, delCache = null, delCacheKey = "";
   function gen() {
+    // Production: no synthetic delivery history — monitoring shows only real
+    // completions fed in via onDeliveryCompleted() (an empty state otherwise).
+    if (!(window.DOODLY_DEMO_ALLOWED && window.DOODLY_DEMO_ALLOWED())) return [];
     var key = todayStr(); if (genCache && genKey === key) return genCache;
     var out = []; var today = todayStr();
     for (var d = 0; d < 30; d++) {

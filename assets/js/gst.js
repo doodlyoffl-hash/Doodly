@@ -40,17 +40,16 @@ window.DOODLY_GST = (function () {
     if (!get("doodly-gst-configs", null)) {
       var t = today();
       set("doodly-gst-configs", [
-        { id: "GST-001", name: "Milk GST (Nil)", percent: 0, type: "GST", status: "active", from: "2026-04-01", until: "", desc: "Fresh & pasteurised milk — nil-rated.", isDefault: true, by: "Super Admin", at: now(), up: now() },
-        { id: "GST-002", name: "Dairy 5%", percent: 5, type: "GST", status: "active", from: "2026-04-01", until: "", desc: "Curd, paneer, palkova and similar dairy.", isDefault: false, by: "Super Admin", at: now(), up: now() },
-        { id: "GST-003", name: "Ghee & Butter 12%", percent: 12, type: "GST", status: "active", from: "2026-04-01", until: "", desc: "Ghee, butter and fat products.", isDefault: false, by: "Super Admin", at: now(), up: now() },
-        { id: "GST-004", name: "Standard 18%", percent: 18, type: "GST", status: "active", from: "2026-04-01", until: "", desc: "Standard rate for non-essential goods.", isDefault: false, by: "Super Admin", at: now(), up: now() },
-        { id: "GST-005", name: "Legacy Dairy 5% (FY25)", percent: 5, type: "GST", status: "inactive", from: "2025-04-01", until: "2026-03-31", desc: "Retired FY24-25 dairy slab.", isDefault: false, by: "Super Admin", at: now(), up: now() },
+        { id: "GST-001", name: "Milk GST (Nil)", percent: 0, type: "GST", status: "active", from: "2026-04-01", until: "", desc: "Fresh & pasteurised milk — nil-rated.", isDefault: true, by: "System", at: now(), up: now() },
+        { id: "GST-002", name: "Dairy 5%", percent: 5, type: "GST", status: "active", from: "2026-04-01", until: "", desc: "Curd, paneer, palkova and similar dairy.", isDefault: false, by: "System", at: now(), up: now() },
+        { id: "GST-003", name: "Ghee & Butter 12%", percent: 12, type: "GST", status: "active", from: "2026-04-01", until: "", desc: "Ghee, butter and fat products.", isDefault: false, by: "System", at: now(), up: now() },
+        { id: "GST-004", name: "Standard 18%", percent: 18, type: "GST", status: "active", from: "2026-04-01", until: "", desc: "Standard rate for non-essential goods.", isDefault: false, by: "System", at: now(), up: now() },
       ]);
     }
     if (!get("doodly-gst-product", null)) set("doodly-gst-product", { milk: "GST-001", curd: "GST-002", paneer: "GST-002", kova: "GST-002", ghee: "GST-003" });
     if (!get("doodly-gst-settings", null)) set("doodly-gst-settings", { defaultId: "GST-001", showSplit: true, inclusive: false, place: "Andhra Pradesh", future: { igst: false, cess: false, locationBased: false } });
-    if (!get("doodly-gst-txns", null)) {
-      // sample TransactionGST snapshots (immutable history for reports)
+    if ((window.DOODLY_DEMO_ALLOWED && window.DOODLY_DEMO_ALLOWED()) && !get("doodly-gst-txns", null)) {
+      // sample TransactionGST snapshots — LOCAL EXPLORATION ONLY (never seeded on production)
       var P = ["milk", "curd", "paneer", "ghee"], names = { milk: "A2 Buffalo Milk", curd: "Buffalo Pot Curd", paneer: "Malai Paneer", ghee: "Buffalo Ghee" };
       var rows = [], d = new Date(); var cfgMap = { milk: ["GST-001", 0], curd: ["GST-002", 5], paneer: ["GST-002", 5], ghee: ["GST-003", 12] };
       for (var i = 0; i < 40; i++) {

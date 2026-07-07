@@ -71,6 +71,9 @@ window.DOODLY_DELIVERY = (function () {
   /* ---------- today's route (demo data when not signed in) ---------- */
   function stops() {
     if (_live) return _live.stops;
+    // Production: an executive only ever sees their real assigned route (_live).
+    // With no live route, show an empty state — never a demo sheet.
+    if (!(window.DOODLY_DEMO_ALLOWED && window.DOODLY_DEMO_ALLOWED())) return [];
     const L = (M() ? M().locs() : []);
     const names = ["Ananya Rao", "Karthik Varma", "Priya Sharma", "Rahul Mehta", "Sneha Reddy", "Vikram Joshi"];
     const labels = ["Home", "Office", "Apartment", "Home", "Home", "Office"];
@@ -143,10 +146,10 @@ window.DOODLY_DELIVERY = (function () {
       const s = summary();
       host.innerHTML = `
         <div class="dl-hero">
-          <div><div class="dl-greet">Good morning, ${esc(_live ? String((_live.driver || {}).name || "Executive").split(/\s+/)[0] : "Ramesh")} 👋</div>
+          <div><div class="dl-greet">Good morning, ${esc(_live ? String((_live.driver || {}).name || "Executive").split(/\s+/)[0] : "Executive")} 👋</div>
           <div class="dl-sub">${_live
             ? `${_live.route ? esc(_live.route.name || _live.route.code || "Your route") + " · " : ""}${esc(_live.date || "")}${_live.isFallbackDate ? " (latest assigned day)" : ""} · ${s.total} stops`
-            : `Route RT-JH-01 · Jubilee Hills · ${s.total} stops today`}</div></div>
+            : (s.total ? `${s.total} stops today` : "No route assigned yet")}</div></div>
           <span class="badge green">${_live ? "Live" : "On shift"}</span>
         </div>
         <div class="dl-kpis">
@@ -166,7 +169,7 @@ window.DOODLY_DELIVERY = (function () {
             <button class="btn btn-ghost" id="dlRefresh">Refresh route</button>
           </div>
         </div>
-        <div class="dl-list">${all.map((s2) => stopCard(s2)).join("")}</div>`;
+        <div class="dl-list">${all.length ? all.map((s2) => stopCard(s2)).join("") : '<div class="dl-card" style="text-align:center;padding:34px 18px;color:#6b7280">No deliveries assigned for today. New stops will appear here once your route is assigned.</div>'}</div>`;
 
       if (M()) {
         M().routeMap(host.querySelector("#dlRouteMap"), { stops: all, onStop: (i) => { const c = host.querySelector(`#card-${all[i].id}`); if (c) c.scrollIntoView({ behavior: "smooth", block: "center" }); } });
@@ -264,7 +267,7 @@ window.DOODLY_DELIVERY = (function () {
         // automatic late-delivery monitoring: detect lateness vs the 7:00 AM promise, apologise + record if late
         try {
           if (window.DOODLY_LATE) {
-            const res = window.DOODLY_LATE.onDeliveryCompleted({ id: "LIVE-" + id + "-" + Date.now().toString(36), customer: s2.name, customerId: s2.id, area: s2.area, route: "RT-LIVE", exec: "Ramesh K.", deliveredAt: st[id].deliveredAt });
+            const res = window.DOODLY_LATE.onDeliveryCompleted({ id: "LIVE-" + id + "-" + Date.now().toString(36), customer: s2.name, customerId: s2.id, area: s2.area, route: (_live && _live.route && (_live.route.code || _live.route.name)) || "RT-LIVE", exec: (_live && _live.driver && _live.driver.name) || "Executive", deliveredAt: st[id].deliveredAt });
             if (res && res.late) toast(`⚠ Late by ${res.delayMin} min — apology sent to ${s2.name}`);
           }
         } catch (e) {}

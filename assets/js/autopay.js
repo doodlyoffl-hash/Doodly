@@ -152,6 +152,9 @@ window.DOODLY_AUTOPAY = (function () {
      Admin: Subscription Billing  mountBilling(host)
      ============================================================ */
   function MOCK() {
+    // Production: no fabricated billing rows — the list is driven purely by real
+    // subscriptions from the backend (mapSub); an empty state shows if none.
+    if (!(window.DOODLY_DEMO_ALLOWED && window.DOODLY_DEMO_ALLOWED())) return [];
     const plans = ((D() || {}).plans || []), pins = ((D() || {}).serviceablePincodes || []);
     const names = ["Ananya R", "Karthik V", "Priya S", "Rahul M", "Sneha T", "Vikram J", "Deepa N", "Arjun P", "Meera K", "Sanjay B", "Lakshmi R", "Imran S"];
     const statuses = ["active", "active", "active", "active", "active", "retry", "active", "suspended", "active", "active", "cancelled", "active"];
@@ -234,7 +237,7 @@ window.DOODLY_AUTOPAY = (function () {
         render({ status: fs ? fs.value : "all", plan: fp ? fp.value : "all" });
         apBanner(host, "● Live — " + rows.length + " auto-pay subscription(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
       }).catch(function (e) {
-        apBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo billing data." : e.code === "forbidden" ? "⚠ Your role can't view subscriptions (403)." : "⚠ " + (e.message || "Couldn't load billing."), "err");
+        apBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live billing data." : e.code === "forbidden" ? "⚠ Your role can't view subscriptions (403)." : "⚠ " + (e.message || "Couldn't load billing."), "err");
       });
     }
   }

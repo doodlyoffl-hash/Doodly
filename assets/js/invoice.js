@@ -67,6 +67,19 @@ window.DOODLY_INVOICE = (function () {
   }
   function waLink(ctx) { var t = encodeURIComponent((ctx.title || "Your DOODLY invoice") + " " + (ctx.no || "") + " — " + inr(ctx.amount || 0) + ". View: " + location.href); return "https://wa.me/?text=" + t; }
 
+  /* Production empty state — shown when there's no real invoice/statement to
+     render (these premium documents are templates, not yet wired to live billing,
+     so on the live site they must never display fabricated figures). */
+  function invEmpty(host, title, msg) {
+    host.innerHTML =
+      '<div class="inv inv-empty" style="max-width:640px;margin:0 auto;text-align:center;padding:56px 26px">' +
+        '<div style="font-size:44px;line-height:1;margin-bottom:14px">🧾</div>' +
+        '<h2 style="margin:0 0 8px;font-size:1.25rem">' + esc(title) + '</h2>' +
+        '<p style="margin:0;color:#6b7280;font-size:.95rem;line-height:1.6">' + esc(msg) + '</p>' +
+      '</div>';
+  }
+  function demoOK() { return !!(window.DOODLY_DEMO_ALLOWED && window.DOODLY_DEMO_ALLOWED()); }
+
   /* ============================================================
      B2C — Customer invoice
      ============================================================ */
@@ -98,6 +111,7 @@ window.DOODLY_INVOICE = (function () {
 
   function mountB2C(host, id) {
     if (!host) return;
+    if (!demoOK()) return invEmpty(host, "No invoice to display", "Your tax invoice will appear here once your billing has been generated.");
     var v = b2cInvoice(id || qp("id"));
     var c = cfg();
     var rowsDesktop = v.lines.map(function (l) {
@@ -173,6 +187,10 @@ window.DOODLY_INVOICE = (function () {
 
   function mountB2B(host, code) {
     if (!host) return;
+    // Real statement needs a registered business with recorded orders; otherwise
+    // (and always on production without real data) show a clean empty state.
+    var hasBiz = false; try { hasBiz = !!(B2B() && B2B().businesses && B2B().businesses().length); } catch (e) {}
+    if (!demoOK() && !hasBiz) return invEmpty(host, "No business statement yet", "Register a business and record B2B orders to generate a partner statement here.");
     var v = b2bStatement(code || qp("id"));
     var c = cfg(), b = B2B();
     var bizOpts = b ? b.businesses().map(function (x) { return '<option value="' + x.code + '"' + (x.code === v.biz.code ? " selected" : "") + '>' + esc(x.name) + ' (' + x.code + ')</option>'; }).join("") : "";

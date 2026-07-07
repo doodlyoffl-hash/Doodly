@@ -60,6 +60,11 @@ window.DOODLY_ASSIGN = (function () {
   function now() { return (typeof Date !== "undefined" && Date.now) ? Date.now() : 0; }
   function seed(opts) {
     opts = opts || {};
+    // Production: no synthetic executives or deliveries — the board starts empty
+    // and is populated only by real assignments (professional empty state).
+    if (!(window.DOODLY_DEMO_ALLOWED && window.DOODLY_DEMO_ALLOWED())) {
+      return { execs: [], deliveries: [], queue: [], trips: [], logs: [], config: { capacity: CAP, slot: "7:00 AM" } };
+    }
     var n = opts.deliveries || 0;
     var execNames = [["Ramesh K.", "Central"], ["Suresh B.", "South"], ["Anil R.", "East"], ["Vijay M.", "North"], ["Priya S.", "West"]];
     var execs = execNames.map(function (x, i) { var a = AREAS.find(function (ar) { return ar.zone === x[1]; }) || AREAS[0]; return { id: "EX" + (i + 1), name: x[0], mobile: "+9190000000" + (10 + i), zone: x[1], homeArea: a.area, lat: a.lat, lng: a.lng, status: "Available", bottles: 0, stops: [], trips: 0, route: null }; });

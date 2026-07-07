@@ -233,20 +233,40 @@ window.DOODLY_DATA = (function () {
     ],
   };
 
-  /* PRODUCTION SAFETY — a REAL signed-in user (real cuid + token, NOT the localhost
-     "static-" exploration persona) must never see demo records. Empty every demo
-     record array at the source so any admin/staff/driver module that is un-wired,
-     still loading, or offline shows an honest EMPTY state instead of fabricated
-     rows. Structural bits (inr, blog posts) are kept; the demo persona keeps all. */
+  /* =====================================================================
+     PRODUCTION SAFETY GATE — no demo record may ever reach a live visitor.
+     The designed demo dataset above exists ONLY so the owner can explore the
+     app locally. It is emptied whenever we are NOT on a local dev host, and
+     also whenever a REAL signed-in user (real cuid + token, not the localhost
+     "static-" exploration persona) is present on any host. On production this
+     fires unconditionally — independent of login state, route, or timing — so
+     every module shows an honest EMPTY state or its real backend data, never
+     fabricated rows. EVERY array is blanked (including blog `posts`) and the
+     demo `me` profile is neutralised; only the `inr` formatter is kept. */
   try {
-    const u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null");
-    const realUser = !!(u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token"));
-    if (realUser) {
-      ["orders", "deliveries", "trackTimeline", "bottleLedger", "wallet", "invoices", "addresses", "notifications", "referrals", "tickets",
-        "customers", "adminOrders", "drivers", "routes", "farmers", "procurement", "quality", "inventory", "bottleInv", "payments", "coupons", "adminTickets", "audit",
-        "driverStops", "driverCompleted", "adminKpis", "revenueBars", "driverKpis"].forEach((k) => { if (Array.isArray(data[k])) data[k] = []; });
+    const host = (typeof location !== "undefined" && location.hostname ? location.hostname : "").toLowerCase();
+    const isLocalDev = host === "" || host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1";
+    let realUser = false;
+    try {
+      const u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null");
+      realUser = !!(u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token"));
+    } catch (e) { /* no localStorage */ }
+
+    const production = !isLocalDev || realUser; // live domain OR a real login anywhere
+    if (production) {
+      // Blank every demo record array at the source (future-proof: covers any key).
+      Object.keys(data).forEach((k) => { if (Array.isArray(data[k])) data[k] = []; });
+      // Neutralise the demo customer profile so no fabricated identity leaks
+      // (a real login overwrites `me` with live data after this runs).
+      if (data.me && typeof data.me === "object") {
+        data.me = {
+          name: "", initials: "", phone: "", email: "", area: "",
+          walletPaise: 0, bottlesPending: 0, depositPaise: 0,
+          plan: "", variant: "", nextDelivery: "", subStatus: "", points: 0,
+        };
+      }
     }
-  } catch (e) { /* no localStorage → treat as demo persona */ }
+  } catch (e) { /* fail safe → leave demo persona only if truly local */ }
 
   return data;
 })();

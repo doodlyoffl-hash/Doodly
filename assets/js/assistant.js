@@ -198,6 +198,9 @@ window.DOODLY_ASSISTANT = (function () {
   function sessionId() { try { var s = sessionStorage.getItem("doodly-assist-sid"); if (!s) { s = "CHAT-" + Math.random().toString(36).slice(2, 8).toUpperCase(); sessionStorage.setItem("doodly-assist-sid", s); } return s; } catch (e) { return "CHAT-LOCAL"; } }
 
   function seedConvos() {
+    // Production: no fabricated chat sessions — Chat Management starts empty and
+    // fills only with real customer conversations (professional empty state).
+    if (!(window.DOODLY_DEMO_ALLOWED && window.DOODLY_DEMO_ALLOWED())) { saveConvos([]); return []; }
     var now = Date.now(); var d = function (h) { return new Date(now - h * 3600000).toISOString(); };
     var c = [
       { id: "CHAT-9F2A1", user: "Ananya Reddy", started: d(2), status: "resolved", by: "AI", turns: 4, csat: 5, escalated: false, topics: { "sub.plans": 1, "wallet": 1 }, messages: [{ role: "user", text: "What plans do you have?", at: d(2) }, { role: "bot", text: "Our subscription plans: Single Pour · 7-Day Fresh Start · 30-Day Morning Ritual (8% off) · 90-Day Nourish Plan (10% off).", at: d(2) }] },

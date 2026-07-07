@@ -43,6 +43,8 @@ window.DOODLY_EXPENSES = (function () {
   function staff() { try { return (RBAC() ? RBAC().users() : []).map((u) => u.name); } catch (e) { return ["Admin User"]; } }
 
   function seed() {
+    // Production: never fabricate expense records — start empty (professional empty state).
+    if (!(window.DOODLY_DEMO_ALLOWED && window.DOODLY_DEMO_ALLOWED())) { setList([]); return []; }
     const today = new Date(); const d = (off) => { const x = new Date(today); x.setDate(x.getDate() - off); return x.toISOString().slice(0, 10); };
     const sample = [
       { date: d(0), title: "Morning milk collection — Kanuru", category: "Milk Procurement", vendor: "Ravi Dairy Farm", amount: 18400, mode: "UPI", status: "Paid", paid: 18400, requestedBy: "Admin User", approvedBy: "Aarav Sharma", paidBy: "Rohan Mehta" },

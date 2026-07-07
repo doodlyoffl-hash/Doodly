@@ -989,7 +989,7 @@
       dacRerender();
       bkBanner(host, "● Live — " + rows.length + " customer(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      if (e.code === "offline") bkBanner(host, "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo data. Start next-app to go live.", "err");
+      if (e.code === "offline") bkBanner(host, "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live data. Start next-app for live records.", "err");
       else if (e.code === "forbidden") bkBanner(host, "⚠ Your role doesn't have permission to view customers (403).", "err");
       else bkBanner(host, "⚠ " + (e.message || "Couldn't load customers."), "err");
     }
@@ -1037,7 +1037,7 @@
       bkRemount("payments");
       bkBanner(host, "● Live — " + rows.length + " payment(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      if (e.code === "offline") bkBanner(host, "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo data. Start next-app to go live.", "err");
+      if (e.code === "offline") bkBanner(host, "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live data. Start next-app for live records.", "err");
       else if (e.code === "forbidden") bkBanner(host, "⚠ Your role doesn't have permission to view payments (403).", "err");
       else bkBanner(host, "⚠ " + (e.message || "Couldn't load payments."), "err");
       return;
@@ -1073,7 +1073,7 @@
       bkRemount("adminOrders");
       bkBanner(host, "● Live — " + rows.length + " order(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      bkBanner(host, e.code === "offline" ? "⚠ Backend offline — showing demo data." : e.code === "forbidden" ? "⚠ No permission to view orders (403)." : "⚠ " + e.message, "err");
+      bkBanner(host, e.code === "offline" ? "⚠ Backend offline — couldn't load live data." : e.code === "forbidden" ? "⚠ No permission to view orders (403)." : "⚠ " + e.message, "err");
     }
   }
 
@@ -1100,7 +1100,7 @@
       bkRemount("adminOrders");
       bkBanner(host, "● Live — " + rows.length + " subscription(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      bkBanner(host, e.code === "offline" ? "⚠ Backend offline — showing demo data." : e.code === "forbidden" ? "⚠ No permission to view subscriptions (403)." : "⚠ " + e.message, "err");
+      bkBanner(host, e.code === "offline" ? "⚠ Backend offline — couldn't load live data." : e.code === "forbidden" ? "⚠ No permission to view subscriptions (403)." : "⚠ " + e.message, "err");
       return;
     }
     try {
@@ -1135,7 +1135,7 @@
     return { biz: biz.length, ords: ords.length };
   }
   function b2bErr(host, e) {
-    bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo B2B data." : e.code === "forbidden" ? "⚠ Your role can't access B2B (403)." : "⚠ " + (e.message || "Couldn't load B2B."), "err");
+    bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live B2B data." : e.code === "forbidden" ? "⚠ Your role can't access B2B (403)." : "⚠ " + (e.message || "Couldn't load B2B."), "err");
   }
   async function wireB2BBackend() {
     if (!window.DOODLY_API) return;
@@ -1240,7 +1240,7 @@
       wireProductsRerender();
       bkBanner(document.querySelector(".js-admin-products"), "● Live — " + products.length + " product(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo catalogue." : e.code === "forbidden" ? "⚠ Your role can't view products (403)." : "⚠ " + (e.message || "Couldn't load products."), "err");
+      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live catalogue." : e.code === "forbidden" ? "⚠ Your role can't view products (403)." : "⚠ " + (e.message || "Couldn't load products."), "err");
     }
   }
   window.DOODLY_ADMIN.wireProductsBackend = wireProductsBackend;
@@ -1306,7 +1306,7 @@
       }
       bkBanner(document.querySelector(".grid-cards"), "● Live — " + cats.length + " categor" + (cats.length === 1 ? "y" : "ies") + " from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo categories." : e.code === "forbidden" ? "⚠ Your role can't view categories (403)." : "⚠ " + (e.message || "Couldn't load categories."), "err");
+      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live categories." : e.code === "forbidden" ? "⚠ Your role can't view categories (403)." : "⚠ " + (e.message || "Couldn't load categories."), "err");
     }
   }
   window.DOODLY_ADMIN.wireCategoriesBackend = wireCategoriesBackend;
@@ -1366,7 +1366,7 @@
       bkKpis({ "1000 ml ready": avail("1000 ml"), "500 ml ready": avail("500 ml"), "low": String(st.lowStock || 0), "reorder": String(_invItems.filter(function (x) { return x.status[1] === "Reorder" || x.status[1] === "Out of stock"; }).length) });
       bkBanner(document.querySelector('.dt-host[data-dataset="inventory"]'), "● Live — " + _invItems.length + " inventory item(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo stock." : e.code === "forbidden" ? "⚠ Your role can't view inventory (403)." : "⚠ " + (e.message || "Couldn't load inventory."), "err");
+      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live stock." : e.code === "forbidden" ? "⚠ Your role can't view inventory (403)." : "⚠ " + (e.message || "Couldn't load inventory."), "err");
     }
   }
   window.DOODLY_ADMIN.wireInventoryBackend = wireInventoryBackend;
@@ -1458,7 +1458,7 @@
       bkRemount("bottleMoves");
       bkBanner(document.querySelector('.dt-host[data-dataset="bottleMoves"]'), "● Live — fleet of " + (k.totalOwned || 0).toLocaleString("en-IN") + " bottles · " + rows.length + " recent movement(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo fleet." : e.code === "forbidden" ? "⚠ Your role can't view bottle inventory (403)." : "⚠ " + (e.message || "Couldn't load bottle inventory."), "err");
+      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live fleet." : e.code === "forbidden" ? "⚠ Your role can't view bottle inventory (403)." : "⚠ " + (e.message || "Couldn't load bottle inventory."), "err");
     }
   }
   window.DOODLY_ADMIN.wireBottlesBackend = wireBottlesBackend;
@@ -1605,7 +1605,7 @@
       bkBanner(host, "● Live — " + (st.total || mapped.length) + " serviceable pincode(s) across " + (st.zones || 0) + " zone(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
       renderSaStats(host, st);
     } catch (e) {
-      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo pincodes." : e.code === "forbidden" ? "⚠ Your role can't view serviceable areas (403)." : "⚠ " + (e.message || "Couldn't load serviceable areas."), "err");
+      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live pincodes." : e.code === "forbidden" ? "⚠ Your role can't view serviceable areas (403)." : "⚠ " + (e.message || "Couldn't load serviceable areas."), "err");
     }
   }
   window.DOODLY_ADMIN.wireServiceableAreasBackend = wireServiceableAreasBackend;
@@ -1733,7 +1733,7 @@
       bkRemount("adminDeliveries");
       bkBanner(host, "● Live — " + rows.length + " delivery record(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo deliveries." : e.code === "forbidden" ? "⚠ Your role can't view deliveries (403)." : "⚠ " + (e.message || "Couldn't load deliveries."), "err");
+      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live deliveries." : e.code === "forbidden" ? "⚠ Your role can't view deliveries (403)." : "⚠ " + (e.message || "Couldn't load deliveries."), "err");
     }
   }
   window.DOODLY_ADMIN.wireDeliveriesBackend = wireDeliveriesBackend;
@@ -1923,7 +1923,7 @@
       try { var st = await DOODLY_API.get("/api/admin/drivers/stats"); renderDrStats(host, st); } catch (e2) {}
       bkBanner(host, "● Live — " + rows.length + " delivery executive(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo drivers." : e.code === "forbidden" ? "⚠ Your role can't view drivers (403)." : "⚠ " + (e.message || "Couldn't load drivers."), "err");
+      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live drivers." : e.code === "forbidden" ? "⚠ Your role can't view drivers (403)." : "⚠ " + (e.message || "Couldn't load drivers."), "err");
     }
   }
   window.DOODLY_ADMIN.wireDriversBackend = wireDriversBackend;
@@ -2052,7 +2052,7 @@
       try { mountRtOverview(); } catch (eov) {}
       bkBanner(host, "● Live — " + rows.length + " route(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo routes." : e.code === "forbidden" ? "⚠ Your role can't view routes (403)." : "⚠ " + (e.message || "Couldn't load routes."), "err");
+      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live routes." : e.code === "forbidden" ? "⚠ Your role can't view routes (403)." : "⚠ " + (e.message || "Couldn't load routes."), "err");
     }
   }
   window.DOODLY_ADMIN.wireRoutesBackend = wireRoutesBackend;
@@ -2207,7 +2207,7 @@
       try { var st = await DOODLY_API.get("/api/admin/farmers/stats"); renderFmStats(host, st); } catch (e2) {}
       bkBanner(host, "● Live — " + rows.length + " farmer(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo farmers." : e.code === "forbidden" ? "⚠ Your role can't view farmers (403)." : "⚠ " + (e.message || "Couldn't load farmers."), "err");
+      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live farmers." : e.code === "forbidden" ? "⚠ Your role can't view farmers (403)." : "⚠ " + (e.message || "Couldn't load farmers."), "err");
     }
   }
   window.DOODLY_ADMIN.wireFarmersBackend = wireFarmersBackend;
@@ -2341,7 +2341,7 @@
       try { var fr = await DOODLY_API.get("/api/admin/farmers"); _prFarmers = fr.farmers || []; } catch (e3) { _prFarmers = []; }
       bkBanner(host, "● Live — " + rows.length + " procurement record(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo procurement." : e.code === "forbidden" ? "⚠ Your role can't view procurement (403)." : "⚠ " + (e.message || "Couldn't load procurement."), "err");
+      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live procurement." : e.code === "forbidden" ? "⚠ Your role can't view procurement (403)." : "⚠ " + (e.message || "Couldn't load procurement."), "err");
     }
   }
   window.DOODLY_ADMIN.wireProcurementBackend = wireProcurementBackend;
@@ -2476,7 +2476,7 @@
       } catch (e2) {}
       bkBanner(host, "● Live — " + rows.length + " quality record(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo quality." : e.code === "forbidden" ? "⚠ Your role can't view quality (403)." : "⚠ " + (e.message || "Couldn't load quality."), "err");
+      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live quality." : e.code === "forbidden" ? "⚠ Your role can't view quality (403)." : "⚠ " + (e.message || "Couldn't load quality."), "err");
     }
   }
   window.DOODLY_ADMIN.wireQualityBackend = wireQualityBackend;
@@ -2658,7 +2658,7 @@
       expMount(preferTab);
       bkBanner(host, "● Live — " + n.count + " expense record(s) · " + n.cats + " categor" + (n.cats === 1 ? "y" : "ies") + " from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      if (e.code === "offline") bkBanner(host, "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo expenses. Start next-app to go live.", "err");
+      if (e.code === "offline") bkBanner(host, "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live expenses. Start next-app to go live.", "err");
       else if (e.code === "forbidden") bkBanner(host, "⚠ Your role can't access Daily Expenses — Accountant, Admin & Super Admin only (403).", "err");
       else bkBanner(host, "⚠ " + (e.message || "Couldn't load expenses."), "err");
     }
@@ -2840,7 +2840,7 @@
       try { renderWalStats(host, await DOODLY_API.get("/api/wallet/admin?view=reports")); } catch (e2) {}
       bkBanner(host, "● Live — " + wallets.length + " wallet(s) · " + (txR.transactions || []).length + " transaction(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo wallets. Start next-app to go live."
+      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live wallets. Start next-app to go live."
         : e.code === "forbidden" ? "⚠ Your role can't access Wallet Management — Finance, Admin & Super Admin only (403)."
         : "⚠ " + (e.message || "Couldn't load wallets."), "err");
     }
@@ -3363,7 +3363,7 @@
       var k = dash.kpis || {};
       bkBanner(host, "● Live — " + rels.length + " referral(s) · " + (k.successfulReferrals || 0) + " rewarded · " + rpRup(k.walletRewardsIssuedPaise || 0) + " issued from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo referrals. Start next-app to go live."
+      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live referrals. Start next-app to go live."
         : e.code === "forbidden" ? "⚠ Your role can't view Referrals (403)." : "⚠ " + (e.message || "Couldn't load referrals."), "err");
     }
   }
@@ -3430,7 +3430,7 @@
       try { var dash = await DOODLY_API.get("/api/admin/coupons?view=dashboard"); renderCouponStats(host, dash.kpis); } catch (e2) {}
       bkBanner(host, "● Live — " + rows.length + " coupon(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
-      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing demo coupons." : e.code === "forbidden" ? "⚠ Your role can't view Coupons (403)." : "⚠ " + (e.message || "Couldn't load coupons."), "err");
+      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — no coupons to display." : e.code === "forbidden" ? "⚠ Your role can't view Coupons (403)." : "⚠ " + (e.message || "Couldn't load coupons."), "err");
     }
   }
   window.DOODLY_ADMIN.wireCouponsBackend = wireCouponsBackend;
