@@ -9,6 +9,7 @@ import { verifyWebhookSignature } from "@/lib/razorpay";
 import { db } from "@/lib/db";
 import { syncFromOrderPayment, recordWebhook } from "@/lib/payments/service";
 import { maybeAwardReferralForUser } from "@/lib/referrals/service";
+import { releaseCheckoutHolds } from "@/lib/checkout/service";
 import { notify, notifyOrderConfirmed } from "@/lib/notifications/dispatch";
 import { awardOrderPaid, earn } from "@/lib/loyalty/service";
 
@@ -63,9 +64,11 @@ export async function POST(req: NextRequest) {
       case "payment.failed": {
         const p = event.payload.payment.entity;
         await db.payment.updateMany({ where: { razorpayOrderId: p.order_id }, data: { status: "FAILED", razorpayPayId: p.id } });
-        const op = await db.payment.findFirst({ where: { razorpayOrderId: p.order_id }, select: { id: true, userId: true } });
+        const op = await db.payment.findFirst({ where: { razorpayOrderId: p.order_id }, select: { id: true, userId: true, orderId: true } });
         const ledgerId = op ? await syncFromOrderPayment(op.id).catch(() => null) : null;
         await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: p.id, paymentId: ledgerId ?? undefined, processed: true }).catch(() => {});
+        // Release any coupon + wallet held against this checkout order (credits the wallet back).
+        if (op?.orderId) { try { await releaseCheckoutHolds(op.orderId, "Online payment failed"); } catch (e) { console.error("webhook.release", (e as Error)?.message); } }
         // Notify the customer their payment didn't go through (in-app + opted channels).
         if (op?.userId) {
           try {

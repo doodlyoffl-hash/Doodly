@@ -714,6 +714,11 @@ model Order {
   taxPaise      Int          @default(0)           // GST
   deliveryPaise Int          @default(0)
   totalPaise    Int
+  // Checkout coupon + wallet (applied server-side; discountPaise stays the plan
+  // discount, these are recorded separately for the summary/invoice + rollback).
+  couponCode          String?
+  couponDiscountPaise Int     @default(0)
+  walletAppliedPaise  Int     @default(0)
   status        PaymentStatus @default(PENDING)
   cancelledAt  DateTime?                              // customer/admin cancellation
   createdAt    DateTime      @default(now())

@@ -18,7 +18,9 @@ import { ApiError, Errors } from "@/lib/http";
 import { quote } from "@/lib/pricing";
 import { resolveCheckoutPricing } from "@/lib/catalogue/service";
 import { createOrder as createRzpOrder, razorpayConfigured } from "@/lib/razorpay";
-import { applyWalletAtCheckout, creditTrialCashback } from "@/lib/wallet/service";
+import { applyWalletAtCheckout, creditTrialCashback, getWallet, reverseTxn } from "@/lib/wallet/service";
+import { computeWalletApply } from "@/lib/wallet/engine";
+import { validateCouponForCart, redeemCoupon } from "@/lib/coupons/service";
 import { maybeAwardReferralForPaidOrder } from "@/lib/referrals/service";
 import { earn } from "@/lib/loyalty/service";
 import { notifyOrderConfirmed } from "@/lib/notifications/dispatch";
@@ -33,6 +35,8 @@ export interface CheckoutInput {
   planId?: string;
   bottles?: number;
   method: "upi" | "card" | "netbanking" | "wallet" | "cod";
+  couponCode?: string;                      // optional coupon (validated + applied server-side)
+  walletAmountPaise?: number;               // optional wallet amount to apply (capped server-side)
   startDate?: string;                       // ISO date for the first delivery
   slot?: string;                            // display slot, e.g. "6:00 AM – 8:00 AM"
   address: {
@@ -91,6 +95,30 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
   const addressId = addr.id;
   const pincode = addr.pincode;                      // serviceability uses the SAVED pincode, not the client's
 
+  /* ---- 3. coupon (server-validated) + wallet (server-capped) — NEVER trust the
+       client's amounts. Coupon discounts the product only, not the refundable
+       deposit; wallet then applies to the remaining amount. ---- */
+  const couponCode = (input.couponCode ?? "").trim().toUpperCase();
+  let couponDiscountPaise = 0;
+  if (couponCode) {
+    const res = await validateCouponForCart(couponCode, {
+      orderTotalPaise: q.totalPaise, userId,
+      productSlugs: [variant.productSlug], planSlugs: plan ? [plan.slug] : [],
+    });
+    if (!res.ok) throw Errors.badRequest(res.message || "This coupon can't be applied to this order.");
+    couponDiscountPaise = Math.max(0, Math.min(res.discountPaise, q.totalPaise));
+  }
+  const afterCouponPaise = totalPaise - couponDiscountPaise;
+
+  const walletBalancePaise = (await db.user.findUnique({ where: { id: userId }, select: { walletPaise: true } }))?.walletPaise ?? 0;
+  let requestedWalletPaise = Math.max(0, Math.floor(input.walletAmountPaise ?? 0));
+  if (input.method === "wallet") requestedWalletPaise = afterCouponPaise; // "pay by wallet" = use as much as it covers
+  const walletAppliedPaise = computeWalletApply(walletBalancePaise, afterCouponPaise, requestedWalletPaise).appliedPaise;
+  const payablePaise = afterCouponPaise - walletAppliedPaise;
+  if (input.method === "wallet" && payablePaise > 0) {
+    throw Errors.conflict("Your wallet balance isn't enough for this order — add money or pick another method.");
+  }
+
   /* ---- serviceable-pincode check against the saved address (when coverage set) ---- */
   const coverage = await db.serviceablePincode.count({ where: { enabled: true, deletedAt: null } });
   if (coverage > 0) {
@@ -109,6 +137,7 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
       data: {
         userId, type: orderType,
         subtotalPaise, discountPaise: q.discountPaise, depositPaise, taxPaise: 0, deliveryPaise: 0, totalPaise,
+        couponCode: couponCode || null, couponDiscountPaise, walletAppliedPaise,
         status: "PENDING",
         items: {
           create: [{
@@ -150,59 +179,71 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     return { order, subscriptionId };
   }, TX);
 
-  const base = { orderId: order.id, number: num(order.id), totalPaise, depositPaise, subscriptionId, type: orderType };
+  const base = { orderId: order.id, number: num(order.id), totalPaise, depositPaise, subscriptionId, type: orderType, couponDiscountPaise, walletAppliedPaise, payablePaise };
+  const noteBits = [
+    couponDiscountPaise > 0 ? `coupon −₹${(couponDiscountPaise / 100).toLocaleString("en-IN")}` : "",
+    walletAppliedPaise > 0 ? `wallet −₹${(walletAppliedPaise / 100).toLocaleString("en-IN")}` : "",
+  ].filter(Boolean).join(", ");
 
-  /* ---- 5a. wallet payment — reuse the idempotent checkout debit ---- */
-  if (input.method === "wallet") {
-    const user = await db.user.findUnique({ where: { id: userId }, select: { walletPaise: true } });
-    if ((user?.walletPaise ?? 0) < totalPaise) {
-      await failOrder(order.id, "Insufficient wallet balance", subscriptionId);
-      throw Errors.conflict("Your wallet balance isn't enough for this order — add money or pick another method.");
+  /* ---- 5. lock the coupon + wallet against THIS order (idempotent per order;
+       reversed by releaseCheckoutHolds on any failure). Locking before the
+       gateway is what lets us charge exactly the remaining `payablePaise`. ---- */
+  if (couponCode && couponDiscountPaise > 0) {
+    try {
+      await redeemCoupon(couponCode, { orderTotalPaise: q.totalPaise, userId, productSlugs: [variant.productSlug], planSlugs: plan ? [plan.slug] : [] }, order.id, { actorId: userId, actorRole: "customer" });
+    } catch (e) {
+      await failOrder(order.id, "Coupon could not be applied", subscriptionId);
+      throw Errors.conflict((e as Error)?.message || "This coupon can no longer be applied.");
     }
-    const applied = await applyWalletAtCheckout({ userId, orderId: order.id, amountPaise: totalPaise, actorId: userId, actorRole: "customer" });
-    if ((applied.appliedPaise ?? 0) < totalPaise) {          // lost a race — roll the partial back
-      await db.walletTxn.deleteMany({ where: { orderId: order.id, kind: "usage" } }).catch(() => {});
-      await failOrder(order.id, "Wallet debit incomplete", subscriptionId);
-      throw Errors.conflict("Your wallet balance changed — please retry.");
+  }
+  if (walletAppliedPaise > 0) {
+    const applied = await applyWalletAtCheckout({ userId, orderId: order.id, amountPaise: walletAppliedPaise, actorId: userId, actorRole: "customer" });
+    if ((applied.appliedPaise ?? 0) < walletAppliedPaise) {          // balance dropped mid-checkout — undo everything
+      await releaseCheckoutHolds(order.id, "Wallet balance changed", subscriptionId);
+      throw Errors.conflict("Your wallet balance changed — please review and retry.");
     }
-    await db.payment.create({ data: { userId, orderId: order.id, method: "WALLET", amountPaise: totalPaise, status: "PAID" } });
+  }
+
+  /* ---- 6a. fully covered by wallet (+ coupon) → confirm now, no gateway ---- */
+  if (payablePaise <= 0) {
+    await db.payment.create({ data: { userId, orderId: order.id, method: "WALLET", amountPaise: walletAppliedPaise, status: "PAID" } });
     await db.order.update({ where: { id: order.id }, data: { status: "PAID" } });
-    await db.orderEvent.create({ data: { orderId: order.id, type: "PAYMENT", title: "Paid from wallet", note: `₹${(totalPaise / 100).toLocaleString("en-IN")} debited from your DOODLY Wallet` } });
+    await db.orderEvent.create({ data: { orderId: order.id, type: "PAYMENT", title: "Order paid", note: `Paid in full${noteBits ? ` (${noteBits})` : ""}` } });
     let cashback = null;
     if (plan) { try { cashback = await creditTrialCashback({ userId, targetPlanSlug: plan.slug, actorId: userId }); } catch { /* non-blocking */ } }
-    // referral reward — if THIS buyer was referred and just paid for a qualifying (30-day+) plan (non-blocking)
     await maybeAwardReferralForPaidOrder(userId, { subscriptionId, orderId: order.id }, { actorId: userId, actorRole: "customer" });
-    // DOODLY Pure Rewards: points on the paid order + subscription bonus (idempotent per order/subscription)
-    await earn.order(userId, order.id, totalPaise);
+    // DOODLY Pure Rewards: points on what the customer actually spent on product
+    // (after coupon, excluding the refundable deposit) + subscription bonus. Idempotent.
+    await earn.order(userId, order.id, Math.max(0, q.totalPaise - couponDiscountPaise));
     if (subscriptionId && plan) await earn.subscribe(userId, subscriptionId, plan.days);
-    await audit({ userId, actorRole: "customer", action: "order.placed", target: `${base.number} wallet ₹${totalPaise / 100}`, ctx });
+    await audit({ userId, actorRole: "customer", action: "order.placed", target: `${base.number} wallet ₹${walletAppliedPaise / 100}${noteBits ? ` (${noteBits})` : ""}`, ctx });
     await notifyOrderConfirmed(userId, { number: base.number });   // in-app + email/SMS/WhatsApp (per opt-in + provider), non-blocking
     return { ...base, paid: true, method: "wallet", cashback };
   }
 
-  /* ---- 5b. cash on delivery ---- */
+  /* ---- 6b. cash on delivery (remaining due on delivery) ---- */
   if (input.method === "cod") {
-    await db.payment.create({ data: { userId, orderId: order.id, method: "CASH", amountPaise: totalPaise, status: "PENDING" } });
-    await db.orderEvent.create({ data: { orderId: order.id, type: "NOTE", title: "Cash on delivery", note: "Pay the delivery executive on arrival" } });
-    await audit({ userId, actorRole: "customer", action: "order.placed", target: `${base.number} cod ₹${totalPaise / 100}`, ctx });
+    await db.payment.create({ data: { userId, orderId: order.id, method: "CASH", amountPaise: payablePaise, status: "PENDING" } });
+    await db.orderEvent.create({ data: { orderId: order.id, type: "NOTE", title: "Cash on delivery", note: `Pay the delivery executive on arrival${noteBits ? ` (${noteBits})` : ""}` } });
+    await audit({ userId, actorRole: "customer", action: "order.placed", target: `${base.number} cod ₹${payablePaise / 100}`, ctx });
     return { ...base, paid: false, method: "cod" };
   }
 
-  /* ---- 5c. gateway (Razorpay) — completed later by /api/payments/verify + webhook ---- */
+  /* ---- 6c. gateway (Razorpay) for the REMAINING payable — completed by verify + webhook ---- */
   if (!razorpayConfigured()) {
-    await failOrder(order.id, "Payment gateway not configured", subscriptionId);
+    await releaseCheckoutHolds(order.id, "Payment gateway not configured", subscriptionId);
     throw new ApiError(503, "Online payments aren't configured yet — use wallet or cash on delivery.", "gateway_unconfigured");
   }
   try {
-    const rzp = await createRzpOrder(totalPaise, { receipt: base.number, notes: { purpose: "checkout", orderId: order.id, userId } });
+    const rzp = await createRzpOrder(payablePaise, { receipt: base.number, notes: { purpose: "checkout", orderId: order.id, userId } });
     await db.payment.create({
-      data: { userId, orderId: order.id, method: GATEWAY_METHODS[input.method] ?? "UPI", amountPaise: totalPaise, status: "PENDING", razorpayOrderId: rzp.id },
+      data: { userId, orderId: order.id, method: GATEWAY_METHODS[input.method] ?? "UPI", amountPaise: payablePaise, status: "PENDING", razorpayOrderId: rzp.id },
     });
-    await audit({ userId, actorRole: "customer", action: "order.placed", target: `${base.number} ${input.method} ₹${totalPaise / 100}`, ctx });
+    await audit({ userId, actorRole: "customer", action: "order.placed", target: `${base.number} ${input.method} ₹${payablePaise / 100}${noteBits ? ` (${noteBits})` : ""}`, ctx });
     return { ...base, paid: false, method: input.method, rzp: { orderId: rzp.id, amount: rzp.amount, currency: rzp.currency, keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID } };
   } catch (e) {
     console.error("checkout.rzp", (e as Error)?.message);
-    await failOrder(order.id, "Could not start gateway payment", subscriptionId);
+    await releaseCheckoutHolds(order.id, "Could not start gateway payment", subscriptionId);
     throw Errors.badRequest("Could not start the payment. Please try again.");
   }
 }
@@ -217,4 +258,38 @@ async function failOrder(orderId: string, why: string, subscriptionId?: string |
     await db.subscriptionEvent.deleteMany({ where: { subscriptionId } }).catch(() => {});
     await db.subscription.delete({ where: { id: subscriptionId } }).catch(() => {});
   }
+}
+
+/**
+ * Reverse any coupon + wallet held against an order and fail it. Idempotent and
+ * safe to call from every failure path (creation race, gateway-start failure,
+ * client cancel, webhook payment.failed). Never reverses a PAID order.
+ * Wallet is reversed via reverseTxn (which credits the balance BACK — not a bare
+ * delete), the coupon redemption is removed and its usage counter decremented.
+ */
+export async function releaseCheckoutHolds(orderId: string, why: string, subscriptionId?: string | null) {
+  const ord = await db.order.findUnique({ where: { id: orderId }, select: { status: true } }).catch(() => null);
+  if (ord?.status === "PAID") return; // never claw back a completed order
+
+  // 1. wallet — reverse the usage debit exactly once (credits the balance back)
+  try {
+    const usage = await db.walletTxn.findFirst({ where: { orderId, kind: "usage" }, select: { id: true } });
+    if (usage) {
+      const already = await db.walletTxn.findFirst({ where: { reversedTxnId: usage.id }, select: { id: true } });
+      if (!already) await reverseTxn({ txnId: usage.id, actorRole: "system" });
+    }
+  } catch (e) { console.error("checkout.release.wallet", (e as Error)?.message); }
+
+  // 2. coupon — remove the redemption + decrement its usage counter
+  try {
+    const red = await db.couponRedemption.findUnique({ where: { orderId }, select: { couponId: true } });
+    if (red) {
+      await db.$transaction([
+        db.couponRedemption.delete({ where: { orderId } }),
+        db.coupon.update({ where: { id: red.couponId }, data: { redeemed: { decrement: 1 } } }),
+      ]);
+    }
+  } catch (e) { console.error("checkout.release.coupon", (e as Error)?.message); }
+
+  await failOrder(orderId, why, subscriptionId);
 }
