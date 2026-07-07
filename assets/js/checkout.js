@@ -41,7 +41,7 @@ window.DOODLY_CHECKOUT = (function () {
     ["wallet", "Wallet", "Paytm, PhonePe, Amazon Pay"],
   ];
 
-  let mount, coPicker, state = { step: 0, slot: 0, addr: 0, method: "upi", reached: 0 };
+  let mount, coPicker, state = { step: 0, slot: 0, addr: 0, method: "upi", reached: 0, coupon: null, useWallet: false, walletPaise: 0 };
 
   /* ---------------- markup ---------------- */
   function stepperHTML() {
@@ -162,7 +162,17 @@ window.DOODLY_CHECKOUT = (function () {
   }
   function paymentPaneHTML() {
     return `<h2 class="co-h">Payment</h2>
-      <div class="co-secure">${icon("lock", 14)} 256-bit encrypted · This is a demo — no real payment is taken</div>
+      <div class="co-secure">${icon("lock", 14)} 256-bit encrypted &amp; secure payment</div>
+      <div class="co-promo">
+        <div class="co-coupon" id="coCouponHost">
+          <label class="co-fl co-coupon-fl"><input type="text" class="co-input" id="coCouponInput" placeholder=" " autocomplete="off" maxlength="40"><span>Have a coupon code?</span></label>
+          <button type="button" class="btn btn-ghost co-coupon-apply">Apply</button>
+        </div>
+        <div class="co-coupon-msg" id="coCouponMsg" hidden></div>
+        <label class="co-walletuse" id="coWalletUse" hidden>
+          <input type="checkbox" id="coUseWallet"><span class="co-walletuse-txt">Use DOODLY Wallet balance <b id="coWalletBal"></b></span>
+        </label>
+      </div>
       <div class="co-methods">${METHODS.map((m) => `
         <div class="co-method ${m[0] === state.method ? "sel" : ""}" data-method="${m[0]}">
           <button type="button" class="co-method-head">
@@ -254,6 +264,7 @@ window.DOODLY_CHECKOUT = (function () {
     if (i < 0 || i >= STEPS.length) return;
     state.step = i; state.reached = Math.max(state.reached, i);
     STEPS.forEach((s, k) => { const el = paneEl(s[0]); if (el) el.hidden = k !== i; });
+    if (STEPS[i] && STEPS[i][0] === "payment") { hydrateWalletUse(); recalcPromo(); }   // coupon + wallet preview
     updateStepper();
     const top = mount.querySelector(".co-steps"); if (top) top.scrollIntoView({ behavior: reduced() ? "auto" : "smooth", block: "start" });
   }
@@ -265,6 +276,71 @@ window.DOODLY_CHECKOUT = (function () {
     });
     const line = mount.querySelectorAll(".co-line");
     line.forEach((l, k) => l.classList.toggle("done", k < state.step));
+  }
+
+  /* ---------------- coupon + DOODLY wallet (server-authoritative; this is preview UX) ---------------- */
+  function orderTotalPaise() {
+    const cartT = CART() ? CART().getTotals() : null;
+    const sd = (cartT && cartT.bottles) ? null : subDisplay();
+    const t = (cartT && cartT.bottles) ? cartT : (sd ? sd.totals : { total: 0 });
+    return Math.round((t.total || 0) * 100);
+  }
+  function couponMsg(text, ok) {
+    const el = mount.querySelector("#coCouponMsg"); if (!el) return;
+    el.hidden = !text; el.className = "co-coupon-msg" + (ok ? " ok" : " err"); el.textContent = text || "";
+  }
+  function recalcPromo() {
+    const sum = mount.querySelector(".co-sum"); if (!sum) return;
+    sum.querySelectorAll(".row.co-r-coupon, .row.co-r-wallet, .row.co-r-payable").forEach((r) => r.remove());
+    const totalRow = sum.querySelector(".row.total"); if (!totalRow) return;
+    const totalP = orderTotalPaise();
+    const cDisc = state.coupon ? Math.min(state.coupon.discountPaise, totalP) : 0;
+    const afterCoupon = totalP - cDisc;
+    const wUse = state.useWallet ? Math.min(state.walletPaise, afterCoupon) : 0;
+    const payable = afterCoupon - wUse;
+    let html = "";
+    if (cDisc > 0) html += `<div class="row save co-r-coupon"><span>Coupon ${state.coupon.code}</span><b>− ${inr(cDisc / 100)}</b></div>`;
+    if (wUse > 0) html += `<div class="row save co-r-wallet"><span>DOODLY Wallet</span><b>− ${inr(wUse / 100)}</b></div>`;
+    if (cDisc > 0 || wUse > 0) html += `<div class="row total co-r-payable"><span>To pay</span><b>${inr(payable / 100)}</b></div>`;
+    totalRow.insertAdjacentHTML("afterend", html);
+    totalRow.classList.toggle("co-total-struck", cDisc > 0 || wUse > 0);
+  }
+  function applyCoupon() {
+    const inp = mount.querySelector("#coCouponInput"), btn = mount.querySelector(".co-coupon-apply");
+    if (!inp || !btn) return;
+    const code = (inp.value || "").trim().toUpperCase();
+    if (state.coupon) {   // acting as "Remove"
+      state.coupon = null; inp.value = ""; inp.disabled = false;
+      btn.textContent = "Apply"; couponMsg("", true); recalcPromo(); return;
+    }
+    if (!code) { couponMsg("Enter a coupon code first.", false); return; }
+    if (!coSignedIn() || !window.DOODLY_API) { couponMsg("Sign in to apply a coupon.", false); return; }
+    const sub = subContext() || {};
+    btn.disabled = true; btn.textContent = "Checking…";
+    DOODLY_API.post("/api/coupons/validate", { code, orderTotalPaise: orderTotalPaise(), planSlugs: sub.planId ? [sub.planId] : [] })
+      .then((r) => {
+        btn.disabled = false;
+        if (r && r.ok) {
+          state.coupon = { code, discountPaise: r.discountPaise || 0 };
+          inp.disabled = true; btn.textContent = "Remove";
+          couponMsg(r.message || ("Coupon applied — you save " + inr((r.discountPaise || 0) / 100) + "!"), true);
+        } else {
+          btn.textContent = "Apply";
+          couponMsg((r && (r.message || r.reason)) || "This coupon can't be applied.", false);
+        }
+        recalcPromo();
+      })
+      .catch((e) => { btn.disabled = false; btn.textContent = "Apply"; couponMsg((e && e.message) || "Couldn't check the coupon — try again.", false); });
+  }
+  function hydrateWalletUse() {
+    const row = mount.querySelector("#coWalletUse"); if (!row) return;
+    if (!coSignedIn() || !window.DOODLY_API) { row.hidden = true; return; }
+    DOODLY_API.get("/api/wallet").then((r) => {
+      state.walletPaise = (r && r.balancePaise) || 0;
+      const bal = mount.querySelector("#coWalletBal"); if (bal) bal.textContent = "(" + inr(state.walletPaise / 100) + " available)";
+      row.hidden = state.walletPaise <= 0;
+      recalcPromo();
+    }).catch(() => { row.hidden = true; });
   }
 
   /* ---------------- payment ---------------- */
@@ -345,9 +421,14 @@ window.DOODLY_CHECKOUT = (function () {
     const addressPayload = (selA && selA.dataset.addrId)
       ? { id: selA.dataset.addrId, pincode: pin }     // pincode still needed for the serviceability check
       : { label: atxt(".co-addr-tag") || "Home", line1: line, city: cityM ? cityM[1] : "", pincode: pin, contactName: atxt(".co-addr-name"), phone: (atxt(".co-addr-phone") || "").replace(/[^\d+ ]/g, "").trim() };
+    // coupon + wallet are INTENT only — the backend re-validates the coupon and
+    // caps the wallet amount against the real balance (never trusts these numbers)
+    const walletIntent = state.useWallet ? Math.min(state.walletPaise, Math.max(0, orderTotalPaise() - (state.coupon ? state.coupon.discountPaise : 0))) : 0;
     const payload = {
       variantId: sub.variantId, planId: sub.planId || undefined,
       method: state.method === "card" ? "card" : state.method === "netbanking" ? "netbanking" : "upi",
+      couponCode: state.coupon ? state.coupon.code : undefined,
+      walletAmountPaise: walletIntent > 0 ? walletIntent : undefined,
       startDate: sub.startIso || undefined,
       slot: SC && SC.slotLabel ? SC.slotLabel() : undefined,
       address: addressPayload,
@@ -526,6 +607,8 @@ window.DOODLY_CHECKOUT = (function () {
       const dot = t.closest(".co-stepdot"); if (dot && !dot.disabled) { goto(Number(dot.dataset.goto)); return; }
       if (t.closest(".co-next")) {
         if (t.closest(".co-pay")) { pay(); return; }
+        if (t.closest(".co-coupon-apply")) { applyCoupon(); return; }
+        if (t.id === "coUseWallet") { state.useWallet = t.checked; recalcPromo(); return; }
         if (state.step === 1 && !addrChosen()) { showAddrReq(true); return; }   // an address MUST be selected first
         if (state.step === 1 && !serviceableOk()) { showPinReq(); return; }   // pincode must be serviceable
         if (state.step === 2 && !startOk()) { showDateReq(); return; }        // need a valid start date

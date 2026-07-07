@@ -250,3 +250,17 @@
   .co-bottle-milk { transform:scaleY(.92); }
   .co-truck { left:auto; right:10px; }
 }
+
+/* ---------------- coupon + DOODLY wallet at payment (backend-validated) ---------------- */
+.co-promo { display:flex; flex-direction:column; gap:10px; margin:0 0 16px; }
+.co-coupon { display:flex; gap:10px; align-items:stretch; }
+.co-coupon-fl { flex:1; margin:0; }
+.co-coupon .co-coupon-apply { flex:0 0 auto; }
+.co-coupon-msg { font-size:.85rem; border-radius:10px; padding:8px 12px; }
+.co-coupon-msg.ok { background:var(--mint-soft); color:var(--forest-700); }
+.co-coupon-msg.err { background:#FDECEC; color:#B4271F; border:1px solid #F6C9C6; }
+.co-walletuse { display:flex; align-items:center; gap:9px; cursor:pointer; background:var(--surface-2); border:1px solid var(--line); border-radius:var(--r-sm); padding:11px 14px; font-size:.9rem; color:var(--ink); }
+.co-walletuse input { width:17px; height:17px; accent-color:var(--leaf); flex:0 0 auto; }
+.co-walletuse b { color:var(--leaf-600); font-weight:700; }
+.co-sum .row.co-total-struck b { text-decoration:line-through; opacity:.55; font-weight:600; }
+.co-sum .row.co-r-payable b { color:var(--leaf-600); }

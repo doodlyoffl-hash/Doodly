@@ -7,6 +7,7 @@ import {
   listWallets, walletReports, getCashbackConfig, setCashbackConfig,
   adminCredit, adminDebit, reverseTxn, creditTrialCashback,
   walletDetail, listAllTransactions, creditReferralReward, bulkCredit, bulkDebit,
+  refundBottleDeposit,
 } from "@/lib/wallet/service";
 import { actorRole, actorId, canViewWallets, canManageWallets } from "@/lib/wallet/guard";
 
@@ -51,6 +52,7 @@ const Body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("reverse"), txnId: z.string().min(1) }),
   z.object({ action: z.literal("cashback"), userId: z.string().min(1), subscriptionId: z.string().optional() }),
   z.object({ action: z.literal("referral"), referrerId: z.string().min(1), refereeId: z.string().min(1), amountPaise: z.number().int().positive().optional() }),
+  z.object({ action: z.literal("bottleRefund"), userId: z.string().min(1), amountPaise: z.number().int().positive(), qty: z.number().int().nonnegative().optional(), note: z.string().max(200).optional() }),
   z.object({ action: z.literal("bulkCredit"), userIds: z.array(z.string().min(1)).min(1).max(500), amountPaise: z.number().int().positive(), reason: z.string().min(1) }),
   z.object({ action: z.literal("bulkDebit"), userIds: z.array(z.string().min(1)).min(1).max(500), amountPaise: z.number().int().positive(), reason: z.string().min(1) }),
   z.object({
@@ -80,6 +82,7 @@ export async function POST(req: NextRequest) {
       : d.action === "reverse" ? await reverseTxn({ txnId: d.txnId, ...a })
       : d.action === "cashback" ? await creditTrialCashback({ userId: d.userId, subscriptionId: d.subscriptionId, ...a })
       : d.action === "referral" ? await creditReferralReward({ referrerId: d.referrerId, refereeId: d.refereeId, amountPaise: d.amountPaise, ...a })
+      : d.action === "bottleRefund" ? await refundBottleDeposit({ userId: d.userId, amountPaise: d.amountPaise, qty: d.qty, note: d.note, ...a })
       : d.action === "bulkCredit" ? await bulkCredit({ userIds: d.userIds, amountPaise: d.amountPaise, reason: d.reason, ...a })
       : d.action === "bulkDebit" ? await bulkDebit({ userIds: d.userIds, amountPaise: d.amountPaise, reason: d.reason, ...a })
       : await setCashbackConfig({ enabled: d.enabled, amountPaise: d.amountPaise, eligiblePlanSlugs: d.eligiblePlanSlugs, expiryDays: d.expiryDays, ...a });

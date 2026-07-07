@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { expireDueLots, sendExpiryReminders, earn } from "@/lib/loyalty/service";
 import { loyaltyEnabled } from "@/lib/loyalty/config";
+import { notify } from "@/lib/notifications/dispatch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +40,34 @@ async function anniversaryAwards(now: Date) {
   return { candidates: rows.length, awarded };
 }
 
+/** Remind customers of a personally-assigned coupon (eligibility SPECIFIC) that
+    expires in exactly 3 days. Day-window + daily cron = at most one reminder. */
+async function couponExpiryReminders(now: Date) {
+  const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0);
+  const target = new Date(dayStart.getTime() + 3 * 24 * 60 * 60 * 1000);
+  const targetEnd = new Date(target.getTime() + 24 * 60 * 60 * 1000 - 1);
+  const coupons = await db.coupon.findMany({
+    where: { active: true, deletedAt: null, eligibility: "SPECIFIC", expiresAt: { gte: target, lte: targetEnd } },
+    select: { code: true, name: true, eligibleUserIds: true, expiresAt: true },
+    take: 50,
+  });
+  let reminded = 0;
+  for (const c of coupons) {
+    for (const uid of c.eligibleUserIds.slice(0, 500)) {
+      try {
+        await notify(uid, {
+          title: `Your coupon ${c.code} expires in 3 days ⏳`,
+          body: `${c.name || "Your DOODLY coupon"} is valid until ${c.expiresAt?.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}. Use it on your next order before it's gone.`,
+          email: true,
+          emailSubject: `Your DOODLY coupon ${c.code} expires soon`,
+        });
+        reminded++;
+      } catch { /* non-blocking */ }
+    }
+  }
+  return { coupons: coupons.length, reminded };
+}
+
 async function handle(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   const auth = req.headers.get("authorization") || "";
@@ -57,8 +86,9 @@ async function handle(req: NextRequest) {
   const reminders = enabled ? await sendExpiryReminders(now) : { reminded: 0 };
   const birthdays = enabled ? await birthdayAwards(now) : { candidates: 0, awarded: 0 };
   const anniversaries = enabled ? await anniversaryAwards(now) : { candidates: 0, awarded: 0 };
+  const couponReminders = await couponExpiryReminders(now);   // independent of the loyalty switch
 
-  return NextResponse.json({ ok: true, expired, reminders, birthdays, anniversaries });
+  return NextResponse.json({ ok: true, expired, reminders, birthdays, anniversaries, couponReminders });
 }
 
 export const GET = handle;

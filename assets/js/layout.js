@@ -2853,11 +2853,12 @@
     if (host._walWired) return; host._walWired = true;
     host.addEventListener("click", function (ev) {
       var t = ev.target; if (!t || !t.closest) return;
-      var cr = t.closest(".w-cr"), db = t.closest(".w-db"), rev = t.closest(".w-rev"), save = t.closest("#c-save");
-      if (!(cr || db || rev || save)) return;
+      var cr = t.closest(".w-cr"), db = t.closest(".w-db"), rf = t.closest(".w-rf"), rev = t.closest(".w-rev"), save = t.closest("#c-save");
+      if (!(cr || db || rf || rev || save)) return;
       ev.preventDefault(); ev.stopImmediatePropagation();
       if (cr) return walletCreditDebit(cr.getAttribute("data-id"), "credit");
       if (db) return walletCreditDebit(db.getAttribute("data-id"), "debit");
+      if (rf) return walletBottleRefund(rf.getAttribute("data-id"));
       if (rev) return walletReverse(rev.getAttribute("data-tx"));
       if (save) return walletSaveConfig(host);
     }, true);
@@ -2872,6 +2873,21 @@
       dacToast("₹" + amt.toLocaleString("en-IN") + " " + (mode === "credit" ? "credited" : "debited"));
       await wireWalletBackend();
     } catch (e) { dacToast(e.code === "forbidden" ? "Your role can't manage wallets (403)." : e.code === "conflict" ? (e.message || "Insufficient balance.") : (e.message || "Action failed.")); }
+  }
+  async function walletBottleRefund(userId) {
+    if (!userId) return;
+    var raw = prompt("Refund deposit amount (₹)"); if (raw === null) return;
+    var amt = Number(raw); if (!(amt > 0)) { dacToast("Enter a valid amount greater than zero"); return; }
+    var qty = parseInt(prompt("Bottles returned (qty, optional)") || "", 10);
+    var note = prompt("Note? (optional)") || "";
+    var body = { action: "bottleRefund", userId: userId, amountPaise: Math.round(amt * 100) };
+    if (qty > 0) body.qty = qty;
+    if (note) body.note = note;
+    try {
+      await DOODLY_API.post("/api/wallet/admin", body);
+      dacToast("₹" + amt.toLocaleString("en-IN") + " deposit refunded to wallet");
+      await wireWalletBackend();
+    } catch (e) { dacToast(e.code === "forbidden" ? "Your role can't manage wallets (403)." : (e.message || "Refund failed.")); }
   }
   async function walletReverse(txnId) {
     if (!txnId) return;

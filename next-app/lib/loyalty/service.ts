@@ -94,13 +94,28 @@ export async function awardPoints(p: {
       const user = await tx.user.update({
         where: { id: p.userId },
         data: { loyaltyPoints: { increment: points }, loyaltyLifetimeEarned: { increment: points } },
-        select: { loyaltyPoints: true },
+        select: { loyaltyPoints: true, loyaltyLifetimeEarned: true },
       });
       await tx.loyaltyLedger.update({ where: { id: row.id }, data: { balanceAfter: user.loyaltyPoints } });
-      return { balance: user.loyaltyPoints, reference: row.reference };
+      return { balance: user.loyaltyPoints, lifetime: user.loyaltyLifetimeEarned, reference: row.reference };
     }, TX));
 
     if ("idempotent" in res) return { awarded: false, idempotent: true, reason: "already_awarded" };
+
+    // Tier upgrade? Tier follows LIFETIME points — compare before/after this earn and
+    // congratulate the member the moment they cross a threshold (in-app + email).
+    try {
+      const before = tierFor(res.lifetime - points, cfg.tiers);
+      const after = tierFor(res.lifetime, cfg.tiers);
+      if (after.min > before.min) {
+        notify(p.userId, {
+          title: `You're now a ${after.name}! 🎉`,
+          body: `Congratulations — you've reached the ${after.name} tier of DOODLY Pure Rewards. New benefits are waiting on your Rewards page.`,
+          email: true,
+          emailSubject: `Welcome to ${after.name} — DOODLY Pure Rewards`,
+        }).catch(() => {});
+      }
+    } catch { /* non-blocking */ }
 
     if (p.notify) {
       notify(p.userId, {
@@ -212,9 +227,10 @@ async function cfgEarn(
  */
 export async function awardOrderPaid(userId: string, orderId: string) {
   try {
-    const order = await db.order.findUnique({ where: { id: orderId }, select: { totalPaise: true, type: true } });
+    const order = await db.order.findUnique({ where: { id: orderId }, select: { totalPaise: true, depositPaise: true, couponDiscountPaise: true, type: true } });
     if (!order) return;
-    await earn.order(userId, orderId, order.totalPaise);
+    // points on the actual product spend: minus refundable deposit, minus coupon discount
+    await earn.order(userId, orderId, Math.max(0, order.totalPaise - order.depositPaise - order.couponDiscountPaise));
     if (order.type === "SUBSCRIPTION") {
       const sub = await db.subscription.findFirst({
         where: { userId, status: "ACTIVE" },

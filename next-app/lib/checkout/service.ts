@@ -23,7 +23,7 @@ import { computeWalletApply } from "@/lib/wallet/engine";
 import { validateCouponForCart, redeemCoupon } from "@/lib/coupons/service";
 import { maybeAwardReferralForPaidOrder } from "@/lib/referrals/service";
 import { earn } from "@/lib/loyalty/service";
-import { notifyOrderConfirmed } from "@/lib/notifications/dispatch";
+import { notify, notifyOrderConfirmed } from "@/lib/notifications/dispatch";
 import { audit } from "@/lib/auth/audit";
 import type { ReqContext } from "@/lib/auth/request";
 
@@ -191,6 +191,11 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
   if (couponCode && couponDiscountPaise > 0) {
     try {
       await redeemCoupon(couponCode, { orderTotalPaise: q.totalPaise, userId, productSlugs: [variant.productSlug], planSlugs: plan ? [plan.slug] : [] }, order.id, { actorId: userId, actorRole: "customer" });
+      // in-app confirmation of the saving (non-blocking; order confirmation covers channels)
+      notify(userId, {
+        title: `Coupon ${couponCode} applied ✓`,
+        body: `You saved ₹${(couponDiscountPaise / 100).toLocaleString("en-IN")} on order ${base.number}.`,
+      }).catch(() => {});
     } catch (e) {
       await failOrder(order.id, "Coupon could not be applied", subscriptionId);
       throw Errors.conflict((e as Error)?.message || "This coupon can no longer be applied.");

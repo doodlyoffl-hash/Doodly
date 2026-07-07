@@ -339,6 +339,41 @@ export async function creditReferralReward(args: { referrerId: string; refereeId
   return result;
 }
 
+// ---------- Bottle deposit refund → wallet (admin/ops action) ----------
+
+/**
+ * Refund a customer's glass-bottle deposit to their WALLET. One atomic txn:
+ * BottleLedger DEPOSIT_REFUNDED row + WalletTxn CREDIT (kind "refund") linked by
+ * the ledger row's id in the reference — so every refund is traceable both ways.
+ * Guards: amount must be positive AND not exceed what the customer still has on
+ * deposit (deposits charged on paid orders − deposits already refunded).
+ */
+export async function refundBottleDeposit(args: { userId: string; amountPaise: number; qty?: number; note?: string } & Actor) {
+  const amt = Math.round(args.amountPaise);
+  if (!Number.isFinite(amt) || amt <= 0) throw new Error("Refund amount must be positive");
+  const qty = Math.max(0, Math.round(args.qty ?? 0));
+  return withRetry(() => db.$transaction(async (tx) => {
+    // deposit still held = deposits collected on PAID orders − already refunded
+    const [charged, refunded] = await Promise.all([
+      tx.order.aggregate({ where: { userId: args.userId, status: "PAID" }, _sum: { depositPaise: true } }),
+      tx.bottleLedger.aggregate({ where: { userId: args.userId, event: "DEPOSIT_REFUNDED" }, _sum: { amountPaise: true } }),
+    ]);
+    const held = (charged._sum.depositPaise ?? 0) - (refunded._sum.amountPaise ?? 0);
+    if (amt > held) throw new Error(`Refund exceeds the deposit on file (₹${Math.floor(held / 100)} held).`);
+
+    const ledger = await tx.bottleLedger.create({
+      data: { userId: args.userId, event: "DEPOSIT_REFUNDED", qty, amountPaise: amt, note: args.note || "Bottle deposit refund" },
+    });
+    const { txn, balancePaise } = await postTxn(tx, {
+      userId: args.userId, type: "CREDIT", kind: "refund", amountPaise: amt,
+      reason: "bottle_deposit_refund", description: `Bottle deposit refund${qty ? ` (${qty} bottle${qty > 1 ? "s" : ""})` : ""} · ${ledger.id}`,
+      createdById: args.actorId,
+    });
+    await notifyUser(tx, args.userId, `₹${Math.round(amt / 100)} deposit refunded`, "Your glass-bottle deposit has been refunded to your DOODLY Wallet.");
+    return { refundedPaise: amt, balancePaise, reference: txn.reference, ledgerId: ledger.id, heldAfterPaise: held - amt };
+  }, TX));
+}
+
 /** Reverse a previous txn (creates the opposite entry). Guarded against double-reversal. */
 export async function reverseTxn(args: { txnId: string } & Actor) {
   return withRetry(() =>
