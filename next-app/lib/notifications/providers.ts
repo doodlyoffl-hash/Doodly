@@ -6,11 +6,13 @@
    in the request path breaks. Keys live ONLY in server env (Vercel):
      Email    → RESEND_API_KEY            (+ EMAIL_FROM)
      SMS      → TWILIO_* (+ TWILIO_SMS_FROM) or MSG91_AUTH_KEY (+ MSG91_SENDER_ID)
-     WhatsApp → TWILIO_* (+ TWILIO_WHATSAPP_FROM)
+     WhatsApp → SUPERFONE_API_KEY (preferred; see superfone.ts) or
+                MSG91 or TWILIO_* (+ TWILIO_WHATSAPP_FROM)
    ============================================================= */
 import "server-only";
 import { log } from "@/lib/logger";
 import { msg91, msg91SendSMS, msg91SendWhatsApp } from "./msg91";
+import { superfone, superfoneTemplateFor, superfoneSendTemplate, superfoneSendText } from "./superfone";
 
 const env = (k: string) => {
   const v = process.env[k];
@@ -37,7 +39,7 @@ export function channelStatus() {
   const email = !!RESEND_KEY();
   const twilio = !!(TWILIO_SID() && TWILIO_TOKEN());
   const sms = msg91.smsConfigured() || (twilio && !!TWILIO_SMS_FROM());
-  const whatsapp = msg91.whatsappConfigured() || (twilio && !!TWILIO_WA_FROM());
+  const whatsapp = superfone.configured() || msg91.whatsappConfigured() || (twilio && !!TWILIO_WA_FROM());
   return { email, sms, whatsapp, push: false };
 }
 
@@ -140,6 +142,19 @@ export async function sendSMS(phone: string | null | undefined, msg: ChannelMsg)
 export async function sendWhatsApp(phone: string | null | undefined, msg: ChannelMsg): Promise<SendResult> {
   const to = toE164(phone);
   if (!to) return { ok: false, skipped: true, error: "no-phone-number" };
+  // Superfone (Dragonfly) — preferred WhatsApp Business provider. Template events
+  // send the mapped approved template (POSITIONAL vars); unmapped events fall back
+  // to a session text ONLY when explicitly allowed (24h-window rule), else the
+  // next provider gets a chance. Fallback-safe: a Superfone failure is returned,
+  // never thrown.
+  if (superfone.configured()) {
+    const tpl = msg.template ? superfoneTemplateFor(msg.template) : null;
+    if (tpl) return superfoneSendTemplate(digitsOf(to), tpl, msg.vars ?? []);
+    if (superfone.sessionTextAllowed()) return superfoneSendText(digitsOf(to), msg.text);
+    if (!msg91.whatsappConfigured() && !(TWILIO_SID() && TWILIO_TOKEN() && TWILIO_WA_FROM())) {
+      return { ok: false, skipped: true, error: msg.template ? `no-whatsapp-template:${msg.template}` : "no-whatsapp-template" };
+    }
+  }
   if (msg91.whatsappConfigured()) {
     const tpl = msg.template ? msg91.whatsappTemplateFor(msg.template) : null;
     if (tpl) return msg91SendWhatsApp(digitsOf(to), tpl, msg.vars ?? []);
