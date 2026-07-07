@@ -1543,9 +1543,15 @@ model Notification {
   providerStatus String    @default("PENDING")   // PENDING | SENT | SKIPPED | FAILED
   providerRef    String?                          // primary external message id
   providerLog    String?                          // compact per-channel result JSON
+  // Marketing campaign link — this row IS the per-recipient delivery log for a
+  // NotificationCampaign (null for transactional notifications). Powers real
+  // per-campaign delivery logs + analytics + retry.
+  campaignId     String?
+  retryCount     Int       @default(0)
   @@index([userId, readAt])
   @@index([userId, createdAt])
   @@index([providerStatus])
+  @@index([campaignId])
 }
 
 // ================================================================

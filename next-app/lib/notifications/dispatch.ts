@@ -172,6 +172,35 @@ export async function emailIfOptedIn(userId: string, build: (name: string | null
  * Idempotent (only picks PENDING; each row ends terminal). Cron-driven.
  * Only touches rows from the last 7 days as a safety net against stuck rows.
  */
+type PendingRow = { id: string; userId: string; channel: string; title: string; body: string; user: { email: string | null; phone: string | null } | null };
+
+/** Deliver a batch of PENDING rows on each row's own channel. Shared by the
+ *  cron drain and campaign delivery — one source of truth for the per-row
+ *  provider dispatch + opt-in gating + row stamping. */
+async function processPending(rows: PendingRow[], budgetMs?: number) {
+  if (!rows.length) return { processed: 0, sent: 0, skipped: 0, failed: 0 };
+  const userIds = Array.from(new Set(rows.map((r) => r.userId)));
+  const prefRows = await db.customerPreference.findMany({
+    where: { userId: { in: userIds } }, select: { userId: true, emailOptIn: true, smsOptIn: true, whatsappOptIn: true },
+  });
+  const prefMap = new Map(prefRows.map((p) => [p.userId, p]));
+  const start = Date.now();
+  let sent = 0, skipped = 0, failed = 0, processed = 0;
+  for (const r of rows) {
+    // Stay within the serverless time budget — leftover rows remain PENDING for
+    // the daily drain / a manual drain / retry, so a large audience never times out.
+    if (budgetMs && processed > 0 && Date.now() - start > budgetMs) break;
+    // rows carry no template info → email/Twilio free-text; MSG91 skips (no template).
+    const plan: DeliverPlan = { email: r.channel === "EMAIL", sms: r.channel === "SMS" ? {} : null, whatsapp: r.channel === "WHATSAPP" ? {} : null };
+    const out = await deliverRow(r.id, plan, r.user ?? { email: null, phone: null }, prefMap.get(r.userId) ?? null, r.title, r.body);
+    if (out.providerStatus === "SENT") sent++;
+    else if (out.providerStatus === "FAILED") failed++;
+    else skipped++;
+    processed++;
+  }
+  return { processed, sent, skipped, failed };
+}
+
 export async function drainPending(limit = 200) {
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const rows = await db.notification.findMany({
@@ -180,33 +209,24 @@ export async function drainPending(limit = 200) {
     take: Math.min(1000, Math.max(1, limit)),
     include: { user: { select: { email: true, phone: true } } },
   });
-  if (!rows.length) return { processed: 0, sent: 0, skipped: 0, failed: 0 };
+  const res = await processPending(rows);
+  log.info("notify.drain", "drain complete", res);
+  return res;
+}
 
-  // batch-load prefs for the involved users
-  const userIds = Array.from(new Set(rows.map((r) => r.userId)));
-  const prefRows = await db.customerPreference.findMany({
-    where: { userId: { in: userIds } }, select: { userId: true, emailOptIn: true, smsOptIn: true, whatsappOptIn: true },
+/** Deliver a marketing campaign's queued rows on its channel — reuses the exact
+ *  same per-row sender + opt-in gating as the cron drain. Bounded by `limit`;
+ *  called inline on send and again by retry / the daily drain for any remainder. */
+export async function deliverCampaignQueue(campaignId: string, limit = 500, budgetMs = 8000) {
+  const rows = await db.notification.findMany({
+    where: { campaignId, providerStatus: "PENDING" },
+    orderBy: { createdAt: "asc" },
+    take: Math.min(2000, Math.max(1, limit)),
+    include: { user: { select: { email: true, phone: true } } },
   });
-  const prefMap = new Map(prefRows.map((p) => [p.userId, p]));
-
-  let sent = 0, skipped = 0, failed = 0;
-  for (const r of rows) {
-    // drain rows carry no template info → email/Twilio free-text; MSG91 skips (no template).
-    const plan: DeliverPlan = {
-      email: r.channel === "EMAIL",
-      sms: r.channel === "SMS" ? {} : null,
-      whatsapp: r.channel === "WHATSAPP" ? {} : null,
-    };
-    const out = await deliverRow(
-      r.id, plan, r.user ?? { email: null, phone: null },
-      prefMap.get(r.userId) ?? null, r.title, r.body,
-    );
-    if (out.providerStatus === "SENT") sent++;
-    else if (out.providerStatus === "FAILED") failed++;
-    else skipped++;
-  }
-  log.info("notify.drain", "drain complete", { processed: rows.length, sent, skipped, failed });
-  return { processed: rows.length, sent, skipped, failed };
+  const res = await processPending(rows, budgetMs);
+  log.info("notify.campaign", "campaign delivery batch", { campaignId, ...res });
+  return res;
 }
 
 // ------------------------------------------------------------------ transactional event templates

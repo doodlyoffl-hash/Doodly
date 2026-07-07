@@ -12,6 +12,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { z } from "zod";
 import { channelStatus } from "./providers";
+import { deliverCampaignQueue } from "./dispatch";
 
 interface Actor { actorId?: string; actorRole?: string }
 
@@ -89,29 +90,102 @@ export async function createCampaign(raw: unknown, actor: Actor) {
   return shape(c);
 }
 
-/** Send a campaign: fan out per-user Notification records (in-app), stamp SENT + counts. */
+// ---- consent + personalization ----
+type Pref = { emailOptIn: boolean; smsOptIn: boolean; whatsappOptIn: boolean; pushOptIn: boolean; marketingOptIn: boolean } | null;
+const DEFAULT_PREF = { emailOptIn: true, smsOptIn: false, whatsappOptIn: false, pushOptIn: true, marketingOptIn: true };
+/** Marketing consent for a channel: needs the global marketing opt-in AND the
+ *  per-channel opt-in (sensible defaults when the customer has no preference row). */
+function channelConsent(channel: string, pref: Pref): boolean {
+  const p = pref ?? DEFAULT_PREF;
+  if (!p.marketingOptIn) return false;
+  return channel === "EMAIL" ? p.emailOptIn : channel === "SMS" ? p.smsOptIn : channel === "WHATSAPP" ? p.whatsappOptIn : p.pushOptIn;
+}
+/** Substitute {{variables}} per recipient; unknown/unavailable variables → "" (never breaks the send). */
+function personalize(text: string, u: { name: string | null; referralCode: string | null }): string {
+  const name = (u.name || "").trim();
+  const first = name.split(/\s+/)[0] || "there";
+  return String(text || "")
+    .replace(/\{\{\s*first[_\s]?name\s*\}\}/gi, first)
+    .replace(/\{\{\s*name\s*\}\}/gi, name || "there")
+    .replace(/\{\{\s*referral[_\s]?code\s*\}\}/gi, u.referralCode || "")
+    .replace(/\{\{\s*[\w.\s]+\s*\}\}/g, ""); // any remaining variable → blank (graceful)
+}
+
+type Recipient = { id: string; name: string | null; referralCode: string | null; pref: Pref };
+async function loadRecipients(ids: string[]): Promise<Recipient[]> {
+  const [users, prefs] = await Promise.all([
+    db.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, referralCode: true } }),
+    db.customerPreference.findMany({ where: { userId: { in: ids } }, select: { userId: true, emailOptIn: true, smsOptIn: true, whatsappOptIn: true, pushOptIn: true, marketingOptIn: true } }),
+  ]);
+  const pm = new Map(prefs.map((p) => [p.userId, p]));
+  return users.map((u) => ({ id: u.id, name: u.name, referralCode: u.referralCode, pref: pm.get(u.id) ?? null }));
+}
+
+/**
+ * Launch a campaign FOR REAL: resolve the audience, filter by marketing consent,
+ * enqueue a per-recipient Notification row (the delivery log) with the campaign's
+ * channel + personalized content, then deliver through the existing provider
+ * layer. Push = in-app only (no external push provider) so it's delivered on
+ * enqueue; Email/SMS/WhatsApp are queued PENDING and dispatched inline within a
+ * time budget — any remainder is finished by the daily drain / a manual drain /
+ * retry. Every channel + recipient is independent: one failure never stops the rest.
+ */
 export async function sendCampaign(id: string, actor: Actor) {
+  void actor;
   const c = await db.notificationCampaign.findUnique({ where: { id } });
   if (!c) throw new Error("Campaign not found");
-  if (c.status === "SENT") throw new Error("Campaign already sent.");
-  const recipients = await resolveAudience(c.audience);
+  if (c.status === "SENT" || c.status === "SENDING") throw new Error(`Campaign already ${STATUS_LABEL[c.status].toLowerCase()}.`);
+  const ids = (await resolveAudience(c.audience)).map((r) => r.id);
   const title = c.title || `${CHANNEL_LABEL[c.channel]} update`;
-  let delivered = 0;
-  // chunk the fan-out to keep the write batch reasonable
+  const isPush = c.channel === "PUSH"; // in-app only — no external push provider configured
+  await db.notificationCampaign.update({ where: { id }, data: { status: "SENDING", recipientCount: ids.length } });
+
+  // enqueue only consented recipients (chunked); Push rows are delivered in-app immediately
   const CHUNK = 500;
-  for (let i = 0; i < recipients.length; i += CHUNK) {
-    const slice = recipients.slice(i, i + CHUNK);
-    const res = await db.notification.createMany({
-      // In-app fan-out. providerStatus SKIPPED keeps the transactional drain from
-      // auto-blasting a marketing campaign as SMS/WhatsApp/Email — external
-      // campaign delivery is a separate, marketing-consent-aware path (roadmap).
-      data: slice.map((u) => ({ userId: u.id, channel: c.channel, title, body: c.message, sentAt: new Date(), providerStatus: "SKIPPED" })),
-      skipDuplicates: true,
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const recips = (await loadRecipients(ids.slice(i, i + CHUNK))).filter((u) => channelConsent(c.channel, u.pref));
+    if (!recips.length) continue;
+    await db.notification.createMany({
+      data: recips.map((u) => ({
+        userId: u.id, channel: c.channel, campaignId: c.id,
+        title: personalize(title, u), body: personalize(c.message, u), sentAt: new Date(),
+        providerStatus: isPush ? "SENT" : "PENDING", dispatchedAt: isPush ? new Date() : null,
+      })),
     });
-    delivered += res.count;
   }
-  const updated = await db.notificationCampaign.update({ where: { id }, data: { status: "SENT", sentAt: new Date(), recipientCount: recipients.length, deliveredCount: delivered } });
-  return shape(updated);
+
+  // dispatch the external queue now (time-budgeted so a large audience never times out)
+  if (!isPush) { try { await deliverCampaignQueue(c.id, 1000, 9000); } catch (e) { void e; /* remainder stays queued for the drain */ } }
+
+  const a = await campaignAnalytics(id);
+  const status: CampaignRow["status"] = a.pending > 0 ? "SENDING" : (a.sent > 0 || isPush) ? "SENT" : a.failed > 0 ? "FAILED" : "SENT";
+  const updated = await db.notificationCampaign.update({ where: { id }, data: { status, sentAt: new Date(), deliveredCount: a.sent } });
+  return { ...shape(updated), analytics: a };
+}
+
+// ---------------------------------------------------------------- analytics + retry
+/** Real per-campaign delivery breakdown, computed from the linked Notification rows. */
+export async function campaignAnalytics(id: string) {
+  const c = await db.notificationCampaign.findUnique({ where: { id }, select: { recipientCount: true } });
+  const grp = await db.notification.groupBy({ by: ["providerStatus"], where: { campaignId: id }, _count: { _all: true } });
+  const g = (s: string) => grp.find((x) => x.providerStatus === s)?._count._all ?? 0;
+  const sent = g("SENT"), failed = g("FAILED"), skipped = g("SKIPPED"), pending = g("PENDING");
+  const targeted = sent + failed + skipped + pending;
+  const audience = c?.recipientCount ?? targeted;
+  // "delivered" = provider-accepted (open/click/bounce need provider webhooks — see report).
+  return { audience, targeted, sent, delivered: sent, failed, pending, skipped, optedOut: Math.max(0, audience - targeted) };
+}
+
+/** Requeue this campaign's FAILED rows and re-dispatch (bounded, idempotent). */
+export async function retryCampaign(id: string, _actor: Actor) {
+  const c = await db.notificationCampaign.findUnique({ where: { id } });
+  if (!c) throw new Error("Campaign not found");
+  await db.notification.updateMany({ where: { campaignId: id, providerStatus: "FAILED" }, data: { providerStatus: "PENDING", retryCount: { increment: 1 } } });
+  await deliverCampaignQueue(id, 1000, 9000);
+  const a = await campaignAnalytics(id);
+  const status: CampaignRow["status"] = a.pending > 0 ? "SENDING" : a.sent > 0 ? "SENT" : a.failed > 0 ? "FAILED" : "SENT";
+  const updated = await db.notificationCampaign.update({ where: { id }, data: { status, deliveredCount: a.sent } });
+  return { ...shape(updated), analytics: a };
 }
 
 export async function createAndSend(raw: unknown, actor: Actor) {

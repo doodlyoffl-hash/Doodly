@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   listCampaigns, notificationsDashboard, campaignDetail, audienceCount,
   createCampaign, sendCampaign, createAndSend, softDeleteCampaign, restoreCampaign,
+  campaignAnalytics, retryCampaign,
 } from "@/lib/notifications/service";
 import { drainPending } from "@/lib/notifications/dispatch";
 import { actorRole, actorId, canViewNotifications, canManageNotifications } from "@/lib/notifications/guard";
@@ -25,6 +26,7 @@ export async function GET(req: NextRequest) {
   try {
     if (view === "dashboard") return NextResponse.json(await notificationsDashboard(), { headers: { "Cache-Control": "no-store" } });
     if (view === "audience") { const a = sp.get("audience") ?? "All customers"; return NextResponse.json({ audience: a, count: await audienceCount(a) }, { headers: { "Cache-Control": "no-store" } }); }
+    if (view === "analytics") { const id = sp.get("id"); if (!id) return NextResponse.json({ error: "id required" }, { status: 400 }); return NextResponse.json({ analytics: await campaignAnalytics(id) }, { headers: { "Cache-Control": "no-store" } }); }
     if (view === "detail") { const id = sp.get("id"); if (!id) return NextResponse.json({ error: "id required" }, { status: 400 }); return NextResponse.json({ campaign: await campaignDetail(id) }, { headers: { "Cache-Control": "no-store" } }); }
     return NextResponse.json(await listCampaigns({ q: sp.get("q") ?? undefined, status: sp.get("status") ?? undefined, channel: sp.get("channel") ?? undefined, page: num(sp.get("page")), pageSize: num(sp.get("pageSize")), includeDeleted: sp.get("includeDeleted") === "1" }), { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
@@ -52,6 +54,7 @@ export async function POST(req: NextRequest) {
     if (action === "create") { const c = await createCampaign(body.data ?? body, actor); result = c; target = c.name; }
     else if (action === "send") { const { id } = IdOnly.parse(body); const c = await sendCampaign(id, actor); result = c; target = `${c.name} → ${c.deliveredCount} recipient(s)`; }
     else if (action === "createAndSend") { const c = await createAndSend(body.data ?? body, actor); result = c; target = `${c.name} → ${c.deliveredCount} recipient(s)`; }
+    else if (action === "retry") { const { id } = IdOnly.parse(body); const c = await retryCampaign(id, actor); result = c; target = `${c.name} → retried`; }
     else if (action === "delete") { const { id } = IdOnly.parse(body); result = await softDeleteCampaign(id); target = id; }
     else if (action === "restore") { const { id } = IdOnly.parse(body); result = await restoreCampaign(id); target = id; }
     else if (action === "drain") { const r = await drainPending(500); result = r; target = `dispatched ${r.sent}/${r.processed}`; }
