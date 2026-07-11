@@ -92,7 +92,7 @@ export async function createCampaign(raw: unknown, actor: Actor) {
 
 // ---- consent + personalization ----
 type Pref = { emailOptIn: boolean; smsOptIn: boolean; whatsappOptIn: boolean; pushOptIn: boolean; marketingOptIn: boolean } | null;
-const DEFAULT_PREF = { emailOptIn: true, smsOptIn: false, whatsappOptIn: false, pushOptIn: true, marketingOptIn: true };
+const DEFAULT_PREF = { emailOptIn: true, smsOptIn: false, whatsappOptIn: true, pushOptIn: true, marketingOptIn: true };
 /** Marketing consent for a channel: needs the global marketing opt-in AND the
  *  per-channel opt-in (sensible defaults when the customer has no preference row). */
 function channelConsent(channel: string, pref: Pref): boolean {

@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 const DEFAULTS = {
   emailOptIn: true,
   smsOptIn: false,
-  whatsappOptIn: false,
+  whatsappOptIn: true,   // transactional WhatsApp defaults ON
   pushOptIn: true,
   marketingOptIn: true,
   language: "en",

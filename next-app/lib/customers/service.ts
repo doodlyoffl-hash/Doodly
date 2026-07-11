@@ -224,7 +224,7 @@ export async function getCustomerProfile(id: string): Promise<CustomerProfile | 
     supportTickets: [], // no ticketing model connected yet
     preferences: c.preference
       ? { emailOptIn: c.preference.emailOptIn, smsOptIn: c.preference.smsOptIn, whatsappOptIn: c.preference.whatsappOptIn, pushOptIn: c.preference.pushOptIn, marketingOptIn: c.preference.marketingOptIn, language: c.preference.language, preferredSlot: c.preference.preferredSlot, assignedExecutive: c.preference.assignedExecutive }
-      : { emailOptIn: true, smsOptIn: false, whatsappOptIn: false, pushOptIn: true, marketingOptIn: true, language: "en", preferredSlot: null, assignedExecutive: null },
+      : { emailOptIn: true, smsOptIn: false, whatsappOptIn: true, pushOptIn: true, marketingOptIn: true, language: "en", preferredSlot: null, assignedExecutive: null },
     events: c.customerEvents.map((e) => ({ id: e.id, type: e.type, summary: e.summary, detail: e.detail, byRole: e.byRole, createdAt: e.createdAt.toISOString() })),
     notes: c.customerNotes.map((n) => ({ id: n.id, body: n.body, byRole: n.byRole, createdAt: n.createdAt.toISOString() })),
   };

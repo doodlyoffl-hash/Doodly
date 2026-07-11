@@ -1681,7 +1681,7 @@ model CustomerPreference {
   user              User     @relation(fields: [userId], references: [id])
   emailOptIn        Boolean  @default(true)
   smsOptIn          Boolean  @default(false)
-  whatsappOptIn     Boolean  @default(false)
+  whatsappOptIn     Boolean  @default(true)    // transactional WhatsApp defaults ON (customer can opt out in settings)
   pushOptIn         Boolean  @default(true)
   marketingOptIn    Boolean  @default(true)
   language          String   @default("en")

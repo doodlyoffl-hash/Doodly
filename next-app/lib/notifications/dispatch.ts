@@ -82,7 +82,7 @@ async function deliverRow(
     const optedIn =
       ch === "EMAIL" ? (prefs ? prefs.emailOptIn : true) :
       ch === "SMS" ? (prefs ? prefs.smsOptIn : false) :
-      (prefs ? prefs.whatsappOptIn : false);
+      (prefs ? prefs.whatsappOptIn : true);   // WhatsApp defaults ON (opt-out respected via the row)
     if (!optedIn) { perChannel[ch] = "skipped:opt-out"; continue; }
 
     // provider gate
