@@ -72,12 +72,18 @@ export async function POST(req: NextRequest) {
         // Notify the customer their payment didn't go through (in-app + opted channels).
         if (op?.userId) {
           try {
+            const { firstNameOf } = await import("@/lib/notifications/dispatch");
+            const [name, ord] = await Promise.all([
+              firstNameOf(op.userId),
+              op.orderId ? db.order.findUnique({ where: { id: op.orderId }, select: { totalPaise: true } }) : null,
+            ]);
             await notify(op.userId, {
               title: "Payment didn't go through",
               body: "We couldn't process your recent DOODLY payment. No amount was charged — please retry from your dashboard or use your wallet.",
               email: true,
               sms: { template: "payment_failed" },
-              whatsapp: { template: "payment_failed" },
+              // vars: [name, amount ₹, order number]
+              whatsapp: { template: "payment_failed", vars: [name, Math.round((ord?.totalPaise ?? 0) / 100).toLocaleString("en-IN"), op.orderId ? num(op.orderId) : "—"] },
             });
           } catch { /* non-blocking */ }
         }
@@ -91,11 +97,22 @@ export async function POST(req: NextRequest) {
           data: { status: "ACTIVE", attempts: 0, nextRenewalAt: new Date(sub.current_end * 1000) },
         }).catch(() => {});
         // DOODLY Pure Rewards: renewal points (idempotent per subscription + billing cycle)
+        // + renewal confirmation on WhatsApp (vars: [name, plan, next renewal date])
         try {
           const ap = await db.autopaySubscription.findFirst({ where: { gatewaySubId: sub.id }, select: { subscriptionId: true } });
           if (ap?.subscriptionId) {
-            const s = await db.subscription.findUnique({ where: { id: ap.subscriptionId }, select: { userId: true } });
-            if (s) await earn.renewal(s.userId, ap.subscriptionId, Math.floor(Number(sub.current_end) || 0));
+            const s = await db.subscription.findUnique({ where: { id: ap.subscriptionId }, select: { userId: true, plan: { select: { name: true } } } });
+            if (s) {
+              await earn.renewal(s.userId, ap.subscriptionId, Math.floor(Number(sub.current_end) || 0));
+              const { firstNameOf } = await import("@/lib/notifications/dispatch");
+              const nextDate = new Date(Number(sub.current_end) * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+              await notify(s.userId, {
+                title: "Subscription renewed 🥛",
+                body: `Your ${s.plan?.name || "DOODLY"} plan has renewed successfully. Next renewal: ${nextDate}.`,
+                email: true,
+                whatsapp: { template: "sub_renewed", vars: [await firstNameOf(s.userId), s.plan?.name || "DOODLY", nextDate] },
+              });
+            }
           }
         } catch { /* non-blocking */ }
         await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: sub.id, processed: true }).catch(() => {});

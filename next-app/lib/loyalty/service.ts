@@ -108,11 +108,15 @@ export async function awardPoints(p: {
       const before = tierFor(res.lifetime - points, cfg.tiers);
       const after = tierFor(res.lifetime, cfg.tiers);
       if (after.min > before.min) {
+        const { firstNameOf } = await import("@/lib/notifications/dispatch");
+        const first = await firstNameOf(p.userId);
         notify(p.userId, {
           title: `You're now a ${after.name}! 🎉`,
           body: `Congratulations — you've reached the ${after.name} tier of DOODLY Pure Rewards. New benefits are waiting on your Rewards page.`,
           email: true,
           emailSubject: `Welcome to ${after.name} — DOODLY Pure Rewards`,
+          // tier_upgrade vars: header [tier] + body [name, tier]
+          whatsapp: { template: "tier_upgrade", vars: [after.name, first, after.name] },
         }).catch(() => {});
       }
     } catch { /* non-blocking */ }
@@ -452,11 +456,15 @@ export async function sendExpiryReminders(now = new Date()) {
       const pts = r._sum.remaining ?? 0;
       if (pts <= 0) continue;
       try {
+        const { firstNameOf } = await import("@/lib/notifications/dispatch");
+        const expDate = target.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
         await notify(r.userId, {
           title: `${pts} DOODLY Points expiring in ${days} days`,
           body: `You have ${pts} points set to expire soon. Redeem them for wallet credit on your Rewards page before they're gone.`,
           email: true,
           emailSubject: `Your DOODLY Points are expiring in ${days} days`,
+          // points_expiring vars: header [points, days] + body [name, points, date]
+          whatsapp: { template: "points_expiring", vars: [String(pts), String(days), await firstNameOf(r.userId), String(pts), expDate] },
         });
         reminded++;
       } catch { /* notify never throws, but stay safe */ }

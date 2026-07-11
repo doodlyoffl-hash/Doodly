@@ -52,14 +52,18 @@ async function couponExpiryReminders(now: Date) {
     take: 50,
   });
   let reminded = 0;
+  const { firstNameOf } = await import("@/lib/notifications/dispatch");
   for (const c of coupons) {
     for (const uid of c.eligibleUserIds.slice(0, 500)) {
       try {
+        const expDate = c.expiresAt?.toLocaleDateString("en-IN", { day: "numeric", month: "short" }) || "soon";
         await notify(uid, {
           title: `Your coupon ${c.code} expires in 3 days ⏳`,
-          body: `${c.name || "Your DOODLY coupon"} is valid until ${c.expiresAt?.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}. Use it on your next order before it's gone.`,
+          body: `${c.name || "Your DOODLY coupon"} is valid until ${expDate}. Use it on your next order before it's gone.`,
           email: true,
           emailSubject: `Your DOODLY coupon ${c.code} expires soon`,
+          // coupon_expiring vars: header [code] + body [name, code, date]
+          whatsapp: { template: "coupon_expiring", vars: [c.code, await firstNameOf(uid), c.code, expDate] },
         });
         reminded++;
       } catch { /* non-blocking */ }

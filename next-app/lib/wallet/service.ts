@@ -19,8 +19,10 @@ import {
   evaluateTrialCashback, computeWalletApply, generateReference,
   DEFAULT_CASHBACK_RULES, type CashbackRules,
 } from "./engine";
-import { emailIfOptedIn } from "@/lib/notifications/dispatch";
+import { emailIfOptedIn, notify, firstNameOf } from "@/lib/notifications/dispatch";
 import * as T from "@/lib/email/templates";
+
+const rsTxt = (paise: number) => Math.round(paise / 100).toLocaleString("en-IN");
 
 interface Actor { actorId?: string; actorRole?: string }
 
@@ -119,7 +121,7 @@ export async function rechargeWallet(args: { userId: string; amountPaise: number
     const existing = await db.walletTxn.findUnique({ where: { reference: args.reference } });
     if (existing) return { ok: true as const, idempotent: true, balancePaise: existing.balanceAfterPaise, txnId: existing.id, reference: existing.reference };
   }
-  return withRetry(() => db.$transaction(async (tx) => {
+  const outcome = await withRetry(() => db.$transaction(async (tx) => {
     const user = await tx.user.update({ where: { id: args.userId }, data: { walletPaise: { increment: amt } }, select: { walletPaise: true } });
     try {
       const txn = await tx.walletTxn.create({
@@ -134,6 +136,17 @@ export async function rechargeWallet(args: { userId: string; amountPaise: number
       throw e;
     }
   }, TX));
+  // in-app + WhatsApp confirmation for a FRESH top-up (never on idempotent replays)
+  if (outcome.ok && !outcome.idempotent) {
+    const amtTxt = rsTxt(amt);
+    await notify(args.userId, {
+      title: `₹${amtTxt} added to your DOODLY Wallet`,
+      body: "Your wallet recharge was successful. Use the balance on any order or renewal.",
+      // wallet_credited vars: header [amount] + body [name, amount, reason, balance]
+      whatsapp: { template: "wallet_credited", vars: [amtTxt, await firstNameOf(args.userId), amtTxt, "Wallet top-up", rsTxt(outcome.balancePaise)] },
+    });
+  }
+  return outcome;
 }
 
 // ---------- Trial Pack cashback (the business rule) ----------
@@ -198,15 +211,21 @@ export async function creditTrialCashback(args: { userId: string; subscriptionId
         reason: "trial_cashback", description: "Trial Pack cashback", subscriptionId: resolvedSubId,
       });
       await tx.trialCashback.update({ where: { userId }, data: { walletTxnId: txn.id } });
-      await notifyUser(tx, userId, "₹200 added to your DOODLY Wallet!", "Your Trial Pack cashback has been credited. Use it on your next order or renewal.");
 
       return { credited: true, amountPaise: decision.amountPaise, balancePaise, reference: txn.reference };
     }, TX),
   );
-  // Branded "wallet credit" email (opt-in respected) once the ₹200 cashback is credited.
+  // In-app + WhatsApp + branded email (opt-ins respected) once the cashback is credited.
   if (result?.credited) {
-    const amt = "₹" + Math.round(((result as { amountPaise?: number }).amountPaise || 0) / 100);
-    await emailIfOptedIn(userId, (name) => T.walletCredit({ name, amount: amt, reason: "Trial Pack cashback" }));
+    const r = result as { amountPaise?: number; balancePaise?: number };
+    const amt = rsTxt(r.amountPaise || 0);
+    await notify(userId, {
+      title: `₹${amt} added to your DOODLY Wallet!`,
+      body: "Your Trial Pack cashback has been credited. Use it on your next order or renewal.",
+      // wallet_credited vars: header [amount] + body [name, amount, reason, balance]
+      whatsapp: { template: "wallet_credited", vars: [amt, await firstNameOf(userId), amt, "Trial Pack cashback", rsTxt(r.balancePaise || 0)] },
+    });
+    await emailIfOptedIn(userId, (name) => T.walletCredit({ name, amount: "₹" + amt, reason: "Trial Pack cashback" }));
   }
   return result;
 }
@@ -324,14 +343,20 @@ export async function creditReferralReward(args: { referrerId: string; refereeId
       }
       const { txn, balancePaise } = await postTxn(tx, { userId: args.referrerId, type: "CREDIT", kind: "referral", amountPaise, reason: "referral", description: "Referral reward — a friend subscribed", subscriptionId: args.triggerSubscriptionId, orderId: args.triggerOrderId, createdById: args.actorId });
       await tx.referralReward.update({ where: { refereeId: args.refereeId }, data: { walletTxnId: txn.id } });
-      await notifyUser(tx, args.referrerId, `₹${Math.round(amountPaise / 100)} referral reward added!`, "Thanks for referring a friend to DOODLY — the reward is in your wallet.");
       return { credited: true, amountPaise, balancePaise, reference: txn.reference };
     }, TX),
   );
-  // Branded "referral reward" celebration email (opt-in respected) once credited.
+  // Celebration across in-app + WhatsApp + branded email (opt-ins respected) once credited.
   if (result?.credited) {
     const friend = await db.user.findUnique({ where: { id: args.refereeId }, select: { name: true } }).then((u) => u?.name || undefined).catch(() => undefined);
-    await emailIfOptedIn(args.referrerId, (name) => T.referralReward({ name, amount: "₹" + Math.round(amountPaise / 100), friend }));
+    const amt = rsTxt(amountPaise);
+    await notify(args.referrerId, {
+      title: `₹${amt} referral reward added!`,
+      body: "Thanks for referring a friend to DOODLY — the reward is in your wallet.",
+      // referral_reward vars: header [amount] + body [name, friend, amount]
+      whatsapp: { template: "referral_reward", vars: [amt, await firstNameOf(args.referrerId), (friend || "Your friend").split(/\s+/)[0], amt] },
+    });
+    await emailIfOptedIn(args.referrerId, (name) => T.referralReward({ name, amount: "₹" + amt, friend }));
     // DOODLY Pure Rewards: bonus loyalty points to the referrer (idempotent per referee)
     const { earn } = await import("@/lib/loyalty/service");
     await earn.referral(args.referrerId, args.refereeId);
@@ -352,7 +377,7 @@ export async function refundBottleDeposit(args: { userId: string; amountPaise: n
   const amt = Math.round(args.amountPaise);
   if (!Number.isFinite(amt) || amt <= 0) throw new Error("Refund amount must be positive");
   const qty = Math.max(0, Math.round(args.qty ?? 0));
-  return withRetry(() => db.$transaction(async (tx) => {
+  const result = await withRetry(() => db.$transaction(async (tx) => {
     // deposit still held = deposits collected on PAID orders − already refunded
     const [charged, refunded] = await Promise.all([
       tx.order.aggregate({ where: { userId: args.userId, status: "PAID" }, _sum: { depositPaise: true } }),
@@ -369,9 +394,15 @@ export async function refundBottleDeposit(args: { userId: string; amountPaise: n
       reason: "bottle_deposit_refund", description: `Bottle deposit refund${qty ? ` (${qty} bottle${qty > 1 ? "s" : ""})` : ""} · ${ledger.id}`,
       createdById: args.actorId,
     });
-    await notifyUser(tx, args.userId, `₹${Math.round(amt / 100)} deposit refunded`, "Your glass-bottle deposit has been refunded to your DOODLY Wallet.");
     return { refundedPaise: amt, balancePaise, reference: txn.reference, ledgerId: ledger.id, heldAfterPaise: held - amt };
   }, TX));
+  // in-app + WhatsApp confirmation (deposit_refunded vars: [name, amount])
+  await notify(args.userId, {
+    title: `₹${rsTxt(amt)} deposit refunded`,
+    body: "Your glass-bottle deposit has been refunded to your DOODLY Wallet.",
+    whatsapp: { template: "deposit_refunded", vars: [await firstNameOf(args.userId), rsTxt(amt)] },
+  });
+  return result;
 }
 
 /** Reverse a previous txn (creates the opposite entry). Guarded against double-reversal. */

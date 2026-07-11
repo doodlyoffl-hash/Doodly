@@ -86,9 +86,13 @@ export async function maybeAwardReferralForUser(refereeId: string, actor: Actor 
 export async function notifyReferrerFriendJoined(referrerId: string, friendName: string | null) {
   try {
     const cfg = await getReferralConfig();
+    const { firstNameOf } = await import("@/lib/notifications/dispatch");
+    const friend = (friendName || "Your friend").trim().split(/\s+/)[0];
     await notify(referrerId, {
       title: "A friend joined DOODLY 🎉",
       body: `${friendName || "Someone"} signed up with your referral code. You'll earn ₹${Math.round(cfg.rewardAmountPaise / 100)} when they start a ${cfg.minPlanDays}-day (or longer) subscription.`,
+      // referral_joined vars: header [friend] + body [name, friend]
+      whatsapp: { template: "referral_joined", vars: [friend, await firstNameOf(referrerId), friend] },
     });
   } catch { /* non-blocking */ }
 }

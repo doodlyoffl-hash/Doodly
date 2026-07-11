@@ -40,16 +40,18 @@ export const superfone = {
   sessionTextAllowed: () => env("SUPERFONE_ALLOW_SESSION_TEXT") === "1",
 };
 
-/** Resolve a DOODLY event key (e.g. "order_confirmed") to a Superfone template. */
-export function superfoneTemplateFor(key: string): { name: string; lang: string } | null {
+/** Resolve a DOODLY event key (e.g. "order_confirmed") to a Superfone template.
+    `header` = how many LEADING vars fill the header component; the rest fill the
+    body (each component's params are positional within that component). */
+export function superfoneTemplateFor(key: string): { name: string; lang: string; header: number } | null {
   try {
     const raw = env("SUPERFONE_WA_TEMPLATES");
     if (!raw) return null;
-    const map = JSON.parse(raw) as Record<string, string | { name: string; lang?: string }>;
+    const map = JSON.parse(raw) as Record<string, string | { name: string; lang?: string; header?: number }>;
     const v = map[key];
     if (!v) return null;
-    if (typeof v === "string") return { name: v, lang: DEFAULT_LANG() };
-    return v.name ? { name: v.name, lang: v.lang || DEFAULT_LANG() } : null;
+    if (typeof v === "string") return { name: v, lang: DEFAULT_LANG(), header: 0 };
+    return v.name ? { name: v.name, lang: v.lang || DEFAULT_LANG(), header: Math.max(0, Math.min(3, v.header ?? 0)) } : null;
   } catch {
     log.warn("superfone", "SUPERFONE_WA_TEMPLATES is not valid JSON — template mapping disabled");
     return null;
@@ -89,11 +91,14 @@ function errorOf(json: Record<string, unknown>, status: number): string {
   return `superfone-${status || "net"}${msg && msg !== "success" ? ":" + msg : ""}`;
 }
 
-/** Send an approved template message. `vars` fill the POSITIONAL body {{1}}..{{n}}. */
-export async function superfoneSendTemplate(recipientDigits: string, tpl: { name: string; lang: string }, vars: string[] = []): Promise<SendResult> {
-  const components = vars.length
-    ? [{ type: "body", parameters: vars.map((v) => ({ type: "text", text: String(v).slice(0, 300) })) }]
-    : [];
+/** Send an approved template message. The first `tpl.header` vars fill the header
+    component; the remaining vars fill the POSITIONAL body {{1}}..{{n}}. */
+export async function superfoneSendTemplate(recipientDigits: string, tpl: { name: string; lang: string; header?: number }, vars: string[] = []): Promise<SendResult> {
+  const param = (v: string) => ({ type: "text", text: String(v).slice(0, 300) });
+  const h = Math.max(0, Math.min(tpl.header ?? 0, vars.length));
+  const components: unknown[] = [];
+  if (h > 0) components.push({ type: "header", parameters: vars.slice(0, h).map(param) });
+  if (vars.length > h) components.push({ type: "body", parameters: vars.slice(h).map(param) });
   const r = await call("POST", "/whatsapp/messages", {
     type: "template", recipient: recipientDigits, templateName: tpl.name, language: tpl.lang, components,
   });

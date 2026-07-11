@@ -234,34 +234,52 @@ export async function deliverCampaignQueue(campaignId: string, limit = 500, budg
 // (MSG91_SMS_TEMPLATES / MSG91_WHATSAPP_TEMPLATES) and the `vars` order must
 // match the registered DLT/WhatsApp template placeholders. See docs/MSG91-SETUP.md.
 
-/** Order placed → confirmation across in-app + opted channels. Email = branded template. */
-export function notifyOrderConfirmed(userId: string, o: { number: string }) {
+/** First name for template personalisation ({{name}} vars). Never throws. */
+export async function firstNameOf(userId: string): Promise<string> {
+  try {
+    const u = await db.user.findUnique({ where: { id: userId }, select: { name: true } });
+    return (u?.name || "").trim().split(/\s+/)[0] || "there";
+  } catch { return "there"; }
+}
+const rs = (paise?: number | null) => Math.round((paise ?? 0) / 100).toLocaleString("en-IN");
+
+/** Order placed → confirmation across in-app + opted channels. Email = branded template.
+    WhatsApp template vars: [name, order number, amount ₹, first delivery]. */
+export async function notifyOrderConfirmed(userId: string, o: { number: string; amountPaise?: number; firstDelivery?: string }) {
   const title = "Order confirmed 🎉";
   const body = `Your DOODLY order ${o.number} is confirmed. Fresh A2 milk will reach you before 7:00 AM. Track it anytime in your dashboard.`;
+  const name = await firstNameOf(userId);
+  let amountPaise = o.amountPaise;
+  if (amountPaise == null) {   // verify/webhook callers only know the number — resolve the total
+    try {
+      const ord = await db.order.findFirst({ where: { id: { endsWith: o.number.replace(/^DOO-/i, "").toLowerCase() } }, select: { totalPaise: true } });
+      amountPaise = ord?.totalPaise ?? 0;
+    } catch { amountPaise = 0; }
+  }
   return notify(userId, {
     title, body,
     email: true,
     emailSubject: `Order ${o.number} confirmed 🎉`,
     emailHtml: T.notificationHtml(title, body, { label: "Track Order", href: "/account/tracking.html" }, "✅"),
     sms: { template: "order_confirmed", vars: [o.number] },
-    whatsapp: { template: "order_confirmed", vars: [o.number] },
+    whatsapp: { template: "order_confirmed", vars: [name, o.number, rs(amountPaise), o.firstDelivery || "tomorrow"] },
   });
 }
 
 /** Executive marked the stop en route. Email = branded "Out for delivery" template. */
-export function notifyOutForDelivery(userId: string) {
+export async function notifyOutForDelivery(userId: string) {
   const e = T.outForDelivery({});
   return notify(userId, {
     title: "Out for delivery 🚚",
     body: "Your DOODLY delivery is on the way and will reach you before 7:00 AM. Please keep your bottle crate ready.",
     email: true, emailSubject: e.subject, emailHtml: e.html,
     sms: { template: "out_for_delivery" },
-    whatsapp: { template: "out_for_delivery" },
+    whatsapp: { template: "out_for_delivery", vars: [await firstNameOf(userId)] },
   });
 }
 
 /** Stop completed. Email = branded "Delivered" template (bottle-return + rate CTA). */
-export function notifyDelivered(userId: string, d: { bottles?: number } = {}) {
+export async function notifyDelivered(userId: string, d: { bottles?: number } = {}) {
   const b = d.bottles && d.bottles > 0 ? ` We collected ${d.bottles} empty bottle${d.bottles > 1 ? "s" : ""}.` : "";
   const e = T.delivered({ bottles: d.bottles });
   return notify(userId, {
@@ -269,7 +287,7 @@ export function notifyDelivered(userId: string, d: { bottles?: number } = {}) {
     body: `Your DOODLY milk has been delivered.${b} Thank you for choosing farm-fresh A2. Rate today's delivery in the app.`,
     email: true, emailSubject: e.subject, emailHtml: e.html,
     sms: { template: "delivered" },
-    whatsapp: { template: "delivered" },
+    whatsapp: { template: "delivered", vars: [await firstNameOf(userId), String(d.bottles ?? 0)] },
   });
 }
 

@@ -227,12 +227,42 @@ Variable "type" = what DOODLY sends at runtime (all become text on WhatsApp).
 
 ---
 
-## SUPERFONE_WA_TEMPLATES map (events currently wired in code)
+## SUPERFONE_WA_TEMPLATES — the production env value
+
+Format: `"event": "template_name"` or `{"name": "...", "header": N}` where `header`
+= how many LEADING runtime vars fill the header component (the rest fill the body,
+each component's `{{n}}` numbering restarting at 1, in order of appearance).
 
 ```json
-{"order_confirmed":"doodly_order_confirmed","out_for_delivery":"doodly_out_for_delivery","delivered":"doodly_delivered","payment_failed":"doodly_payment_failed"}
+{"welcome":{"name":"doodly_welcome","header":1},"order_confirmed":"doodly_order_confirmed","payment_failed":"doodly_payment_failed","sub_renewed":"doodly_sub_renewed","out_for_delivery":"doodly_out_for_delivery","delivered":"doodly_delivered","deposit_refunded":"doodly_deposit_refunded","wallet_credited":{"name":"doodly_wallet_credited","header":1},"referral_joined":{"name":"doodly_referral_joined","header":1},"referral_reward":{"name":"doodly_referral_reward","header":1},"tier_upgrade":{"name":"doodly_tier_upgrade","header":1},"points_expiring":{"name":"doodly_points_expiring","header":2},"coupon_expiring":{"name":"doodly_coupon_expiring","header":1}}
 ```
 
-The remaining events currently send in-app + email only; wiring them to pass their
-WhatsApp template key + vars (per the specs above) is a small code pass once the
-templates are APPROVED — the provider layer already supports it.
+### Wired events → runtime vars (header vars first, then body by order of appearance)
+
+| Event | vars sent |
+|---|---|
+| welcome | [firstName] |
+| order_confirmed | [firstName, orderNo, amount₹, firstDeliveryDate] |
+| payment_failed | [firstName, amount₹, orderNo] |
+| sub_renewed | [firstName, planName, nextRenewalDate] |
+| out_for_delivery | [firstName] |
+| delivered | [firstName, bottlesCollected] |
+| deposit_refunded | [firstName, amount₹] |
+| wallet_credited (cashback + top-up) | [amount₹ (hdr), firstName, amount₹, reason, balance₹] |
+| referral_joined | [friendFirst (hdr), firstName, friendFirst] |
+| referral_reward | [amount₹ (hdr), firstName, friendFirst, amount₹] |
+| tier_upgrade | [tierName (hdr), firstName, tierName] |
+| points_expiring | [points, days (both hdr), firstName, points, expiryDate] |
+| coupon_expiring | [code (hdr), firstName, code, expiryDate] |
+
+### Not yet wired (template exists; needs an event source or a product decision)
+
+`otp` (no WhatsApp-OTP flow yet) · `payment_received` (order_confirmed already covers
+it — avoid double-messaging) · `invoice_ready` (B2C invoices are on-demand) ·
+`sub_activated` (order_confirmed fires on the same purchase) · `sub_expiring/paused/
+resumed` (no server pause/expiry events yet) · `delivery_scheduled` / `arriving_
+tomorrow` / `delivery_delayed` (need a delivery-eve cron / late-monitor hookup) ·
+`bottle_reminder` (needs a reminder cron) · `wallet_debited` (order confirmation
+covers checkout debits) · `points_earned` (deliberately in-app only — a WhatsApp per
+earn would be spammy) · `b2b_*` (B2B contacts aren't customer Users; needs direct-
+send wiring in the B2B invoice module) · `ticket_*` (support module hookup).

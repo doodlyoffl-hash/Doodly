@@ -83,6 +83,17 @@ export const POST = route("auth.register", async (req: NextRequest) => {
   await earn.registration(user.id);
   if (body.phone) await earn.profileComplete(user.id);
   if (user.email) { try { await sendWelcomeEmail(user.email, user.name); } catch { /* non-blocking */ } }
+  // WhatsApp welcome (only reaches customers who gave a phone + opt in). vars: header [first name]
+  if (body.phone) {
+    try {
+      const { notify } = await import("@/lib/notifications/dispatch");
+      await notify(user.id, {
+        title: "Welcome to DOODLY 🥛",
+        body: "Your account is ready — farm-fresh A2 milk, before 7 AM. Explore products and pick your plan!",
+        whatsapp: { template: "welcome", vars: [(user.name || "there").trim().split(/\s+/)[0]] },
+      });
+    } catch { /* non-blocking */ }
+  }
   // let the referrer know a friend joined with their code (in-app + opted-in channels)
   if (referredById) { await notifyReferrerFriendJoined(referredById, user.name); }
 

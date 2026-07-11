@@ -222,7 +222,10 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     await earn.order(userId, order.id, Math.max(0, q.totalPaise - couponDiscountPaise));
     if (subscriptionId && plan) await earn.subscribe(userId, subscriptionId, plan.days);
     await audit({ userId, actorRole: "customer", action: "order.placed", target: `${base.number} wallet ₹${walletAppliedPaise / 100}${noteBits ? ` (${noteBits})` : ""}`, ctx });
-    await notifyOrderConfirmed(userId, { number: base.number });   // in-app + email/SMS/WhatsApp (per opt-in + provider), non-blocking
+    await notifyOrderConfirmed(userId, {   // in-app + email/SMS/WhatsApp (per opt-in + provider), non-blocking
+      number: base.number, amountPaise: totalPaise,
+      firstDelivery: startDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+    });
     return { ...base, paid: true, method: "wallet", cashback };
   }
 
