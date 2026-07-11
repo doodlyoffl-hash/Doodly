@@ -86,6 +86,15 @@ function wamidOf(json: Record<string, unknown>): string | undefined {
   const data = json?.data as { messages?: { id?: string }[] } | undefined;
   return data?.messages?.[0]?.id;
 }
+/** Superfone can return HTTP 200 "success" with a failure INSIDE data (e.g.
+    {reason:"INSUFFICIENT_BALANCE"}). A send without a wamid is NOT a success. */
+function innerFailure(json: Record<string, unknown>): string | null {
+  const data = json?.data as { reason?: string; message?: string } | undefined;
+  if (data?.reason || (data?.message && !wamidOf(json))) {
+    return `superfone:${(data.reason || data.message || "no-message-id").slice(0, 80)}`;
+  }
+  return wamidOf(json) ? null : "superfone:no-message-id";
+}
 function errorOf(json: Record<string, unknown>, status: number): string {
   const msg = String((json as { message?: string; error?: string })?.message || (json as { error?: string })?.error || "").slice(0, 120);
   return `superfone-${status || "net"}${msg && msg !== "success" ? ":" + msg : ""}`;
@@ -106,6 +115,11 @@ export async function superfoneSendTemplate(recipientDigits: string, tpl: { name
     log.error("superfone", "template send rejected", { to: recipientDigits.slice(-4), template: tpl.name, status: r.status });
     return { ok: false, error: errorOf(r.json, r.status) };
   }
+  const fail = innerFailure(r.json);
+  if (fail) {
+    log.error("superfone", "template send failed (200 envelope)", { to: recipientDigits.slice(-4), template: tpl.name, reason: fail });
+    return { ok: false, error: fail };
+  }
   return { ok: true, ref: wamidOf(r.json) };
 }
 
@@ -115,6 +129,11 @@ export async function superfoneSendText(recipientDigits: string, text: string): 
   if (!r.ok) {
     log.error("superfone", "text send rejected", { to: recipientDigits.slice(-4), status: r.status });
     return { ok: false, error: errorOf(r.json, r.status) };
+  }
+  const fail = innerFailure(r.json);
+  if (fail) {
+    log.error("superfone", "text send failed (200 envelope)", { to: recipientDigits.slice(-4), reason: fail });
+    return { ok: false, error: fail };
   }
   return { ok: true, ref: wamidOf(r.json) };
 }
