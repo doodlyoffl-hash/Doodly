@@ -48,6 +48,13 @@ window.DOODLY_DELIVERY = (function () {
     return API().post("/api/delivery/stop/" + encodeURIComponent(id), body).catch((e) => { toast(e.message || "Couldn't sync — will keep your local note."); return null; });
   }
 
+  /* ---------- shift availability (signed-in executive only) ---------- */
+  let _avail = null;   // { availability, available, onTrip } from /api/driver/availability — stays null (no pill) unless the GET succeeds
+  function loadAvailability() {
+    if (!execUser() || !API()) { _avail = null; return Promise.resolve(false); }
+    return API().get("/api/driver/availability").then((r) => { _avail = r || null; return true; }).catch(() => { _avail = null; return false; });
+  }
+
   /* ---------- live GPS reporting (customer + admin tracking maps) ---------- */
   let _geoTimer = null;
   function pingLocation() {
@@ -120,7 +127,7 @@ window.DOODLY_DELIVERY = (function () {
     }
     if (execUser() && !_live) {
       host.innerHTML = '<div class="dl-hero"><div><div class="dl-greet">Loading your route…</div><div class="dl-sub">Fetching today\'s assignments</div></div></div>';
-      loadLive().then(() => mountPortalNow(host));
+      Promise.all([loadLive(), loadAvailability()]).then(() => mountPortalNow(host));
       return;
     }
     mountPortalNow(host);
@@ -150,7 +157,9 @@ window.DOODLY_DELIVERY = (function () {
           <div class="dl-sub">${_live
             ? `${_live.route ? esc(_live.route.name || _live.route.code || "Your route") + " · " : ""}${esc(_live.date || "")}${_live.isFallbackDate ? " (latest assigned day)" : ""} · ${s.total} stops`
             : (s.total ? `${s.total} stops today` : "No route assigned yet")}</div></div>
-          <span class="badge green">${_live ? "Live" : "On shift"}</span>
+          <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">${_avail
+            ? `<button type="button" class="badge ${_avail.available ? "green" : "grey"}" id="dlAvail" style="border:none;cursor:pointer;font-family:inherit" title="${_avail.available ? "Tap to end your shift" : "Tap to start your shift"}">${_avail.available ? "🟢 Available for assignment" : "⚪ Not available — start shift"}</button>`
+            : ""}<span class="badge green">${_live ? "Live" : "On shift"}</span></span>
         </div>
         <div class="dl-kpis">
           <div class="dl-kpi"><div class="n">${s.total}</div><div class="l">Assigned</div></div>
@@ -226,6 +235,14 @@ window.DOODLY_DELIVERY = (function () {
     function setBottles(id, n) { const s2 = all.find((x) => x.id === id); st[id] = Object.assign({}, st[id], { bottles: Math.max(0, Math.min(s2.bottlesExpected, n)) }); save(st); }
 
     function wire() {
+      const av = host.querySelector("#dlAvail");
+      if (av) av.addEventListener("click", () => {
+        const next = !_avail.available;
+        av.disabled = true;
+        API().post("/api/driver/availability", { available: next })
+          .then((r) => { _avail = Object.assign({}, _avail, r || {}, { available: next }); toast(next ? "Shift started — you're available" : "Shift ended"); render(); })
+          .catch((e) => { av.disabled = false; toast((e && e.message) || "Couldn't update availability"); });
+      });
       host.querySelector("#dlStart").addEventListener("click", () => { all.forEach((s2) => { if (stStatus(st, s2.id) === "assigned") setStatus(s2.id, "onway"); }); startLocationPolling(); toast("Route started — drive safe!"); render(); });
       // resume live GPS reporting if the route is already in progress (e.g. after a page reload)
       if (_live && all.some((s2) => { var ss = stStatus(st, s2.id); return ss === "onway" || ss === "reached"; })) startLocationPolling();

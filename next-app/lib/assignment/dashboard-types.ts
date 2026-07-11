@@ -30,6 +30,8 @@ export interface QueueChip {
 }
 
 export interface DashboardData {
+  /** Active auto-assignment strategy (EQUAL = Startup Mode, CAPACITY, AREA, MANUAL). */
+  strategy: string;
   totals: {
     orders: number;
     totalBottles: number;
@@ -38,6 +40,10 @@ export interface DashboardData {
     queueCount: number;
     completedDeliveries: number;
     totalExecutives: number;
+    /** Order-count view for the admin dashboard (Startup Mode KPIs). */
+    assignedOrders: number;
+    unassignedOrders: number;
+    completionPct: number;
   };
   executiveCounts: { available: number; onRoute: number; returned: number; offline: number };
   executives: ExecCardData[];

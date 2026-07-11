@@ -14,7 +14,8 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { planAssignments, assignFromQueue } from "./engine";
+import { planAssignments, planEqualAssignments, assignFromQueue } from "./engine";
+import { getAssignmentStrategy } from "./strategy";
 import { BOTTLE_CAPACITY, QUEUE_REASON } from "./constants";
 import type { DeliveryInput, ExecutiveInput } from "./types";
 import type { DashboardData } from "./dashboard-types";
@@ -100,6 +101,12 @@ export async function runAutoAssignment(args: SlotArgs) {
   const range = dayRange(args.date);
   const date = range.gte;
 
+  // Assignment strategy (admin-configurable; Startup Mode = EQUAL is the default).
+  const strategy = await getAssignmentStrategy();
+  if (strategy === "MANUAL") {
+    return { ok: true, assigned: 0, queued: 0, executives: 0, strategy, message: "Manual mode — auto-assignment is switched off. Assign deliveries from the board." };
+  }
+
   return withRetry(() =>
     db.$transaction(async (tx) => {
       // 1) Confirmed deliveries for the slot that aren't assigned or queued yet.
@@ -123,7 +130,12 @@ export async function runAutoAssignment(args: SlotArgs) {
       const eInputs = drivers.map(toExecutiveInput);
       const userIdByDriver = new Map(drivers.map((d) => [d.id, d.user.id]));
 
-      const plan = planAssignments(dInputs, eInputs);
+      // EQUAL (Startup Mode) balances order counts across peers; CAPACITY packs
+      // fuller trips without locality bias; AREA = the enterprise zone/route planner.
+      const plan =
+        strategy === "EQUAL" ? planEqualAssignments(dInputs, eInputs)
+        : strategy === "CAPACITY" ? planAssignments(dInputs, eInputs, { zoneAffinity: false })
+        : planAssignments(dInputs, eInputs);
 
       // 3) Persist assignments (one trip per executive).
       for (const a of plan.assignments) {
@@ -181,6 +193,7 @@ export async function runAutoAssignment(args: SlotArgs) {
 
       return {
         ok: true,
+        strategy,
         assigned: plan.stats.assignedDeliveries,
         assignedBottles: plan.stats.assignedBottles,
         queued: plan.stats.queuedDeliveries,
@@ -429,7 +442,10 @@ export async function getDashboard(args: { date?: Date | string; slot?: string }
   });
 
   const count = (a: string) => statuses.filter((s) => s.availability === a).length;
+  const assignedOrders = assignAgg._count;
+  const unassignedOrders = Math.max(0, deliveryAgg._count - assignedOrders);
   return {
+    strategy: await getAssignmentStrategy(),
     totals: {
       orders: deliveryAgg._count,
       totalBottles: deliveryAgg._sum.bottleCount ?? 0,
@@ -438,6 +454,9 @@ export async function getDashboard(args: { date?: Date | string; slot?: string }
       queueCount: queueAgg._count,
       completedDeliveries: completedCount,
       totalExecutives: drivers,
+      assignedOrders,
+      unassignedOrders,
+      completionPct: deliveryAgg._count ? Math.round((assignedOrders / deliveryAgg._count) * 100) : 0,
     },
     executiveCounts: {
       available: count("AVAILABLE"),

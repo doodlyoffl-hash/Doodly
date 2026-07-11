@@ -1823,6 +1823,50 @@
       var lab = ((card.querySelector(".as-kpi-l") || {}).textContent || "").toLowerCase();
       for (var key in map) { if (lab.indexOf(key) >= 0) { var v = card.querySelector(".as-kpi-v"); if (v && map[key] != null) v.textContent = map[key]; } }
     });
+    // live-only chips appended by injectAssignLive (marked with data-lv)
+    var extra = { offline: ec.offline, assignedOrders: t.assignedOrders, unassignedOrders: t.unassignedOrders, completionPct: t.completionPct != null ? Math.round(t.completionPct) + "%" : null };
+    host.querySelectorAll(".as-kpi[data-lv]").forEach(function (chip) {
+      var v = extra[chip.getAttribute("data-lv")], el = chip.querySelector(".as-kpi-v");
+      if (el && v != null) el.textContent = v;
+    });
+  }
+  // assignment strategy control + extra live KPI chips. assign.js re-renders the whole
+  // board innerHTML on interaction (search/slot/drag), wiping injected DOM — a guarded
+  // MutationObserver in wireAssignmentBackend re-injects from the cache (_asgnLast).
+  var ASGN_STRATEGIES = [["EQUAL", "Equal distribution (Startup)"], ["CAPACITY", "Capacity based"], ["AREA", "Area based (future)"], ["MANUAL", "Manual"]];
+  var _asgnLast = null, _asgnStrategy = null;
+  function injectAssignLive(host) {
+    var autoBtn = host.querySelector("#asAuto");
+    if (autoBtn && !host.querySelector("#asStrategy")) {
+      var wrap = document.createElement("label");
+      wrap.className = "as-ctl";
+      wrap.innerHTML = '<span>Strategy</span><select class="input" id="asStrategy">' +
+        ASGN_STRATEGIES.map(function (s) { return '<option value="' + s[0] + '"' + (s[0] === _asgnStrategy ? " selected" : "") + '>' + s[1] + '</option>'; }).join("") + '</select>';
+      autoBtn.insertAdjacentElement("afterend", wrap);
+      wrap.querySelector("#asStrategy").addEventListener("change", saveAssignStrategy);
+    }
+    var strip = host.querySelector(".as-kpis");
+    if (strip && !strip.querySelector("[data-lv]")) {
+      strip.insertAdjacentHTML("beforeend",
+        '<div class="as-kpi" data-lv="offline"><p class="as-kpi-v">–</p><p class="as-kpi-l">Offline execs</p></div>' +
+        '<div class="as-kpi green" data-lv="assignedOrders"><p class="as-kpi-v">–</p><p class="as-kpi-l">Assigned orders</p></div>' +
+        '<div class="as-kpi amber" data-lv="unassignedOrders"><p class="as-kpi-v">–</p><p class="as-kpi-l">Unassigned orders</p></div>' +
+        '<div class="as-kpi blue" data-lv="completionPct"><p class="as-kpi-v">–</p><p class="as-kpi-l">Completion %</p></div>');
+    }
+    if (_asgnLast) applyLiveAssignKpis(host, _asgnLast);
+  }
+  async function saveAssignStrategy(e) {
+    var sel = e.target, val = sel.value, prev = _asgnStrategy;
+    sel.disabled = true;
+    try {
+      var r = await DOODLY_API.post("/api/assignments/strategy", { strategy: val });
+      _asgnStrategy = (r && r.strategy) || val;
+      var lab = ASGN_STRATEGIES.filter(function (s) { return s[0] === _asgnStrategy; })[0];
+      dacToast("Assignment strategy saved — " + (lab ? lab[1] : _asgnStrategy));
+    } catch (err) {
+      if (prev) sel.value = prev;
+      dacToast(err.code === "forbidden" ? "Your role can't change the strategy (403)." : "Couldn't save strategy — " + (err.message || err.code || "error"));
+    } finally { sel.disabled = false; }
   }
   var _asgnBusy = false;
   async function runRealAutoAssign(host) {
@@ -1832,6 +1876,7 @@
       var today = new Date(); today.setHours(0, 0, 0, 0);
       var res = await DOODLY_API.post("/api/assignments/auto", { date: today.toISOString(), slot: "06:00-08:00" });
       var d = await DOODLY_API.get("/api/assignments/dashboard");
+      _asgnLast = d;
       applyLiveAssignKpis(host, d);
       dacToast("Auto-assignment: " + (res.assigned || 0) + " assigned, " + (res.queued || 0) + " queued (" + (res.executives || 0) + " exec).");
     } catch (e) { dacToast(e.code === "forbidden" ? "Your role can't run auto-assignment (403)." : "Auto-assign failed — " + (e.message || e.code || "error")); }
@@ -1846,11 +1891,20 @@
       host.addEventListener("click", function (e) {
         if (e.target.closest && e.target.closest("#asAuto")) { e.preventDefault(); e.stopPropagation(); runRealAutoAssign(host); }
       }, true);
+      // assign.js's render() replaces host.innerHTML → re-inject the strategy select + live chips
+      new MutationObserver(function () {
+        if (_asgnLast && !host.querySelector("#asStrategy")) injectAssignLive(host);
+      }).observe(host, { childList: true });
     }
     var ar = host.querySelector("#asAutoRef"); if (ar && ar.checked) { ar.checked = false; try { ar.dispatchEvent(new Event("change")); } catch (e0) {} }
     try {
       var d = await DOODLY_API.get("/api/assignments/dashboard");
-      applyLiveAssignKpis(host, d);
+      _asgnLast = d;
+      if (!_asgnStrategy) {
+        try { var sg = await DOODLY_API.get("/api/assignments/strategy"); _asgnStrategy = (sg && sg.strategy) || d.strategy || "EQUAL"; }
+        catch (e1) { _asgnStrategy = d.strategy || "EQUAL"; }
+      }
+      injectAssignLive(host);
       var t = d.totals || {}, ex = (d.executives || []).length;
       bkBanner(host, "● Live — auto-assignment engine on the DOODLY database (" + DOODLY_API.base() + "): " + (t.orders || 0) + " order(s), " + ex + " executive(s) on trip, " + (t.queueCount || 0) + " queued. ⚡ Auto-assign runs against the DB.", "ok");
     } catch (e) {

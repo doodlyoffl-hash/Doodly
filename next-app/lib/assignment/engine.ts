@@ -189,6 +189,86 @@ export function planAssignments(
   return finalize(buckets, queue, unique);
 }
 
+/**
+ * STARTUP MODE — equal distribution. Ignores localities/zones/routes entirely and
+ * balances today's deliveries by ORDER COUNT across all available executives, so
+ * the difference between any two executives never exceeds one order — while still
+ * never exceeding an executive's bottle capacity (an order that would overflow the
+ * balanced pick goes to the next executive with room; if none, it queues).
+ * Locked deliveries are honoured first and count toward that executive's balance.
+ * Output is plan-shaped exactly like planAssignments → the service persists,
+ * notifies and logs identically. Pure + deterministic (stable id ordering).
+ */
+export function planEqualAssignments(
+  deliveries: DeliveryInput[], executives: ExecutiveInput[], opts: PlanOptions = {},
+): AssignmentPlan {
+  const defaultCapacity = opts.defaultCapacity ?? BOTTLE_CAPACITY;
+
+  const seen = new Set<string>();
+  const unique = deliveries.filter((d) => (seen.has(d.id) ? false : (seen.add(d.id), true)));
+
+  // Symmetric buckets in stable id order — equal mode treats executives as peers.
+  const buckets: Bucket[] = executives
+    .filter((e) => e.available)
+    .map((e) => {
+      const capacity = e.capacity && e.capacity > 0 ? e.capacity : defaultCapacity;
+      const used = e.used ?? 0;
+      return {
+        id: e.id, capacity, remaining: Math.max(0, capacity - used),
+        zoneId: e.zoneId, area: e.area, lat: e.lat, lng: e.lng, items: [] as DeliveryInput[],
+      };
+    })
+    .filter((b) => b.remaining > 0)
+    .sort((a, b) => a.id.localeCompare(b.id));
+
+  const queue: QueuedDelivery[] = [];
+  const maxCapAll = buckets.length ? Math.max(...buckets.map((b) => b.capacity)) : defaultCapacity;
+  const toQueue = (d: DeliveryInput, reason: QueuedDelivery["reason"]) =>
+    queue.push({ deliveryId: d.id, bottles: d.bottles, reason, area: d.area, zoneId: d.zoneId, priority: d.priority ?? 0 });
+
+  const fitting: DeliveryInput[] = [];
+  for (const d of unique) {
+    if (d.bottles > maxCapAll) toQueue(d, QUEUE_REASON.OVERSIZE);
+    else fitting.push(d);
+  }
+  if (!buckets.length) {
+    for (const d of fitting) toQueue(d, QUEUE_REASON.NO_EXECUTIVE);
+    return finalize(buckets, queue, unique);
+  }
+
+  // Locked deliveries reserve their executive first (they count toward balance).
+  const byId = new Map(buckets.map((b) => [b.id, b]));
+  const free: DeliveryInput[] = [];
+  for (const d of fitting) {
+    if (d.lockedTo) {
+      const b = byId.get(d.lockedTo);
+      if (b && b.remaining >= d.bottles) { b.items.push(d); b.remaining -= d.bottles; }
+      else toQueue(d, QUEUE_REASON.LOCKED_CAPACITY);
+    } else {
+      free.push(d);
+    }
+  }
+
+  // Balanced pick: each delivery goes to the executive with the FEWEST orders
+  // (ties → fewest bottles carried → lowest id) among those with capacity left.
+  for (const d of free) {
+    const candidates = buckets.filter((b) => b.remaining >= d.bottles);
+    if (!candidates.length) { toQueue(d, QUEUE_REASON.CAPACITY_FULL); continue; }
+    let target = candidates[0];
+    for (const b of candidates) {
+      if (
+        b.items.length < target.items.length ||
+        (b.items.length === target.items.length && ((b.capacity - b.remaining) < (target.capacity - target.remaining) ||
+          ((b.capacity - b.remaining) === (target.capacity - target.remaining) && b.id < target.id)))
+      ) target = b;
+    }
+    target.items.push(d);
+    target.remaining -= d.bottles;
+  }
+
+  return finalize(buckets, queue, unique);   // finalize keeps per-trip stop ordering sane
+}
+
 function finalize(buckets: Bucket[], queue: QueuedDelivery[], all: DeliveryInput[]): AssignmentPlan {
   const assignments: ExecutiveAssignment[] = buckets
     .filter((b) => b.items.length)
