@@ -274,7 +274,7 @@ export async function notifyOutForDelivery(userId: string) {
     body: "Your DOODLY delivery is on the way and will reach you before 7:00 AM. Please keep your bottle crate ready.",
     email: true, emailSubject: e.subject, emailHtml: e.html,
     sms: { template: "out_for_delivery" },
-    whatsapp: { template: "out_for_delivery", vars: [await firstNameOf(userId)] },
+    whatsapp: { template: "out_for_delivery", vars: [] },   // live template: no variables
   });
 }
 
@@ -287,7 +287,7 @@ export async function notifyDelivered(userId: string, d: { bottles?: number } = 
     body: `Your DOODLY milk has been delivered.${b} Thank you for choosing farm-fresh A2. Rate today's delivery in the app.`,
     email: true, emailSubject: e.subject, emailHtml: e.html,
     sms: { template: "delivered" },
-    whatsapp: { template: "delivered", vars: [await firstNameOf(userId), String(d.bottles ?? 0)] },
+    whatsapp: { template: "delivered", vars: [String(d.bottles ?? 0)] },   // live template: [bottles]
   });
 }
 

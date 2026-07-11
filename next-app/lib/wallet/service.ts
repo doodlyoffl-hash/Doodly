@@ -19,7 +19,7 @@ import {
   evaluateTrialCashback, computeWalletApply, generateReference,
   DEFAULT_CASHBACK_RULES, type CashbackRules,
 } from "./engine";
-import { emailIfOptedIn, notify, firstNameOf } from "@/lib/notifications/dispatch";
+import { emailIfOptedIn, notify } from "@/lib/notifications/dispatch";
 import * as T from "@/lib/email/templates";
 
 const rsTxt = (paise: number) => Math.round(paise / 100).toLocaleString("en-IN");
@@ -142,8 +142,8 @@ export async function rechargeWallet(args: { userId: string; amountPaise: number
     await notify(args.userId, {
       title: `₹${amtTxt} added to your DOODLY Wallet`,
       body: "Your wallet recharge was successful. Use the balance on any order or renewal.",
-      // wallet_credited vars: header [amount] + body [name, amount, reason, balance]
-      whatsapp: { template: "wallet_credited", vars: [amtTxt, await firstNameOf(args.userId), amtTxt, "Wallet top-up", rsTxt(outcome.balancePaise)] },
+      // wallet_credited (live): header [amount] + body [amount, reason, balance]
+      whatsapp: { template: "wallet_credited", vars: [amtTxt, amtTxt, "Wallet top-up", rsTxt(outcome.balancePaise)] },
     });
   }
   return outcome;
@@ -222,8 +222,8 @@ export async function creditTrialCashback(args: { userId: string; subscriptionId
     await notify(userId, {
       title: `₹${amt} added to your DOODLY Wallet!`,
       body: "Your Trial Pack cashback has been credited. Use it on your next order or renewal.",
-      // wallet_credited vars: header [amount] + body [name, amount, reason, balance]
-      whatsapp: { template: "wallet_credited", vars: [amt, await firstNameOf(userId), amt, "Trial Pack cashback", rsTxt(r.balancePaise || 0)] },
+      // wallet_credited (live): header [amount] + body [amount, reason, balance]
+      whatsapp: { template: "wallet_credited", vars: [amt, amt, "Trial Pack cashback", rsTxt(r.balancePaise || 0)] },
     });
     await emailIfOptedIn(userId, (name) => T.walletCredit({ name, amount: "₹" + amt, reason: "Trial Pack cashback" }));
   }
@@ -353,8 +353,8 @@ export async function creditReferralReward(args: { referrerId: string; refereeId
     await notify(args.referrerId, {
       title: `₹${amt} referral reward added!`,
       body: "Thanks for referring a friend to DOODLY — the reward is in your wallet.",
-      // referral_reward vars: header [amount] + body [name, friend, amount]
-      whatsapp: { template: "referral_reward", vars: [amt, await firstNameOf(args.referrerId), (friend || "Your friend").split(/\s+/)[0], amt] },
+      // referral_reward (live): header [amount] + body [amount, friend]
+      whatsapp: { template: "referral_reward", vars: [amt, amt, (friend || "Your friend").split(/\s+/)[0]] },
     });
     await emailIfOptedIn(args.referrerId, (name) => T.referralReward({ name, amount: "₹" + amt, friend }));
     // DOODLY Pure Rewards: bonus loyalty points to the referrer (idempotent per referee)
@@ -396,11 +396,11 @@ export async function refundBottleDeposit(args: { userId: string; amountPaise: n
     });
     return { refundedPaise: amt, balancePaise, reference: txn.reference, ledgerId: ledger.id, heldAfterPaise: held - amt };
   }, TX));
-  // in-app + WhatsApp confirmation (deposit_refunded vars: [name, amount])
+  // in-app + WhatsApp confirmation (deposit_refunded live vars: [amount])
   await notify(args.userId, {
     title: `₹${rsTxt(amt)} deposit refunded`,
     body: "Your glass-bottle deposit has been refunded to your DOODLY Wallet.",
-    whatsapp: { template: "deposit_refunded", vars: [await firstNameOf(args.userId), rsTxt(amt)] },
+    whatsapp: { template: "deposit_refunded", vars: [rsTxt(amt)] },
   });
   return result;
 }

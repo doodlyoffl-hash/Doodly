@@ -234,26 +234,33 @@ Format: `"event": "template_name"` or `{"name": "...", "header": N}` where `head
 each component's `{{n}}` numbering restarting at 1, in order of appearance).
 
 ```json
-{"welcome":{"name":"doodly_welcome","header":1},"order_confirmed":"doodly_order_confirmed","payment_failed":"doodly_payment_failed","sub_renewed":"doodly_sub_renewed","out_for_delivery":"doodly_out_for_delivery","delivered":"doodly_delivered","deposit_refunded":"doodly_deposit_refunded","wallet_credited":{"name":"doodly_wallet_credited","header":1},"referral_joined":{"name":"doodly_referral_joined","header":1},"referral_reward":{"name":"doodly_referral_reward","header":1},"tier_upgrade":{"name":"doodly_tier_upgrade","header":1},"points_expiring":{"name":"doodly_points_expiring","header":2},"coupon_expiring":{"name":"doodly_coupon_expiring","header":1}}
+{"welcome":{"name":"doodly_welcome","header":1},"order_confirmed":"doodly_order_confirmed","payment_failed":"doodly_payment_failed","sub_renewed":"doodly_sub_renewed","out_for_delivery":"doodly_out_for_delivery","delivered":"doodly_delivered","deposit_refunded":"doodly_deposit_refunded","wallet_credited":{"name":"doodly_wallet_credited","header":1},"referral_joined":{"name":"doodly_referral_joined","header":1},"referral_reward":{"name":"doodly_referral_reward","header":1},"tier_upgrade":{"name":"doodly_tier_upgrade","header":1},"points_expiring":{"name":"doodly_points_expiring","header":1},"coupon_expiring":{"name":"doodly_coupon_expiring","header":1}}
 ```
 
 ### Wired events → runtime vars (header vars first, then body by order of appearance)
 
-| Event | vars sent |
+| Event | vars sent (aligned to the LIVE templates, verified 2026-07-12) |
 |---|---|
-| welcome | [firstName] |
-| order_confirmed | [firstName, orderNo, amount₹, firstDeliveryDate] |
-| payment_failed | [firstName, amount₹, orderNo] |
-| sub_renewed | [firstName, planName, nextRenewalDate] |
-| out_for_delivery | [firstName] |
-| delivered | [firstName, bottlesCollected] |
-| deposit_refunded | [firstName, amount₹] |
-| wallet_credited (cashback + top-up) | [amount₹ (hdr), firstName, amount₹, reason, balance₹] |
-| referral_joined | [friendFirst (hdr), firstName, friendFirst] |
-| referral_reward | [amount₹ (hdr), firstName, friendFirst, amount₹] |
-| tier_upgrade | [tierName (hdr), firstName, tierName] |
-| points_expiring | [points, days (both hdr), firstName, points, expiryDate] |
-| coupon_expiring | [code (hdr), firstName, code, expiryDate] |
+| welcome | [firstName] (per pack spec — template still to be created) |
+| order_confirmed | [firstName, orderNo, amount₹, firstDeliveryDate] (per pack spec — to be created) |
+| payment_failed | [firstName, amount₹, orderNo] (per pack spec — to be created) |
+| sub_renewed | [firstName, planName, nextRenewalDate] (per pack spec — to be created) |
+| out_for_delivery | [] — live template has no variables |
+| delivered | [bottlesCollected] |
+| deposit_refunded | [amount₹] |
+| wallet_credited | [amount₹ (hdr), amount₹, reason, balance₹] |
+| referral_joined | [friendFirst (hdr), friendFirst] |
+| referral_reward | [amount₹ (hdr), amount₹, friendFirst] |
+| tier_upgrade | [tierName (hdr), tierName, firstName] |
+| points_expiring | [points (hdr), points, expiryDate] |
+| coupon_expiring | [code (hdr), code, expiryDate] |
+
+Live-verified 2026-07-12: doodly_delivered + doodly_wallet_credited (header path)
+sent → delivered → READ on a real device; statuses tracked via the poll endpoint.
+GOTCHA: Superfone returns HTTP 200 "success" with the failure inside data
+(INSUFFICIENT_BALANCE / generic "Failed to send" on a VARIABLE-COUNT MISMATCH) —
+the client treats any response without a wamid as failed. Keep account balance
+topped up; on template edits re-check variable counts against this table.
 
 ### Not yet wired (template exists; needs an event source or a product decision)
 
