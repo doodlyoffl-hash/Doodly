@@ -320,7 +320,10 @@
    Mirrors the server policy in next-app/lib/auth/password.ts and
    ticks each rule green live so requirements are clear up-front.
    ============================================================ */
-.pw-reqs { list-style:none; margin:9px 2px 3px; padding:0; display:grid; grid-template-columns:1fr 1fr; gap:4px 16px; }
+/* Rendered as a sibling right after the password .fl-field (not inside it, so the
+   field's absolutely-centered lock/label/tick/eye stay aligned to the input line).
+   Negative top margin tucks it snug under the field; bottom margin spaces the next field. */
+.pw-reqs { list-style:none; margin:-8px 2px 15px; padding:0; display:grid; grid-template-columns:1fr 1fr; gap:4px 16px; }
 .pw-reqs li { display:flex; align-items:center; gap:7px; font-size:.75rem; line-height:1.3; color:var(--ink-3); font-weight:600; transition:color .2s ease; }
 .pw-reqs .pw-tick { flex:0 0 auto; width:15px; height:15px; border-radius:50%; border:1.5px solid var(--ink-3); opacity:.5; position:relative; transition:background .2s ease, border-color .2s ease, opacity .2s ease; }
 .pw-reqs .pw-tick::after { content:""; position:absolute; left:4.5px; top:1.5px; width:3.5px; height:7.5px; border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg) scale(0); transition:transform .18s ease; }

@@ -292,11 +292,16 @@ window.DOODLY_AUTH = (function () {
       const primary = newPws[0];
       if (primary) {
         const field = primary.closest(".fl-field");
-        if (field && !field.querySelector(".pw-reqs")) {
+        const already = field && field.nextElementSibling && field.nextElementSibling.classList.contains("pw-reqs");
+        if (field && !already) {
           const list = document.createElement("ul");
           list.className = "pw-reqs"; list.setAttribute("aria-live", "polite"); list.setAttribute("aria-label", "Password requirements");
           list.innerHTML = PW_RULES.map((r) => `<li data-pw="${r.id}"><span class="pw-tick" aria-hidden="true"></span><span>${r.label}</span></li>`).join("");
-          field.appendChild(list);
+          // Insert AFTER the field, not inside it: the lock / label / valid-tick /
+          // reveal-eye are absolutely centered on the field (top:50%), so keeping
+          // the field one line tall stops the checklist from shoving them onto the
+          // typed password. The list still renders directly under the field.
+          field.after(list);
           const paint = () => { const v = primary.value; PW_RULES.forEach((r) => { const li = list.querySelector('[data-pw="' + r.id + '"]'); if (li) li.classList.toggle("ok", r.test(v)); }); };
           primary.addEventListener("input", paint);
           primary.addEventListener("focus", () => list.classList.add("show"));
