@@ -815,6 +815,7 @@
     wireCmsPage(); // hydrate any [data-cms] page sections from the CMS (with built-in fallbacks)
     if (window.DOODLY_PUZZLE) { try { DOODLY_PUZZLE.mountAll(); } catch (e) {} }   // Monthly Puzzle Challenge (game page, self-gates by mount)
     if (window.DOODLY_LOYALTY) { try { DOODLY_LOYALTY.mountAll(); } catch (e) {} }   // DOODLY Pure Rewards (self-gates by mount)
+    if (window.DOODLY_REVIEWS) { try { DOODLY_REVIEWS.mountAll(); } catch (e) {} }   // Customer reviews (homepage testimonials, self-gates by mount)
     // live order status banner — homepage only (self-gates by route)
     if (window.DOODLY_LIVEORDER) window.DOODLY_LIVEORDER.attach();
     // Help Center + onboarding guidance
@@ -5164,6 +5165,7 @@
     if (window.DOODLY_CUSTOMER) window.DOODLY_CUSTOMER.mountAll();   // live customer/user KPI cards, subscription card, rewards redeem, user stats
     if (window.DOODLY_PUZZLE) { try { DOODLY_PUZZLE.mountAll(); } catch (e) {} }   // Monthly Puzzle Challenge (dashboard/rewards card + admin module)
     if (window.DOODLY_LOYALTY) { try { DOODLY_LOYALTY.mountAll(); } catch (e) {} } // DOODLY Pure Rewards (rewards page + dashboard card + admin module)
+    if (window.DOODLY_REVIEWS) { try { DOODLY_REVIEWS.mountAll(); } catch (e) {} } // Customer reviews (admin moderation module, self-gates by mount)
     if (window.DOODLY_ACCOUNT) { try { DOODLY_ACCOUNT.mountAll(); } catch (e) {} } // customer account ACTIONS (orders/subscription/notifications/profile/addresses)
     if (window.DOODLY_TOUR) window.DOODLY_TOUR.init();
     // Global Smart Search — topbar box + shortcuts on every dashboard surface + admin insights

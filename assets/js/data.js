@@ -241,11 +241,10 @@ window.DOODLY = {
     { n: "05", title: "Delivery",          text: "At your door, chilled, before you wake up." },
   ],
 
-  testimonials: [
-    { name: "Ananya R.",  area: "Jubilee Hills",  text: "It tastes like the milk I grew up with at my grandmother's village. The glass bottle is a lovely touch.", stars: 5 },
-    { name: "Karthik V.", area: "Gachibowli",     text: "Switched my whole family over. The 1000ml family bottle lands before 7 every single day.", stars: 5 },
-    { name: "Meera S.",   area: "Banjara Hills",  text: "Started with the ₹200 sample pack, never looked back. You can taste that there's nothing added.", stars: 5 },
-  ],
+  // Demo testimonials REMOVED (production honesty): the homepage review grid is
+  // backend-driven — verified APPROVED 5★ customer reviews from /api/reviews/public
+  // (rendered by reviews.js), with an honest empty state until real ones exist.
+  testimonials: [],
 
   faqs: [
     { q: "What makes A2 buffalo milk different?", a: "DOODLY milk comes from buffalo breeds whose milk is naturally A2 — many people find it easier to digest than ordinary mixed-herd milk. It's also richer in fat and protein." },

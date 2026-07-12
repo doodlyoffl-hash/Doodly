@@ -578,10 +578,12 @@ window.DOODLY_BLOCKS = (function () {
       }).join("")}</div>
     </div></section>`;
 
+  // Backend-driven: verified APPROVED 5★ reviews only (hydrated by reviews.js from
+  // /api/reviews/public). Section shell + card markup unchanged; honest empty state.
   R.testimonialGrid = (s) => `
     <section><div class="wrap">
       <div class="section-head reveal"><span class="eyebrow">Loved by mornings</span><h2 class="display">What DOODLY families say.</h2></div>
-      <div class="grid tgrid">${D().testimonials.map(t=>`<article class="tcard reveal"><div class="stars">${"★".repeat(t.stars)}</div><p>“${t.text}”</p><div class="who"><span class="av">${t.name[0]}</span><span><b>${t.name}</b><small>${t.area}</small></span></div></article>`).join("")}</div>
+      <div class="grid tgrid" id="testimonialsMount"></div>
     </div></section>`;
 
   R.faqSection = (s) => `
@@ -747,6 +749,7 @@ window.DOODLY_BLOCKS = (function () {
   R.loyaltyProgram = () => `<div id="loyaltyMount"></div>`;
   R.loyaltyCard = () => `<div id="loyaltyCardMount"></div>`;
   R.loyaltyAdmin = () => `<div id="loyaltyAdminMount"></div>`;
+  R.reviewsAdmin = () => `<div id="reviewsAdminMount"></div>`;
   R.reviewsPanel = () => `<div id="reviewsPanelMount"></div>`;
   R.lateCustomerStats = () => `<div id="lateCustomerMount"></div>`;
 

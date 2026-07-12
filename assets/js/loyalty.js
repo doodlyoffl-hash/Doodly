@@ -321,6 +321,7 @@ window.DOODLY_LOYALTY = (function () {
                   '<div class="lr-item-info"><b>' + esc(o.number) + '</b><span class="muted-sm">' + esc(o.label) + ' · ' + esc(fmtDate(o.placedAt)) + '</span></div>' +
                   '<div class="lr-stars" role="radiogroup" aria-label="Rating">' +
                     [1,2,3,4,5].map(function (i) { return '<button type="button" class="lr-pick" data-v="' + i + '" aria-label="' + i + ' star">★</button>'; }).join("") + '</div>' +
+                  '<input type="text" class="lr-comment lr-title" maxlength="120" placeholder="Title (optional)">' +
                   '<input type="text" class="lr-comment" maxlength="1000" placeholder="Anything to add? (optional)">' +
                   '<button type="button" class="btn btn-primary sm lr-submit" disabled>Submit review</button>' +
                 '</div>';
@@ -351,7 +352,7 @@ window.DOODLY_LOYALTY = (function () {
       submit.addEventListener("click", function () {
         if (!rating) return;
         submit.disabled = true; submit.textContent = "Submitting…";
-        API().post("/api/account/reviews", { orderId: item.dataset.order, rating: rating, comment: item.querySelector(".lr-comment").value.trim() })
+        API().post("/api/account/reviews", { orderId: item.dataset.order, rating: rating, title: item.querySelector(".lr-title").value.trim(), comment: item.querySelector(".lr-comment:not(.lr-title)").value.trim() })
           .then(function (res) {
             var pts = res && res.pointsAwarded;
             toast(pts ? "Thanks for your review — +" + fmtNum(pts) + " points! ⭐" : "Thanks for your review! ⭐");

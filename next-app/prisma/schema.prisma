@@ -1600,15 +1600,25 @@ model CouponRedemption {
 }
 
 model Review {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  target    String                                 // "milk","delivery","driver" or a product slug
-  rating    Int                                    // 1..5
-  comment   String?
-  orderId   String?  @unique                       // verified review: the delivered order it reviews (one review per order)
-  createdAt DateTime @default(now())
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  target      String                                 // order label (products purchased)
+  productSlug String?                                // primary product reviewed (analytics / filters)
+  title       String?                                // optional review headline
+  rating      Int                                    // 1..5
+  comment     String?
+  orderId     String?   @unique                      // verified review: the delivered order it reviews (one review per order)
+  // ---- moderation (public site shows ONLY status=APPROVED && rating=5 && orderId set) ----
+  status      String    @default("PENDING")          // PENDING | APPROVED | REJECTED | HIDDEN
+  featured    Boolean   @default(false)              // featured reviews sort first publicly
+  reply       String?                                // admin/support reply (internal + shown to the customer)
+  repliedAt   DateTime?
+  moderatedBy String?                                // admin role/id snapshot
+  moderatedAt DateTime?
+  createdAt   DateTime  @default(now())
   @@index([userId, createdAt])
+  @@index([status, rating, featured, createdAt])     // public listing + admin filters
 }
 
 // ----------------------------------------------------------------

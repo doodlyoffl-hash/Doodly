@@ -41,7 +41,7 @@ export const GET = route("account.reviews.list", async (req: NextRequest) => {
     db.order.findMany({
       where: { userId, status: "PAID", cancelledAt: null },
       orderBy: { createdAt: "desc" }, take: 25,
-      include: { items: { select: { quantity: true, productName: true, variantLabel: true } } },
+      include: { items: { select: { quantity: true, productName: true, variantLabel: true, productSlug: true } } },
     }),
     getLoyaltyConfig(),
   ]);
@@ -63,6 +63,7 @@ export const GET = route("account.reviews.list", async (req: NextRequest) => {
 const postSchema = z.object({
   orderId: z.string().min(1),
   rating: z.number().int().min(1).max(5),
+  title: z.string().trim().max(120).optional().or(z.literal("").transform(() => undefined)),
   comment: z.string().trim().max(1000).optional().or(z.literal("").transform(() => undefined)),
 });
 
@@ -73,7 +74,7 @@ export const POST = route("account.reviews.create", async (req: NextRequest) => 
   // the order must be the customer's own, paid, not cancelled — never trust the client
   const order = await db.order.findFirst({
     where: { id: body.orderId, userId, status: "PAID", cancelledAt: null },
-    include: { items: { select: { quantity: true, productName: true, variantLabel: true } } },
+    include: { items: { select: { quantity: true, productName: true, variantLabel: true, productSlug: true } } },
   });
   if (!order) throw Errors.notFound("Order not found on your account (only paid orders can be reviewed).");
   if (!(await isDelivered(userId, order))) throw Errors.badRequest("You can review this order once it has been delivered.");
@@ -81,7 +82,11 @@ export const POST = route("account.reviews.create", async (req: NextRequest) => 
   let review;
   try {
     review = await db.review.create({
-      data: { userId, target: orderLabel(order).slice(0, 120), rating: body.rating, comment: body.comment, orderId: order.id },
+      data: {
+        userId, target: orderLabel(order).slice(0, 120), productSlug: order.items[0]?.productSlug ?? null,
+        title: body.title, rating: body.rating, comment: body.comment, orderId: order.id,
+        status: "PENDING",   // moderation gate: nothing goes public until an admin approves
+      },
     });
   } catch (e) {
     // unique orderId → this order was already reviewed (race-safe)
@@ -89,6 +94,18 @@ export const POST = route("account.reviews.create", async (req: NextRequest) => 
   }
 
   await audit({ userId, actorRole: "customer", action: "review.create", target: `${order.id} ${body.rating}★`, ctx: reqContext(req) });
+  // Low-rating workflow: 1–2★ alerts admins/support so they can follow up (feedback is never deleted).
+  if (body.rating <= 2) {
+    try {
+      const { notify } = await import("@/lib/notifications/dispatch");
+      const admins = await db.user.findMany({ where: { role: { in: ["ADMIN", "SUPER_ADMIN", "SUPPORT"] }, status: "ACTIVE" }, select: { id: true }, take: 10 });
+      const who = await db.user.findUnique({ where: { id: userId }, select: { name: true } });
+      await Promise.all(admins.map((a) => notify(a.id, {
+        title: `⚠️ ${body.rating}★ review needs follow-up`,
+        body: `${who?.name || "A customer"} rated order ${order.id.slice(-6).toUpperCase()} ${body.rating}★${body.comment ? `: "${body.comment.slice(0, 140)}"` : ""} — review it in Admin → Reviews.`,
+      })));
+    } catch { /* non-blocking */ }
+  }
   // DOODLY Pure Rewards: verified-review points, once per delivered order (idempotent)
   const earned = await earn.review(userId, order.id);
 
