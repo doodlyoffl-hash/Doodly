@@ -358,7 +358,16 @@ window.DOODLY_CHECKOUT = (function () {
   // A delivery address must be chosen before leaving the address step; a REAL saved
   // address (state.addrId) is required to actually place the order. The backend
   // re-validates independently — this is the UX guard, not the security boundary.
-  function addrChosen() { try { return !!state.addrId || state.addr != null; } catch (e) { return false; } }
+  // A real signed-in customer must have SELECTED one of their saved addresses
+  // (state.addrId); the demo/guest flow needs an actually-selected card in the
+  // DOM. state.addr's initial 0 must never count as "chosen" — with zero saved
+  // addresses the customer cannot leave this step until they add + select one.
+  function addrChosen() {
+    try {
+      if (coSignedIn() && window.DOODLY_API) return !!state.addrId;
+      return !!mount.querySelector(".co-addr.sel[data-addr], .co-addr.sel[data-addr-id]");
+    } catch (e) { return false; }
+  }
   function realAddrChosen() { try { return !!state.addrId; } catch (e) { return false; } }
   function showAddrReq(show) { const el = mount && mount.querySelector("#coAddrReq"); if (!el) return; el.hidden = !show; if (show) el.scrollIntoView({ behavior: reduced() ? "auto" : "smooth", block: "center" }); }
   function showPinReq() {
