@@ -35,6 +35,28 @@ window.DOODLY_PINCODE = (function () {
     if (e && e.enabled !== false) return { ok: true, valid: true, serviceable: true, pincode: pin, area: e.area, city: e.city, state: e.state, charge: e.charge || 0, slot: e.slot, eta: e.eta, zone: e.zone, zoneName: zoneName(e.zone), executive: zoneExec(e.zone) };
     return { ok: true, valid: true, serviceable: false, pincode: pin, area: e ? e.area : null, city: e ? e.city : null, state: e ? e.state : null, reason: e ? "disabled" : "out" };
   }
+  /* Async, backend-first serviceability. Same return shape as validate() so callers
+     can drop it in. Prefers GET /api/geo/serviceable?pincode= (live coverage from
+     the DB); on any offline/error/format issue it falls back to the sync validate()
+     so nothing ever breaks. validate() stays SYNC for the ~31 sync call sites. */
+  function validateLive(pin) {
+    pin = String(pin || "").trim();
+    var sync = validate(pin);
+    if (!sync.valid) return Promise.resolve(sync);                 // bad format → no point calling out
+    var API = window.DOODLY_API;
+    if (!API || !API.get) return Promise.resolve(sync);            // no backend client → client list
+    return API.get("/api/geo/serviceable?pincode=" + encodeURIComponent(pin)).then(function (r) {
+      if (!r || r.valid === false) return sync;                    // unknown pincode upstream → client list
+      return {
+        ok: true, valid: true, serviceable: !!r.serviceable, pincode: pin,
+        area: r.area != null ? r.area : sync.area, city: r.city != null ? r.city : sync.city,
+        state: r.state != null ? r.state : sync.state,
+        charge: r.charge != null ? r.charge : (sync.charge || 0), slot: r.slot != null ? r.slot : sync.slot,
+        eta: r.eta != null ? r.eta : sync.eta, zone: sync.zone, zoneName: sync.zoneName, executive: sync.executive,
+        reason: r.serviceable ? undefined : "out",
+      };
+    }).catch(function () { return sync; });                        // offline / error → client list
+  }
 
   /* ---------- selected delivery pincode (gates cart/checkout) ---------- */
   function getPin() { try { return localStorage.getItem("doodly-pincode") || ""; } catch (e) { return ""; } }
@@ -197,5 +219,5 @@ window.DOODLY_PINCODE = (function () {
     render();
   }
 
-  return { list, setList, resetList, zones, zoneName, validate, lookup, getPin, setPin, isServiceable, waitlist, addWaitlist, mountChecker, mountAdmin, toast };
+  return { list, setList, resetList, zones, zoneName, validate, validateLive, lookup, getPin, setPin, isServiceable, waitlist, addWaitlist, mountChecker, mountAdmin, toast };
 })();

@@ -219,29 +219,89 @@ window.DOODLY_MAPS = (function () {
       </div>`;
     const input = host.querySelector(".mp-search-i"), sug = host.querySelector(".mp-suggest"),
       svg = host.querySelector(".mp-svg"), marker = host.querySelector(".mp-marker");
+    const API = () => window.DOODLY_API;
+
+    // Emit the SAME shape the Google path emits, so account.js autofill keeps working.
+    function emit(res) {
+      host.dataset.serviceable = (res && res.serviceable) ? "1" : "0";
+      if (opts.onChange) opts.onChange(res);
+    }
+    // Local (offline) resolution from the seeded pincode coords — the previous behaviour.
+    function localRes(lat, lng) {
+      const n = nearest(lat, lng), serviceable = PC() ? PC().validate(n.pincode).serviceable : true;
+      return { lat, lng, area: n.area, city: n.city, state: n.state, pincode: n.pincode, serviceable, formatted: `${n.area}, ${n.city}, ${n.state} ${n.pincode}` };
+    }
+
+    // Debounced backend reverse-geocode. On a NEW pin position we first flag {loading:true}
+    // (so the form can show "📍 Detecting address…"), then call GET /api/geo/reverse and
+    // emit the resolved {address parts, serviceable}. Offline → the local seeded result.
+    let revTimer = null, revSeq = 0;
+    function reverse(lat, lng) {
+      if (!API() || !API().get) { emit(localRes(lat, lng)); return; }
+      const seq = ++revSeq;
+      emit({ lat, lng, loading: true });
+      if (revTimer) clearTimeout(revTimer);
+      revTimer = setTimeout(function () {
+        API().get("/api/geo/reverse?lat=" + encodeURIComponent(lat) + "&lng=" + encodeURIComponent(lng)).then(function (r) {
+          if (seq !== revSeq) return;                                    // a newer pin move superseded this
+          const a = (r && r.address) || {}, sv = (r && r.serviceable) || {};
+          emit({
+            lat: a.lat != null ? +a.lat : lat, lng: a.lng != null ? +a.lng : lng,
+            houseNo: a.houseNo || "", street: a.street || "", area: a.area || "", landmark: a.landmark || "",
+            city: a.city || "", district: a.district || "", state: a.state || "", country: a.country || "",
+            pincode: a.pincode || "", serviceable: !!sv.serviceable,
+            svCharge: sv.charge, svSlot: sv.slot, svEta: sv.eta,
+            formatted: a.formatted || `${a.area || ""}, ${a.city || ""} ${a.pincode || ""}`.trim(),
+          });
+        }).catch(function () { if (seq === revSeq) emit(localRes(lat, lng)); });   // offline / error
+      }, 500);
+    }
 
     function place(lat, lng, fromDrag) {
       cur = { lat, lng };
       const p = toXY(lat, lng);
       marker.setAttribute("transform", `translate(${p.x},${p.y})`);
-      const n = nearest(lat, lng), serviceable = PC() ? PC().validate(n.pincode).serviceable : true;
-      const res = { lat, lng, area: n.area, city: n.city, state: n.state, pincode: n.pincode, serviceable, formatted: `${n.area}, ${n.city}, ${n.state} ${n.pincode}` };
-      host.dataset.serviceable = serviceable ? "1" : "0";
       if (!fromDrag) input.value = "";
-      if (opts.onChange) opts.onChange(res);
+      reverse(lat, lng);
     }
-    // suggestions
-    function renderSug(q) {
-      const L = locs().filter((l) => !q || (l.area + " " + l.city + " " + l.pincode).toLowerCase().includes(q.toLowerCase()));
-      if (!L.length) { sug.hidden = true; return; }
-      sug.innerHTML = L.slice(0, 6).map((l) => `<button type="button" class="mp-sg" data-lat="${l.lat}" data-lng="${l.lng}">${svgPin(13)}<span><b>${esc(l.area)}</b><small>${esc(l.city)}, ${esc(l.state)} · ${esc(l.pincode)}</small></span></button>`).join("");
+    // suggestions — backend search (debounced) replaces the mock locs() filtering; the
+    // dropdown markup is unchanged. Offline → fall back to the seeded locs() filter.
+    let sugTimer = null, sugSeq = 0;
+    function renderResults(rows) {
+      if (!rows || !rows.length) { sug.hidden = true; return; }
+      sug.innerHTML = rows.slice(0, 6).map((l) => `<button type="button" class="mp-sg" data-lat="${l.lat}" data-lng="${l.lng}">${svgPin(13)}<span><b>${esc(l.area || l.label || "")}</b><small>${esc([l.city, l.state].filter(Boolean).join(", "))}${l.pincode ? " · " + esc(l.pincode) : ""}</small></span></button>`).join("");
       sug.hidden = false;
+    }
+    function localSug(q) {
+      return locs().filter((l) => !q || (l.area + " " + l.city + " " + l.pincode).toLowerCase().includes((q || "").toLowerCase()));
+    }
+    function renderSug(q) {
+      q = (q || "").trim();
+      if (!API() || !API().get) { renderResults(localSug(q)); return; }
+      if (q.length < 3) { renderResults(localSug(q)); return; }
+      const seq = ++sugSeq;
+      if (sugTimer) clearTimeout(sugTimer);
+      sugTimer = setTimeout(function () {
+        API().get("/api/geo/search?q=" + encodeURIComponent(q)).then(function (r) {
+          if (seq !== sugSeq) return;
+          renderResults((r && r.results) || []);
+        }).catch(function () { if (seq === sugSeq) renderResults(localSug(q)); });
+      }, 350);
     }
     input.addEventListener("input", () => renderSug(input.value));
     input.addEventListener("focus", () => renderSug(input.value));
+    // selecting a suggestion recenters the pin + reverse-geocodes those coords
     sug.addEventListener("click", (e) => { const b = e.target.closest(".mp-sg"); if (b) { place(+b.dataset.lat, +b.dataset.lng); sug.hidden = true; } });
     document.addEventListener("click", (e) => { if (!host.contains(e.target)) sug.hidden = true; });
-    host.querySelector(".mp-geo").addEventListener("click", () => { const l = locs()[Math.floor(Math.random() * locs().length)]; place(l.lat, l.lng); });
+    // "use my location" — real GPS via navigator.geolocation → reverse-geocode those coords
+    host.querySelector(".mp-geo").addEventListener("click", () => {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => place(pos.coords.latitude, pos.coords.longitude),
+          () => { toast_("Couldn't get your location — drag the pin instead."); }
+        );
+      } else { toast_("Location isn't available on this device — drag the pin instead."); }
+    });
 
     // drag the pin
     let dragging = false;

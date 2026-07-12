@@ -318,7 +318,7 @@ window.DOODLY_ACCOUNT = (function () {
     s.textContent =
       ".na-sec{font-family:'Fraunces',serif;color:var(--forest,#0f3d2e);font-size:1rem;font-weight:600;margin:18px 0 10px;padding-top:14px;border-top:1px solid #eee}.na-sec:first-child{border-top:none;padding-top:0;margin-top:0}" +
       ".na-chips{display:flex;flex-wrap:wrap;gap:8px}.na-chip{border:1px solid #d8ddd8;background:#fff;border-radius:999px;padding:8px 15px;font-size:.85rem;font-weight:600;cursor:pointer;color:#33413a;min-height:38px}.na-chip.sel{background:var(--leaf-600,#2f7d4f);border-color:var(--leaf-600,#2f7d4f);color:#fff}" +
-      ".na-sv{margin:10px 0;font-size:.85rem;font-weight:600;padding:9px 13px;border-radius:10px}.na-sv.ok{background:#e8f6ec;color:#1c6b3a}.na-sv.no{background:#fdece9;color:#b3261e}" +
+      ".na-sv{margin:10px 0;font-size:.85rem;font-weight:600;padding:9px 13px;border-radius:10px;background:#f1f4f2;color:#4a5751}.na-sv.ok{background:#e8f6ec;color:#1c6b3a}.na-sv.no{background:#fdece9;color:#b3261e}" +
       ".na-counter{font-size:.75rem;color:#8a948d;text-align:right;margin-top:4px}.input.na-bad{border-color:#e5533c!important;background:#fff7f5}.na-note-chips .na-chip{font-weight:500;font-size:.8rem}" +
       ".na-form textarea.input{width:100%;font:inherit;padding:10px 12px;border:1px solid #d8ddd8;border-radius:10px;resize:vertical}" +
       ".acc-addr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}" +
@@ -387,6 +387,10 @@ window.DOODLY_ACCOUNT = (function () {
       var g = function (sel) { return (q(sel).value || "").trim(); };
       var errEl = q("#na-err");
       var showErr = function (m) { errEl.style.display = "block"; errEl.textContent = m; };
+      // Reflect the svOK serviceability gate on the Save/Continue button — disabled
+      // (greyed) whenever the pinned location isn't serviceable. Same gate the hard
+      // save-guard below uses. Loading counts as "not yet serviceable" → disabled.
+      var syncSaveBtn = function () { var b = q("#na-save"); if (b) { b.disabled = !svOK; b.style.opacity = svOK ? "" : ".55"; b.style.cursor = svOK ? "" : "not-allowed"; } };
       var counter = q("#na-counter"), noteEl = q("#na-note");
       var updCount = function () { counter.textContent = (noteEl.value || "").length + " / 250"; };
       updCount();
@@ -395,28 +399,60 @@ window.DOODLY_ACCOUNT = (function () {
       var areaTouched = !!e.area, pinTouched = !!e.pincode;
       q("#na-area").addEventListener("input", function () { areaTouched = true; });
 
+      // Serviceability line — three visual states surfaced through the existing #na-sv box:
+      //   loading  → neutral "📍 Detecting address…" / "Checking delivery availability…"
+      //   ok (🟢)  → "Great! DOODLY delivers to this location." (green, .na-sv.ok)
+      //   no (🔴)  → "Sorry! DOODLY currently does not deliver…" + "Choose another location" (red, .na-sv.no)
+      // svOK gates the Save button below (the existing !svOK guard already disables save).
+      function svLoading(txt) {
+        var sv = q("#na-sv"); sv.style.display = "block"; sv.className = "na-sv"; svOK = false;
+        sv.textContent = txt || "📍 Detecting address…"; syncSaveBtn();
+      }
+      function svOk(area, city) {
+        var sv = q("#na-sv"); sv.style.display = "block"; sv.className = "na-sv ok"; svOK = true;
+        sv.textContent = "🟢 Great! DOODLY delivers to " + ((area ? area + ", " : "") + (city || "this location")) + "."; syncSaveBtn();
+      }
+      function svNo() {
+        var sv = q("#na-sv"); sv.style.display = "block"; sv.className = "na-sv no"; svOK = false;
+        sv.innerHTML = "🔴 Sorry! DOODLY currently does not deliver to this location. <span style=\"display:block;font-weight:500;margin-top:2px\">Choose another location.</span>"; syncSaveBtn();
+      }
+
+      // Sync-check from the typed pincode (client list) — used when the user edits the pincode field.
       function checkPin() {
         var pin = g("#na-pin"), sv = q("#na-sv");
-        if (pin.length !== 6) { sv.style.display = "none"; svOK = false; return; }
+        if (pin.length !== 6) { sv.style.display = "none"; svOK = false; syncSaveBtn(); return; }
         var res = window.DOODLY_PINCODE ? DOODLY_PINCODE.validate(pin) : { serviceable: true };
-        sv.style.display = "block";
         if (res.serviceable) {
-          svOK = true; sv.className = "na-sv ok"; sv.textContent = "✓ We deliver to " + ((res.area ? res.area + ", " : "") + (res.city || "Vijayawada"));
+          svOk(res.area, res.city || "Vijayawada");
           if (res.city) q("#na-city").value = res.city;
           if (res.state) q("#na-state").value = res.state;
           if (res.area && !areaTouched) q("#na-area").value = res.area;
-        } else { svOK = false; sv.className = "na-sv no"; sv.textContent = "Sorry! DOODLY does not currently deliver to this location."; }
+        } else { svNo(); }
       }
 
       try {
         if (window.DOODLY_MAPS && DOODLY_MAPS.mountPicker) {
           DOODLY_MAPS.mountPicker(q("#na-map"), { value: geo.lat != null ? { lat: geo.lat, lng: geo.lng } : undefined, height: "200px", onChange: function (r) {
             geo.lat = r.lat; geo.lng = r.lng;   // GPS always follows the pin
-            if (r.pincode && !pinTouched) q("#na-pin").value = String(r.pincode).replace(/\D/g, "").slice(0, 6);
-            if (r.city && !pinTouched) q("#na-city").value = r.city;
-            if (r.state && !pinTouched) q("#na-state").value = r.state;
-            if (r.area && !areaTouched && !pinTouched) q("#na-area").value = r.area;
-            checkPin();
+            // (a) in-flight → loading indicator, then a second "Checking delivery availability…" beat
+            if (r.loading) { svLoading("📍 Detecting address…"); setTimeout(function () { if (!svOK && q("#na-sv").className === "na-sv") svLoading("Checking delivery availability…"); }, 350); return; }
+            // (b) a NEW pin drag / search / locate came back with resolved parts — the user
+            //     explicitly moved the pin, so overwrite pincode + area + city + state.
+            if (r.pincode) q("#na-pin").value = String(r.pincode).replace(/\D/g, "").slice(0, 6);
+            if (r.city) q("#na-city").value = r.city;
+            if (r.state) q("#na-state").value = r.state;
+            if (r.area) { q("#na-area").value = r.area; areaTouched = true; }
+            if (r.houseNo && !g("#na-house")) q("#na-house").value = r.houseNo;
+            if (r.street && !g("#na-street")) q("#na-street").value = r.street;
+            if (r.landmark && !g("#na-landmark")) q("#na-landmark").value = r.landmark;
+            pinTouched = true;   // the pin is now the source of truth for this address
+            // (c) serviceability: trust the reverse response's flag when we have a pincode;
+            //     otherwise fall back to a live pincode check.
+            if (r.pincode) { if (r.serviceable) svOk(r.area, r.city); else svNo(); }
+            else if (window.DOODLY_PINCODE && DOODLY_PINCODE.validateLive) {
+              svLoading("Checking delivery availability…");
+              DOODLY_PINCODE.validateLive(g("#na-pin")).then(function (res) { if (res.serviceable) svOk(res.area, res.city); else svNo(); });
+            } else { checkPin(); }
           } });
         }
       } catch (er) {}
