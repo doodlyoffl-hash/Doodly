@@ -196,6 +196,22 @@ window.DOODLY_AUTH = (function () {
      Validation
      ============================================================ */
   const reEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  // Password policy — MUST match the server (next-app/lib/auth/password.ts).
+  // Keeping the two in lock-step is what prevents the "password error on
+  // sign-up" bug (the form used to accept 6 chars the server then rejected).
+  const PW_RULES = [
+    { id: "len", label: "At least 8 characters", test: (v) => v.length >= 8, msg: "Password must be at least 8 characters" },
+    { id: "upper", label: "One uppercase letter", test: (v) => /[A-Z]/.test(v), msg: "Password must include an uppercase letter" },
+    { id: "lower", label: "One lowercase letter", test: (v) => /[a-z]/.test(v), msg: "Password must include a lowercase letter" },
+    { id: "num", label: "One number", test: (v) => /[0-9]/.test(v), msg: "Password must include a number" },
+    { id: "special", label: "One special character", test: (v) => /[^A-Za-z0-9]/.test(v), msg: "Password must include a special character" },
+  ];
+  // First unmet rule for a value (null → all pass). Used for the inline message.
+  function pwFirstFail(v) { for (let i = 0; i < PW_RULES.length; i++) { if (!PW_RULES[i].test(v)) return PW_RULES[i]; } return null; }
+  // A "new" password field (sign-up / reset) is policy-checked; a "current"
+  // password field (log-in) is not, so existing accounts are never blocked.
+  function isNewPassword(input) { return (input.getAttribute("autocomplete") || "") === "new-password"; }
   function ruleFor(input) {
     if (input.type === "password") return "password";
     const hint = (input.getAttribute("data-rule") || input.type || "").toLowerCase();
@@ -205,9 +221,24 @@ window.DOODLY_AUTH = (function () {
     return "required";
   }
   function validate(input) {
-    const v = input.value.trim(), rule = ruleFor(input);
+    const raw = input.value, v = raw.trim(), rule = ruleFor(input);
     if (!v) return [false, "This field is required"];
-    if (rule === "password") return v.length >= 6 ? [true, ""] : [false, "Use at least 6 characters"];
+    if (rule === "password") {
+      // Confirm-password field → must equal the primary password (handled live
+      // too). Identify it by its data-rule label so field order stays flexible.
+      if (/confirm/i.test(input.getAttribute("data-rule") || "")) {
+        const form = input.closest("form");
+        const first = form ? form.querySelector('input[type="password"]') : null;
+        if (first && raw !== first.value) return [false, "Passwords do not match"];
+        return [true, ""];
+      }
+      // Log-in (current-password) isn't strength-checked so existing accounts
+      // are never blocked; sign-up / reset (new-password) enforce the full policy.
+      if (!isNewPassword(input)) return raw.length >= 1 ? [true, ""] : [false, "Enter your password"];
+      if (raw.length > 72) return [false, "Password must be 72 characters or fewer"];
+      const bad = pwFirstFail(raw);
+      return bad ? [false, bad.msg] : [true, ""];
+    }
     if (rule === "email") return reEmail.test(v) ? [true, ""] : [false, "Enter a valid email"];
     if (rule === "contact") {
       if (v.includes("@")) return reEmail.test(v) ? [true, ""] : [false, "Enter a valid email"];
@@ -252,6 +283,39 @@ window.DOODLY_AUTH = (function () {
         else if (inp.value.trim()) { const [ok] = validate(inp); field.classList.toggle("is-valid", ok); }
       });
     });
+
+    // Password requirements checklist + confirm-password matching (sign-up / reset).
+    // The checklist ticks green live as each rule is met, so customers see exactly
+    // what's needed BEFORE submitting — no more silent server-side rejection.
+    (function wirePassword() {
+      const newPws = [...form.querySelectorAll('input[type="password"]')].filter(isNewPassword);
+      const primary = newPws[0];
+      if (primary) {
+        const field = primary.closest(".fl-field");
+        if (field && !field.querySelector(".pw-reqs")) {
+          const list = document.createElement("ul");
+          list.className = "pw-reqs"; list.setAttribute("aria-live", "polite"); list.setAttribute("aria-label", "Password requirements");
+          list.innerHTML = PW_RULES.map((r) => `<li data-pw="${r.id}"><span class="pw-tick" aria-hidden="true"></span><span>${r.label}</span></li>`).join("");
+          field.appendChild(list);
+          const paint = () => { const v = primary.value; PW_RULES.forEach((r) => { const li = list.querySelector('[data-pw="' + r.id + '"]'); if (li) li.classList.toggle("ok", r.test(v)); }); };
+          primary.addEventListener("input", paint);
+          primary.addEventListener("focus", () => list.classList.add("show"));
+          paint();
+        }
+      }
+      // Confirm field mirrors the primary; validate the match live in both directions.
+      const confirm = form.querySelector('input[data-rule*="Confirm" i], input[data-rule*="confirm" i]');
+      if (primary && confirm) {
+        const cField = confirm.closest(".fl-field");
+        const recheck = () => {
+          if (!confirm.value) { if (cField) setState(cField, true, ""); cField && cField.classList.remove("is-valid", "is-error"); return; }
+          const ok = confirm.value === primary.value;
+          if (cField) setState(cField, ok, ok ? "" : "Passwords do not match");
+        };
+        confirm.addEventListener("input", recheck);
+        primary.addEventListener("input", () => { if (confirm.value) recheck(); });
+      }
+    })();
 
     // Referral code (signup): auto-fill from ?ref= and validate in real time via the backend.
     (function wireReferral() {
@@ -494,10 +558,18 @@ window.DOODLY_AUTH = (function () {
     const name = val(0), phone = val(1);
     const emailInp = form.querySelector('input[type="email"]');
     const email = (emailInp ? String(emailInp.value || "").trim() : val(2)).toLowerCase();
-    const pwInp = form.querySelector('input[type="password"]');
-    const password = pwInp ? String(pwInp.value || "") : "";
+    const pwInps = [...form.querySelectorAll('input[type="password"]')];
+    const password = pwInps[0] ? String(pwInps[0].value || "") : "";
+    const confirmPw = pwInps[1] ? String(pwInps[1].value || "") : "";
     const refInp = form.querySelector('input[data-rule*="Referral"]');
     const referralCode = refInp ? String(refInp.value || "").trim().toUpperCase() : "";
+
+    // Final client-side guard (the server re-validates authoritatively). Mirrors
+    // the live checklist so a weak or mismatched password never reaches the API
+    // as a surprise error.
+    const weak = pwFirstFail(password);
+    if (weak) return showCustomerAuthError(form, weak.msg);
+    if (pwInps.length > 1 && confirmPw !== password) return showCustomerAuthError(form, "Passwords do not match.");
 
     // Return the new customer to where they were gated: ?from= (same-origin), else
     // a mid-purchase ?order= → checkout.
@@ -559,8 +631,9 @@ window.DOODLY_AUTH = (function () {
     const pw = pwInps[0] ? String(pwInps[0].value || "") : "";
     const confirm = pwInps[1] ? String(pwInps[1].value || "") : pw;
     if (!token) return showCustomerAuthError(form, "This reset link is invalid or has expired. Please request a new one.");
-    if (pw.length < 8) return showCustomerAuthError(form, "Use at least 8 characters for your new password.");
-    if (pw !== confirm) return showCustomerAuthError(form, "The two passwords don't match.");
+    const weak = pwFirstFail(pw);
+    if (weak) return showCustomerAuthError(form, weak.msg);
+    if (pw !== confirm) return showCustomerAuthError(form, "Passwords do not match.");
     const btn = form.querySelector(".btn-auth"); const label = btn ? btn.textContent : "";
     if (btn) { btn.disabled = true; btn.textContent = "Updating…"; }
     try {
