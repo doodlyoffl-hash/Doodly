@@ -212,8 +212,15 @@ window.DOODLY_AUTH = (function () {
   // A "new" password field (sign-up / reset) is policy-checked; a "current"
   // password field (log-in) is not, so existing accounts are never blocked.
   function isNewPassword(input) { return (input.getAttribute("autocomplete") || "") === "new-password"; }
+  // A password field stays a password field even while its value is revealed: the
+  // reveal-eye flips input.type between "password" and "text", so identify these
+  // fields (and read their values) by the STABLE autocomplete attribute
+  // (new-password / current-password) — never by [type=password], or a revealed
+  // field is missed and reads as an empty string ("Password must be at least 8…").
+  function isPasswordField(input) { return input.type === "password" || /password$/.test(input.getAttribute("autocomplete") || ""); }
+  function pwFields(form) { return form ? [...form.querySelectorAll("input")].filter(isPasswordField) : []; }
   function ruleFor(input) {
-    if (input.type === "password") return "password";
+    if (isPasswordField(input)) return "password";
     const hint = (input.getAttribute("data-rule") || input.type || "").toLowerCase();
     if (input.type === "email") return "email";
     if (input.type === "tel") return "contact";
@@ -228,7 +235,7 @@ window.DOODLY_AUTH = (function () {
       // too). Identify it by its data-rule label so field order stays flexible.
       if (/confirm/i.test(input.getAttribute("data-rule") || "")) {
         const form = input.closest("form");
-        const first = form ? form.querySelector('input[type="password"]') : null;
+        const first = pwFields(form)[0] || null;
         if (first && raw !== first.value) return [false, "Passwords do not match"];
         return [true, ""];
       }
@@ -288,7 +295,7 @@ window.DOODLY_AUTH = (function () {
     // The checklist ticks green live as each rule is met, so customers see exactly
     // what's needed BEFORE submitting — no more silent server-side rejection.
     (function wirePassword() {
-      const newPws = [...form.querySelectorAll('input[type="password"]')].filter(isNewPassword);
+      const newPws = pwFields(form).filter(isNewPassword);
       const primary = newPws[0];
       if (primary) {
         const field = primary.closest(".fl-field");
@@ -474,7 +481,7 @@ window.DOODLY_AUTH = (function () {
     const RB = window.DOODLY_RBAC;
     const flds = [...form.querySelectorAll(".fl-field input")];
     const emailInp = form.querySelector('input[type="email"]') || flds[0] || null;
-    const pwInp = form.querySelector('input[type="password"]') || null;
+    const pwInp = pwFields(form)[0] || null;
     const email = emailInp ? String(emailInp.value || "").trim() : "";
     const password = pwInp ? String(pwInp.value || "") : "";
 
@@ -509,7 +516,7 @@ window.DOODLY_AUTH = (function () {
     const RB = window.DOODLY_RBAC;
     const flds = [...form.querySelectorAll(".fl-field input")];
     const emailInp = form.querySelector('input[type="email"]') || flds[0] || null;
-    const pwInp = form.querySelector('input[type="password"]') || null;
+    const pwInp = pwFields(form)[0] || null;
     const email = emailInp ? String(emailInp.value || "").trim() : "";
     const password = pwInp ? String(pwInp.value || "") : "";
 
@@ -534,7 +541,7 @@ window.DOODLY_AUTH = (function () {
     const RB = window.DOODLY_RBAC;
     const flds = [...form.querySelectorAll(".fl-field input")];
     const idInp = flds[0] || null;
-    const pwInp = form.querySelector('input[type="password"]') || null;
+    const pwInp = pwFields(form)[0] || null;
     const idVal = idInp ? String(idInp.value || "").trim() : "";
     const password = pwInp ? String(pwInp.value || "") : "";
 
@@ -563,7 +570,7 @@ window.DOODLY_AUTH = (function () {
     const name = val(0), phone = val(1);
     const emailInp = form.querySelector('input[type="email"]');
     const email = (emailInp ? String(emailInp.value || "").trim() : val(2)).toLowerCase();
-    const pwInps = [...form.querySelectorAll('input[type="password"]')];
+    const pwInps = pwFields(form);
     const password = pwInps[0] ? String(pwInps[0].value || "") : "";
     const confirmPw = pwInps[1] ? String(pwInps[1].value || "") : "";
     const refInp = form.querySelector('input[data-rule*="Referral"]');
@@ -632,7 +639,7 @@ window.DOODLY_AUTH = (function () {
   /** Reset password: set a new password using the token from the emailed link. */
   async function resolveReset(form) {
     const token = new URLSearchParams(location.search).get("token") || "";
-    const pwInps = [...form.querySelectorAll('input[type="password"]')];
+    const pwInps = pwFields(form);
     const pw = pwInps[0] ? String(pwInps[0].value || "") : "";
     const confirm = pwInps[1] ? String(pwInps[1].value || "") : pw;
     if (!token) return showCustomerAuthError(form, "This reset link is invalid or has expired. Please request a new one.");
