@@ -88,6 +88,15 @@ async function timedFetch(url: string, headers?: Record<string, string>, ms = 50
 const validLatLng = (lat: number, lng: number) =>
   Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 
+/** Normalise a postal code to a clean 6-digit Indian pincode (or undefined).
+    Geocoders return codes like "520 010" / "520010, India" — the space/format
+    used to break the serviceability lookup (a false "not serviceable"). This is
+    the single place every reverse/search result gets its pincode cleaned. */
+export function cleanPincode(raw?: string | null): string | undefined {
+  const d = String(raw ?? "").replace(/\D/g, "").slice(0, 6);
+  return /^[1-9]\d{5}$/.test(d) ? d : undefined;
+}
+
 // ---- Nominatim (keyless) ----
 type NomAddr = Record<string, string | undefined>;
 function fromNominatim(lat: number, lng: number, a: NomAddr, display?: string): ResolvedAddress {
@@ -100,7 +109,7 @@ function fromNominatim(lat: number, lng: number, a: NomAddr, display?: string): 
     district: a.state_district || a.county,
     state: a.state,
     country: a.country,
-    pincode: a.postcode,
+    pincode: cleanPincode(a.postcode),
     formatted: display,
   };
 }
@@ -118,7 +127,7 @@ function fromGoogle(lat: number, lng: number, comps: GComp[], formatted?: string
     district: get("administrative_area_level_2"),
     state: get("administrative_area_level_1"),
     country: get("country"),
-    pincode: get("postal_code"),
+    pincode: cleanPincode(get("postal_code")),
     formatted,
   };
 }

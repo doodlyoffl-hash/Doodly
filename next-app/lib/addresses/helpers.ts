@@ -59,7 +59,12 @@ export const LOCATION_KEYS = ["pincode", "houseNo", "buildingName", "floor", "st
 /* The pincode must be an enabled serviceable pincode. Returns the matched row so
    the caller can auto-fill area/city/state and the delivery zone. */
 export async function assertServiceable(pincode: string) {
-  const sp = await db.serviceablePincode.findFirst({ where: { pincode, enabled: true, deletedAt: null } });
+  // normalise first (a "520 010" must match seeded "520010") — same rule the geo
+  // endpoints use, so the frontend check and the backend save can never disagree.
+  const clean = String(pincode ?? "").replace(/\D/g, "").slice(0, 6);
+  const sp = /^[1-9]\d{5}$/.test(clean)
+    ? await db.serviceablePincode.findFirst({ where: { pincode: clean, enabled: true, deletedAt: null } })
+    : null;
   if (!sp) throw Errors.badRequest(NOT_SERVICEABLE, { pincode: NOT_SERVICEABLE });
   return sp;
 }

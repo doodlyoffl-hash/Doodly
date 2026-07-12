@@ -25,7 +25,8 @@ export const GET = route("addresses.list", async (req: NextRequest) => {
 });
 
 const createSchema = z.object(addressFields).extend({
-  pincode: z.string().trim().regex(/^[1-9][0-9]{5}$/, "Enter a valid 6-digit pincode"),
+  // normalise before validating: a geocoder-autofilled "520 010" is a valid pincode
+  pincode: z.string().transform((s) => s.replace(/\D/g, "").slice(0, 6)).refine((v) => /^[1-9]\d{5}$/.test(v), "Enter a valid 6-digit pincode"),
 });
 
 export const POST = route("addresses.create", async (req: NextRequest) => {
