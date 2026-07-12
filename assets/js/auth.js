@@ -455,6 +455,22 @@ window.DOODLY_AUTH = (function () {
      ============================================================ */
   function isLocalhost() { try { return /^(localhost|127\.0\.0\.1)$/.test(location.hostname); } catch (e) { return true; } }
 
+  /** Where a customer lands after signing in / signing up. Always the Home page,
+      with ONE exception: an in-progress purchase. If they were sent to auth FROM
+      checkout (?from=/checkout…) or carry a mid-purchase ?order= marker, return
+      them to checkout to finish paying so no sale is lost. Everything else — gated
+      account links, normal login — goes Home. (The /^\/checkout guard also blocks
+      open-redirects: only same-origin checkout paths are honoured.) */
+  function customerAuthDest() {
+    try {
+      const params = new URLSearchParams(location.search);
+      const from = params.get("from") || "";
+      if (/^\/checkout(\.html)?([/?#]|$)/.test(from)) return from;   // resume the exact checkout URL (keeps its order/query)
+      if (params.has("order")) return "/checkout.html";              // mid-purchase marker → checkout
+    } catch (e) {}
+    return "/";                                                       // Home
+  }
+
   /** Exchange email+password for the signed sign-in token; persist the identity.
       Returns { user } on success, "invalid" on bad credentials, null when the
       backend is unreachable / the input isn't an email (→ caller may fall back). */
@@ -488,13 +504,9 @@ window.DOODLY_AUTH = (function () {
     // Adopt the customer role locally first (works even if the backend is down).
     if (RB) { if (RB.setRealRole) RB.setRealRole("customer"); if (RB.returnToSelf) RB.returnToSelf(); }
 
-    // Return the customer to where they were gated: ?from= (a same-origin path — the
-    // /^\/[^/]/ guard blocks open-redirects), else a mid-purchase ?order= → checkout.
-    try {
-      const from = new URLSearchParams(location.search).get("from");
-      if (from && /^\/[^/]/.test(from)) form.dataset.dest = from;
-      else if (/[?&]order=/.test(location.search)) form.dataset.dest = "/checkout.html";
-    } catch (e) { if (/[?&]order=/.test(location.search)) form.dataset.dest = "/checkout.html"; }
+    // Customers land on Home after signing in — unless they were mid-purchase,
+    // in which case they return to checkout to complete payment.
+    form.dataset.dest = customerAuthDest();
 
     const res = await tokenSignIn(email, password);
     if (res === "invalid") return showCustomerAuthError(form, "Invalid email or password.");
@@ -583,13 +595,9 @@ window.DOODLY_AUTH = (function () {
     if (weak) return showCustomerAuthError(form, weak.msg);
     if (pwInps.length > 1 && confirmPw !== password) return showCustomerAuthError(form, "Passwords do not match.");
 
-    // Return the new customer to where they were gated: ?from= (same-origin), else
-    // a mid-purchase ?order= → checkout.
-    try {
-      const from = new URLSearchParams(location.search).get("from");
-      if (from && /^\/[^/]/.test(from)) form.dataset.dest = from;
-      else if (/[?&]order=/.test(location.search)) form.dataset.dest = "/checkout.html";
-    } catch (e) { if (/[?&]order=/.test(location.search)) form.dataset.dest = "/checkout.html"; }
+    // New customers land on Home after signing up — unless they were mid-purchase
+    // (e.g. a Quick-Buy trial), in which case they continue to checkout to pay.
+    form.dataset.dest = customerAuthDest();
 
     if (window.DOODLY_API) {
       try {
