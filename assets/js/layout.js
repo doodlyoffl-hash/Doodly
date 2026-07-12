@@ -341,6 +341,10 @@
         const type = f.type || "text", isPwd = type === "password";
         const auto = isPwd ? (a.submit.match(/create|reset|update/i) ? "new-password" : "current-password")
           : (/email/.test((f.label || "").toLowerCase()) ? "email" : type === "tel" ? "tel" : "username");
+        // The hint sits AFTER the .fl-field, not inside it: the icon, floating
+        // label and valid-tick are absolutely centered on the field (top:50%), so
+        // an in-field hint makes the field tall and drops them onto the input text.
+        // Negative top margin tucks the hint snug under the field.
         return `<div class="fl-field${isPwd ? " has-eye" : ""}">
           <span class="fl-ic">${fieldIcon(f)}</span>
           <input id="af${i}" type="${type}" placeholder=" " autocomplete="${auto}" data-rule="${f.label}">
@@ -348,8 +352,7 @@
           <span class="fl-valid">${checkSvg}</span>
           ${isPwd ? `<button type="button" class="fl-eye" aria-label="Show password">${eyeSvg}</button>` : ""}
           <span class="fl-err" aria-live="polite"></span>
-          ${f.hint ? `<span class="fl-hint" style="display:block;font-size:.78rem;color:#8a9691;margin:4px 2px 0;line-height:1.35">${f.hint}</span>` : ""}
-        </div>`;
+        </div>${f.hint ? `<span class="fl-hint" style="display:block;font-size:.78rem;color:#8a9691;margin:-8px 2px 14px;line-height:1.35">${f.hint}</span>` : ""}`;
       }).join("");
     }
 
