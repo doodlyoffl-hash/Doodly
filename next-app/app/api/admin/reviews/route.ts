@@ -14,6 +14,7 @@ import { readUserId } from "@/lib/auth/identity";
 import { audit } from "@/lib/auth/audit";
 import { reqContext } from "@/lib/auth/request";
 import type { Prisma } from "@prisma/client";
+import { recomputeProductRating } from "@/lib/reviews/aggregate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,7 +83,7 @@ const schema = z.discriminatedUnion("action", [
 export const POST = route("admin.reviews.action", async (req: NextRequest) => {
   const role = requirePermission(req, "support", "edit");
   const body = await parseBody(req, schema);
-  const existing = await db.review.findUnique({ where: { id: body.reviewId }, select: { id: true, status: true } });
+  const existing = await db.review.findUnique({ where: { id: body.reviewId }, select: { id: true, status: true, productSlug: true } });
   if (!existing) throw Errors.notFound("Review not found.");
 
   const stamp = { moderatedBy: `${role}${readUserId(req) ? ":" + readUserId(req) : ""}`.slice(0, 80), moderatedAt: new Date() };
@@ -95,6 +96,9 @@ export const POST = route("admin.reviews.action", async (req: NextRequest) => {
     : { reply: body.reply, repliedAt: new Date(), ...stamp };
 
   const review = await db.review.update({ where: { id: body.reviewId }, data });
+  // status transitions change the product's public aggregate → keep every star
+  // on the platform (PDP, cards, related rail, search) automatically in sync
+  if (review.status !== existing.status) await recomputeProductRating(existing.productSlug);
   await audit({ actorRole: role, action: `review.${body.action}`, target: `${body.reviewId} (${existing.status} → ${review.status})`, ctx: reqContext(req) });
   return ok({ review: { id: review.id, status: review.status, featured: review.featured, reply: review.reply } });
 });

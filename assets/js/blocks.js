@@ -649,7 +649,7 @@ window.DOODLY_BLOCKS = (function () {
         <div class="reveal">
           <div class="pd-statusrow">${statusBadge(p,{size:"md",sub:true})}</div>
           <h1 class="pd-title">${p.name}</h1>
-          <div class="pd-rating">${"★".repeat(5)} <span>${rating.value} · ${rating.count} reviews</span></div>
+          <div class="pd-rating" id="pdRatingMount" data-product="${p.slug}"><span class="muted-sm">Loading ratings…</span></div>
           <p class="lead">${longDesc}</p>
           <div class="nutri mt-2">
             <div class="n"><b>${nut.fat||"—"}</b><small>Fat / 100ml</small></div><div class="n"><b>${nut.snf||"—"}</b><small>SNF</small></div>
@@ -686,6 +686,7 @@ window.DOODLY_BLOCKS = (function () {
     ${R.builderSection({})}
     <section><div class="wrap"><div class="section-head reveal"><span class="eyebrow">Benefits</span><h2 class="display">Why this milk is different.</h2></div>
       <div class="grid why-grid">${D().why.map(w=>`<article class="feature reveal"><div class="ic">${icon(w.icon)}</div><h3>${w.title}</h3><p>${w.text}</p></article>`).join("")}</div></div></section>
+    <section><div class="wrap"><div id="productReviewsMount" data-product="${p.slug}"></div></div></section>
     ${R.faqSection({})}
     ${R.relatedProducts({ product: p.id })}
     <div class="pd-buybar" role="region" aria-label="Quick purchase">
@@ -711,6 +712,7 @@ window.DOODLY_BLOCKS = (function () {
         <p class="muted-sm mt-2">Admins flip one field — <code>status: available</code> — and this page becomes fully orderable. Zero code change.</p>
       </div>
     </div></section>
+    <section><div class="wrap"><div id="productReviewsMount" data-product="${p.slug}"></div></div></section>
     ${R.relatedProducts({ product: p.id })}`;
   };
 

@@ -13,6 +13,7 @@ import { reqContext } from "@/lib/auth/request";
 import { audit } from "@/lib/auth/audit";
 import { earn } from "@/lib/loyalty/service";
 import { getLoyaltyConfig } from "@/lib/loyalty/config";
+import { recomputeProductRating } from "@/lib/reviews/aggregate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,17 +47,21 @@ export const GET = route("account.reviews.list", async (req: NextRequest) => {
     getLoyaltyConfig(),
   ]);
   const reviewedIds = new Set(reviews.map((r) => r.orderId).filter(Boolean));
-  const reviewable: { orderId: string; number: string; label: string; placedAt: string }[] = [];
+  // once per PRODUCT: an order whose product this customer already reviewed isn't reviewable again
+  const reviewedProducts = new Set(reviews.filter((r) => r.orderId && r.productSlug).map((r) => r.productSlug as string));
+  const reviewable: { orderId: string; number: string; label: string; productSlug: string | null; placedAt: string }[] = [];
   for (const o of paidOrders) {
     if (reviewedIds.has(o.id)) continue;
+    const slug = o.items[0]?.productSlug ?? null;
+    if (slug && reviewedProducts.has(slug)) continue;
     if (await isDelivered(userId, o)) {
-      reviewable.push({ orderId: o.id, number: `DOO-${o.id.slice(-6).toUpperCase()}`, label: orderLabel(o), placedAt: o.createdAt.toISOString() });
+      reviewable.push({ orderId: o.id, number: `DOO-${o.id.slice(-6).toUpperCase()}`, label: orderLabel(o), productSlug: slug, placedAt: o.createdAt.toISOString() });
     }
   }
   return ok({
     pointsPerReview: cfg.enabled ? cfg.earnReview : 0,
     reviewable,
-    reviews: reviews.map((r) => ({ id: r.id, orderId: r.orderId, target: r.target, rating: r.rating, comment: r.comment, createdAt: r.createdAt.toISOString() })),
+    reviews: reviews.map((r) => ({ id: r.id, orderId: r.orderId, target: r.target, productSlug: r.productSlug, title: r.title, status: r.status, rating: r.rating, comment: r.comment, createdAt: r.createdAt.toISOString() })),
   });
 });
 
@@ -79,18 +84,26 @@ export const POST = route("account.reviews.create", async (req: NextRequest) => 
   if (!order) throw Errors.notFound("Order not found on your account (only paid orders can be reviewed).");
   if (!(await isDelivered(userId, order))) throw Errors.badRequest("You can review this order once it has been delivered.");
 
+  // ONE feedback per purchased product: buying the same product again does not
+  // grant another public review slot (edit the existing one instead).
+  const slug = order.items[0]?.productSlug ?? null;
+  if (slug) {
+    const dupProduct = await db.review.findFirst({ where: { userId, productSlug: slug, orderId: { not: null } }, select: { id: true } });
+    if (dupProduct) throw Errors.conflict("You've already reviewed this product — you can edit your existing review instead.");
+  }
+
   let review;
   try {
     review = await db.review.create({
       data: {
-        userId, target: orderLabel(order).slice(0, 120), productSlug: order.items[0]?.productSlug ?? null,
+        userId, target: orderLabel(order).slice(0, 120), productSlug: slug,
         title: body.title, rating: body.rating, comment: body.comment, orderId: order.id,
         status: "PENDING",   // moderation gate: nothing goes public until an admin approves
       },
     });
   } catch (e) {
-    // unique orderId → this order was already reviewed (race-safe)
-    throw Errors.conflict("This order has already been reviewed — thank you!");
+    // unique orderId OR the partial (userId, productSlug) index → duplicate (race-safe)
+    throw Errors.conflict("You've already reviewed this — you can edit your existing review instead.");
   }
 
   await audit({ userId, actorRole: "customer", action: "review.create", target: `${order.id} ${body.rating}★`, ctx: reqContext(req) });
@@ -113,4 +126,35 @@ export const POST = route("account.reviews.create", async (req: NextRequest) => 
     review: { id: review.id, orderId: review.orderId, rating: review.rating, comment: review.comment, createdAt: review.createdAt.toISOString() },
     pointsAwarded: "awarded" in earned && earned.awarded ? earned.points : 0,
   }, { status: 201 });
+});
+
+const patchSchema = z.object({
+  reviewId: z.string().min(1),
+  rating: z.number().int().min(1).max(5),
+  title: z.string().trim().max(120).optional().or(z.literal("").transform(() => undefined)),
+  comment: z.string().trim().max(1000).optional().or(z.literal("").transform(() => undefined)),
+});
+
+/** PATCH — edit YOUR OWN review (business rule: allowed, but every edit goes
+    back through moderation: status resets to PENDING and the product's public
+    aggregate is recomputed immediately, so an edited review never stays
+    public un-reviewed). */
+export const PATCH = route("account.reviews.update", async (req: NextRequest) => {
+  const userId = requireUserId(req);
+  const body = await parseBody(req, patchSchema);
+  const existing = await db.review.findFirst({ where: { id: body.reviewId, userId }, select: { id: true, productSlug: true } });
+  if (!existing) throw Errors.notFound("Review not found on your account.");
+
+  const review = await db.review.update({
+    where: { id: existing.id },
+    data: {
+      rating: body.rating,
+      ...(body.title !== undefined ? { title: body.title } : {}),
+      ...(body.comment !== undefined ? { comment: body.comment } : {}),
+      status: "PENDING", featured: false, moderatedBy: null, moderatedAt: null,
+    },
+  });
+  await recomputeProductRating(existing.productSlug);   // an edited (now-pending) review leaves the public aggregate
+  await audit({ userId, actorRole: "customer", action: "review.edit", target: `${existing.id} → ${body.rating}★ (re-moderation)`, ctx: reqContext(req) });
+  return ok({ review: { id: review.id, rating: review.rating, title: review.title, comment: review.comment, status: review.status } });
 });

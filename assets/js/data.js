@@ -155,7 +155,8 @@ window.DOODLY = {
       category: "Milk", order: 1, emoji: "🥛",
       desc: "Single-source, chilled within minutes, bottled in glass.",
       from: "from ₹70 / day",
-      rating: { value: 4.9, count: 312 },
+      // demo rating REMOVED — PDP stars are live from /api/reviews/public?productSlug=
+      // (approved verified customer ratings only; hydrated by reviews.js)
 
       image: "/assets/img/products/milk-bottle.png",
       gallery: [

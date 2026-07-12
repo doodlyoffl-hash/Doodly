@@ -304,6 +304,8 @@ window.DOODLY_LOYALTY = (function () {
      Rate delivered orders → earn points. Server verifies ownership,
      payment and delivery; one review per order (DB-enforced).
      ============================================================ */
+  var RV_BADGE = { PENDING: "amber", APPROVED: "green", REJECTED: "red", HIDDEN: "grey" };
+
   function mountReviews() {
     var host = document.getElementById("reviewsPanelMount"); if (!host) return;
     if (!signedInCustomer() || !API()) { host.innerHTML = ""; return; }
@@ -330,11 +332,16 @@ window.DOODLY_LOYALTY = (function () {
           (reviews.length
             ? '<div class="lr-done"><div class="lr-done-h">Your reviews</div>' +
               reviews.slice(0, 8).map(function (r) {
-                return '<div class="lr-done-row"><span class="lr-done-stars">' + stars(r.rating) + '</span><span class="lr-done-t">' + esc(r.target || "") + (r.comment ? ' — “' + esc(r.comment) + '”' : '') + '</span><span class="muted-sm">' + esc(fmtDate(r.createdAt)) + '</span></div>';
+                return '<div class="lr-done-row" data-review="' + esc(r.id || "") + '"><span class="lr-done-stars">' + stars(r.rating) + '</span><span class="lr-done-t">' + esc(r.target || "") + (r.comment ? ' — “' + esc(r.comment) + '”' : '') + '</span>' +
+                  (r.status ? '<span class="badge ' + (RV_BADGE[r.status] || "grey") + '">' + esc(r.status) + '</span>' : '') +
+                  '<span class="muted-sm">' + esc(fmtDate(r.createdAt)) + '</span>' +
+                  (r.id ? '<button type="button" class="btn btn-ghost sm lr-edit" data-id="' + esc(r.id) + '">Edit</button>' : '') +
+                '</div>';
               }).join("") + '</div>'
             : '') +
         '</div></section>';
       wireReviewItems(host);
+      wireReviewEdits(host, reviews);
     }).catch(function () { host.innerHTML = ""; });
   }
 
@@ -363,6 +370,53 @@ window.DOODLY_LOYALTY = (function () {
             toast((e && e.message) || "Couldn't submit the review.");
           });
       });
+    });
+  }
+
+  /* Edit your own review — swaps the row into the same star-picker + inputs;
+     PATCH sends it back through moderation (server resets status to PENDING). */
+  function wireReviewEdits(host, reviews) {
+    host.querySelectorAll(".lr-edit").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var row = btn.closest(".lr-done-row"); if (!row) return;
+        var r = null, i;
+        for (i = 0; i < reviews.length; i++) { if (reviews[i].id === btn.dataset.id) { r = reviews[i]; break; } }
+        if (r) swapReviewEditor(row, r);
+      });
+    });
+  }
+
+  function swapReviewEditor(row, r) {
+    var rating = Number(r.rating) || 0;
+    row.innerHTML =
+      '<div class="lr-item" style="grid-template-columns:1fr;border-bottom:0;padding:6px 0;width:100%">' +
+        '<div class="lr-item-info"><b>' + esc(r.target || "Your review") + '</b><span class="muted-sm">Edited reviews go back through moderation before reappearing.</span></div>' +
+        '<div class="lr-stars" role="radiogroup" aria-label="Rating" style="grid-column:1;grid-row:auto">' +
+          [1, 2, 3, 4, 5].map(function (i) { return '<button type="button" class="lr-pick' + (i <= rating ? " on" : "") + '" data-v="' + i + '" aria-label="' + i + ' star">★</button>'; }).join("") + '</div>' +
+        '<input type="text" class="lr-comment lr-title" maxlength="120" placeholder="Title (optional)" value="' + esc(r.title || "") + '">' +
+        '<input type="text" class="lr-comment" maxlength="1000" placeholder="Anything to add? (optional)" value="' + esc(r.comment || "") + '">' +
+        '<div style="display:flex;gap:8px"><button type="button" class="btn btn-primary sm lr-save">Save changes</button><button type="button" class="btn btn-ghost sm lr-cancel">Cancel</button></div>' +
+      '</div>';
+    var picks = row.querySelectorAll(".lr-pick"), save = row.querySelector(".lr-save"), cancel = row.querySelector(".lr-cancel");
+    picks.forEach(function (b) {
+      b.addEventListener("click", function () {
+        rating = Number(b.dataset.v);
+        picks.forEach(function (x) { x.classList.toggle("on", Number(x.dataset.v) <= rating); });
+      });
+    });
+    cancel.addEventListener("click", function () { mountReviews(); });
+    save.addEventListener("click", function () {
+      if (!rating) { toast("Pick a star rating first."); return; }
+      save.disabled = true; save.textContent = "Saving…";
+      API().patch("/api/account/reviews", { reviewId: r.id, rating: rating, title: row.querySelector(".lr-title").value.trim(), comment: row.querySelector(".lr-comment:not(.lr-title)").value.trim() })
+        .then(function () {
+          toast("Review updated — it will reappear once re-approved.");
+          mountReviews();
+        })
+        .catch(function (e) {
+          save.disabled = false; save.textContent = "Save changes";
+          toast((e && e.message) || "Couldn't update the review.");
+        });
     });
   }
 

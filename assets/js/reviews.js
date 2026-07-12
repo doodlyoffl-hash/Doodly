@@ -8,8 +8,10 @@
      POST /api/admin/reviews               — approve/reject/hide/feature/unfeature/reply (support:edit)
 
    Mounts (rendered by blocks.js, wired from layout.js):
-     #testimonialsMount — homepage "What DOODLY families say" grid
-     #reviewsAdminMount — /admin/reviews.html moderation module
+     #testimonialsMount    — homepage "What DOODLY families say" grid
+     #pdRatingMount        — PDP inline star rating (data-product)
+     #productReviewsMount  — PDP "Ratings & Reviews" section (data-product)
+     #reviewsAdminMount    — /admin/reviews.html moderation module
    Self-gates: renders nothing when a mount is absent. The public grid
    NEVER shows demo data — an honest empty state instead.
    ============================================================= */
@@ -49,6 +51,80 @@ window.DOODLY_REVIEWS = (function () {
       var list = (d && d.reviews) || [];
       host.innerHTML = list.length ? list.map(publicCard).join("") : emptyCard();
     }).catch(function () { host.innerHTML = emptyCard(); });
+  }
+
+  /* ============================================================
+     PDP RATING + REVIEWS  (#pdRatingMount / #productReviewsMount)
+     One shared fetch per product slug feeds both mounts. Honest
+     numbers only — API unreachable renders "—" / nothing.
+     ============================================================ */
+  var _pd = {};   // slug → shared Promise<{stats, reviews}>
+  function pdFetch(slug) {
+    if (!_pd[slug]) {
+      _pd[slug] = API()
+        ? API().get("/api/reviews/public?productSlug=" + encodeURIComponent(slug) + "&limit=12").then(function (d) { return d || {}; })
+        : Promise.reject(new Error("Backend offline"));
+      _pd[slug].catch(function () { delete _pd[slug]; });   // never cache a failure
+    }
+    return _pd[slug];
+  }
+
+  function starRow(avg) {
+    var full = Math.round(Math.max(0, Math.min(5, Number(avg) || 0))), s = "", i;
+    for (i = 0; i < 5; i++) s += i < full ? "★" : "☆";
+    return s;
+  }
+
+  function mountProductRating() {
+    var host = document.getElementById("pdRatingMount"); if (!host) return;
+    var slug = host.getAttribute("data-product"); if (!slug) { host.innerHTML = ""; return; }
+    pdFetch(slug).then(function (d) {
+      var s = (d && d.stats) || {};
+      host.innerHTML = Number(s.ratings) > 0
+        ? '<span class="stars">' + starRow(s.average) + '</span> <span><b>' + (Number(s.average) || 0).toFixed(1) + '</b> (' + fmtNum(s.ratings) + ' Ratings • ' + fmtNum(s.reviews) + ' Reviews)</span>'
+        : '<span class="muted-sm">No ratings yet</span>';
+    }).catch(function () { host.innerHTML = "—"; });
+  }
+
+  function pdCard(r) {
+    var name = String(r.name || "DOODLY customer");
+    return '<article class="tcard reveal in"><div class="stars">' + stars(r.rating || 5) + '</div>' +
+      '<p>' + (r.title ? '<b>' + esc(r.title) + '</b><br>' : '') + '“' + esc(r.text) + '”</p>' +
+      '<div class="who"><span class="av">' + esc(name.charAt(0).toUpperCase()) + '</span><span><b>' + esc(name) + '</b>' +
+      '<small><span class="badge green">✓ Verified Purchase</span>' + (r.date ? ' · ' + esc(fmtDate(r.date)) : '') + '</small></span></div></article>';
+  }
+
+  function mountProductReviews() {
+    var host = document.getElementById("productReviewsMount"); if (!host) return;
+    var slug = host.getAttribute("data-product"); if (!slug) { host.innerHTML = ""; return; }
+    pdFetch(slug).then(function (d) {
+      var s = (d && d.stats) || {}, list = (d && d.reviews) || [];
+      var total = Number(s.ratings) || 0, body;
+      if (!total && !list.length) {
+        body = '<p class="lead" style="margin:0">No reviews yet. Be the first verified customer to review this product.</p>' +
+          '<p class="muted-sm" style="margin:8px 0 0">Reviews can be written from My Orders after your delivery.</p>';
+      } else {
+        var summary = "";
+        if (total > 0) {
+          var distRows = (s.distribution || []).map(function (x) {
+            var pct = Number(x.pct) || 0;
+            return '<div style="display:flex;align-items:center;gap:10px;margin:5px 0">' +
+              '<span class="muted-sm" style="min-width:32px;white-space:nowrap">★ ' + x.rating + '</span>' +
+              '<div style="flex:1;height:8px;border-radius:99px;background:var(--line);overflow:hidden"><div style="width:' + pct + '%;height:100%;border-radius:99px;background:var(--leaf)"></div></div>' +
+              '<span class="muted-sm" style="min-width:36px;text-align:right">' + pct + '%</span></div>';
+          }).join("");
+          summary = '<div style="display:flex;gap:28px;flex-wrap:wrap;align-items:center">' +
+            '<div style="text-align:center"><div style="font-size:2.4rem;font-weight:800;line-height:1.1;color:var(--forest)">' + (Number(s.average) || 0).toFixed(1) + '</div>' +
+            '<div class="stars">' + starRow(s.average) + '</div>' +
+            '<div class="muted-sm">(' + fmtNum(total) + ' Ratings • ' + fmtNum(s.reviews) + ' Reviews)</div></div>' +
+            '<div style="flex:1;min-width:220px">' + distRows + '</div></div>';
+        }
+        body = summary + (list.length
+          ? '<div class="grid tgrid"' + (summary ? ' style="margin-top:18px"' : '') + '>' + list.map(pdCard).join("") + '</div>'
+          : '<p class="muted-sm" style="margin:14px 0 0">Reviews are published after moderation.</p>');
+      }
+      host.innerHTML = '<section class="panel"><div class="panel-head"><h3>Ratings &amp; Reviews</h3></div><div class="panel-pad">' + body + '</div></section>';
+    }).catch(function () { host.innerHTML = ""; });
   }
 
   /* ============================================================
@@ -223,7 +299,12 @@ window.DOODLY_REVIEWS = (function () {
   }
 
   /* ---------------- entry ---------------- */
-  function mountAll() { try { mountPublic(); } catch (e) {} try { mountAdmin(); } catch (e) {} }
+  function mountAll() {
+    try { mountPublic(); } catch (e) {}
+    try { mountProductRating(); } catch (e) {}
+    try { mountProductReviews(); } catch (e) {}
+    try { mountAdmin(); } catch (e) {}
+  }
 
-  return { mountAll: mountAll, mountPublic: mountPublic, mountAdmin: mountAdmin };
+  return { mountAll: mountAll, mountPublic: mountPublic, mountProductRating: mountProductRating, mountProductReviews: mountProductReviews, mountAdmin: mountAdmin };
 })();
