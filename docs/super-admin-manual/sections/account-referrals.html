@@ -1,0 +1,175 @@
+<section class="sheet" id="account-referrals">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Customer Module · Referrals</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Customer Module</span></div>
+  <h2 class="section-title">Referrals</h2>
+  <p class="lead">The customer's "refer a friend" screen — it shows their personal DOODLY code and share link, tracks the friends they invited, and pays a one-time wallet reward when a friend subscribes to a qualifying plan.</p>
+
+  <!-- ============================================================ SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">My Referral Program</p><p class="sm">The signed-in customer's referral dashboard at /account/referrals.html.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give every customer a shareable referral code and link, let them share it in one tap, and show — in real time — which friends joined, which converted, and how much wallet money they earned.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (their own account only). The reward policy and moderation are controlled by <span class="pill role">Super Admin</span> / <span class="pill role">Admin</span> in the Growth → Referrals admin console.</span>
+      <span class="m"><b>Path</b> <span class="navpath">My Account → Rewards → Referrals</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Referrals — <b>Refer a friend, earn ₹100</b> · code · share · history</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Referral code card</b><span>Large "Your referral code" (e.g. DOODLY8F4XK), read-only share-link box with Copy link, and share row: Share (native), Copy code, WhatsApp, SMS, Email.</span></div>
+          <div class="wf-cell"><b>Policy line</b><span>"Earn ₹100 when a friend subscribes to a 30-day or longer plan. Terms apply." — values come live from the reward policy.</span></div>
+          <div class="wf-cell"><b>Stat tiles (×4)</b><span>Friends joined · Successful · Pending · Wallet earned (green). All derived from the backend.</span></div>
+          <div class="wf-cell"><b>"Friends you referred" table</b><span>Columns: Friend · Joined · Status. Colour-coded status badge per friend; honest empty state when there are no referrals yet.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the customer Referrals screen (#referralPanelMount, built by account.js → GET /api/account/referrals).</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — this screen is read-only for the customer</div><p>The customer does not fill in a form here. Everything on this page is fetched from the server: the code, the share link, the four totals, and the friends list. The only editable control is the share-link box, which is read-only text kept there so the customer can select and copy it.</p></div></div>
+
+      <!-- Data shown -->
+      <p class="st" style="margin-top:14px">Data shown on this screen</p>
+      <p class="sm">Returned by <span class="navpath">GET /api/account/referrals</span> under <code>referral</code>. All figures are server-derived; nothing is stored in the browser.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Your referral code</td><td>The customer's unique, shareable code</td><td>DOODLY + 5–6 unambiguous chars</td><td class="t-req">Yes</td><td><code>ensureReferralCode()</code> — reads <code>User.referralCode</code>; a legacy cuid code is silently upgraded to the DOODLY format. Character set excludes 0/O/1/I.</td><td>DOODLY8F4XK</td></tr>
+          <tr><td>Share link</td><td>Pre-built registration URL that carries the code</td><td>Full https URL (read-only)</td><td class="t-req">Yes</td><td><code>storefrontBase() + /signup.html?ref=CODE</code>. Always the <code>.html</code> path — the extensionless <code>/signup</code> 404s.</td><td>https://doodly.in/signup.html?ref=DOODLY8F4XK</td></tr>
+          <tr><td>Friends joined</td><td>How many people signed up with this code</td><td>Whole number ≥ 0</td><td class="t-req">Yes</td><td>Count of <code>User.referredById = me</code>.</td><td>4</td></tr>
+          <tr><td>Successful</td><td>Friends whose reward was actually credited</td><td>Whole number ≥ 0</td><td class="t-req">Yes</td><td>Count of <code>ReferralReward</code> rows with status <code>CREDITED</code> for this referrer.</td><td>2</td></tr>
+          <tr><td>Pending</td><td>Friends who joined but haven't earned a reward yet</td><td>Whole number ≥ 0</td><td class="t-req">Yes</td><td>Friends whose status is not "Reward Credited" and not "Reward Cancelled".</td><td>2</td></tr>
+          <tr><td>Wallet earned</td><td>Total referral money paid into this customer's wallet</td><td>Currency (₹)</td><td class="t-req">Yes</td><td>Sum of <code>WalletTxn</code> where type = <code>CREDIT</code> and kind = <code>referral</code>.</td><td>₹200</td></tr>
+          <tr><td>Friend — Name</td><td>Who was referred</td><td>Text (falls back to "A friend")</td><td class="t-req">Yes</td><td><code>User.name</code> of each referred customer.</td><td>Meera S.</td></tr>
+          <tr><td>Friend — Joined</td><td>When they signed up</td><td>Date</td><td class="t-req">Yes</td><td><code>User.createdAt</code>, newest first (max 100).</td><td>24 Jun 2026</td></tr>
+          <tr><td>Friend — Status</td><td>Where the friend is in the reward journey</td><td>See status legend below</td><td class="t-req">Yes</td><td>Derived from the reward ledger + the friend's qualifying subscription / paid orders.</td><td>Reward Credited</td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- Status legend -->
+      <p class="st" style="margin-top:14px">Friend status legend</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Badge</th><th>Colour</th><th>What it means</th><th>How the backend decides</th></tr></thead>
+        <tbody>
+          <tr><td>Registered</td><td>Grey</td><td>Friend signed up with the code but has not made a qualifying purchase.</td><td>Referred user exists, no reward and no qualifying subscription/paid order.</td></tr>
+          <tr><td>First Purchase Pending</td><td>Amber</td><td>Friend has paid for something, but not yet an eligible 30-day+ subscription.</td><td>Friend has a <code>PAID</code> order but no qualifying subscription.</td></tr>
+          <tr><td>Qualifying Subscription Purchased</td><td>Blue</td><td>Friend bought an eligible plan; the reward is about to be / being processed.</td><td>Friend has an <code>ACTIVE</code>/<code>COMPLETED</code> subscription on a plan with days ≥ policy minimum.</td></tr>
+          <tr><td>Reward Credited</td><td>Green</td><td>The ₹100 reward has been paid into this customer's wallet.</td><td><code>ReferralReward.status = CREDITED</code>.</td></tr>
+          <tr><td>Reward Cancelled</td><td>Red</td><td>The reward was voided or reversed by an admin (fraud / error).</td><td><code>ReferralReward.status = VOID</code>.</td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- Share buttons -->
+      <p class="st" style="margin-top:14px">Share actions</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Copy link</td><td>Copies the full share URL to the clipboard and shows a "Link copied ✓" toast.</td><td>Client-side <code>navigator.clipboard</code>; no server call.</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Copy code</td><td>Copies just the DOODLY code and shows a "Code copied ✓" toast.</td><td>Client-side clipboard; no server call.</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Share</td><td>Opens the device's native share sheet (mobile / supported browsers). Hidden automatically where the OS share API is unavailable.</td><td><code>navigator.share()</code> with the code + link; no server call.</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>WhatsApp</td><td>Opens WhatsApp with a pre-written invite message containing the code and link.</td><td><code>wa.me</code> deep link in a new tab; no server call.</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>SMS</td><td>Opens the phone's messaging app pre-filled with the same invite text.</td><td><code>sms:</code> link; no server call.</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Email</td><td>Opens the mail client with subject "Try DOODLY fresh milk" and the invite body pre-filled.</td><td><code>mailto:</code> link; no server call.</td><td><span class="pill role">Customer</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- Friends table spec -->
+      <p class="st" style="margin-top:14px">"Friends you referred" — table specification</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Property</th><th>Behaviour</th></tr></thead>
+        <tbody>
+          <tr><td>Columns</td><td>Friend · Joined · Status (three columns).</td></tr>
+          <tr><td>Sorting</td><td>Fixed — newest joiner first (server orders by sign-up date, descending).</td></tr>
+          <tr><td>Search / Filters</td><td>None on the customer screen. (Search, status filters and exports exist only in the admin console.)</td></tr>
+          <tr><td>Pagination</td><td>None; the server returns up to the 100 most recent friends.</td></tr>
+          <tr><td>Row actions</td><td>None — the list is informational for the customer.</td></tr>
+          <tr><td>Empty state</td><td>"No referrals yet — share your code to start earning."</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — a Trial Pack does not earn the reward</div><p>The reward is only released when the referred friend pays for a subscription whose plan length is at least the policy minimum (30 days by default). Trial Packs, single pours, 7-day plans and any shorter or free plan do <b>not</b> qualify. If the friend starts on a Trial Pack, their status stays "First Purchase Pending" until they upgrade to an eligible plan.</p></div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — one reward per friend, ever</div><p>Each referred friend can trigger the reward only once. Renewals or additional purchases by the same friend never pay a second time — the server keeps a single <code>ReferralReward</code> row per referred customer as the idempotency guard.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ WORKFLOW -->
+  <div class="diagram"><div class="wf">
+    <div class="wf-topbar">Workflow — from sharing a code to a wallet credit</div>
+    <div class="wf-flow">
+      <span>Customer shares code / link</span>
+      <span>Friend opens /signup.html?ref=CODE</span>
+      <span>Code validated live (/api/referral/validate)</span>
+      <span>Friend registers → linked as referredById</span>
+      <span>Referrer notified "A friend joined 🎉"</span>
+      <span>Friend pays for a 30-day+ subscription</span>
+      <span>₹100 auto-credited to referrer's wallet (once)</span>
+    </div>
+  </div><div class="wire-cap">Figure — end-to-end referral lifecycle. The credit is idempotent and eligibility-gated; a failed, refunded or ineligible order never pays out.</div></div>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — how the code is applied (registration side)</div><p>The share link carries the code as <code>?ref=CODE</code>. On the sign-up page the code is checked in real time by <code>GET /api/referral/validate</code>, which returns whether it is valid plus the referrer's first name (only the first name, for privacy). At registration the server re-validates it — see the field below — and links the new account to the referrer via <code>User.referredById</code>.</p></div></div>
+
+  <!-- Registration referral-code field -->
+  <p class="st" style="margin-top:6px">Referral-code field at sign-up</p>
+  <p class="sm">This is the one place a code is entered. It belongs to the registration form (<span class="navpath">POST /api/auth/register</span>) but is the entry point of this module's workflow.</p>
+  <div class="twrap"><table>
+    <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td>Referral code</td><td>Link the new customer to the friend who invited them</td><td>DOODLY-format or legacy code, up to 40 chars; blank = skip</td><td class="t-opt">Opt.</td><td>Trimmed and upper-cased. If present: program must be enabled, the code must resolve to a real customer, and it must not be the sign-up person's own email/phone (self-referral blocked). An invalid code blocks registration with a clear message; validity is checked against the database, not by length.</td><td>DOODLY8F4XK</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — self-referrals are rejected</div><p>If the referral code belongs to the same person signing up (matching email or phone), registration fails with "You can't use your own referral code." The admin console also blocks duplicate-account and circular referrals and logs them as fraud alerts.</p></div></div>
+
+  <!-- Reward policy (admin-controlled) -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Reward policy (what the customer screen reflects)</p><p class="sm">Set by the Super Admin; the customer screen only displays these values.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Define the reward amount, the minimum plan length that qualifies, and whether the whole program is on — the single source of truth read by both the customer page and the automatic credit logic.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> to change; <span class="pill role">Admin</span> may view/manage per RBAC (payments/billing rights).</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Referrals → Settings</span></span>
+    </div>
+    <div class="spec-body">
+      <div class="twrap"><table>
+        <thead><tr><th>Setting</th><th>Purpose</th><th>Default</th><th>Backend</th></tr></thead>
+        <tbody>
+          <tr><td>Referral program enabled</td><td>Master on/off switch. When off, codes stop working and no rewards are paid.</td><td>On</td><td><code>ReferralConfig.enabled</code></td></tr>
+          <tr><td>Reward amount (₹)</td><td>Wallet credit paid per successful referral.</td><td>₹100 (10000 paise)</td><td><code>ReferralConfig.rewardAmountPaise</code></td></tr>
+          <tr><td>Eligible from plan duration (days)</td><td>Minimum subscription length a friend must buy to qualify.</td><td>30 days</td><td><code>ReferralConfig.minPlanDays</code></td></tr>
+        </tbody>
+      </table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — one shared policy</div><p>These three values drive the customer page's headline ("Earn ₹100 … 30-day or longer plan"), the stat tiles, and the automatic credit. Changing them in the admin Settings tab (saved via <code>POST /api/admin/referrals</code>, action <code>config</code>) instantly changes what every customer sees.</p></div></div>
+    </div>
+  </div>
+
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Coach customers to share via the <b>WhatsApp</b> or <b>Share</b> buttons rather than typing the code by hand — the pre-built link already carries <code>?ref=CODE</code>, so the friend's code is filled in automatically at sign-up and can't be mistyped. When helping a customer over support, confirm a "Pending" friend simply hasn't bought a qualifying plan yet; the reward will credit itself the moment they do — no manual action needed.</p></div></div>
+
+  <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip</div><p>"Wallet earned" on this screen and the wallet's referral credits always agree, because both are driven by the same <code>WalletTxn</code> rows (kind = <code>referral</code>). If a customer disputes their earnings, cross-check the Wallet page — the numbers are the same ledger.</p></div></div>
+
+  <!-- Troubleshooting -->
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>"Couldn't load your referrals" warning on the page.</td><td>Customer is signed out, or the backend is unreachable (offline).</td><td>Confirm the customer is logged in and online; the screen requires an authenticated session and reloads on refresh.</td></tr>
+      <tr><td>A friend joined but shows "Registered" and no reward.</td><td>The friend hasn't bought a qualifying 30-day+ subscription yet (or only bought a Trial Pack).</td><td>Expected. The reward credits automatically once they purchase an eligible plan. Nothing to do manually.</td></tr>
+      <tr><td>Friend's status is "First Purchase Pending" indefinitely.</td><td>They paid for a non-qualifying item (trial / short plan).</td><td>Encourage the friend to upgrade to a 30-day or longer subscription; the reward releases on that purchase.</td></tr>
+      <tr><td>Reward shows "Reward Cancelled" (red).</td><td>An admin voided or reversed the reward (fraud, duplicate account, or error).</td><td>Check the Fraud Alerts / referral record in the admin console for the reason before re-issuing.</td></tr>
+      <tr><td>Friend couldn't register — "That referral code isn't valid."</td><td>Code mistyped, program disabled, or self-referral (own email/phone).</td><td>Re-share the link (auto-fills the code); confirm the program is enabled in Settings; a customer cannot use their own code.</td></tr>
+      <tr><td>Reward never paid even though the friend bought a plan.</td><td>The program was disabled, or the reward was already voided for that friend, or the order was refunded/failed.</td><td>Verify the program is enabled and the friend's subscription is ACTIVE/COMPLETED; ineligible, failed or refunded orders never pay out.</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- FAQ -->
+  <h4>Is the referral reward paid every time my friend renews?</h4>
+  <p>No. It is a one-time credit per referred friend. Once their first eligible subscription pays out the ₹100, further renewals or purchases never pay again.</p>
+
+  <h4>Can a customer change or regenerate their code?</h4>
+  <p>Not from this screen — the code is fixed and shown as-is. An admin can regenerate a customer's code from the referral console if needed, which invalidates the old link.</p>
+
+  <h4>Where does the reward money go?</h4>
+  <p>Into the referrer's DOODLY wallet as a CREDIT of kind "referral". It appears both here under "Wallet earned" and on the Wallet page, and can be spent at checkout like any other wallet balance.</p>
+
+  <h4>Why does the friends list only show first names / partial contact?</h4>
+  <p>Privacy. On the customer screen only the friend's name and join date are shown. Full contact details, referrer codes and lifecycle actions live in the admin referral console, which is role-restricted.</p>
+
+</section>

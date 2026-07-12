@@ -1,0 +1,437 @@
+<section class="sheet" id="admin-payments">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Commerce · Payments</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Commerce</span></div>
+  <h2 class="section-title">Payments</h2>
+  <p class="lead">The single, canonical money ledger for DOODLY — every rupee collected through a Razorpay order, a subscription renewal, an Auto-Pay charge, a cash-on-doorstep hand-off or a manually recorded payment lands here, where staff can search it, refund it, reconcile it, send a receipt and export it for accounting.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Two surfaces, one ledger</div>
+      <p>The <b>Payments</b> item under <span class="navpath">Admin → Commerce</span> is served by two front-ends that both read the <b>same</b> database tables through the <b>same</b> APIs. (1) The <b>storefront admin page</b> (<code>/admin/payments.html</code>) shows four live KPIs and a read-only ledger table with the shared DataTable toolbar. (2) The <b>full Payments board</b> in the Next.js admin app adds five working tabs — <b>Dashboard, Payments, Record Payment, Reports, Gateways</b> — with refunds, receipts, reconciliation and CSV exports. This manual documents the complete capability set. Money is always stored as integer <b>paise</b> (₹1 = 100 paise) and rendered in ₹; every change appends an immutable <code>PaymentEvent</code> so the history can never be quietly edited.</p>
+    </div>
+  </div>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">How records get into the ledger</div>
+      <p>The ledger is a superset of every payment source. Paid <b>order</b> <code>Payment</code> rows and paid <b>SubscriptionBilling</b> rows are synced in automatically (both a one-time back-fill and forward on every new event), so the ledger is never missing a gateway payment. Staff add <b>MANUAL</b> rows for cash or off-gateway settlements. Each row carries a source of <code>ORDER</code>, <code>SUBSCRIPTION</code>, <code>AUTOPAY</code>, <code>MANUAL</code> or <code>B2B</code>, and a unique code like <code>PAY-000042</code>. Sync is idempotent — re-running it updates the existing row rather than creating a duplicate.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 1 : DASHBOARD -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Payments Dashboard</p>
+      <p class="sm">Live money KPIs across the whole ledger — collections today and this month, lifetime revenue, and a count of every payment by status.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Give staff a one-glance financial pulse: how much came in today, how much this month, how many payments are still pending or failed, and how much revenue arrived through wallet and Auto-Pay.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> — anyone with <code>payments:view</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → Payments → Dashboard</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Payments — <b>Dashboard</b> · KPI grid (reads <code>GET /api/admin/payments/stats</code>)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Collections KPIs</b><span>Total payments · Today's collections · Monthly collections · Total revenue</span></div>
+          <div class="wf-cell"><b>Status counts</b><span>Successful · Pending · Failed · Refunded (each a live count)</span></div>
+          <div class="wf-cell"><b>Channel KPIs</b><span>Wallet payments · Auto-Pay collections · Outstanding (pending + failed value)</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the eleven KPI tiles of the full Payments Dashboard tab.</div></div>
+
+      <p>The storefront <code>/admin/payments.html</code> page shows a trimmed four-tile version of the same data: <b>Captured today</b>, <b>Failed</b>, <b>Refunding</b> and <b>Disputed</b>. "Refunding" maps to the count of refunded payments; "Disputed" is a fixed <code>0</code> placeholder (chargeback disputes are not yet tracked). The KPI numbers are re-filled from the backend the moment the page loads.</p>
+
+      <h4>Every KPI and where the number comes from</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>KPI</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Total payments</td><td>Size of the whole ledger</td><td>Count</td><td class="t-opt">Read-only</td><td><code>count()</code> of all <code>PaymentRecord</code> rows.</td><td>1,284</td></tr>
+          <tr><td>Today's collections</td><td>Money actually received today</td><td>₹ amount</td><td class="t-opt">Read-only</td><td>Sum of <code>netPaise</code> for <code>SUCCESS</code> rows created since midnight.</td><td>₹1.7L</td></tr>
+          <tr><td>Monthly collections</td><td>Money received this calendar month</td><td>₹ amount</td><td class="t-opt">Read-only</td><td>Sum of <code>netPaise</code> for <code>SUCCESS</code> rows since the 1st.</td><td>₹24.6L</td></tr>
+          <tr><td>Total revenue</td><td>Lifetime collected</td><td>₹ amount</td><td class="t-opt">Read-only</td><td>Sum of <code>netPaise</code> for all <code>SUCCESS</code> rows.</td><td>₹1.9Cr</td></tr>
+          <tr><td>Successful</td><td>Payments that captured</td><td>Count</td><td class="t-opt">Read-only</td><td>Grouped count where status = <code>SUCCESS</code>.</td><td>1,201</td></tr>
+          <tr><td>Pending</td><td>Awaiting capture</td><td>Count</td><td class="t-opt">Read-only</td><td>Grouped count where status = <code>PENDING</code>.</td><td>14</td></tr>
+          <tr><td>Failed</td><td>Gateway declined</td><td>Count</td><td class="t-opt">Read-only</td><td>Grouped count where status = <code>FAILED</code>.</td><td>2</td></tr>
+          <tr><td>Refunded</td><td>Fully or partly returned</td><td>Count</td><td class="t-opt">Read-only</td><td>Count of <code>REFUNDED</code> + <code>PARTIALLY_REFUNDED</code>.</td><td>7</td></tr>
+          <tr><td>Wallet payments</td><td>Value paid from DOODLY wallets</td><td>₹ amount</td><td class="t-opt">Read-only</td><td>Sum of <code>walletUsedPaise</code> across all rows.</td><td>₹58,400</td></tr>
+          <tr><td>Auto-Pay collections</td><td>Money from recurring mandates</td><td>₹ amount</td><td class="t-opt">Read-only</td><td>Sum of <code>netPaise</code> for <code>SUCCESS</code> rows with source <code>AUTOPAY</code>.</td><td>₹3.1L</td></tr>
+          <tr><td>Outstanding</td><td>Uncollected exposure</td><td>₹ amount</td><td class="t-opt">Read-only</td><td>Sum of <code>netPaise</code> for <code>PENDING</code> + <code>FAILED</code> rows.</td><td>₹6,200</td></tr>
+        </tbody>
+      </table></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 : LEDGER LIST -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Payments Ledger (list)</p>
+      <p class="sm">The searchable, filterable, exportable table of every payment — with row selection for bulk reconcile / receipts / export.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Find any payment fast (by code, transaction, order, subscription, invoice, customer name or phone), narrow the ledger with filters, and act on one or many rows at once.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> — <code>payments:view</code> to read, <code>payments:edit</code> for bulk actions</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → Payments → Payments</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Payments — <b>Ledger</b> · search · filters · sort · bulk bar · paged table</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Filter row</b><span>Search box · Status · Method · Gateway · Source · "Wallet used" checkbox · ₹ min / ₹ max · From / To dates · Sort</span></div>
+          <div class="wf-cell"><b>Bulk action bar</b><span>Appears when rows are ticked: "N selected" · Reconcile · Send receipts · Export CSV · clear</span></div>
+          <div class="wf-cell"><b>Ledger table</b><span>Select ✓ · Payment · Customer · Source · Method / gateway · Amount · Wallet · Net · Status · Invoice · View</span></div>
+          <div class="wf-cell"><b>Footer</b><span>Total count · "page collected ₹X" · Prev / Page n of m / Next paging</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Payments ledger with its filter row, bulk bar and paged table.</div></div>
+
+      <h4>Table columns</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>Shows</th><th>Backend field</th></tr></thead>
+        <tbody>
+          <tr><td>(checkbox)</td><td>Row select for bulk actions; header ticks/unticks the whole page</td><td>—</td></tr>
+          <tr><td>Payment</td><td>The <code>PAY-000000</code> code, then the transaction / order reference, then the date</td><td><code>code</code>, <code>transactionId</code>/<code>orderId</code>, <code>createdAt</code></td></tr>
+          <tr><td>Customer</td><td>Customer name and phone</td><td><code>customer.name</code>, <code>customer.phone</code></td></tr>
+          <tr><td>Source</td><td>order / subscription / autopay / manual / b2b, with a "✓" when reconciled</td><td><code>source</code>, <code>reconciled</code></td></tr>
+          <tr><td>Method / gateway</td><td>UPI / Card / Net Banking / Wallet / Cash over the gateway name</td><td><code>method</code>, <code>gateway</code></td></tr>
+          <tr><td>Amount</td><td>Gross amount charged</td><td><code>amountPaise</code></td></tr>
+          <tr><td>Wallet</td><td>How much of it was paid from the wallet ("—" if none)</td><td><code>walletUsedPaise</code></td></tr>
+          <tr><td>Net</td><td>Net received through the gateway/cash, with any refunded amount in red below</td><td><code>netPaise</code>, <code>refundedPaise</code></td></tr>
+          <tr><td>Status</td><td>Coloured pill: Captured / Pending / Failed / Refunded / Part refund</td><td><code>status</code></td></tr>
+          <tr><td>Invoice</td><td>Linked invoice number, if any</td><td><code>invoiceNumber</code></td></tr>
+          <tr><td>View</td><td>Opens / closes the full detail &amp; actions panel for that row</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+
+      <p>The storefront table (<code>/admin/payments.html</code>) is the same data through the shared DataTable engine with a slimmer column set — <b>Payment ID · Customer · Method · Amount · Status · Date</b> — and a status filter chip row of <b>All · Captured · Failed · Refunding</b>. That engine adds free-text search, column sort, a date-range picker, saved views, favourites, CSV export and pagination on top. A green banner ("● Live — N payment(s) from the DOODLY database") confirms live data; a 403 shows "Your role doesn't have permission to view payments".</p>
+
+      <h4>Filters, search &amp; sort (full Payments tab)</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Control</th><th>Purpose</th><th>Accepted values</th><th>Backend param</th></tr></thead>
+        <tbody>
+          <tr><td>Search</td><td>Match across many keys at once</td><td>Free text</td><td><code>q</code> — matches code, transactionId, orderId, subscriptionId, invoiceNumber, customer name, phone or userId</td></tr>
+          <tr><td>Status</td><td>Filter by outcome</td><td>Success / Pending / Failed / Refunded / Partially refunded</td><td><code>status</code></td></tr>
+          <tr><td>Method</td><td>Filter by payment method</td><td>UPI / CARD / NETBANKING / WALLET / CASH (options come from live facets)</td><td><code>method</code></td></tr>
+          <tr><td>Gateway</td><td>Filter by processor</td><td>razorpay / wallet / cash / manual (live facets)</td><td><code>gateway</code></td></tr>
+          <tr><td>Source</td><td>Filter by where the payment originated</td><td>ORDER / SUBSCRIPTION / AUTOPAY / MANUAL / B2B</td><td><code>source</code></td></tr>
+          <tr><td>Wallet used</td><td>Only rows where some wallet balance was applied</td><td>Checkbox</td><td><code>walletUsed=1</code></td></tr>
+          <tr><td>₹ min / ₹ max</td><td>Amount band (on gross)</td><td>Rupees (converted to paise)</td><td><code>amountMin</code>, <code>amountMax</code></td></tr>
+          <tr><td>From / To</td><td>Date range on when the payment was created</td><td>Dates</td><td><code>from</code>, <code>to</code></td></tr>
+          <tr><td>Sort</td><td>Order the list</td><td>Latest / Oldest / Highest ₹ / Lowest ₹ / Customer A–Z</td><td><code>sort</code> + <code>dir</code></td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Table behaviour</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Behaviour</th></tr></thead>
+        <tbody>
+          <tr><td>Search</td><td>One box, server-side, case-insensitive across code / txn / order / subscription / invoice / customer / phone.</td></tr>
+          <tr><td>Filters</td><td>Status, method, gateway, source, wallet-used, amount band and date range — all combine (AND).</td></tr>
+          <tr><td>Sorting</td><td>Latest (default), Oldest, Highest ₹, Lowest ₹, Customer A–Z.</td></tr>
+          <tr><td>Pagination</td><td>15 rows per page in the full board (200 pulled at a time on the storefront page); footer shows total count, value collected on the page, and Prev / Next.</td></tr>
+          <tr><td>Row actions</td><td>"View" expands the in-line detail &amp; actions panel (Screen 3).</td></tr>
+          <tr><td>Bulk actions</td><td>Tick rows → Reconcile · Send receipts · Export CSV (max 500 rows per call).</td></tr>
+          <tr><td>Exports</td><td>CSV of the selected rows (or the whole page if none selected): Payment ID, Transaction ID, Order ID, Subscription ID, Customer, Date, Method, Gateway, Amount, Wallet, GST, Discount, Net, Status, Invoice, Collected By.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Bulk actions</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Reconcile</td><td>Marks the selected payments as reconciled (matched to a bank/settlement)</td><td><code>POST /api/admin/payments/bulk</code> action <code>reconcile</code> → sets <code>reconciled=true</code>, appends a RECONCILE event per row</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span></td></tr>
+          <tr><td>Send receipts</td><td>E-mails a payment receipt to each selected customer</td><td><code>bulk</code> action <code>receipts</code> → queues an EMAIL notification + RECEIPT event per row</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span></td></tr>
+          <tr><td>Export CSV</td><td>Downloads the selected rows as a spreadsheet</td><td>Builds the CSV in the browser; also logs a <code>bulk export</code> NOTE event on the selected rows</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span></td></tr>
+        </tbody>
+      </table></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3 : DETAIL & ACTIONS -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Payment Detail &amp; Actions</p>
+      <p class="sm">The full picture of a single payment — breakdown, gateway response, wallet activity, refund history, retry attempts, timeline — plus the refund / retry / receipt / reconcile / note controls.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Investigate one payment end-to-end and take the right action on it: refund a customer, retry a failed charge, resend a receipt, mark it reconciled or add an internal note.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> — view with <code>payments:view</code>; refund needs the <code>payments:refund</code> special; retry / reconcile / note / receipt need <code>payments:edit</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → Payments → Payments → View</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Payment <b>PAY-000042</b> · three-column detail panel</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Customer &amp; links</b><span>Name, e-mail, phone; linked order / subscription / billing cycle; source · method / gateway · collected-by</span></div>
+          <div class="wf-cell"><b>Payment breakdown</b><span>Gross · Discount · GST · Wallet used · Net received · Refunded · Invoice; "Print / PDF" receipt button</span></div>
+          <div class="wf-cell"><b>Gateway response</b><span>Gateway order id · gateway payment id · raw JSON payload (if stored)</span></div>
+          <div class="wf-cell"><b>Wallet activity</b><span>Last few wallet transactions for this customer</span></div>
+          <div class="wf-cell"><b>Refund history</b><span>Each refund: reason, "· wallet" flag, amount, date</span></div>
+          <div class="wf-cell"><b>Attempts</b><span>Retry attempts: #, status, timestamp</span></div>
+          <div class="wf-cell"><b>Actions</b><span>Refund · Retry · Send receipt · Reconcile / Unreconcile</span></div>
+          <div class="wf-cell"><b>Timeline &amp; Note</b><span>Append-only event log; free-text note box (adds a dated line)</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the expanded per-payment detail and actions panel.</div></div>
+
+      <h4>Action buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Refund</td><td>Opens a small form (₹ amount pre-filled to the refundable balance, "to wallet" checkbox, reason). Only shown when the payment is Captured or Part-refunded and there is still a refundable balance.</td><td><code>PATCH /api/admin/payments/{id}</code> action <code>refund</code> → creates a <code>PaymentRefund</code> (ref <code>RFND-XXXXXX</code>), lowers the refundable balance, sets status to Refunded (full) or Part refund; if "to wallet" it credits the customer's wallet; notifies the customer; a fully-refunded order/billing is flipped to Refunded too.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span> (<code>refund</code> special)</td></tr>
+          <tr><td>Retry</td><td>Records a fresh charge attempt. Only shown for Pending or Failed payments.</td><td>action <code>retry</code> → adds a <code>PaymentLedgerAttempt</code> and an ATTEMPT event. For a Razorpay row it notes that a live re-charge needs gateway keys — settle it with Record Payment if the retry can't clear.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span> (<code>edit</code>)</td></tr>
+          <tr><td>Send receipt</td><td>E-mails the customer a receipt for this payment.</td><td>action <code>receipt</code> → queues an EMAIL notification + RECEIPT event.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span> (<code>edit</code>)</td></tr>
+          <tr><td>Reconcile / Unreconcile</td><td>Toggles the "matched to bank settlement" flag.</td><td>action <code>reconcile</code> → flips <code>reconciled</code>, appends a RECONCILE event.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span> (<code>edit</code>)</td></tr>
+          <tr><td>Add note</td><td>Appends an internal, date-stamped note.</td><td>action <code>note</code> → appends to <code>notes</code> and logs a NOTE event.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span> (<code>edit</code>)</td></tr>
+          <tr><td>Print / PDF</td><td>Opens a clean, branded receipt in a new window ready to print or save as PDF.</td><td>Rendered in the browser from the loaded detail — no server call.</td><td>Any viewer</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Refund form fields</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Amount ₹</td><td>How much to refund</td><td>1 … refundable balance</td><td class="t-req">Yes</td><td>Must be &gt; 0 and ≤ refundable (net − already refunded); capped at ₹1,00,000. A larger amount is rejected with the exact refundable shown.</td><td>₹300</td></tr>
+          <tr><td>To wallet</td><td>Credit the DOODLY wallet instead of the original method</td><td>Checkbox (on by default)</td><td class="t-opt">Opt.</td><td>When ticked, the amount is credited to the customer's wallet as a <code>refund</code> credit and a WALLET event is logged.</td><td>On</td></tr>
+          <tr><td>Reason</td><td>Why the refund was issued</td><td>Free text, up to 300 chars</td><td class="t-opt">Opt.</td><td>Stored on the refund and shown in the refund history and the customer notification.</td><td>Spilt bottle on delivery</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Refunds are one-directional</div>
+          <p>A refund can only be raised against a <b>Captured</b> or <b>Part-refunded</b> payment, and never for more than the remaining refundable balance. A Pending or Failed payment cannot be refunded — there is nothing to return yet. Each refund gets its own <code>RFND-</code> reference and a customer notification fires immediately, so double-check the amount and the "to wallet" toggle before you press <b>Process</b>.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 4 : RECORD PAYMENT -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Record a Payment (manual)</p>
+      <p class="sm">A three-step form to log a cash or off-gateway payment against a customer and, optionally, mark the linked order or billing cycle as paid.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Capture money that did not flow through the online gateway — cash on the doorstep, a bank transfer, a UPI paid to a staff phone — so the ledger and the customer's order/billing stay accurate.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> — needs <code>payments:create</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → Payments → Record Payment</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Record Payment — <b>3-step form</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>1 · Customer</b><span>Search by name / mobile / e-mail, pick a result; "change" to reset</span></div>
+          <div class="wf-cell"><b>2 · Link (optional)</b><span>Order · Billing cycle · Subscription dropdowns (that customer's payable items) + "Mark the linked order / billing as paid" checkbox</span></div>
+          <div class="wf-cell"><b>3 · Amount &amp; method</b><span>Method · Amount ₹ · Wallet used ₹ · GST ₹ · Discount ₹ · Reference no. · Invoice no. · Notes</span></div>
+          <div class="wf-cell"><b>Footer</b><span>"Net to collect: ₹X" live preview · Record payment button</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the guided Record Payment form (customer → link → amount).</div></div>
+
+      <h4>Form fields</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Customer</td><td>Who paid</td><td>Search &amp; select</td><td class="t-req">Yes</td><td>Search hits <code>/payments/options?q=</code> (name / e-mail / phone, customers only). The customer must exist or the save is rejected "Customer not found."</td><td>Ananya Reddy</td></tr>
+          <tr><td>Order (link)</td><td>Tie the payment to a pending order</td><td>That customer's Pending / Failed orders</td><td class="t-opt">Opt.</td><td>Loaded from <code>/payments/options?userId=</code>.</td><td>subscription · ₹1,799</td></tr>
+          <tr><td>Billing (link)</td><td>Tie it to a subscription billing cycle</td><td>Pending / Failed / Partial cycles</td><td class="t-opt">Opt.</td><td>A cycle that already has a Captured payment is rejected "This billing cycle is already paid."</td><td>SB-000110 c3 · ₹1,799</td></tr>
+          <tr><td>Subscription (link)</td><td>Tie it to a subscription</td><td>That customer's subscriptions</td><td class="t-opt">Opt.</td><td>Reference only.</td><td>Daily 500ml · active</td></tr>
+          <tr><td>Mark as paid</td><td>Flip the linked order/billing to PAID</td><td>Checkbox (on by default)</td><td class="t-opt">Opt.</td><td>When set, the linked order is set to PAID and the billing cycle to PAID with the amount recorded.</td><td>On</td></tr>
+          <tr><td>Method</td><td>How the money was paid</td><td>CASH / UPI / CARD / NETBANKING / WALLET</td><td class="t-req">Yes</td><td>Enum. Gateway defaults to "cash" for CASH else "manual".</td><td>CASH</td></tr>
+          <tr><td>Amount ₹</td><td>Gross amount received</td><td>1 … 1,00,000</td><td class="t-req">Yes</td><td>Positive integer paise; must be &gt; 0.</td><td>₹1,799</td></tr>
+          <tr><td>Wallet used ₹</td><td>Part of it settled from the wallet</td><td>0 or more</td><td class="t-opt">Opt.</td><td>Net collected = Amount − Wallet used (never below 0).</td><td>₹0</td></tr>
+          <tr><td>GST ₹</td><td>Tax portion, for the receipt/report</td><td>0 or more</td><td class="t-opt">Opt.</td><td>Stored on the row and rolled into reports.</td><td>₹0</td></tr>
+          <tr><td>Discount ₹</td><td>Discount applied</td><td>0 or more</td><td class="t-opt">Opt.</td><td>Stored and rolled into reports.</td><td>₹0</td></tr>
+          <tr><td>Reference no.</td><td>Bank/UPI reference for audit</td><td>Text, up to 80 chars</td><td class="t-opt">Opt.</td><td>Saved as the unique <code>transactionId</code>; a duplicate reference is rejected "A payment with that reference already exists."</td><td>UPI-8837XXQ</td></tr>
+          <tr><td>Invoice no.</td><td>Attach an invoice number</td><td>Text, up to 60 chars</td><td class="t-opt">Opt.</td><td>Stored on the row.</td><td>INV-2026-0442</td></tr>
+          <tr><td>Notes</td><td>Any free-text remark</td><td>Text, up to 500 chars</td><td class="t-opt">Opt.</td><td>Stored on the row and visible in the detail panel.</td><td>Collected at doorstep</td></tr>
+        </tbody>
+      </table></div>
+
+      <p>A manual payment is always saved with source <b>MANUAL</b>, status <b>Captured (SUCCESS)</b>, a fresh <code>PAY-</code> code and a SUCCESS event stamped with the recording staff member. The footer shows the live <b>Net to collect</b> as you type.</p>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 5 : REPORTS -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Payment Reports</p>
+      <p class="sm">Date-ranged revenue analytics — gross / net / GST / refunds / wallet / Auto-Pay, plus breakdowns by day, month, method, gateway and status, with a one-click CSV.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Give the accounts team the numbers they need to close a period: what was collected, how it broke down by channel, what was refunded, and a row-level export for reconciliation.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> — <code>payments:view</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → Payments → Reports</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Payments — <b>Reports</b> · date preset · Refresh · Export CSV</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Range picker</b><span>Today · Last 7 days · Last 30 days · This month · This year · Custom (From / To)</span></div>
+          <div class="wf-cell"><b>Summary KPIs</b><span>Gross revenue · Net collected · GST collected · Refunds (count + to-wallet) · Wallet used · Cashback / referral · Auto-Pay collected · Discounts</span></div>
+          <div class="wf-cell"><b>Breakdown tables</b><span>Daily collections · Monthly collections · By method · By gateway · By status</span></div>
+          <div class="wf-cell"><b>Export</b><span>CSV of every payment row in range</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Reports tab: range picker, KPI grid and breakdown tables.</div></div>
+
+      <h4>Report contents</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Block</th><th>What it shows</th><th>Backend</th></tr></thead>
+        <tbody>
+          <tr><td>Gross revenue</td><td>Sum of gross amount on Captured rows in range</td><td><code>revenue.grossPaise</code></td></tr>
+          <tr><td>Net collected</td><td>Net (gross − wallet) on Captured rows</td><td><code>revenue.netPaise</code></td></tr>
+          <tr><td>GST collected</td><td>Tax portion on Captured rows</td><td><code>revenue.gstPaise</code></td></tr>
+          <tr><td>Refunds</td><td>Total refunded amount, count, and how much went to wallet</td><td><code>refunds.amountPaise / count / toWalletPaise</code></td></tr>
+          <tr><td>Wallet used</td><td>Wallet balance applied to payments</td><td><code>wallet.usedPaise</code></td></tr>
+          <tr><td>Cashback / referral</td><td>Wallet credits granted as cashback and referral rewards</td><td><code>wallet.cashbackPaise / referralPaise</code></td></tr>
+          <tr><td>Auto-Pay collected</td><td>Recurring-mandate money and its count</td><td><code>autopay.collectedPaise / count</code></td></tr>
+          <tr><td>Discounts</td><td>Discount value on Captured rows</td><td><code>revenue.discountPaise</code></td></tr>
+          <tr><td>Daily / Monthly</td><td>Count and collected per day and per month</td><td><code>daily[] / monthly[]</code></td></tr>
+          <tr><td>By method / gateway / status</td><td>Count and collected split by channel and outcome</td><td><code>byMethod[] / byGateway[] / byStatus[]</code></td></tr>
+          <tr><td>Export CSV</td><td>Payment ID, Date, Customer, Method, Gateway, Source, Status, Amount, Wallet, GST, Net, Invoice — one row per payment</td><td>Built in-browser from the report rows</td></tr>
+        </tbody>
+      </table></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 6 : GATEWAYS -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Gateways</p>
+      <p class="sm">Turn payment gateways on or off, switch Razorpay between Test and Live, and see at a glance whether the API keys and webhook secret are configured.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Control which processors are accepting money and confirm the environment is wired correctly before real charges flow.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> — view with <code>payments:view</code>, change with <code>payments:edit</code> (mode / keys are a Super-Admin-grade change)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → Payments → Gateways</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Payments — <b>Gateways</b> · one card per processor</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Gateway card</b><span>Label · Enabled/Disabled toggle · Mode (TEST/LIVE) with "switch" · Key ID · Refunds supported · Webhook configured</span></div>
+          <div class="wf-cell"><b>Razorpay readiness</b><span>● API keys present/MISSING · ● Webhook secret present/MISSING · Webhook URL &amp; the events to subscribe</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — a gateway card with its toggle and the Razorpay readiness strip.</div></div>
+
+      <h4>Gateway card fields &amp; actions</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field / action</th><th>What it does</th><th>Backend</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Enabled / Disabled</td><td>Toggles whether the gateway accepts payments</td><td><code>PATCH /api/admin/payments/gateways</code> → sets <code>enabled</code></td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+          <tr><td>Mode (switch)</td><td>Flips Razorpay between TEST and LIVE</td><td>Sets <code>mode</code> TEST/LIVE</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+          <tr><td>Key ID</td><td>The public key id (safe to store/display)</td><td><code>keyId</code> — secret keys are never sent to the browser</td><td>Read-only display</td></tr>
+          <tr><td>Refunds</td><td>Whether the gateway supports refunds</td><td><code>supportsRefund</code></td><td>Read-only</td></tr>
+          <tr><td>Webhook configured</td><td>Whether the webhook has been marked set up</td><td><code>webhookConfigured</code></td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+          <tr><td>API keys readiness</td><td>Live check that <code>RAZORPAY_KEY_ID</code> and <code>RAZORPAY_KEY_SECRET</code> exist in the server environment</td><td><code>liveKeysPresent</code></td><td>Read-only</td></tr>
+          <tr><td>Webhook secret readiness</td><td>Live check that <code>RAZORPAY_WEBHOOK_SECRET</code> exists</td><td><code>webhookSecretPresent</code></td><td>Read-only</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Secrets live in the server, not this screen</div>
+          <p>You can toggle a gateway, switch Test/Live and confirm readiness here, but the actual Razorpay <b>secret key</b> and <b>webhook secret</b> are only ever set as server environment variables (<code>RAZORPAY_KEY_ID</code>, <code>RAZORPAY_KEY_SECRET</code>, <code>RAZORPAY_WEBHOOK_SECRET</code>) and never travel to the browser. Point Razorpay's webhook at <code>/api/payments/webhook</code> and subscribe to <code>payment.captured</code>, <code>payment.failed</code>, and <code>subscription.charged / halted / cancelled</code>.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ WORKFLOWS -->
+  <div class="diagram"><div class="wf">
+    <div class="wf-topbar">Workflow — Record a manual (cash) payment</div>
+    <div class="wf-flow"><span>Open Record Payment</span><span>Search &amp; pick customer</span><span>Link order / billing (optional)</span><span>Choose method, enter amount</span><span>Tick "mark as paid"</span><span>Record payment</span><span>Row appears Captured in the ledger</span></div>
+  </div><div class="wire-cap">Figure — logging money that did not flow through the online gateway.</div></div>
+
+  <div class="diagram"><div class="wf">
+    <div class="wf-topbar">Workflow — Refund a customer</div>
+    <div class="wf-flow"><span>Find the payment</span><span>View detail</span><span>Refund</span><span>Enter ₹ ≤ refundable, choose "to wallet", add reason</span><span>Process</span><span>Refund logged · status Refunded/Part refund · customer notified · wallet credited (if chosen)</span></div>
+  </div><div class="wire-cap">Figure — the refund path and everything it triggers.</div></div>
+
+  <!-- ============================================================ ROLE ACCESS -->
+  <h4>Who can do what</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Capability</th><th>Permission</th><th>Super Admin</th><th>Admin</th><th>Accountant</th><th>Other roles</th></tr></thead>
+    <tbody>
+      <tr><td>View ledger, dashboard, reports, gateways</td><td><code>payments:view</code></td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+      <tr><td>Record a manual payment</td><td><code>payments:create</code></td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+      <tr><td>Retry / reconcile / note / receipt / bulk / gateway config</td><td><code>payments:edit</code></td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+      <tr><td>Issue a refund</td><td><code>payments:refund</code> (a "full"-level special)</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+    </tbody>
+  </table></div>
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">The Payments module is finance-only</div>
+      <p>Only <b>Super Admin</b>, <b>Admin</b> and <b>Accountant</b> have the payments module in the permission matrix, and all three hold it at "full" — so all three can view, record, edit and refund. Support, operations, procurement, quality, inventory, marketing and delivery roles have no payments access at all and never see this screen. Server-side <code>requirePermission</code> is the real security boundary; the client menu filter is convenience only.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ BEST PRACTICE -->
+  <div class="call best">
+    <span class="ci">✅</span>
+    <div class="cbody">
+      <div class="ctitle">Best Practice — reconcile against the bank, then refund from the ledger</div>
+      <p>Run <b>Reports</b> for the period, export the CSV and match it to the Razorpay settlement report using the <b>Payment ID</b> and <b>Transaction ID</b> columns. Tick the matched rows and hit <b>Reconcile</b> so the ledger records what's been banked. Only refund from the <b>payment's own detail panel</b> (never by editing the customer's wallet directly) — that way the refund is capped at the refundable balance, gets its own <code>RFND-</code> reference, notifies the customer and, when you choose "to wallet", credits them in one auditable step.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOTING -->
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>"Your role doesn't have permission to view payments (403)"</td><td>Signed in as a role without the payments module (e.g. Operations, Support)</td><td>Use a Super Admin, Admin or Accountant account — those are the only roles with payments access.</td></tr>
+      <tr><td>Ledger shows "Backend offline" and no rows</td><td>The Next.js backend isn't running / unreachable</td><td>Start the backend (next-app) so the storefront page can reach the live APIs.</td></tr>
+      <tr><td>"A payment with that reference already exists"</td><td>The Reference no. you typed is already used by another payment</td><td>References are unique — leave it blank or enter the true, distinct bank/UPI reference.</td></tr>
+      <tr><td>"This billing cycle is already paid"</td><td>You linked a billing cycle that already has a Captured payment</td><td>Pick a different (unpaid) cycle, or leave the billing link empty.</td></tr>
+      <tr><td>Refund button doesn't appear on a payment</td><td>The payment is Pending / Failed, or already fully refunded (nothing left to refund)</td><td>Only Captured or Part-refunded payments with a positive refundable balance can be refunded.</td></tr>
+      <tr><td>"Refund exceeds the refundable balance"</td><td>Amount entered is larger than net minus what's already been refunded</td><td>Enter an amount up to the refundable figure shown next to the box.</td></tr>
+      <tr><td>Gateways tab warns "API keys MISSING"</td><td><code>RAZORPAY_KEY_ID</code> / <code>RAZORPAY_KEY_SECRET</code> not set in the environment</td><td>Add the keys as server environment variables and redeploy; the readiness dot turns green.</td></tr>
+      <tr><td>A retry on a Razorpay payment doesn't actually charge</td><td>Live gateway re-charges need valid keys; retry only records the attempt</td><td>Once the customer pays, settle it with <b>Record Payment</b>, or wait for the webhook to capture it.</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- ============================================================ FAQ -->
+  <h4>Frequently asked questions</h4>
+  <h4>Q. A customer paid by UPI to our staff phone. How do I record it?</h4>
+  <p>Open <b>Record Payment</b>, search and pick the customer, optionally link the order or billing cycle, set method <b>UPI</b>, enter the amount and the UPI reference, tick <b>Mark as paid</b>, and press <b>Record payment</b>. It appears in the ledger as a Captured MANUAL payment.</p>
+
+  <h4>Q. What's the difference between "Amount" and "Net"?</h4>
+  <p><b>Amount</b> is the gross charged. <b>Net</b> is what actually came in through the gateway or cash, i.e. gross minus any wallet balance the customer applied. Reports total both so you can see wallet usage separately.</p>
+
+  <h4>Q. If I refund "to wallet", does the customer get real money back?</h4>
+  <p>No — "to wallet" credits the refund to the customer's DOODLY wallet for their next purchase. Leave it unticked to signal the money is going back to the original payment method; either way the refund is logged with its own reference and the customer is notified.</p>
+
+  <h4>Q. Why do some payments show a "✓" on the Source column?</h4>
+  <p>That means the payment has been <b>reconciled</b> — matched to a bank settlement — either individually from its detail panel or via the bulk Reconcile action.</p>
+
+  <h4>Q. Can I edit or delete a payment after it's recorded?</h4>
+  <p>No. The ledger is append-only for integrity — you can refund, add notes, reconcile, resend receipts and log retry attempts, and every one of those actions is written to the payment's timeline. There is no "delete", by design.</p>
+
+</section>

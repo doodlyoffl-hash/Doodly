@@ -1,0 +1,214 @@
+<section class="sheet" id="admin-routes">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Operations · Routes</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Operations</span></div>
+  <h2 class="section-title">Routes</h2>
+  <p class="lead">Plan and manage the delivery routes your executives run each morning — group stops by zone, assign a driver, auto-optimise the stop order, and watch the route on a live map.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">How routes are stored (no duplicate data)</div><p>A route does not keep its own copy of the stops. Each "stop" is simply one of today's <b>Deliveries</b> tagged with this route's ID and a sequence number. When you optimise a route, DOODLY only re-orders those deliveries and stamps the route's total distance and estimated duration — it never creates a second list to keep in sync. This is why a route's stop count, map pins and performance figures always match the real delivery board.</p></div></div>
+
+  <!-- ============================ SCREEN 1 — ROUTES BOARD ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Routes board</p><p class="sm">Live list of every delivery route, a KPI strip and a page-level map preview.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> See all routes at a glance — zone, driver, number of stops, distance and status — and open any one to edit or optimise it.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations</span> — view, create and edit. Deleting a route needs <span class="pill role">Super Admin</span> or <span class="pill role">Admin</span>.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Routes</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Routes</b> · "Delivery routes by zone." · <b>Plan route</b> button</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>KPI strip</b><span>Seven live tiles: Total Routes, Active, In Use Today, Assigned Drivers, Zones, Scheduled Deliveries, Avg Distance</span></div>
+          <div class="wf-cell"><b>Live status banner</b><span>Green "● Live — N route(s) from the DOODLY database" or a red offline / 403 message</span></div>
+          <div class="wf-cell"><b>Routes table</b><span>Route · Zone · Driver · Stops · Distance · Status · Manage — no search box or pager in this view</span></div>
+          <div class="wf-cell"><b>Overview map</b><span>Draws the first route that has geocoded stops; otherwise a 🗺️ empty-state card</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Routes board</div></div>
+
+      <h4>KPI strip</h4>
+      <p>The tiles above the table are drawn live from <span class="navpath">GET /api/admin/routes/stats</span>. All counts exclude soft-deleted routes.</p>
+      <div class="twrap"><table><thead><tr><th>Tile</th><th>What it shows</th><th>How it is calculated</th></tr></thead><tbody>
+        <tr><td>Total Routes</td><td>Every live route</td><td>Count of routes that are not soft-deleted</td></tr>
+        <tr><td>Active</td><td>Routes switched on</td><td>Count where <b>Active</b> is ticked</td></tr>
+        <tr><td>In Use Today</td><td>Routes with a delivery today</td><td>Distinct routes referenced by today's deliveries</td></tr>
+        <tr><td>Assigned Drivers</td><td>Drivers covering routes</td><td>Distinct driver IDs across live routes</td></tr>
+        <tr><td>Zones</td><td>Zones with a route</td><td>Distinct zone IDs across live routes</td></tr>
+        <tr><td>Scheduled Deliveries</td><td>Total stops planned</td><td>Sum of every route's stop (delivery) count</td></tr>
+        <tr><td>Avg Distance</td><td>Mean route length</td><td>Average of the stamped distance (km) over routes that have been optimised</td></tr>
+      </tbody></table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Also computed in the background</div><p>The stats endpoint additionally calculates <b>Inactive</b>, <b>Avg Duration (min)</b> and an <b>On-time %</b> (delivered-on-time out of today's completed deliveries). These are available in the data even though the strip surfaces the seven tiles above.</p></div></div>
+
+      <h4>Routes table</h4>
+      <div class="twrap"><table><thead><tr><th>Aspect</th><th>Behaviour in this screen</th></tr></thead><tbody>
+        <tr><td><b>Columns</b></td><td>Route · Zone · Driver · Stops · Distance · Status · Manage</td></tr>
+        <tr><td><b>Route</b></td><td>The route <b>code</b> if one was set, otherwise the route name</td></tr>
+        <tr><td><b>Zone</b></td><td>The linked delivery zone's name, or "—" if none</td></tr>
+        <tr><td><b>Driver</b></td><td>The assigned executive's name, or "—" if unassigned</td></tr>
+        <tr><td><b>Stops</b></td><td>Number of deliveries currently attached to the route</td></tr>
+        <tr><td><b>Distance</b></td><td>The optimised distance in km; if not yet optimised it shows the estimated duration in minutes, or "—"</td></tr>
+        <tr><td><b>Status</b></td><td>Coloured badge — <b>Active</b> (green), <b>Inactive</b> (grey) or <b>Deleted</b> (grey)</td></tr>
+        <tr><td><b>Search / Filters / Sorting</b></td><td>This table is rendered with the toolbar turned off, so there is no on-screen search box, filter chips or column sort. The backend list <em>does</em> accept search, status, zone and driver filters (used by other tools).</td></tr>
+        <tr><td><b>Pagination</b></td><td>Off — every loaded route is listed on one page. The server returns up to the 300 most recent routes, newest date first.</td></tr>
+        <tr><td><b>Exports</b></td><td>Not offered on this screen.</td></tr>
+        <tr><td><b>Row actions</b></td><td><b>Manage</b> — opens the route's edit drawer (see Screen 3)</td></tr>
+      </tbody></table></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td><b>Plan route</b> (header)</td><td>Opens the "Plan a route" dialog to create a new route</td><td>On save → <span class="navpath">POST /api/admin/routes</span></td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations</span></td></tr>
+        <tr><td><b>Manage</b> (row)</td><td>Opens the route drawer to edit, view stops, optimise or soft-delete</td><td>Loads <span class="navpath">GET /api/admin/routes/{id}</span></td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations</span></td></tr>
+      </tbody></table></div>
+
+      <h4>Overview map</h4>
+      <p>Below the table sits a map preview. On load, DOODLY looks through the first few routes that have stops and draws the first one whose stops carry map pins (latitude &amp; longitude). If nothing is geocoded yet, it keeps a 🗺️ card that reads: <em>"Open a route below to see its delivery map — stops appear once their addresses are geocoded."</em></p>
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — get pins on the map</div><p>Route maps and distance optimisation only work for stops whose customer address has been geocoded (a saved latitude/longitude). Use the address pin-drop on the customer's address to add coordinates, and the stop will appear on the map automatically.</p></div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Keep one route per zone per driver and give it a clear code (for example <b>RT-VJ-02</b>). Re-run <b>Optimize stops</b> after new subscriptions are added to the zone so the stop order and the estimated distance stay accurate for the morning run.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================ SCREEN 2 — PLAN A ROUTE ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Plan a route</p><p class="sm">Create a new delivery route and (optionally) attach a zone and driver.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Register a brand-new route so deliveries can be grouped onto it and a driver can run it.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Routes → Plan route</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Dialog — <b>Plan a route</b> · ✕ close</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Route name *</b><span>Free text, e.g. "RT-VJ-02 · Governorpet"</span></div>
+          <div class="wf-cell"><b>Route code</b><span>Short unique code, e.g. "RT-VJ-02"</span></div>
+          <div class="wf-cell"><b>Zone</b><span>Dropdown of delivery zones (— No zone —)</span></div>
+          <div class="wf-cell"><b>Driver</b><span>Dropdown of executives (— Unassigned —)</span></div>
+          <div class="wf-cell"><b>Notes</b><span>Optional free text</span></div>
+          <div class="wf-cell"><b>Footer</b><span>Cancel · Create route</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Plan a route dialog</div></div>
+
+      <h4>Fields</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Route name</td><td>Human name for the route</td><td>Text</td><td class="t-req">Yes</td><td>At least 2 characters (client blocks &lt;2); server requires 2–60 characters</td><td>RT-VJ-02 · Governorpet</td></tr>
+        <tr><td>Route code</td><td>Short reference shown in the Route column</td><td>Text, up to 30 characters</td><td class="t-opt">Opt.</td><td>Must be unique — a clash returns "That route code is already in use."</td><td>RT-VJ-02</td></tr>
+        <tr><td>Zone</td><td>Ties the route to a delivery zone</td><td>Pick from existing zones</td><td class="t-opt">Opt.</td><td>Options loaded from <span class="navpath">GET /api/admin/delivery/zones</span>; blank = no zone</td><td>Vijayawada West</td></tr>
+        <tr><td>Driver</td><td>Executive who will run the route</td><td>Pick from existing drivers</td><td class="t-opt">Opt.</td><td>Options from <span class="navpath">GET /api/admin/drivers</span>; server rejects a driver ID that does not exist</td><td>Ramesh K.</td></tr>
+        <tr><td>Notes</td><td>Any handover note about the route</td><td>Text, up to 500 characters</td><td class="t-opt">Opt.</td><td>Trimmed; stored on the route</td><td>Start from the depot gate</td></tr>
+      </tbody></table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Route date is set automatically</div><p>A new route is dated today when you create it. There is no date field in this dialog — the run date is stamped for you.</p></div></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td><b>Create route</b></td><td>Validates the name, then saves the route and refreshes the board</td><td><span class="navpath">POST /api/admin/routes</span> → writes a <b>route.create</b> audit entry</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations</span></td></tr>
+        <tr><td><b>Cancel</b> / ✕ / Esc</td><td>Closes the dialog without saving</td><td>—</td><td>—</td></tr>
+      </tbody></table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — creating a route</div>
+        <div class="wf-flow"><span>Click Plan route</span><span>Enter name (+ code / zone / driver)</span><span>Create route</span><span>Route saved &amp; audited</span><span>Board refreshes with the new row</span></div>
+      </div><div class="wire-cap">Figure — from empty dialog to a live route</div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Always give the route a code. The board and reports identify routes by their code, and a consistent scheme (zone prefix + number) makes bulk driver reassignment and hand-offs far easier.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================ SCREEN 3 — MANAGE ROUTE ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Manage route</p><p class="sm">Edit a route, review its ordered stops, optimise the stop sequence, and soft-delete.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> The full control drawer for a single route — change its details, see who is on it, optimise the driving order and retire it when no longer needed.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> Edit &amp; optimise: <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations</span>. Soft-delete: <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> only.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Routes → Manage</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Drawer — <b>{route name}</b> · summary "N stop(s) · X km · ~Y min" · ✕</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Route name</b><span>Editable text</span></div>
+          <div class="wf-cell"><b>Route code</b><span>Editable, still must be unique</span></div>
+          <div class="wf-cell"><b>Zone</b><span>Zone dropdown</span></div>
+          <div class="wf-cell"><b>Driver</b><span>Driver dropdown</span></div>
+          <div class="wf-cell"><b>Active</b><span>Checkbox — on/off the route</span></div>
+          <div class="wf-cell"><b>Stops list</b><span>Ordered stops with a completed/total &amp; bottles header</span></div>
+          <div class="wf-cell"><b>Route map</b><span>Numbered pins + line, shown when stops are geocoded</span></div>
+          <div class="wf-cell"><b>Footer</b><span>Optimize stops · Soft-delete · Close · Save</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Manage route drawer</div></div>
+
+      <h4>Editable fields</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Route name</td><td>Rename the route</td><td>Text</td><td class="t-req">Yes</td><td>Cannot be empty; server allows 2–60 characters</td><td>RT-VJ-02 · Governorpet</td></tr>
+        <tr><td>Route code</td><td>Change the code</td><td>Text, up to 30 characters</td><td class="t-opt">Opt.</td><td>Must remain unique across routes</td><td>RT-VJ-02</td></tr>
+        <tr><td>Zone</td><td>Move the route to another zone</td><td>Pick a zone / none</td><td class="t-opt">Opt.</td><td>Zone list from delivery zones</td><td>Vijayawada West</td></tr>
+        <tr><td>Driver</td><td>Reassign the executive</td><td>Pick a driver / unassign</td><td class="t-opt">Opt.</td><td>Driver must exist; blank = unassigned</td><td>Ramesh K.</td></tr>
+        <tr><td>Active</td><td>Turn the route on or off</td><td>Checkbox</td><td class="t-opt">Opt.</td><td>Unticking sets the route Inactive (kept, not deleted)</td><td>Ticked</td></tr>
+      </tbody></table></div>
+
+      <h4>Stops panel (read-only)</h4>
+      <p>Below the fields, the drawer lists the route's stops in delivery order, pulled from <span class="navpath">GET /api/admin/routes/{id}</span>. The header summarises performance as <b>completed / total done · bottles collected</b>. Each row shows the stop's sequence number, the customer name and their address. A ⚠ marker appears on any stop whose address has no map pin, warning that it will not show on the route map or count toward the optimised distance.</p>
+      <div class="twrap"><table><thead><tr><th>Stops-panel figure</th><th>Meaning</th></tr></thead><tbody>
+        <tr><td>Completed</td><td>Stops marked <b>DELIVERED</b></td></tr>
+        <tr><td>Total</td><td>All stops on the route</td></tr>
+        <tr><td>Bottles collected</td><td>Sum of empties returned across the route's stops</td></tr>
+      </tbody></table></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td><b>Save</b></td><td>Saves the edited name, code, zone, driver and Active state</td><td><span class="navpath">PATCH /api/admin/routes/{id}</span> → audited as route.update / route.assign_driver / route.status</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations</span></td></tr>
+        <tr><td><b>Optimize stops</b></td><td>Re-orders the stops into the shortest sensible driving order and stamps the route's distance and estimated time</td><td><span class="navpath">POST /api/admin/routes/{id}/optimize</span> → nearest-neighbour reorder (haversine); audited as route.optimize</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations</span></td></tr>
+        <tr><td><b>Soft-delete</b></td><td>Retires the route (recoverable) and refreshes the board</td><td><span class="navpath">DELETE /api/admin/routes/{id}</span> → sets a deleted timestamp; audited as route.delete</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+        <tr><td><b>Close</b> / ✕ / Esc</td><td>Closes the drawer without saving</td><td>—</td><td>—</td></tr>
+      </tbody></table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — optimise needs pins</div><p><b>Optimize stops</b> refuses to run if the route has no stops ("This route has no stops to optimise."). It can only measure distance between stops that carry map pins — stops without coordinates are ordered but contribute 0 km, so a route with un-geocoded addresses may report a shorter distance than reality. Geocode the addresses first for a trustworthy figure.</p></div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Soft-delete, not permanent delete</div><p>Soft-delete simply hides the route from the live list and marks it Deleted; the record and its history are kept and can be restored. The manual delete on this screen never hard-deletes data.</p></div></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — optimising a route</div>
+        <div class="wf-flow"><span>Open Manage</span><span>Confirm addresses are geocoded</span><span>Optimize stops</span><span>Stops re-sequenced + km &amp; ~min stamped</span><span>Toast + board updated</span></div>
+      </div><div class="wire-cap">Figure — the optimise cycle</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Bulk operations exist behind the scenes</div><p>The backend also supports bulk actions on routes — activate, deactivate, assign a driver, delete and restore across many routes at once (<span class="navpath">POST /api/admin/routes/bulk</span>, delete/restore need delete permission). The current Routes screen manages routes one at a time; bulk actions are available to tooling built on the API.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================ TROUBLESHOOTING & FAQ ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common Routes issues and quick answers.</p></div>
+    <div class="spec-body">
+
+      <div class="twrap"><table><thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead><tbody>
+        <tr><td>Red "Backend offline" banner and no routes</td><td>The API server is unreachable</td><td>Confirm the backend is running and reachable at the shown address, then reload</td></tr>
+        <tr><td>Red "Your role can't view routes (403)"</td><td>Your role lacks routes:view</td><td>Sign in as Super Admin, Admin or Operations, or ask for the Operations role</td></tr>
+        <tr><td>"That route code is already in use."</td><td>Another route has that code</td><td>Pick a different, unique code</td></tr>
+        <tr><td>Optimise says "This route has no stops to optimise."</td><td>No deliveries are attached to the route yet</td><td>Attach/generate deliveries for the route first, then optimise</td></tr>
+        <tr><td>Map stays on the 🗺️ empty card</td><td>No stop has a saved latitude/longitude</td><td>Geocode the customer addresses (pin-drop); pins then appear automatically</td></tr>
+        <tr><td>Distance column shows minutes or "—"</td><td>Route not optimised yet</td><td>Open Manage and run Optimize stops to stamp the km distance</td></tr>
+        <tr><td>Can't find the Soft-delete option working</td><td>Your role has manage (Operations) but not delete</td><td>Deleting a route needs Super Admin or Admin</td></tr>
+      </tbody></table></div>
+
+      <h4>Is a "stop" a separate record I have to maintain?</h4>
+      <p>No. A stop is just one of the day's deliveries linked to the route with a sequence number. You manage deliveries on the delivery board; the route only holds their order, distance and duration.</p>
+
+      <h4>Why does turning a route Inactive not remove it?</h4>
+      <p>Inactive keeps the route on file (grey badge) so you can re-activate it later — useful for seasonal or weekend-only routes. Use Soft-delete to retire a route you no longer plan to run.</p>
+
+      <h4>How does "Optimize stops" decide the order?</h4>
+      <p>It uses a nearest-neighbour method over the stops' map coordinates and straight-line (haversine) distance, then estimates time at roughly 20 km/h plus about 3 minutes per stop. It is a fast, sensible ordering — not a turn-by-turn routing engine — so always sanity-check unusual routes.</p>
+
+    </div>
+  </div>
+
+</section>

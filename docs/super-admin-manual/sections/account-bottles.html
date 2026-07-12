@@ -1,0 +1,155 @@
+<section class="sheet" id="account-bottles">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Customer Module · Bottle Tracking</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Customer Module</span></div>
+  <h2 class="section-title">Bottle Tracking</h2>
+  <p class="lead">A read-only, per-customer ledger of every reusable glass bottle DOODLY has issued, collected back, or lost — plus the refundable deposit held against them.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where this screen sits</div><p>Bottle Tracking is a <b>customer self-service page</b> at <span class="navpath">/account/bottles.html</span>. It shows the signed-in customer only <b>their own</b> ledger. A Super Admin normally reviews this screen while helping a customer over support, or reconciles the same numbers from the operations side under <span class="navpath">Admin → Catalogue → Bottle Inventory</span> (the warehouse fleet) and the driver's <span class="navpath">Bottle Collection</span> task list. This page never edits the ledger — entries are written automatically by delivery, checkout and refund flows (see the Workflow below).</p></div></div>
+
+  <!-- ============================ SCREEN 1 ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Bottle Tracking page</p><p class="sm">Deposit &amp; empties dashboard plus the full bottle ledger for one customer.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the customer a transparent, tamper-proof record of every bottle sent out and returned, the number still pending collection, and the deposit money held against un-returned glass.</span></div>
+
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (owns the data — the API resolves the ledger from the logged-in user id) · <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> may view the same data while assisting a customer</span>
+      <span class="m"><b>Path</b> <span class="navpath">My Account → Bottles &amp; money → Bottle Tracking</span></span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Route</b> <span class="navpath">/account/bottles.html</span></span>
+      <span class="m"><b>Data source</b> <span class="navpath">GET /api/bottles</span> (authenticated) → hydrated into <code>DOODLY_DATA.bottleLedger</code></span>
+      <span class="m"><b>Manifest key</b> <code>account/bottles</code></span>
+    </div>
+
+    <div class="spec-body">
+
+      <!-- Wireframe -->
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Bottle Tracking — <b>Header</b> · "Request collection" button</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Page header</b><span>Title "Bottle Tracking", subtitle "Every glass bottle issued, returned and pending", and a primary "Request collection" button that opens the Bottle Return page.</span></div>
+          <div class="wf-cell"><b>KPI strip (4 cards)</b><span>Total issued · Returned · Pending (awaiting collection) · Deposit held (refundable). Each card is a clickable tile that deep-links onward.</span></div>
+          <div class="wf-cell"><b>Warning notice</b><span>Amber banner reminding the customer to leave empties out for the next delivery.</span></div>
+          <div class="wf-cell"><b>Bottle ledger table</b><span>Chronological list — Date · Type · Qty · Note · Balance. No search/filter toolbar; paginated 25 rows/page. Shows a friendly empty state if the customer has no bottle activity yet.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Bottle Tracking screen (four stacked regions).</div></div>
+
+      <!-- KPI cards -->
+      <h4>The four KPI cards</h4>
+      <p>The KPI strip is rendered live by <code>DOODLY_CUSTOMER</code> (the <code>customerKpis</code> block with <code>page:"bottles"</code>). Every card is a link — clicking it navigates to the destination in the last column.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Card</th><th>What it shows</th><th>How it is calculated (real code)</th><th>Sub-label</th><th>Clicks through to</th></tr></thead>
+        <tbody>
+          <tr><td><b>Total issued</b></td><td>How many "Issued" entries appear in the ledger.</td><td>Count of ledger rows whose type is <code>Issued</code> (from the up-to-120 most-recent rows the API returns).</td><td>—</td><td><span class="navpath">/account/bottles.html</span></td></tr>
+          <tr><td><b>Returned</b></td><td>How many "Returned" entries appear in the ledger.</td><td>Count of ledger rows whose type is <code>Returned</code>.</td><td>—</td><td><span class="navpath">/account/bottles.html</span></td></tr>
+          <tr><td><b>Pending</b></td><td>Empties still out with the customer, awaiting pickup.</td><td>From the account summary: <code>Σ ISSUED − Σ RETURNED − Σ LOST</code>, floored at 0 (never negative).</td><td>"awaiting collection"</td><td><span class="navpath">/bottle-return.html</span></td></tr>
+          <tr><td><b>Deposit held</b></td><td>Refundable money held against un-returned glass, in ₹.</td><td><code>depositPaise ÷ 100</code>, where <code>depositPaise = Σ DEPOSIT_CHARGED</code> from the ledger.</td><td>"refundable"</td><td><span class="navpath">/account/wallet.html</span></td></tr>
+        </tbody>
+      </table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Two different counting methods — on purpose</div><p><b>Total issued</b> and <b>Returned</b> count the <i>number of ledger entries</i> of that kind, while <b>Pending</b> uses the <i>sum of bottle quantities</i> (<code>ISSUED − RETURNED − LOST</code>). In everyday use each delivery issues one bottle (qty 1), so the numbers line up. If you ever see "Total issued" and "Pending" disagree in a way maths can't explain, check for a ledger row with <code>qty &gt; 1</code> or a <code>LOST</code> event — those are the two cases where the entry-count and the quantity-sum diverge.</p></div></div>
+
+      <!-- Buttons -->
+      <h4>Buttons &amp; actions</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button / control</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Request collection</b> (header, primary)</td><td>Opens the public <b>Bottle Return</b> page explaining the closed glass loop and how to hand back empties.</td><td>Plain navigation to <span class="navpath">/bottle-return.html</span>. It does not itself write to the ledger — the actual <code>RETURNED</code> entry is created later when a delivery executive collects the empties.</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Pending</b> card</td><td>Deep-links to the Bottle Return page so the customer can arrange pickup.</td><td>Navigation only.</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Deposit held</b> card</td><td>Deep-links to the Wallet, where a returned bottle's deposit refund lands.</td><td>Navigation only. A refund shows up as a <code>DEPOSIT_REFUNDED</code> ledger row plus a matching wallet credit.</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Column header</b> (Date / Type / Qty / Note / Balance)</td><td>Click to sort the ledger by that column; click again to reverse; the sort survives page reloads.</td><td>Handled entirely in the browser by the DataTable engine — no server call.</td><td><span class="pill role">Customer</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- Table spec -->
+      <h4>Bottle ledger — table specification</h4>
+      <p>The table is declared as <code>tbl("bottleLedger", {toolbar:false})</code>, so it runs on the shared DataTable engine but with the toolbar deliberately switched off (this is a simple chronological statement, not a data-mining grid).</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Behaviour on this screen</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td>Date · Type · Qty · Note · Balance (5 columns).</td></tr>
+          <tr><td><b>Search</b></td><td>Hidden — the search box is part of the toolbar, which is off.</td></tr>
+          <tr><td><b>Facet filters</b></td><td>Hidden — no filter chips or filter panel on this table.</td></tr>
+          <tr><td><b>Date range</b></td><td>Hidden (toolbar off).</td></tr>
+          <tr><td><b>Sorting</b></td><td>Available by clicking any column header (multi-column, with ▲/▼ indicators); the chosen sort persists per user and table.</td></tr>
+          <tr><td><b>Pagination</b></td><td>On — 25 rows per page by default, newest first.</td></tr>
+          <tr><td><b>Export</b></td><td>Hidden (CSV/Excel/PDF export lives in the toolbar, which is off).</td></tr>
+          <tr><td><b>Row actions</b></td><td>None — rows are informational only.</td></tr>
+          <tr><td><b>Empty state</b></td><td>Bottle icon with "No bottle activity yet", the line "Every bottle we deliver and collect is tracked here, along with your refundable deposit", and a "Start a subscription" call-to-action.</td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- Ledger row types -->
+      <h4>Reading a ledger row — event types</h4>
+      <p>Each ledger row carries one <b>event</b>. The screen renders it as a coloured Type badge and formats the Qty column differently for bottle-movement events versus money events. The Balance column is a running count of bottles still out (recomputed in the browser, floored at 0).</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Event (backend)</th><th>Type badge</th><th>Qty column shows</th><th>Effect on Balance</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>ISSUED</code></td><td>green "Issued"</td><td><code>+</code> qty (e.g. <code>+1</code>)</td><td>increases</td><td>A full bottle was delivered to the customer.</td></tr>
+          <tr><td><code>RETURNED</code></td><td>blue "Returned"</td><td><code>−</code> qty (e.g. <code>−1</code>)</td><td>decreases</td><td>An empty was collected back by the delivery executive.</td></tr>
+          <tr><td><code>LOST</code></td><td>red "Lost"</td><td><code>−</code> qty</td><td>decreases</td><td>A bottle was written off as broken or not returned.</td></tr>
+          <tr><td><code>DEPOSIT_CHARGED</code></td><td>amber "Deposit"</td><td><code>₹</code> amount (from <code>amountPaise</code>)</td><td>no change</td><td>A refundable glass-bottle deposit was charged.</td></tr>
+          <tr><td><code>DEPOSIT_REFUNDED</code></td><td>green "Refund"</td><td><code>₹</code> amount</td><td>no change</td><td>A deposit was refunded (e.g. after the bottle came back).</td></tr>
+        </tbody>
+      </table></div>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>What it contains</th></tr></thead>
+        <tbody>
+          <tr><td><b>Date</b></td><td>Relative date of the entry (from <code>createdAt</code>).</td></tr>
+          <tr><td><b>Type</b></td><td>The coloured event badge (see table above).</td></tr>
+          <tr><td><b>Qty</b></td><td>For bottle events: signed bottle count (<code>+1</code> / <code>−1</code>). For deposit events: the ₹ amount.</td></tr>
+          <tr><td><b>Note</b></td><td>The entry's note if present (e.g. "Collected by delivery executive", "Refundable glass-bottle deposit"); otherwise "Delivery &lt;date&gt;" when the row is linked to a delivery.</td></tr>
+          <tr><td><b>Balance</b></td><td>Running total of bottles still out after this entry, never shown below 0.</td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- Workflow -->
+      <h4>How a ledger entry is born</h4>
+      <p>The customer never writes to this ledger — it is <b>append-only</b> and populated automatically by operational events. Understanding those triggers is how a Super Admin explains any number on this page.</p>
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — bottle lifecycle that feeds the ledger</div>
+        <div class="wf-flow"><span>Deposit charged at first order → DEPOSIT_CHARGED</span><span>Driver marks delivery done with bottle out → ISSUED (+1)</span><span>Empties left out → "Request collection"</span><span>Executive collects empty → RETURNED (−1)</span><span>Broken / not returned → LOST (−1)</span><span>Deposit returned → DEPOSIT_REFUNDED + wallet credit</span></div>
+      </div><div class="wire-cap">Figure — the events that generate ledger rows, written by delivery, checkout and refund flows (not by this screen).</div></div>
+      <div class="twrap"><table>
+        <thead><tr><th>Ledger row</th><th>Which flow writes it (real endpoint)</th></tr></thead>
+        <tbody>
+          <tr><td><code>ISSUED</code></td><td>Driver completes a delivery with bottles out → <span class="navpath">POST /api/driver/deliveries/[id]</span>.</td></tr>
+          <tr><td><code>RETURNED</code></td><td>Driver records empties collected → <span class="navpath">/api/driver/deliveries/[id]</span> or the delivery stop update <span class="navpath">/api/delivery/stop/[id]</span> (note "Collected by delivery executive").</td></tr>
+          <tr><td><code>DEPOSIT_CHARGED</code></td><td>Refundable deposit taken (e.g. at checkout / first issue).</td></tr>
+          <tr><td><code>DEPOSIT_REFUNDED</code></td><td>Wallet refund service writes the refund row plus a matching wallet CREDIT (kind "refund").</td></tr>
+          <tr><td><code>LOST</code></td><td>An operations write-off for a broken or unreturned bottle.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>When a customer disputes their pending-bottle count, don't adjust anything from this screen — it is read-only by design. Instead trace the underlying delivery: an over-count almost always means an <code>ISSUED</code> row exists without its matching <code>RETURNED</code> row because a driver forgot to tick "collected empty" at the stop. Fix it at the source (the driver's delivery record), and this ledger and every KPI recompute themselves.</p></div></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — the deposit is separate from the bottle count</div><p><code>DEPOSIT_CHARGED</code> / <code>DEPOSIT_REFUNDED</code> events move money (₹), not the bottle balance. That is why the "Deposit held" card links to the <b>Wallet</b>, while the "Pending" card links to <b>Bottle Return</b>. A refund shows here as a green "Refund" row and simultaneously as a credit in the customer's wallet.</p></div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — the API returns the 120 most recent rows</div><p><span class="navpath">GET /api/bottles</span> returns at most the 120 latest ledger entries for the table. The <b>Pending</b> and <b>Deposit held</b> figures are computed server-side from <i>all-time</i> grouped totals, so they stay correct even beyond 120 rows — but "Total issued" and "Returned" cards (which count visible rows) could under-count for an extremely long-tenured customer. Trust the Pending and Deposit numbers as the authoritative balances.</p></div></div>
+
+      <!-- Troubleshooting -->
+      <h4>Troubleshooting</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>"Pending" stays high after the customer returned bottles.</td><td>The delivery executive did not tick "collected empty", so no <code>RETURNED</code> row was written.</td><td>Update the delivery stop / driver record to log the collection; the ledger and Pending KPI refresh automatically.</td></tr>
+          <tr><td>Ledger table shows the empty state for a paying customer.</td><td>No bottle events yet (brand-new customer) or the API returned no rows because the session isn't authenticated.</td><td>Confirm the customer has had at least one delivery; verify they are logged in (the endpoint needs a valid user id).</td></tr>
+          <tr><td>"Deposit held" is ₹0 but a deposit was expected.</td><td>No <code>DEPOSIT_CHARGED</code> row exists for this customer (deposit not levied on their plan).</td><td>Check the order/checkout that should have charged the deposit; deposit policy may not apply to that plan.</td></tr>
+          <tr><td>Balance column looks off by one.</td><td>A ledger row has <code>qty &gt; 1</code>, or a <code>LOST</code> event reduced the balance.</td><td>Read the Qty column row-by-row — Balance is the running <code>ISSUED − RETURNED − LOST</code> and is always floored at 0.</td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- FAQ -->
+      <h4>Frequently asked questions</h4>
+      <h4>Q. Can a Super Admin edit or delete a bottle ledger entry from this page?</h4>
+      <p>No. The ledger is append-only and this screen is strictly read-only. Corrections are made by writing a new, opposite event (for example a <code>RETURNED</code> to offset an over-issued bottle) through the delivery/operations flow — never by altering history.</p>
+      <h4>Q. Why does "Pending" link to Bottle Return but "Deposit held" links to the Wallet?</h4>
+      <p>Because they represent two different things: Pending is a <i>bottle</i> count the customer clears by handing empties back (Bottle Return), while Deposit held is <i>money</i> that is refunded into the <i>Wallet</i> once the glass is returned.</p>
+      <h4>Q. Where does the "Request collection" button actually take the customer?</h4>
+      <p>To the public <span class="navpath">/bottle-return.html</span> page that explains the reusable-glass loop. Pickup itself happens on the next delivery — the button starts the conversation; the driver's collection creates the <code>RETURNED</code> ledger row.</p>
+      <h4>Q. Is this the same as the admin "Bottle Inventory" screen?</h4>
+      <p>No. This customer page is the <b>per-customer</b> deposit-and-empties ledger. <span class="navpath">Admin → Catalogue → Bottle Inventory</span> tracks the <b>physical fleet</b> of glass bottles by capacity and lifecycle stage across the whole business. They reconcile against each other but are separate views.</p>
+
+    </div>
+  </div>
+</section>

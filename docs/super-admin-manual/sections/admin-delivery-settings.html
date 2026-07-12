@@ -1,0 +1,252 @@
+<section class="sheet" id="admin-delivery-settings">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Catalogue · Delivery Settings</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Catalogue</span></div>
+  <h2 class="section-title">Delivery Settings</h2>
+  <p class="lead">One control panel that decides which dates a customer can pick to start milk delivery — the nightly order cut-off, the morning delivery window, how far ahead an order may be booked, which weekdays you run, and any holidays or maintenance days you close.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">What this screen controls</div>
+      <p>Every rule you set here becomes the <b>single source of truth</b> for the start-date picker used everywhere on the storefront — the checkout, the "choose your first delivery day" calendar, and the subscription "change start date" panel. A brand-new employee can think of it as: <i>"the settings that tell customers which mornings we can deliver."</i> There is no code change and no redeploy — you edit the form, click <b>Save settings</b>, and the storefront honours the new rules immediately, platform-wide.</p>
+    </div>
+  </div>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Where the data lives</div>
+      <p>All values are stored in one database row — the <b>DeliveryConfig</b> singleton (its id is literally <code>"singleton"</code>, so there is exactly one shared config for the whole business). The row is created automatically with sensible defaults the first time the page is opened. The screen reads it with <span class="navpath">GET /api/admin/delivery/config</span> and writes it with <span class="navpath">PATCH /api/admin/delivery/config</span>. Every save is diffed old&nbsp;→&nbsp;new and written to the audit log.</p>
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 1 : DELIVERY SETTINGS FORM -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Delivery Settings — configuration form</p><p class="sm">A single form with the ten scheduling rules that drive the storefront date picker.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Set and change the order cut-off time, delivery window, minimum/maximum advance days, the weekdays you deliver, the weekend switch, and the holiday &amp; blackout date lists — then push them live everywhere in one click.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> · <span class="pill role">Operations</span> (view &amp; edit) — every other role is refused (403)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Catalogue → Delivery Settings</span> (<span class="navpath">/admin/delivery-settings.html</span>)</span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Delivery settings</b> · green "Live" badge · live-status banner (● Live — delivery configuration from the DOODLY database · Saves apply platform-wide)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Intro line</b><span>"These rules drive the start-date picker everywhere on the storefront. Changes apply immediately."</span></div>
+          <div class="wf-cell"><b>Form grid (two columns)</b><span>Order cut-off time · Delivery window (start – end) · Minimum advance (days) · Maximum advance (days).</span></div>
+          <div class="wf-cell"><b>Available delivery days</b><span>Seven checkboxes — Sun Mon Tue Wed Thu Fri Sat.</span></div>
+          <div class="wf-cell"><b>Weekend delivery toggle</b><span>Single checkbox — "Weekend delivery (Sat &amp; Sun)".</span></div>
+          <div class="wf-cell"><b>Date lists (two columns)</b><span>Holidays textarea · Blackout dates (maintenance) textarea — comma-separated ISO dates.</span></div>
+          <div class="wf-cell"><b>Action row</b><span>Save settings · Reset to default · "✓ Saved — changes are live" confirmation.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Delivery Settings screen</div></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Live vs local</div>
+          <p>On open, the page fetches the config from the database and shows a green banner: <i>"● Live — delivery configuration from the DOODLY database (&lt;api-base&gt;). Saves apply platform-wide."</i> If the backend cannot be reached it shows a red banner <i>"⚠ Backend offline at &lt;api-base&gt; — settings save locally only."</i> and any edits stay in this browser only until you re-save with the backend up. This manual documents the <b>live</b> (database-backed) behaviour.</p>
+        </div>
+      </div>
+
+      <!-- ---------- FIELD TABLE ---------- -->
+      <h4>Every field on the form</h4>
+      <p>These are the exact ten settings the screen edits. Field IDs are shown in <code>code</code> so support staff can match them to what they see on screen. All numeric limits below are enforced again on the server, so a bad value can never reach the database.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Order cut-off time</b><br><code>#ds-cutoff</code></td>
+            <td>The nightly deadline. Orders placed before it qualify for <b>next-morning</b> delivery; after it, the earliest start shifts one more day.</td>
+            <td>A time of day (HH:MM, 24-hour time picker)</td>
+            <td class="t-req">Yes</td>
+            <td>Split into <code>cutoffHour</code> (0–23) and <code>cutoffMinute</code> (0–59); server clamps to those ranges. Hint reads "currently 8:00 PM".</td>
+            <td>20:00 (8:00 PM)</td>
+          </tr>
+          <tr>
+            <td><b>Delivery window — start</b><br><code>#ds-slotStart</code></td>
+            <td>Left side of the morning window text shown to customers.</td>
+            <td>Free text label</td>
+            <td class="t-req">Yes</td>
+            <td><code>slotStart</code> — trimmed, max 40 chars.</td>
+            <td>5:00 AM</td>
+          </tr>
+          <tr>
+            <td><b>Delivery window — end</b><br><code>#ds-slotEnd</code></td>
+            <td>Right side of the window; also drives the "Before &lt;end&gt;" promise label on the storefront.</td>
+            <td>Free text label</td>
+            <td class="t-req">Yes</td>
+            <td><code>slotEnd</code> — trimmed, max 40 chars. The storefront shows the slot as "Before &lt;slotEnd&gt;".</td>
+            <td>7:00 AM</td>
+          </tr>
+          <tr>
+            <td><b>Minimum advance (days)</b><br><code>#ds-min</code></td>
+            <td>The earliest a customer may start — today plus this many days (then the cut-off is applied on top).</td>
+            <td>Whole number, 1 or more</td>
+            <td class="t-req">Yes</td>
+            <td><code>minAdvanceDays</code> — coerced to at least 1 in the form; server clamps 1–60. Must be ≤ maximum advance (see caution below).</td>
+            <td>1</td>
+          </tr>
+          <tr>
+            <td><b>Maximum advance (days)</b><br><code>#ds-max</code></td>
+            <td>The furthest ahead a start date can be booked — today plus this many days.</td>
+            <td>Whole number, 1 or more</td>
+            <td class="t-req">Yes</td>
+            <td><code>maxAdvanceDays</code> — coerced to at least 1 (default 30); server clamps 1–365. Must be ≥ minimum advance.</td>
+            <td>30</td>
+          </tr>
+          <tr>
+            <td><b>Available delivery days</b><br><code>[data-day="0..6"]</code></td>
+            <td>Which weekdays you run at all. Tick the days you deliver.</td>
+            <td>Any of seven checkboxes — Sun(0) … Sat(6)</td>
+            <td class="t-opt">Opt.</td>
+            <td><code>availableDays</code> — array of 0–6. If <b>none</b> are ticked the form falls back to all seven; server de-duplicates and sorts.</td>
+            <td>Mon–Sat (1–6)</td>
+          </tr>
+          <tr>
+            <td><b>Weekend delivery</b><br><code>#ds-weekend</code></td>
+            <td>A master switch for Saturday &amp; Sunday. When off, both weekend days are dropped even if their day boxes are ticked.</td>
+            <td>On / Off checkbox</td>
+            <td class="t-opt">Opt.</td>
+            <td><code>weekendDelivery</code> (boolean). Off removes day 0 (Sun) and day 6 (Sat) from the effective delivery days.</td>
+            <td>On</td>
+          </tr>
+          <tr>
+            <td><b>Holidays</b><br><code>#ds-holidays</code></td>
+            <td>Fixed dates you will not deliver (public holidays). Blocked in the picker with reason "Holiday — no delivery".</td>
+            <td>Comma- or space-separated ISO dates</td>
+            <td class="t-opt">Opt.</td>
+            <td><code>holidays</code> — server keeps only <code>YYYY-MM-DD</code> matches, de-duplicated, max 200 entries. Hint: "Comma-separated ISO dates (YYYY-MM-DD)."</td>
+            <td>2026-08-15, 2026-10-02</td>
+          </tr>
+          <tr>
+            <td><b>Blackout dates (maintenance)</b><br><code>#ds-blackout</code></td>
+            <td>One-off no-delivery days for maintenance or operations closure. Hint: "No delivery on these dates."</td>
+            <td>Comma- or space-separated ISO dates</td>
+            <td class="t-opt">Opt.</td>
+            <td><code>blackoutDates</code> — same ISO validation and 200-entry cap as holidays.</td>
+            <td>2026-07-20</td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Minimum must never exceed maximum</div>
+          <p>If you set <b>Minimum advance</b> greater than <b>Maximum advance</b>, the server rejects the save with a 400 error: <i>"Minimum advance days cannot exceed maximum advance days."</i> Keep minimum ≤ maximum (for example min&nbsp;1, max&nbsp;30).</p>
+        </div>
+      </div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Holidays vs Blackout dates</div>
+          <p>Both lists block delivery on the dates you list. They exist as two boxes only to keep your records tidy — <b>Holidays</b> for planned public holidays and <b>Blackout dates</b> for maintenance / operational closures. On the storefront they simply show as unavailable days (reason "holiday" vs "blackout"). A date in either list is unbookable.</p>
+        </div>
+      </div>
+
+      <!-- ---------- BUTTON TABLE ---------- -->
+      <h4>Buttons &amp; actions</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Save settings</b><br><code>#ds-save</code></td>
+            <td>Reads every field, writes the settings so this browser's storefront picker updates instantly, and pushes the ten fields to the database. On success a toast reads <i>"Delivery settings saved to the database — live platform-wide"</i>; the inline "✓ Saved — changes are live" note flashes for ~2.6 seconds.</td>
+            <td><span class="navpath">PATCH /api/admin/delivery/config</span> with the scheduling fields. Server validates &amp; clamps each value, checks min ≤ max, writes the DeliveryConfig row, stamps <code>updatedBy</code> = your role, and records an audit entry (<code>delivery.config.update</code>) listing exactly which fields changed.</td>
+            <td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Operations</span> (needs <code>deliverySettings:edit</code>)</td>
+          </tr>
+          <tr>
+            <td><b>Reset to default</b><br><code>#ds-reset</code></td>
+            <td>Clears the local override and re-renders the form with the built-in defaults (cut-off 8:00 PM, all seven days, weekend on, min 1 / max 30, empty holiday &amp; blackout lists), then saves those defaults to the database the same way a Save does.</td>
+            <td>Removes the local <code>doodly-delivery</code> override, then the same <span class="navpath">PATCH /api/admin/delivery/config</span> path runs with the default values — audited like any other change.</td>
+            <td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Operations</span></td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">If your role cannot edit</div>
+          <p>If someone without edit rights clicks Save, the change is kept in their own browser but the database rejects the write (403). They see the toast <i>"Saved locally — your role can't edit settings (403)"</i> and nothing changes for other users. Only <b>Super Admin</b>, <b>Admin</b>, and <b>Operations</b> can make settings stick platform-wide.</p>
+        </div>
+      </div>
+
+      <!-- ---------- WORKFLOW ---------- -->
+      <h4>How a change goes live</h4>
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — saving a delivery-settings change</div>
+        <div class="wf-flow">
+          <span>Open page → GET config from database</span>
+          <span>Form renders with current values</span>
+          <span>Edit fields (cut-off, days, holidays…)</span>
+          <span>Click Save settings</span>
+          <span>Local storefront picker updates instantly</span>
+          <span>PATCH config to database (validated + audited)</span>
+          <span>Storefront everywhere honours the new rules</span>
+        </div>
+      </div><div class="wire-cap">Figure — the load → edit → save → live path for Delivery Settings</div></div>
+
+      <!-- ---------- HOW SETTINGS DRIVE THE PICKER ---------- -->
+      <h4>How each setting shapes the customer's date picker</h4>
+      <p>Understanding this helps you predict exactly what a customer will see after you save. The storefront scheduling engine applies your rules in this order when deciding whether a date can be picked:</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Setting</th><th>Effect on the picker</th><th>Blocked-date reason shown</th></tr></thead>
+        <tbody>
+          <tr><td><b>Order cut-off time</b></td><td>Before the cut-off, the earliest start is today + minimum advance. After the cut-off, tomorrow is closed and the earliest start moves one more day.</td><td>"Past today's 8 PM cut-off" / "Too soon"</td></tr>
+          <tr><td><b>Minimum advance</b></td><td>Sets the earliest bookable date (today + this many days).</td><td>"Too soon"</td></tr>
+          <tr><td><b>Maximum advance</b></td><td>Sets the last bookable date (today + this many days). Anything beyond is greyed out.</td><td>"Too far ahead to book"</td></tr>
+          <tr><td><b>Available delivery days + Weekend delivery</b></td><td>A date on a day you don't run (or a weekend when the weekend switch is off) is not selectable.</td><td>"We don't deliver on this day"</td></tr>
+          <tr><td><b>Holidays</b></td><td>Listed dates are blocked out.</td><td>"Holiday — no delivery"</td></tr>
+          <tr><td><b>Blackout dates</b></td><td>Listed dates are blocked out.</td><td>"Delivery unavailable on this date"</td></tr>
+          <tr><td><b>Delivery window (start/end)</b></td><td>Shown on each available date as the promise label — "Before &lt;end&gt;".</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">This screen edits scheduling only</div>
+          <p>The DeliveryConfig row also stores a few operational values — delivery charge, free-delivery threshold, auto-assignment on/off, per-executive and per-trip bottle capacity, and the late-delivery SLA time and grace. Those are <b>not</b> exposed on this form; they are managed from the <span class="navpath">Operations → Delivery Mgmt</span>, <span class="navpath">Auto Assignment</span> and <span class="navpath">Late Deliveries</span> screens. The Delivery Settings page saves only the ten scheduling fields listed above and leaves the operational fields untouched.</p>
+        </div>
+      </div>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">Best Practice</div>
+          <p>Make scheduling changes <b>ahead of time</b>, especially the cut-off and holiday lists, so customers who are mid-checkout aren't surprised. After every save, confirm you got the green <i>"…live platform-wide"</i> toast, then open the storefront date picker in another tab and check the affected date shows the state you expect (available, or blocked with the right reason). Add holidays in bulk at the start of each month rather than one at a time.</p>
+        </div>
+      </div>
+
+      <!-- ---------- TROUBLESHOOTING ---------- -->
+      <h4>Troubleshooting</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>Toast says "Saved locally — your role can't edit settings (403)".</td><td>The signed-in role lacks <code>deliverySettings:edit</code>.</td><td>Have a Super Admin, Admin, or Operations user make the change.</td></tr>
+          <tr><td>Save is rejected with a "minimum … maximum" error.</td><td>Minimum advance was set higher than maximum advance.</td><td>Set Minimum advance ≤ Maximum advance (e.g. 1 and 30).</td></tr>
+          <tr><td>Red banner "⚠ Backend offline … settings save locally only."</td><td>The backend/API is unreachable, so edits stay in this browser only.</td><td>Restore connectivity, reload the page, and Save again to push to the database.</td></tr>
+          <tr><td>A date customers expect to see is missing from the picker.</td><td>That day is unticked, weekend delivery is off, or the date is in the Holidays / Blackout list.</td><td>Tick the weekday, turn the weekend switch on, or remove the date from the holiday/blackout box, then Save.</td></tr>
+          <tr><td>Other devices still show the old rules.</td><td>They read the config from the database on load; the save may not have reached the database.</td><td>Confirm the green "live platform-wide" toast fired, then refresh the storefront on the other device.</td></tr>
+          <tr><td>Holiday/blackout date I typed didn't take effect.</td><td>It wasn't in <code>YYYY-MM-DD</code> form, so the server dropped it.</td><td>Re-enter using ISO dates, e.g. 2026-08-15, comma-separated.</td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- ---------- FAQ ---------- -->
+      <h4>Frequently asked questions</h4>
+      <h4>Q: Does changing the cut-off time reschedule customers who already subscribed?</h4>
+      <p>A: No. The cut-off and advance-day rules only decide the earliest <b>start date</b> the picker offers on new orders and start-date changes. Active subscriptions already have their dates and are not moved.</p>
+      <h4>Q: What happens if I un-tick every delivery day?</h4>
+      <p>A: The form never lets the list be empty — if no day is ticked it falls back to all seven days. An empty set would make every date unbookable, so it is prevented on purpose.</p>
+      <h4>Q: The weekday boxes have Saturday and Sunday ticked, but weekend delivery is off. Which wins?</h4>
+      <p>A: The weekend switch wins. "Weekend delivery" off removes Saturday and Sunday from the effective days even when their individual boxes are checked — treat it as a quick override.</p>
+      <h4>Q: Is every change tracked?</h4>
+      <p>A: Yes. Each Save writes an audit entry (<code>delivery.config.update</code>) that names the exact fields that changed and records who changed them (your role), so the history is fully accountable.</p>
+
+    </div>
+  </div>
+</section>

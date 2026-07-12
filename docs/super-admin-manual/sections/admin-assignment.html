@@ -1,0 +1,308 @@
+<section class="sheet" id="admin-assignment">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Operations · Auto Assignment</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Operations</span></div>
+  <h2 class="section-title">Auto Assignment</h2>
+  <p class="lead">The morning control room that spreads every confirmed delivery across your delivery executives fairly and within their carrying capacity — automatically packing trips, queueing the overflow, re-filling executives the moment they return to the dairy, and letting you override any assignment by hand.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">What "Auto Assignment" does at DOODLY</div>
+      <p>DOODLY delivers fresh A2 buffalo milk in glass bottles every morning. Each executive can physically carry only a limited number of bottles per trip — the system's hard cap is <b>45 bottles</b> per trip (counted by <b>bottles</b>, not by number of customers). Auto Assignment takes today's confirmed deliveries for a time slot and distributes them across the executives who are free right now, keeping every trip at or under 45 bottles, grouping nearby stops together, and ordering each executive's route for the shortest drive. Anything that doesn't fit goes into a <b>Pending Assignment Queue</b>; when an executive finishes and returns to the dairy, the next batch is pulled from that queue for them. You can always step in and reassign, unassign, lock or move a delivery by hand.</p>
+    </div>
+  </div>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Live engine vs on-screen planner</div>
+      <p>This screen has two layers working together. The <b>on-screen board</b> (the executive cards, queue and activity feed) is a fast visual planner that mirrors the assignment logic. The <b>⚡ Auto-assign button</b> is wired to the real engine: it calls <span class="navpath">POST /api/assignments/auto</span> against the DOODLY database, then refreshes the KPI tiles from <span class="navpath">GET /api/assignments/dashboard</span>. When the backend is reachable you see a green banner — <i>"● Live — auto-assignment engine on the DOODLY database …: N order(s), N executive(s) on trip, N queued"</i>. In production the board starts <b>empty</b> (a clean professional state) and fills only from real assignments; there are no fake executives or deliveries. <b>This manual documents the live behaviour.</b></p>
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 1 : THE ASSIGNMENT BOARD -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Auto Assignment board</p><p class="sm">One page: a control toolbar, live KPI tiles, a card per executive, the pending queue and an activity feed.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Run and monitor the whole morning distribution — pick a slot, press Auto-assign, watch each executive fill toward capacity, clear the pending queue, advance executives through their trip, and correct anything by hand.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> · <span class="pill role">Operations</span> — viewing needs <code>deliveries → view</code>; running Auto-assign, changing strategy and manual overrides need <code>deliveries → assign/edit</code>. Customers and Delivery Executives never reach any <span class="navpath">/admin</span> page.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Auto Assignment</span> (<span class="navpath">/admin/assignment.html</span>)</span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Auto Delivery Assignment</b> · live-status banner (● Live — engine on the DOODLY database)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Control toolbar</b><span>Slot picker · Strategy picker · Search · ⚡ Auto-assign · Generate deliveries ▾ · Run tests · Auto-refresh · Reset.</span></div>
+          <div class="wf-cell"><b>KPI strip</b><span>Total orders · Total bottles · Assigned · Pending queue · Available execs · On route · Returned · Completed (plus live: Offline execs · Assigned orders · Unassigned orders · Completion %).</span></div>
+          <div class="wf-cell"><b>Executive cards (left)</b><span>One card per executive: name, zone · home area, status badge, capacity bar (bottles / 45 · %), route summary, delivery chips, status-advance buttons.</span></div>
+          <div class="wf-cell"><b>Pending Assignment Queue (right)</b><span>Overflow deliveries awaiting capacity, as chips; "Assign queue to available execs" button.</span></div>
+          <div class="wf-cell"><b>Activity &amp; notifications (right)</b><span>The latest 8 log lines: auto-assign runs, status changes, queue pulls, reassigns, locks, notifications.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Auto Assignment board</div></div>
+
+      <!-- ---------- CONTROL TOOLBAR ---------- -->
+      <h4>The control toolbar</h4>
+      <p>The strip across the top drives everything below it. Every control re-renders the board immediately, and the whole state is saved as you work.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Control</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Slot</b> picker</td><td>Choose which delivery time slot you are assigning</td><td>5:30 AM · 7:00 AM · 11:30 AM · 5:00 PM</td><td class="t-req">Yes</td><td>Only deliveries in the chosen slot are assigned; the choice is stored as the working slot. The live engine runs the day's morning slot (<code>06:00-08:00</code>) against the DB.</td><td>7:00 AM</td></tr>
+          <tr><td><b>Strategy</b> picker</td><td>How work is distributed (see Screen 2)</td><td>Equal distribution (Startup) · Capacity based · Area based (future) · Manual</td><td class="t-opt">Opt.</td><td>Injected once the backend loads. Saving posts to <span class="navpath">POST /api/assignments/strategy</span> and is audited (<code>assignment.strategy.update</code>).</td><td>Equal distribution (Startup)</td></tr>
+          <tr><td><b>Search</b> box</td><td>Filter the chips on screen</td><td>Free text — matches delivery code, customer, area or executive name</td><td class="t-opt">Opt.</td><td>Client-side filter of the visible chips (queue + each executive's stops); keeps caret position while typing.</td><td>Benz Circle</td></tr>
+          <tr><td><b>⚡ Auto-assign</b> button</td><td>Run the distribution engine for the current slot</td><td>Button</td><td class="t-req">Yes</td><td>Live: <span class="navpath">POST /api/assignments/auto</span> <code>{date, slot}</code>, then refreshes KPIs. Needs <code>deliveries → assign/edit</code> — a role without it gets a <b>403</b> ("Your role can't run auto-assignment").</td><td>—</td></tr>
+          <tr><td><b>Generate deliveries ▾</b></td><td>Create sample deliveries for the current slot (demo / load-test only)</td><td>Dropdown: 25 · 100 · 500 · 1000 deliveries</td><td class="t-opt">Opt.</td><td>Appends N synthetic confirmed deliveries to the board so you can rehearse the flow. It does <b>not</b> create real orders in the database.</td><td>100 deliveries</td></tr>
+          <tr><td><b>Run tests</b></td><td>Run the built-in assignment test harness</td><td>Button</td><td class="t-opt">Opt.</td><td>Executes 12 self-tests on synthetic data (never touches live data) and shows "N/N tests passed · 1k in Nms"; hover the result for the per-test list.</td><td>12/12 tests passed</td></tr>
+          <tr><td><b>Auto-refresh</b></td><td>Reload the board every few seconds</td><td>Checkbox (on / off)</td><td class="t-opt">Opt.</td><td>When on, reloads the board every 8 seconds so a shared screen stays current. The live overlay turns this off once by default to avoid fighting the backend refresh.</td><td>☑</td></tr>
+          <tr><td><b>Reset</b></td><td>Clear the board back to empty</td><td>Button (confirms first)</td><td class="t-opt">Opt.</td><td>Asks "Reset all executives, deliveries and the queue?" then rebuilds an empty state. Affects the on-screen planner state only.</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Warning — "Generate deliveries" and "Reset" are planner tools, not order tools</div>
+          <p><b>Generate deliveries</b> creates practice deliveries on the board for rehearsing or load-testing the layout; it never places real customer orders. <b>Reset</b> wipes the on-screen board. Neither touches real orders, customers or money. The button that actually moves the database is <b>⚡ Auto-assign</b>, which distributes the <i>real</i> confirmed deliveries for the day's slot.</p>
+        </div>
+      </div>
+
+      <!-- ---------- KPI STRIP ---------- -->
+      <h4>The KPI strip</h4>
+      <p>The tiles summarise the selected slot at a glance. The first eight are computed on the board; the live overlay adds four more from the backend dashboard once it connects.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Tile</th><th>What it shows</th><th>How it is derived</th><th>Colour</th></tr></thead>
+        <tbody>
+          <tr><td><b>Total orders</b></td><td>Deliveries in the selected slot</td><td>Count of the slot's deliveries</td><td>Neutral</td></tr>
+          <tr><td><b>Total bottles</b></td><td>Bottles the slot must carry</td><td>Sum of bottles across the slot's deliveries</td><td>Neutral</td></tr>
+          <tr><td><b>Assigned</b></td><td>Bottles already placed on a trip</td><td>Sum of bottles on assigned deliveries</td><td>Green</td></tr>
+          <tr><td><b>Pending queue</b></td><td>Bottles waiting for capacity</td><td>Sum of bottles in the pending queue</td><td>Amber when &gt; 0</td></tr>
+          <tr><td><b>Available execs</b></td><td>Executives who can take work now</td><td>Count in status <i>Available</i> or <i>Returned To Dairy</i></td><td>Neutral</td></tr>
+          <tr><td><b>On route</b></td><td>Executives currently out on a trip</td><td>Count in <i>Assigned</i> / <i>Accepted</i> / <i>Out For Delivery</i></td><td>Blue</td></tr>
+          <tr><td><b>Returned</b></td><td>Executives back at the dairy</td><td>Count in <i>Returned To Dairy</i></td><td>Neutral</td></tr>
+          <tr><td><b>Completed</b></td><td>Deliveries marked delivered</td><td>Count of the slot's delivered deliveries</td><td>Green</td></tr>
+          <tr><td><b>Offline execs</b> <span class="t-opt">(live)</span></td><td>Executives off shift</td><td>Backend count of <code>OFFLINE</code> + <code>BREAK</code></td><td>Neutral</td></tr>
+          <tr><td><b>Assigned orders</b> <span class="t-opt">(live)</span></td><td>Order-count view of what's placed</td><td>Backend <code>assignedOrders</code> (Startup-Mode KPI)</td><td>Green</td></tr>
+          <tr><td><b>Unassigned orders</b> <span class="t-opt">(live)</span></td><td>Orders still without a trip</td><td>Backend <code>unassignedOrders</code></td><td>Amber</td></tr>
+          <tr><td><b>Completion %</b> <span class="t-opt">(live)</span></td><td>Share of orders assigned</td><td>Backend <code>completionPct</code> = assigned ÷ orders</td><td>Blue</td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- ---------- EXECUTIVE CARD ---------- -->
+      <h4>The executive card</h4>
+      <p>Each delivery executive gets a card on the left. It shows who they are, how full their trip is, their route, the exact deliveries on board, and the buttons to move them through the trip.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Part of the card</th><th>What it shows</th></tr></thead>
+        <tbody>
+          <tr><td><b>Name &amp; locality</b></td><td>The executive's name, with their zone and home area beneath (e.g. "Central · Benz Circle").</td></tr>
+          <tr><td><b>Status badge</b></td><td>Colour-coded workflow state: Available (green) · Assigned (amber) · Accepted (blue) · Out For Delivery (blue) · Completed (green) · Returned To Dairy (green) · Offline / Break (grey).</td></tr>
+          <tr><td><b>Capacity bar</b></td><td>A fill bar reading "<b>bottles / 45 · %</b>". It turns to a "high" tone at 80%+ and "full" at 100% so you can see who still has room.</td></tr>
+          <tr><td><b>Route summary</b></td><td>"N stops · ~N km route" once a trip is planned (nearest-neighbour ordering), or "No active trip" when the card is empty.</td></tr>
+          <tr><td><b>Delivery chips</b></td><td>The deliveries on this trip, as draggable chips (bottle count · customer · area). This region is also a drop zone — drag a chip onto it to move a delivery here.</td></tr>
+          <tr><td><b>Status-advance buttons</b></td><td>Only the valid next step(s) for the current status (see Screen 3). Plus a <b>Break</b> button when Available, or <b>Go available</b> when Offline/Break.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The delivery chip</h4>
+      <p>Every delivery — on a card or in the queue — is a chip. It carries three quick controls.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Chip element</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Bottle count · customer · area</b></td><td>Reads the delivery at a glance; hovering shows "customer · area".</td><td>Display only</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Operations</span></td></tr>
+          <tr><td><b>Lock / unlock</b> (🔒 / 🔓)</td><td>Pins the delivery to its current executive so a later auto-assign can't move it.</td><td>Override <code>{action:"lock", locked}</code> → sets <code>DeliveryAssignment.locked</code>; logged as LOCK / UNLOCK</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Operations</span></td></tr>
+          <tr><td><b>Unassign</b> (✕)</td><td>Removes the delivery from the executive and sends it back to the pending queue.</td><td>Override <code>{action:"unassign"}</code> → deletes the assignment, frees the executive's bottles, re-queues it (reason <code>manual_unassign</code>); refused if locked</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Operations</span></td></tr>
+          <tr><td><b>Drag &amp; drop</b></td><td>Drag a chip onto another executive's card to move it there, or onto the queue panel to unassign it.</td><td>Override <code>{action:"reassign", toDriverId}</code> — capacity-checked, refused if locked (unless forced) or over capacity</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Operations</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- ---------- QUEUE PANEL ---------- -->
+      <h4>The Pending Assignment Queue</h4>
+      <p>The right-hand panel holds deliveries that couldn't be placed on any trip yet — usually because every free executive was already full. The badge shows the total bottles waiting (amber when there is anything in the queue, grey when empty).</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Element</th><th>What it does</th><th>Backend process</th></tr></thead>
+        <tbody>
+          <tr><td><b>Queue chips</b></td><td>The waiting deliveries, as draggable chips. Drag one onto an executive card to place it by hand.</td><td>Reads <code>AssignmentQueue</code> rows in status <code>PENDING</code>, ordered by priority then age</td></tr>
+          <tr><td><b>Empty state</b></td><td>"Queue empty — everything assigned ✓" when nothing is waiting.</td><td>—</td></tr>
+          <tr><td><b>Assign queue to available execs</b></td><td>Runs auto-assignment again so any freed capacity absorbs the queue (only shown while the queue has items).</td><td>Re-runs the assignment pass for the slot</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Why a delivery lands in the queue</div>
+          <p>The backend tags each queued delivery with a <b>reason</b>: <code>capacity_full</code> (every free executive already hit 45), <code>no_executive</code> (no one is available at all), <code>oversize</code> (a single delivery bigger than one trip's capacity — it can never fit), <code>locked_capacity</code> (locked to an executive who has no room), or <code>manual_unassign</code> (you sent it back by hand). If more than <b>50 bottles</b> pile up in the queue for a slot, admins and operations get an in-app alert — "Pending queue growing".</p>
+        </div>
+      </div>
+
+      <!-- ---------- ACTIVITY FEED ---------- -->
+      <h4>Activity &amp; notifications</h4>
+      <p>The bottom-right panel is a running feed of the latest eight events — auto-assign runs, status changes, queue pulls, reassigns, locks, and the notifications sent to executives and admins. It is your quick audit of what the board just did. On the live database, every assignment action is also written to the permanent <code>AssignmentLog</code> (actions <code>AUTO_ASSIGN</code>, <code>QUEUE</code>, <code>DEQUEUE</code>, <code>MANUAL_ASSIGN</code>, <code>REASSIGN</code>, <code>UNASSIGN</code>, <code>RETURN_TRIP</code>, <code>LOCK</code>, <code>UNLOCK</code>) with the actor's role.</p>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 2 : ASSIGNMENT STRATEGY -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Assignment strategy (Startup Mode switch)</p><p class="sm">Choose how the engine distributes work — no deploy needed.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Switch the distribution logic to match how the business is running today — spread work evenly across the team, pack the fullest trips, use the enterprise area/route planner, or turn auto-assignment off entirely and assign by hand.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> · <span class="pill role">Operations</span> — reading the strategy needs <code>deliveries → view</code>; changing it needs <code>deliveries → assign/edit</code> and is audited.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Auto Assignment</span> → <b>Strategy</b> picker (in the toolbar)</span>
+    </div>
+    <div class="spec-body">
+
+      <p>The strategy is stored in <code>AppSetting</code> under the key <code>assignment.strategy</code>, so changing it takes effect immediately without a code release. The default is <b>EQUAL</b> — "Startup Mode".</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Strategy</th><th>Label on screen</th><th>What the engine does</th><th>When to use it</th></tr></thead>
+        <tbody>
+          <tr><td><b>EQUAL</b> <span class="t-opt">(default)</span></td><td>Equal distribution (Startup)</td><td>Splits today's orders as evenly as possible across all available executives (their order counts stay within one of each other). Areas and routes are ignored, but the 45-bottle capacity is still enforced.</td><td>Small team, everyone should carry a fair share.</td></tr>
+          <tr><td><b>CAPACITY</b></td><td>Capacity based</td><td>Packs the fullest trips first — fills one executive toward 45 before opening the next, without locality bias — so you use the fewest executives.</td><td>Fewer drivers on shift; minimise the number of trips.</td></tr>
+          <tr><td><b>AREA</b></td><td>Area based (future)</td><td>The full enterprise planner: groups deliveries by locality/zone, keeps nearby stops on the same trip, and optimises each route (nearest-neighbour). Fully built and ready.</td><td>Dense delivery map where drive time dominates.</td></tr>
+          <tr><td><b>MANUAL</b></td><td>Manual</td><td>Auto-assignment becomes a no-op — pressing ⚡ Auto-assign does nothing and returns "Manual mode — auto-assignment is switched off". You assign every delivery by hand from the board.</td><td>Special events, or when you want full manual control.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>strategy</td><td>The distribution mode to save</td><td>EQUAL · CAPACITY · AREA · MANUAL</td><td class="t-req">Yes</td><td>Enum-validated. <span class="navpath">POST /api/assignments/strategy</span> upserts <code>AppSetting["assignment.strategy"]</code> and writes an audit record <code>assignment.strategy.update</code> ("PREV → NEXT"). A role without manage rights gets a <b>403</b>.</td><td>CAPACITY</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">Best Practice — start on EQUAL, move to AREA as you scale</div>
+          <p>While the team is small and every executive should pull the same weight, keep <b>Equal distribution (Startup)</b>. As delivery density grows and drive time starts to hurt, switch to <b>Area based</b> so nearby stops ride together. Only use <b>Manual</b> for one-off situations — and remember to switch back, or the next morning's ⚡ Auto-assign will silently do nothing.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 3 : EXECUTIVE STATUS & RETURN TRIP -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Executive status &amp; return-trip workflow</p><p class="sm">Advance an executive through the trip; returning to the dairy auto-pulls the next batch.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Track where each executive is in their trip and keep the wheels turning — when an executive returns, the queue automatically re-fills them so no capacity sits idle.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> · <span class="pill role">Operations</span> — status buttons need <code>deliveries → assign/edit</code>. In production, executives advance their own status from the delivery app; this board lets operations do it on their behalf.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Auto Assignment</span> → executive card buttons</span>
+    </div>
+    <div class="spec-body">
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — executive trip status</div>
+        <div class="wf-flow"><span>Available</span><span>Assigned</span><span>Accepted</span><span>Out For Delivery</span><span>Completed</span><span>Returned To Dairy</span><span>Available / next trip</span></div>
+      </div><div class="wire-cap">Figure — the status an executive moves through on one trip</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Status</th><th>Meaning</th><th>Button offered</th><th>What happens to the deliveries</th></tr></thead>
+        <tbody>
+          <tr><td><b>Available</b></td><td>Free, at the dairy, ready for a trip.</td><td>Break (or receives work via Auto-assign)</td><td>Can receive new deliveries.</td></tr>
+          <tr><td><b>Assigned</b></td><td>A trip has been placed on them.</td><td>Accepted →</td><td>Deliveries are marked assigned.</td></tr>
+          <tr><td><b>Accepted</b></td><td>The executive has accepted the trip.</td><td>Out For Delivery →</td><td>—</td></tr>
+          <tr><td><b>Out For Delivery</b></td><td>On the road delivering.</td><td>Completed →</td><td>Every delivery on the trip is set to "Out For Delivery".</td></tr>
+          <tr><td><b>Completed</b></td><td>All stops finished.</td><td>Returned To Dairy →</td><td>Every delivery on the trip is marked "Delivered".</td></tr>
+          <tr><td><b>Returned To Dairy</b></td><td>Back at base after the trip.</td><td>(auto) receives the next queue batch</td><td>The trip is archived to history; the executive is freed; the queue is pulled for the next trip.</td></tr>
+          <tr><td><b>Offline / Break</b></td><td>Off shift or on a break.</td><td>Go available</td><td>Cannot receive work while in this state.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — return-trip continuation</div>
+        <div class="wf-flow"><span>Executive taps "Returned To Dairy"</span><span>Current trip archived (TripHistory)</span><span>Executive freed — bottles reset to 0</span><span>Queue read (priority, then oldest first)</span><span>Nearest / same-zone deliveries pulled up to 45 bottles</span><span>New trip created &amp; executive notified</span></div>
+      </div><div class="wire-cap">Figure — how a returning executive is automatically re-filled from the queue</div></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Nobody sits idle</div>
+          <p>The moment an executive returns, the engine (<span class="navpath">POST /api/assignments/return</span>) pulls the highest-priority waiting deliveries — preferring the same or nearest zone — and starts a fresh trip up to the 45-bottle cap. The executive gets a "New trip after returning" notification. If the queue is empty they simply go back to <b>Available</b>. This is what lets a handful of executives clear a large morning in waves.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= AUTO-ASSIGN ALGORITHM -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">How ⚡ Auto-assign decides</p><p class="sm">The packing logic behind one button press.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Understand exactly what happens when you press Auto-assign, so you can trust the result and know why a delivery went where it did.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations</span> (reference)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Auto Assignment</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — auto-assignment pass (AREA/enterprise mode)</div>
+        <div class="wf-flow"><span>Take confirmed, unassigned, unlocked deliveries for the slot</span><span>Take executives who can receive (Available / Returned)</span><span>Group by zone (busiest zone first) &amp; order nearby stops together</span><span>First-fit pack: fill one executive to 45 before opening the next</span><span>Anything that won't fit → Pending Queue</span><span>Optimise each route &amp; notify each executive</span></div>
+      </div><div class="wire-cap">Figure — the enterprise (AREA) packing pass; EQUAL balances order counts, CAPACITY packs without locality</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Rule</th><th>Guarantee</th></tr></thead>
+        <tbody>
+          <tr><td><b>Capacity is never exceeded</b></td><td>No executive is ever given more than 45 bottles on a trip (the per-driver cap is configurable via <code>DeliveryCapacity.maxBottles</code>, default 45).</td></tr>
+          <tr><td><b>No double-assignment</b></td><td>Each delivery appears on exactly one trip or in the queue — never both. The database enforces this with a unique constraint on the assignment, so even two admins clicking at once cannot double-book.</td></tr>
+          <tr><td><b>Nothing is dropped</b></td><td>Overflow always goes to the queue with a reason; it is not lost.</td></tr>
+          <tr><td><b>Locked stays put</b></td><td>A locked delivery is skipped by auto-assign — it keeps its executive.</td></tr>
+          <tr><td><b>Idempotent</b></td><td>Pressing Auto-assign twice does not duplicate work — already-assigned deliveries are ignored.</td></tr>
+          <tr><td><b>Race-safe</b></td><td>The live engine runs each assignment in a serializable database transaction with automatic retry, so concurrent runs converge safely.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Who gets notified</div>
+          <p>After a run, each executive who received a trip is notified ("New trip assigned · N bottles · N stops"). If <b>no executives</b> are available, admins/operations are alerted and everything is queued. If the queue passes <b>50 bottles</b>, admins/operations get a "Pending queue growing" alert so someone can bring more executives on shift.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= BEST PRACTICE / TROUBLESHOOTING / FAQ -->
+  <div class="call best">
+    <span class="ci">✅</span>
+    <div class="cbody">
+      <div class="ctitle">Best Practice — the morning routine</div>
+      <p>Set the <b>Slot</b> to the morning window and confirm the <b>Strategy</b> is what you want for today. Bring every driver on shift to <b>Available</b>, then press <b>⚡ Auto-assign</b> once. Read the KPI strip: if <b>Pending queue</b> is amber, either bring another executive online and press <b>Assign queue to available execs</b>, or hand-place the queued chips onto executives with room. As executives return, the queue re-fills them automatically — you only step in for exceptions. Use <b>Lock</b> on any delivery you have deliberately hand-placed so the next run leaves it alone, and keep <b>Manual</b> mode for special cases only.</p>
+    </div>
+  </div>
+
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>⚡ Auto-assign does nothing / "Manual mode — auto-assignment is switched off"</td><td>Strategy is set to <b>MANUAL</b></td><td>Switch the Strategy picker back to Equal / Capacity / Area, then run Auto-assign again.</td></tr>
+      <tr><td>"Your role can't run auto-assignment (403)"</td><td>Signed-in role lacks <code>deliveries</code> assign/edit</td><td>Use a Super Admin, Admin or Operations account, or have a Super Admin grant delivery-manage rights in <span class="navpath">Admin → System → Roles &amp; Permissions</span>.</td></tr>
+      <tr><td>Everything went to the Pending Queue after a run</td><td>No executive was Available (all Offline / Break / on a trip)</td><td>Bring executives to <b>Available</b> and press <b>Assign queue to available execs</b>. Watch for the "No executives available" alert.</td></tr>
+      <tr><td>A drag-and-drop move is refused</td><td>Target executive is full, or the delivery is locked</td><td>The toast shows the reason ("… is full (bottles/45)"). Free capacity on the target, or unlock the chip first.</td></tr>
+      <tr><td>A delivery keeps moving to a different executive on each run</td><td>It isn't locked, so the optimiser is free to rebalance it</td><td>Click the chip's 🔓 to <b>Lock</b> it to its current executive.</td></tr>
+      <tr><td>Red "Backend offline — showing the local planner simulation" banner</td><td>The Next.js API isn't reachable from the storefront</td><td>Confirm the backend is running and the API base is correct; the board still lets you plan, but ⚡ Auto-assign won't reach the database until it reconnects.</td></tr>
+      <tr><td>A single delivery never gets assigned</td><td>It's larger than one trip's capacity (queue reason <code>oversize</code>)</td><td>Split the order, or raise that executive's capacity in <span class="navpath">Admin → Operations → Delivery Settings</span> / Drivers.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Frequently asked questions</h4>
+  <h4>Q. Is capacity counted in bottles or in customers?</h4>
+  <p>A. In <b>bottles</b>. The 45-per-trip cap is about what an executive can physically carry, so a single customer ordering many bottles uses more of the cap than several one-bottle customers. The capacity bar on each card always reads "bottles / 45".</p>
+
+  <h4>Q. What is the difference between the on-screen board and the database?</h4>
+  <p>A. The board is a live planner you can rehearse on (including "Generate deliveries" practice data). The <b>⚡ Auto-assign</b> button is what commits real work: it runs the engine against the DOODLY database and writes real assignments, trips and logs. In production the board fills only from real assignments — it starts empty.</p>
+
+  <h4>Q. If I press Auto-assign twice, will customers get duplicate trips?</h4>
+  <p>A. No. The engine is idempotent and the database enforces one assignment per delivery, so a second press only picks up anything still unassigned — it never duplicates an existing trip.</p>
+
+  <h4>Q. What happens when an executive returns to the dairy mid-morning?</h4>
+  <p>A. Their finished trip is archived, they're freed to zero bottles, and the engine immediately pulls the next batch from the pending queue (nearest / same-zone first) to start a fresh trip up to 45 bottles. They get a "New trip after returning" notification. If the queue is empty they go back to Available.</p>
+
+  <h4>Q. How do I stop the system from reshuffling a delivery I placed by hand?</h4>
+  <p>A. <b>Lock</b> it. Click the 🔓 on the chip to lock it to its executive; auto-assignment then skips it. A locked delivery also can't be unassigned or reassigned until you unlock it (or force the move).</p>
+
+  <h4>Q. Which time slots can I assign?</h4>
+  <p>A. The board offers 5:30 AM, 7:00 AM, 11:30 AM and 5:00 PM. Only deliveries in the selected slot are assigned; the live engine runs against the day's morning window.</p>
+
+</section>

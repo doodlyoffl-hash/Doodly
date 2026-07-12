@@ -1,0 +1,274 @@
+<section class="sheet" id="admin-categories">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Catalogue · Categories</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Catalogue</span></div>
+  <h2 class="section-title">Categories</h2>
+  <p class="lead">The master list of product groups — Milk, Curd, Paneer, Ghee, Sweets, Bundles — that organises the whole catalogue; every product hangs off a category, the storefront uses them to filter and browse, and this screen is where a Super Admin creates and manages them, live in the DOODLY database.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">What a category is, and why it matters</div>
+      <p>A <b>category</b> is a normalised grouping row in the <code>Category</code> table (id, slug, name, description, image, sort order, active flag). Each <b>product</b> points at one category through its <code>categoryId</code>, so categories are the backbone of catalogue navigation, product filtering and reporting. The screen you see at <span class="navpath">Admin → Catalogue → Categories</span> is a <b>live card board</b>: when it loads it fetches the real categories from the database and redraws itself, so the tiles you read are the true, current catalogue — never demo data. A green "● Live" banner confirms it.</p>
+    </div>
+  </div>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Categories vs. Products — which screen does what</div>
+      <p>Use <b>Categories</b> to create and name the <i>groups</i> (e.g. "Dairy products"). Use the neighbouring <b>Products</b> screen to create the actual sellable items and assign each one to a category. The product count you see on a category tile ("4 products") is simply how many products are currently linked to that category. Deleting a category is blocked while any product is still linked to it, so the two screens stay in sync.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 1 : CATEGORY BOARD -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Category Board</p>
+      <p class="sm">A live grid of tiles — one per category — showing its icon, name, product count and whether it is active or hidden, drawn fresh from the database on every load.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Give staff a one-glance map of the catalogue's structure: which groups exist, how many products sit in each, and which are live to customers versus hidden.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> — the page is gated to anyone with <code>categories:view</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Catalogue → Categories</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Categories — <b>Board</b> · header action "Add category" · live banner · card grid (reads <code>GET /api/categories</code>)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Page header</b><span>Title "Categories" · subtitle "Organise products into categories." · primary button <b>+ Add category</b></span></div>
+          <div class="wf-cell"><b>Live banner</b><span>Green strip: "● Live — N categories from the DOODLY database (…backend URL…)"</span></div>
+          <div class="wf-cell"><b>Category grid (3 columns)</b><span>One tile per category: icon · name · "N products · active/hidden"</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Categories board: header action, live banner and the auto-generated tile grid.</div></div>
+
+      <p>On load the screen calls <code>GET /api/categories</code>, receives the real rows (ordered by <b>sort order</b>, then name), and rebuilds the tile grid to match. Each tile is <b>display-only</b> (there are no per-tile edit or delete buttons on this screen); all creation happens through the <b>Add category</b> button in the header. If the backend can't be reached or your role lacks access, the banner turns red with the reason instead (see Troubleshooting).</p>
+
+      <h4>What each tile shows</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Tile element</th><th>Shows</th><th>Backend field</th><th>How it is built</th></tr></thead>
+        <tbody>
+          <tr><td>Icon</td><td>A small glyph chosen from the category's slug</td><td>derived from <code>slug</code></td><td>milk → drop; curd / paneer / kova / ghee / dairy → box; sweets / bundles → gift; anything else → a generic tag icon</td></tr>
+          <tr><td>Name</td><td>The category's display name</td><td><code>name</code></td><td>Shown verbatim as the tile heading</td></tr>
+          <tr><td>Product count &amp; status</td><td>e.g. "4 products · active" or "1 product · hidden"</td><td><code>_count.products</code>, <code>active</code></td><td>Count is pluralised ("1 product" vs "2 products"); the word after the dot is <b>active</b> when the category is live, <b>hidden</b> when it is not</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Board data &amp; behaviour</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Behaviour</th></tr></thead>
+        <tbody>
+          <tr><td>Data source</td><td>Live from <code>GET /api/categories</code> — the same endpoint the storefront reads; no local or demo data.</td></tr>
+          <tr><td>Ordering</td><td>By <b>sort order</b> ascending, then by name — so lower "Display order" numbers appear first.</td></tr>
+          <tr><td>What staff see</td><td>Staff with <code>categories:view</code> (Super Admin, Admin) see <b>every</b> category, including hidden ones. (The public storefront, calling the same endpoint without that permission, only receives <b>active</b> categories.)</td></tr>
+          <tr><td>Filters / search / sort / pagination</td><td>None on this board — it is a compact card grid, not a paginated data table. The catalogue is small enough to show every group at once.</td></tr>
+          <tr><td>Row / tile actions</td><td>Tiles are static (view only). The only action on the screen is the header <b>Add category</b> button.</td></tr>
+          <tr><td>Live banner</td><td>Green "● Live — N categor(y/ies) from the DOODLY database (backend URL)" once the fetch succeeds.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Header actions</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>+ Add category</td><td>Opens the <b>Add category</b> dialog (Screen 2) to create a new category</td><td>On save → <code>POST /api/categories</code>; on success the board refetches and redraws</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 : ADD CATEGORY -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Add Category</p>
+      <p class="sm">A short modal form — name, slug, display order, description and status — that creates a new category row in the database and instantly refreshes the board.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Create a new product group so that products can be assigned to it and, if active, so the storefront can browse and filter by it.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> — needs <code>categories:create</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Catalogue → Categories → Add category</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Add category — <b>modal dialog</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Header</b><span>"Add category" title · close (×)</span></div>
+          <div class="wf-cell"><b>Name field</b><span>Category name (required)</span></div>
+          <div class="wf-cell"><b>Slug &amp; order row</b><span>Slug (required, auto-filled from the name) · Display order (number)</span></div>
+          <div class="wf-cell"><b>Description field</b><span>Optional one-line description</span></div>
+          <div class="wf-cell"><b>Status field</b><span>Active / Hidden dropdown</span></div>
+          <div class="wf-cell"><b>Footer</b><span>Cancel · <b>Add category</b> (save) · inline error line</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Add category dialog with its five fields and the save/cancel footer.</div></div>
+
+      <p>As you type the <b>Category name</b>, the <b>Slug</b> auto-fills with a URL-safe version (lowercased, spaces and symbols turned into hyphens). You can override the slug by editing it directly — once you touch it, it stops auto-following the name. Pressing <b>Enter</b> inside any field saves; <b>Esc</b> or clicking outside the dialog cancels.</p>
+
+      <h4>Fields</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Category name</td><td>The display name shown on tiles and to customers</td><td>Text</td><td class="t-req">Yes</td><td>Trimmed; must be <b>2–60</b> characters. The dialog also blocks save if it is under 2 chars ("Name and slug are required.").</td><td>Dairy products</td></tr>
+          <tr><td>Slug</td><td>The URL-safe key used in links and to look the category up; must be unique</td><td>Lowercase letters, numbers and hyphens</td><td class="t-req">Yes</td><td>Auto-generated from the name; trimmed &amp; lowercased; must match <code>^[a-z0-9-]+$</code> ("Use lowercase letters, numbers and hyphens") and be <b>2–40</b> chars. A duplicate is rejected: "A category with that slug already exists."</td><td>dairy-products</td></tr>
+          <tr><td>Display order</td><td>Controls where the tile sits (lower shows first)</td><td>Whole number</td><td class="t-opt">Opt.</td><td>Integer <b>0–9999</b>; defaults to <code>0</code> when left blank. Saved as <code>sortOrder</code>.</td><td>6</td></tr>
+          <tr><td>Description</td><td>A short line describing the group</td><td>Text</td><td class="t-opt">Opt.</td><td>Trimmed; up to <b>280</b> characters. Left blank if empty.</td><td>Curd, paneer, ghee and more…</td></tr>
+          <tr><td>Status</td><td>Whether the category is live to customers</td><td>Active / Hidden</td><td class="t-opt">Opt.</td><td>Select; defaults to <b>Active</b>. "Active" saves <code>active = true</code> (visible to the storefront); "Hidden" saves <code>active = false</code> (staff-only).</td><td>Active</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Category image is set elsewhere</div>
+          <p>The database supports an optional <b>image</b> on a category (<code>imageUrl</code>), but this create dialog does not ask for one — new categories start without an image and pick up their icon from the slug. An image can be added later through the category-edit API. The <b>slug</b> is set once at creation and is <b>not editable</b> afterwards, so choose it carefully.</p>
+        </div>
+      </div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Add category (save)</td><td>Validates the form and creates the category</td><td><code>POST /api/categories</code> with <code>{ slug, name, description, sortOrder, active }</code> → creates a <code>Category</code> row, writes a <code>category.create</code> audit entry, returns <b>201</b>. On success a toast confirms "Category <i>Name</i> saved to the database" and the board refreshes.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+          <tr><td>Cancel / × / Esc</td><td>Closes the dialog without saving</td><td>No server call</td><td>Any viewer</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — Create a category</div>
+        <div class="wf-flow"><span>Click "+ Add category"</span><span>Type the name (slug auto-fills)</span><span>Set display order &amp; status</span><span>(optional) add a description</span><span>Click "Add category"</span><span>POST /api/categories → 201</span><span>Toast + board redraws with the new tile</span></div>
+      </div><div class="wire-cap">Figure — end-to-end path from button click to a new live tile.</div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3 : LIFECYCLE / BACKEND -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Category Lifecycle — Edit, Hide &amp; Delete</p>
+      <p class="sm">How a category changes over its life: renaming, re-ordering, hiding from the storefront, and the guarded rules around deleting one.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Document the full set of operations the categories API supports so staff understand what can be changed after creation and what the safety rails are.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> — edit needs <code>categories:edit</code>, delete needs <code>categories:delete</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Catalogue → Categories</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Editing &amp; deleting run through the API</div>
+          <p>Today the on-screen board offers <b>view</b> and <b>Add category</b>. Renaming, re-ordering, hiding and deleting a category are backed by the <code>/api/categories/{id}</code> endpoint and are performed by staff with the right permission (typically via the product/catalogue tooling). The most common day-to-day change — <b>hiding</b> a category from customers — is simply setting its status: create or update it with status <b>Hidden</b>, and the storefront stops listing it while staff still see it on the board marked "hidden".</p>
+        </div>
+      </div>
+
+      <h4>Operations on an existing category</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Operation</th><th>What it changes</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Rename / re-describe</td><td>Updates the display name (2–60) or description (up to 280)</td><td><code>PATCH /api/categories/{id}</code> → updates the row, writes a <code>category.update</code> audit entry</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+          <tr><td>Re-order</td><td>Changes the <code>sortOrder</code> (0–9999) so the tile moves earlier or later</td><td><code>PATCH /api/categories/{id}</code> (audited)</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+          <tr><td>Hide / show</td><td>Flips <code>active</code> — Hidden pulls it from the storefront, Active restores it</td><td><code>PATCH /api/categories/{id}</code> (audited)</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+          <tr><td>Set / change image</td><td>Attaches or replaces the category's <code>imageUrl</code></td><td><code>PATCH /api/categories/{id}</code> (audited)</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+          <tr><td>Delete</td><td>Permanently removes the category</td><td><code>DELETE /api/categories/{id}</code> → allowed <b>only</b> when no products are linked; otherwise rejected. Writes a <code>category.delete</code> audit entry.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">The slug can't be changed after creation</div>
+          <p>Renaming, re-ordering, hiding and image changes are all allowed, but the <b>slug is fixed for life</b> — the update endpoint deliberately does not accept a new slug, because links and product associations depend on it. If you truly need a different slug, create a fresh category with the correct slug, move the products across on the Products screen, then delete the old (now-empty) one.</p>
+        </div>
+      </div>
+
+      <div class="call danger">
+        <span class="ci">⛔</span>
+        <div class="cbody">
+          <div class="ctitle">Delete is blocked while products are linked</div>
+          <p>You cannot delete a category that still has products in it — the API rejects it with <b>"Reassign or remove its products before deleting this category."</b> First open the <b>Products</b> screen and move every product to another category (or remove them), so the tile reads <b>"0 products"</b>. Only then will the delete succeed. Deletion is permanent; there is no undo, so most teams simply <b>Hide</b> a category they no longer use rather than delete it.</p>
+        </div>
+      </div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — Retire a category safely</div>
+        <div class="wf-flow"><span>Open Products</span><span>Re-assign every product to another category</span><span>Category tile now reads "0 products"</span><span>Either Hide it (recommended) or Delete it</span><span>Delete allowed only when empty</span></div>
+      </div><div class="wire-cap">Figure — the guarded path to removing a category without orphaning products.</div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ ROLE ACCESS -->
+  <h4>Who can do what</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Capability</th><th>Permission</th><th>Super Admin</th><th>Admin</th><th>Other roles</th></tr></thead>
+    <tbody>
+      <tr><td>Open the Categories board / see hidden categories</td><td><code>categories:view</code></td><td>Yes</td><td>Yes</td><td>No</td></tr>
+      <tr><td>Add a category</td><td><code>categories:create</code></td><td>Yes</td><td>Yes</td><td>No</td></tr>
+      <tr><td>Rename / re-order / hide / set image</td><td><code>categories:edit</code></td><td>Yes</td><td>Yes</td><td>No</td></tr>
+      <tr><td>Delete a category</td><td><code>categories:delete</code></td><td>Yes</td><td>Yes</td><td>No</td></tr>
+      <tr><td>See active categories on the public storefront</td><td>(public)</td><td>Yes</td><td>Yes</td><td>Everyone — customers included</td></tr>
+    </tbody>
+  </table></div>
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Categories is an Admin-and-above module</div>
+      <p>In the permission matrix only <b>Super Admin</b> and <b>Admin</b> hold the <code>categories</code> module (Super Admin has everything; Admin holds it at "full", i.e. view / create / edit / delete). Marketing, operations, support, procurement, quality, inventory, accountant and delivery roles have <b>no</b> categories access and never reach this screen. The one exception is the read side: the public list endpoint returns <b>active</b> categories to anyone, because the storefront needs them to build its catalogue navigation. Server-side permission checks are the real security boundary — the menu filter is convenience only.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ BEST PRACTICE -->
+  <div class="call best">
+    <span class="ci">✅</span>
+    <div class="cbody">
+      <div class="ctitle">Best Practice — plan the slug and the order before you save</div>
+      <p>Because the <b>slug is permanent</b>, decide it deliberately: keep it short, lowercase and hyphenated (e.g. <code>dairy-products</code>, not <code>Dairy_Products</code>), and matching how you'd want it to read in a link. Set a sensible <b>Display order</b> in tens (10, 20, 30…) so you can slot new categories between existing ones later without renumbering everything. Create a category as <b>Hidden</b> first, add and check its products on the Products screen, then flip it to <b>Active</b> — that way customers only ever see a category once it actually has products in it.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOTING -->
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>Board shows "⚠ Backend offline …" and the demo tiles don't update</td><td>The Next.js backend isn't running / can't be reached</td><td>Start the backend (next-app) so the storefront page can call the live categories API; reload the page.</td></tr>
+      <tr><td>"⚠ Your role can't view categories (403)"</td><td>Signed in as a role without the categories module (e.g. Operations, Support)</td><td>Use a Super Admin or Admin account — those are the only roles with categories access.</td></tr>
+      <tr><td>"A category with that slug already exists."</td><td>The slug you're saving is already taken by another category</td><td>Change the slug to a unique value (slugs must be unique across all categories).</td></tr>
+      <tr><td>"Name and slug are required."</td><td>Name or slug is under 2 characters when you press save</td><td>Give the category a real name (the slug auto-fills); both must be at least 2 characters.</td></tr>
+      <tr><td>"Use lowercase letters, numbers and hyphens"</td><td>The slug contains spaces, capitals or symbols</td><td>Keep the slug to <code>a–z</code>, <code>0–9</code> and hyphens only — e.g. <code>dairy-products</code>.</td></tr>
+      <tr><td>"Reassign or remove its products before deleting this category."</td><td>Products are still linked to the category you tried to delete</td><td>On the Products screen move every product to another category (tile should read "0 products"), then delete.</td></tr>
+      <tr><td>A new category doesn't appear on the storefront</td><td>It was created as <b>Hidden</b>, or has no products yet</td><td>Set its status to <b>Active</b>, and make sure at least one <b>available</b> product is assigned to it.</td></tr>
+      <tr><td>Categories show in the wrong order</td><td>Their <b>Display order</b> values need adjusting</td><td>Lower the sort order of the ones you want first (the board sorts ascending, then by name).</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- ============================================================ FAQ -->
+  <h4>Frequently asked questions</h4>
+
+  <h4>Q. What is the difference between "Hidden" and "Delete"?</h4>
+  <p><b>Hidden</b> keeps the category and all its product links intact but stops the storefront from listing it — staff still see it on the board marked "hidden", and you can flip it back to Active any time. <b>Delete</b> removes the category permanently and is only allowed once no products are linked. For anything you might reuse, hide it; only delete truly obsolete, empty groups.</p>
+
+  <h4>Q. Can I change a category's slug later?</h4>
+  <p>No. The slug is set when you create the category and cannot be edited afterwards, because product associations and links rely on it. If you need a different slug, create a new category, re-assign the products to it on the Products screen, and delete the old empty one.</p>
+
+  <h4>Q. Where does the product count on a tile come from?</h4>
+  <p>It's a live count of how many products are currently linked to that category (their <code>categoryId</code> points at it). Assigning or moving products on the Products screen changes the number the next time this board loads.</p>
+
+  <h4>Q. Why can customers see categories if it's an admin module?</h4>
+  <p>The <i>management</i> of categories is Admin-only, but the <i>read</i> of <b>active</b> categories is public so the storefront can build its catalogue menu and filters. Hidden categories are never sent to customers — only staff with <code>categories:view</code> receive them.</p>
+
+  <h4>Q. Do I set the category image here?</h4>
+  <p>Not in the Add category dialog — new categories start without an image and use an icon derived from their slug. A category image (<code>imageUrl</code>) can be attached later through the category-edit endpoint.</p>
+
+  <h4>Q. Is every change to a category recorded?</h4>
+  <p>Yes. Creating, updating and deleting a category each write an audit entry (<code>category.create</code> / <code>category.update</code> / <code>category.delete</code>) to the platform Audit Logs, so there is always a trail of who changed the catalogue structure and when.</p>
+
+</section>

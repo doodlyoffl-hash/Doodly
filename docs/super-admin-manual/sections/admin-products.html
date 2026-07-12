@@ -1,0 +1,421 @@
+<section class="sheet" id="admin-products">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Catalogue · Products</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Catalogue</span></div>
+  <h2 class="section-title">Products</h2>
+  <p class="lead">The catalogue control room — the one place where you <b>create products, price them, stock their variants, write their storefront copy, and flip a single status to launch or pull a product live</b>, with no code change and no redeploy.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where this screen lives and what it is</div><p>This is the staff-facing <b>Products</b> screen at route <span class="navpath">/admin/products.html</span> (manifest key <b>admin/products</b>). It is built from three blocks: a <b>page head</b> (title "Products", sub-line "Manage the catalogue. Flip status to launch a product.", with two header buttons — <b>Recommendations</b> and <b>Add product</b>), a green <b>notice</b> banner about zero-code launch, and the <b>product table</b> (block type <code>productAdmin</code>). When the page opens it pulls the live catalogue from the DOODLY database with <code>GET /api/admin/products?pageSize=200&amp;sort=created</code> and re-draws the table.</p></div></div>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">DOODLY sells one product today — but the catalogue is fully multi-product</div><p>The live storefront currently sells <b>A2 Buffalo Milk</b>; Curd, Paneer, Palkova and Ghee are staged as "Coming soon". This screen is not milk-only — it is a complete Product Information Management (PIM) surface that can hold any number of products, each with its own variants, pricing, nutrition, quality, images and SEO. The whole point of the module is that you launch each new dairy line with a <b>status flip</b> here rather than a developer deploy.</p></div></div>
+
+  <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Two save paths — know which button writes where</div><p>This screen has <b>two different persistence routes</b>, and it matters which control you use:</p>
+  <p>• The <b>Add product</b> button and the <b>Recommendations</b> manager write <b>straight to the DOODLY database</b> (real API calls — <code>POST /api/admin/products</code> and <code>PATCH /api/admin/products/[id]</code>). Those changes are permanent, audited and reach every user.</p>
+  <p>• The per-row <b>Edit</b> button opens the rich 12-tab <b>Product CMS</b> editor. In this build that editor saves your changes to the <b>browser (local overrides via <code>DOODLY_CMS</code>)</b> and overlays them onto the catalogue on the next page load; the very same 12 tabs map one-to-one to the backend's <code>PATCH /api/admin/products/[id]</code> actions (update, pricing, seo, nutrition, quality, status, feature, variant and image operations) that persist to the database in production. When in doubt, use <b>Add product</b> for a brand-new product and the header/Recommendations flows for status and merchandising.</p></div></div>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Live vs. demo data — read the banner</div><p>Just above the table a status banner appears after load. Green <b>"● Live — N product(s) from the DOODLY database (…)"</b> means you are looking at the real catalogue. If the backend is unreachable you'll see <b>"⚠ Backend offline … — couldn't load live catalogue."</b>; if your role can't view products you'll see <b>"⚠ Your role can't view products (403)."</b>; any other error shows as <b>"⚠ &lt;message&gt;"</b>. Confirm the green banner before trusting what the table shows.</p></div></div>
+
+  <!-- ============================================================ SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Products — the catalogue table</p><p class="sm">Every product in the catalogue, its variant count, price range and live status, with an Edit and a storefront-View action per row.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give staff a single, at-a-glance list of the whole catalogue — what products exist, how many size/plan variants each has, the price they sell at, and their current storefront status — and a jumping-off point to edit any product or to preview it exactly as a shopper sees it.</span></div>
+
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> (full) · <span class="pill role">Admin</span> (full). The backend enforces the <code>products : view</code> permission on every request; <b>no other role</b> has the Products module, so Manager, Accountant, Delivery Executive, Customer and every operational role are denied with a 403.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Catalogue → Products</span></span>
+    </div>
+
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Products</b> · "Manage the catalogue. Flip status to launch a product." · [Recommendations] [Add product]</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Page head</b><span>Title "Products" and the sub-line, plus two buttons: <b>Recommendations</b> (ghost, award icon) opens the related-products manager; <b>Add product</b> (primary, + icon) opens the new-product form.</span></div>
+          <div class="wf-cell"><b>Zero-code launch notice</b><span>A green info banner: "Zero-code launch: set a product's status to AVAILABLE and it becomes orderable on the storefront instantly."</span></div>
+          <div class="wf-cell"><b>Live banner</b><span>A one-line status strip above the table — green "● Live — N product(s)…", or an amber/red warning if the backend is offline or the role lacks permission.</span></div>
+          <div class="wf-cell"><b>Product table</b><span>Six columns — Product, Variants, Price, Status, Edit, View — one row per product, newest-created first.</span></div>
+          <div class="wf-cell"><b>Status badges</b><span>The Status column shows a colour-coded pill (Available / Coming Soon / Low Stock / Out of Stock / Discontinued / Hidden) computed by the shared status engine.</span></div>
+          <div class="wf-cell"><b>Row actions</b><span>Each row has an <b>Edit</b> button (opens the Product CMS slide-over) and a <b>View</b> eye-icon link that opens the product's public page <code>/products/{id}.html</code> in the storefront.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Admin Products screen.</div></div>
+
+      <h3 class="sub">Table columns</h3>
+      <p>The <code>productAdmin</code> table has a fixed six-column layout. Each cell is derived on the client from the catalogue rows loaded from the backend.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Column</th><th>What it shows</th><th>How it is built</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Product</b></td><td>A thumbnail (the product image, or a 🥛 emoji fallback) next to the product name, with the category shown as a small grey sub-line beneath the name.</td><td><code>image</code> / <code>emoji</code> + <code>name</code> + <code>category</code></td><td>🥛 A2 Buffalo Milk · Milk</td></tr>
+        <tr><td><b>Variants</b></td><td>The number of size/plan variants attached to the product; a dash when it has none.</td><td>count of variants where <code>productId</code> matches, else "—"</td><td>3</td></tr>
+        <tr><td><b>Price</b></td><td>The price range across the product's variants — the lowest to the highest daily price — or a single dash when no priced variant exists.</td><td><code>min–max</code> of variant <code>dailyPrice</code> (₹), else "—"</td><td>₹70–₹75</td></tr>
+        <tr><td><b>Status</b></td><td>A colour-coded status pill (see the status table below), computed from the product's status plus its stock, launch date and variant states.</td><td><code>DOODLY_STATUS.badgeFor(product)</code></td><td>Available (green)</td></tr>
+        <tr><td><b>Edit</b></td><td>An "Edit" button that opens the 12-tab Product CMS slide-over for that product.</td><td><code>data-edit="{id}"</code> → opens editor</td><td>[ ✎ Edit ]</td></tr>
+        <tr><td><b>View</b></td><td>An eye-icon link that opens the product's live storefront page in a normal browser navigation, so you can preview exactly what a shopper sees.</td><td><code>&lt;a href="/products/{id}.html"&gt;</code></td><td>👁</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">The Price column is a variant range, not a single sticker price</div><p>Milk is sold per-day per-variant (e.g. a 500 ml daily plan and a 1000 ml daily plan). The Price cell therefore shows the <b>span</b> of those daily prices (lowest–highest), not one number. A product whose variants aren't priced yet — or a "coming soon" product with no active variants — shows "—". To set exact prices, open <b>Edit → Pricing</b> (product-level MRP/selling) and <b>Edit → Variants</b> (per-variant daily/fixed price).</p></div></div>
+
+      <h3 class="sub">Status values — what each pill means</h3>
+      <p>The Status pill is produced by the shared status engine (<code>DOODLY_STATUS</code>), which resolves the product's stored status together with its stock, launch date and variant states into one of these badges. The <b>orderable</b> column is the practical bottom line: can a customer buy it right now?</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Badge</th><th>Colour</th><th>Stored status</th><th>Orderable?</th><th>Meaning on the storefront</th>
+      </tr></thead><tbody>
+        <tr><td><b>Available</b></td><td>Green</td><td><code>AVAILABLE</code></td><td>Yes</td><td>Live and buyable. Customers can add it to cart and check out.</td></tr>
+        <tr><td><b>Low Stock</b></td><td>Amber</td><td><code>AVAILABLE</code> + stock at/under threshold</td><td>Yes</td><td>Still buyable, but stock has fallen to the low-stock threshold — a nudge to restock.</td></tr>
+        <tr><td><b>Out of Stock</b></td><td>Red</td><td><code>OUT_OF_STOCK</code> (or stock ≤ 0)</td><td>No</td><td>Shown but not buyable; the storefront offers a "Notify me" action instead of Add to cart.</td></tr>
+        <tr><td><b>Coming Soon</b></td><td>Gold</td><td><code>COMING_SOON</code> (or a future launch date)</td><td>No</td><td>Teased on the storefront with a "Notify me" capture; not yet purchasable. The default status for a newly created product.</td></tr>
+        <tr><td><b>Discontinued</b></td><td>Grey</td><td><code>DISCONTINUED</code></td><td>No</td><td>Retired product. This status cascades to its variants — none are orderable.</td></tr>
+        <tr><td><b>Hidden</b></td><td>Grey</td><td><code>HIDDEN</code></td><td>No</td><td>Kept in the catalogue but not listed on the storefront at all.</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Two more states you won't set from the pill</div><p><b>DRAFT</b> — a work-in-progress product that isn't shown publicly; used while you build a product before launch. <b>ARCHIVED</b> — the state a product enters when it is <b>soft-deleted</b> (it is hidden and de-listed but never hard-deleted, so history and reports stay intact). Restoring an archived product returns it to <b>DRAFT</b>, not straight to live, so you re-check it before re-launch.</p></div></div>
+
+      <h3 class="sub">The "flip a status to launch" workflow</h3>
+      <p>This is the headline capability the notice banner promises. Because the storefront reads product status live from the catalogue, changing a product's status is all it takes to launch it (or pull it) — no code change, no deploy.</p>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — launch a product with a status flip</div>
+        <div class="wf-flow"><span>Create the product (starts COMING_SOON)</span><span>Fill in pricing, variants, images, copy</span><span>Set status → AVAILABLE</span><span>Storefront shows it as buyable instantly</span><span>Customers can order it</span></div>
+      </div><div class="wire-cap">Figure — from draft to live in one status change; setting AVAILABLE also forces the product Visible.</div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Setting AVAILABLE also makes the product Visible</div><p>When a product's status is set to <b>AVAILABLE</b>, the backend automatically forces its <b>Visible</b> flag on, so a freshly launched product is guaranteed to appear on the storefront. The reverse is also true for bulk operations: deactivating hides the product and clears Visible. If a product is "Available" but still not showing to customers, check that it has at least one active, priced, in-stock variant.</p></div></div>
+
+      <h3 class="sub">How the list loads</h3>
+      <p>When the Products route mounts, the front end calls <code>GET /api/admin/products?pageSize=200&amp;sort=created</code>, maps each returned product into a catalogue row (id = slug, plus name, status, visibility, category, image, featured flag, stock and a selling/MRP-derived price), replaces the in-memory catalogue, re-renders the <code>productAdmin</code> table and shows the green Live banner with the product count and the API base URL. Every mutation on the backend appends a <b>ProductEvent</b> to that product's history, so who changed what (and when) is always recorded.</p>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Treat status as a deliberate release gate. Build a new product fully in <b>DRAFT</b> or <b>COMING_SOON</b> — set its pricing, add and price every variant, upload images, write the description and complete SEO — and only flip it to <b>AVAILABLE</b> once you've clicked the <b>View</b> eye-icon and confirmed the storefront page looks right. Launching is a one-click, instant, customer-facing action, so preview first.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Add product — new-product form</p><p class="sm">A short modal that creates a brand-new product straight in the DOODLY database.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Register a new product in the catalogue with the essentials — name, slug, launch status, a short description and optional headline pricing — so it exists as a record you can then flesh out (variants, images, nutrition, SEO) via the Edit editor.</span></div>
+
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span>. Creating a product requires the <code>products : create</code> permission; the backend rejects anyone else with a 403.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Catalogue → Products → Add product</span></span>
+    </div>
+
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Modal — <b>Add product</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Product name *</b><span>Free-text name. Typing it auto-fills the Slug beneath.</span></div>
+          <div class="wf-cell"><b>Slug * &amp; Status</b><span>Slug (URL id, auto-suggested from the name) beside a Status dropdown (Coming soon default).</span></div>
+          <div class="wf-cell"><b>Short description *</b><span>One-line storefront blurb.</span></div>
+          <div class="wf-cell"><b>MRP ₹ &amp; Selling ₹</b><span>Optional headline pricing pair.</span></div>
+          <div class="wf-cell"><b>GST % &amp; Featured</b><span>Optional tax rate and a Yes/No featured flag.</span></div>
+          <div class="wf-cell"><b>Footer</b><span>[Cancel] and [Add product]. An inline error line shows validation problems.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Add product modal.</div></div>
+
+      <h3 class="sub">Fields</h3>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Product name</b></td><td>The display name shown everywhere in the catalogue and storefront.</td><td>Text, 2–80 characters.</td><td class="t-req">Yes</td><td>Client requires ≥ 2 chars; backend enforces 2–80 and rejects a duplicate name (case-insensitive) with a conflict error.</td><td>A2 Buffalo Milk</td></tr>
+        <tr><td><b>Slug</b></td><td>The stable URL id — becomes the product's storefront path <code>/products/{slug}.html</code> and its catalogue key.</td><td>Lowercase letters, numbers and hyphens only.</td><td class="t-req">Yes</td><td>Auto-generated from the name (spaces → hyphens, lower-cased) until you edit it. Backend regex <code>^[a-z0-9-]+$</code>, 2–50 chars; a duplicate slug is rejected as a conflict.</td><td>a2-buffalo-milk</td></tr>
+        <tr><td><b>Status</b></td><td>The launch state the product starts in.</td><td>Coming soon · Draft · Available · Out of stock · Hidden.</td><td class="t-opt">Opt.</td><td>Defaults to <b>COMING_SOON</b>. Choosing <b>Available</b> here launches the product immediately on save.</td><td>Coming soon</td></tr>
+        <tr><td><b>Short description</b></td><td>The one-line blurb shown on cards and the product page.</td><td>Text, up to 300 characters.</td><td class="t-req">Yes</td><td>Client requires ≥ 1 char; backend enforces 1–300.</td><td>Fresh A2 buffalo milk, delivered daily.</td></tr>
+        <tr><td><b>MRP ₹</b></td><td>The maximum retail (strike-through) price.</td><td>Number (rupees).</td><td class="t-opt">Opt.</td><td>Only sent if a Selling price is given; converted to paise. Falls back to the Selling price if left blank.</td><td>80</td></tr>
+        <tr><td><b>Selling ₹</b></td><td>The actual price the product sells at.</td><td>Number (rupees).</td><td class="t-opt">Opt.</td><td>If &gt; 0, a pricing record is created (MRP/selling/tax as paise). If blank, the product is created with no pricing yet — add it later under Edit → Pricing.</td><td>70</td></tr>
+        <tr><td><b>GST %</b></td><td>The tax rate applied to the product.</td><td>Number (percent).</td><td class="t-opt">Opt.</td><td>Stored as basis points (e.g. 5% → 500 bps). Only sent alongside a Selling price.</td><td>0</td></tr>
+        <tr><td><b>Featured</b></td><td>Whether to flag the product as featured/merchandised.</td><td>No / Yes.</td><td class="t-opt">Opt.</td><td>Defaults to No. Can also be toggled later from the Recommendations manager.</td><td>No</td></tr>
+      </tbody></table></div>
+
+      <h3 class="sub">Buttons</h3>
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Add product</b></td><td>Validates the form, creates the product, reloads the table with a live banner and shows a toast "Product &lt;name&gt; saved to the database".</td><td><code>POST /api/admin/products</code> with <code>{slug, name, description, status, featured, pricing?}</code>. On success the product is created (default visible = true, featured = false) and a <b>CREATED</b> ProductEvent is logged.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+        <tr><td><b>Cancel</b> / <b>×</b> / Esc</td><td>Closes the modal without saving.</td><td>None.</td><td>—</td></tr>
+      </tbody></table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — create a product</div>
+        <div class="wf-flow"><span>Click Add product</span><span>Type name → slug auto-fills</span><span>Pick status &amp; write the blurb</span><span>(Optional) enter MRP / Selling / GST</span><span>Add product → POST to DB</span><span>Table reloads with the new row</span><span>Open Edit to add variants, images, copy</span></div>
+      </div><div class="wire-cap">Figure — the Add product flow. The modal captures the essentials; the full detail is completed in the Edit editor.</div></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — create it as Coming soon, launch it later</div><p>Leaving Status on the default <b>Coming soon</b> lets you create the record now, then complete pricing, variants and images calmly under <b>Edit</b>. When everything is ready, flip the status to <b>Available</b> to go live. If you pick <b>Available</b> in this modal, it launches the moment you click Add product — even before you've added a single variant.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Edit product — the Product CMS slide-over</p><p class="sm">A tabbed editor that exposes every product attribute across 12 tabs, from basics and pricing to nutrition, quality, images and SEO.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Edit the full detail of an existing product — its identity, price, size/plan variants, subscription plans, nutrition, quality parameters, storefront copy, trust badges, image gallery, availability rules, SEO metadata and read-only performance analytics — in one schema-driven panel, so a merchandiser can manage a product end-to-end without touching code.</span></div>
+
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span>. Editing requires the <code>products : edit</code> permission on the backend; the corresponding <code>PATCH /api/admin/products/[id]</code> actions reject other roles with a 403.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Catalogue → Products → Edit</span></span>
+    </div>
+
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Slide-over — <b>Product CMS</b> · &lt;product name&gt;</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Header</b><span>"Product CMS" label, the product name, and a × close.</span></div>
+          <div class="wf-cell"><b>Tab strip</b><span>12 tabs: Basic · Pricing · Variants · Subscriptions · Nutrition · Quality · Description · Badges · Images · Availability · SEO · Analytics.</span></div>
+          <div class="wf-cell"><b>Tab body</b><span>The fields for the active tab — forms, editable tables, badge/image lists or read-only KPI cards.</span></div>
+          <div class="wf-cell"><b>Footer</b><span>[Reset all CMS edits] on the left; [Cancel] and [Save changes] on the right.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Product CMS slide-over with its 12 tabs.</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">One Save writes the whole panel</div><p>You move freely between tabs; nothing saves until you click <b>Save changes</b>. Save then reads <b>every</b> field across all tabs at once — scalar fields (product / variant / plan), the rebuilt badge list, and the re-ordered image gallery with its featured pick — persists them, re-renders the table and shows the toast "Saved — live across the storefront". In this build those changes are stored as local catalogue overrides; the same fields map to the backend's per-tab PATCH actions in production.</p></div></div>
+
+      <h3 class="sub">Tab 1 — Basic</h3>
+      <p>The product's core identity and listing controls.</p>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Product name</b></td><td>The display name.</td><td>Text (≤ 80).</td><td class="t-req">Yes</td><td>Maps to the <code>update</code> action's <code>name</code>.</td><td>A2 Buffalo Milk</td></tr>
+        <tr><td><b>Slug</b></td><td>The URL id / catalogue key.</td><td>Lowercase, hyphenated.</td><td class="t-opt">Opt.</td><td>Identifies the storefront page; change with care as it moves the public URL.</td><td>milk</td></tr>
+        <tr><td><b>Status</b></td><td>The launch state.</td><td>Active · Draft · Coming Soon · Out of Stock · Discontinued.</td><td class="t-opt">Opt.</td><td>Maps to the <code>status</code> action; setting Active (AVAILABLE) also forces Visible on.</td><td>Active</td></tr>
+        <tr><td><b>Visible on site</b></td><td>Whether the product is listed on the storefront ("Listed in storefront").</td><td>Checkbox.</td><td class="t-opt">Opt.</td><td>Independent of status — a product can be Available but hidden, or shown but not orderable.</td><td>☑</td></tr>
+        <tr><td><b>Category</b></td><td>The product's category label.</td><td>Text.</td><td class="t-opt">Opt.</td><td>Free-text here; the ERP layer can also bind a formal category id.</td><td>Milk</td></tr>
+        <tr><td><b>Display order</b></td><td>Sort position among products.</td><td>Number.</td><td class="t-opt">Opt.</td><td>Lower shows first (<code>sortOrder</code>, 0–9999).</td><td>0</td></tr>
+        <tr><td><b>From (label)</b></td><td>The "from ₹…" style price/eyebrow label shown on cards.</td><td>Text.</td><td class="t-opt">Opt.</td><td>Presentational; used on storefront product cards.</td><td>From ₹70/day</td></tr>
+        <tr><td><b>Rating value</b></td><td>The star rating shown for the product.</td><td>Number (e.g. 0–5, one decimal).</td><td class="t-opt">Opt.</td><td>Display value; the live customer rating comes from verified reviews.</td><td>4.8</td></tr>
+        <tr><td><b>Rating count</b></td><td>How many ratings back the value.</td><td>Number.</td><td class="t-opt">Opt.</td><td>Display value.</td><td>240</td></tr>
+      </tbody></table></div>
+
+      <h3 class="sub">Tab 2 — Pricing</h3>
+      <p>Product-level commercial fields. In production each maps to the backend's <code>pricing</code> action and is stored in paise / basis points; the rupee and percent inputs here are converted on save.</p>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Backend field</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>MRP (₹)</b></td><td>Maximum retail (strike-through) price.</td><td>Number (rupees).</td><td class="t-opt">Opt.</td><td><code>mrpPaise</code></td><td>80</td></tr>
+        <tr><td><b>Selling (₹)</b></td><td>Actual selling price.</td><td>Number (rupees).</td><td class="t-opt">Opt.</td><td><code>sellingPaise</code></td><td>70</td></tr>
+        <tr><td><b>Cost (₹)</b></td><td>Your cost price (for margin).</td><td>Number (rupees).</td><td class="t-opt">Opt.</td><td><code>costPaise</code></td><td>52</td></tr>
+        <tr><td><b>Offer (₹)</b></td><td>A promotional price.</td><td>Number (rupees).</td><td class="t-opt">Opt.</td><td><code>offerPaise</code></td><td>65</td></tr>
+        <tr><td><b>Discount %</b></td><td>Percentage discount.</td><td>Number (0–100).</td><td class="t-opt">Opt.</td><td><code>discountBps</code> (0–10000)</td><td>10</td></tr>
+        <tr><td><b>Tax %</b></td><td>GST rate for the product.</td><td>Number (0–100).</td><td class="t-opt">Opt.</td><td><code>taxBps</code> (0–10000)</td><td>0</td></tr>
+        <tr><td><b>Glass deposit (₹)</b></td><td>The refundable glass-bottle deposit.</td><td>Number (rupees).</td><td class="t-opt">Opt.</td><td><code>depositPaise</code></td><td>120</td></tr>
+        <tr><td><b>Delivery charge (₹)</b></td><td>Per-order delivery fee.</td><td>Number (rupees).</td><td class="t-opt">Opt.</td><td><code>deliveryPaise</code></td><td>0</td></tr>
+        <tr><td><b>Free delivery over (₹)</b></td><td>Basket threshold above which delivery is free.</td><td>Number (rupees).</td><td class="t-opt">Opt.</td><td>Presentational threshold.</td><td>500</td></tr>
+      </tbody></table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Product price and variant price are different things</div><p>The Pricing tab sets the <b>product-level</b> headline price and commercial fields. What a customer is actually charged for a daily milk plan comes from the <b>variant</b> price (Variants tab) resolved server-side at checkout, with the config catalogue as a safety net. The Price column on the list shows the variant range for that reason. Set both: product Pricing for display/margin, and each variant's daily/fixed price for the real charge.</p></div></div>
+
+      <h3 class="sub">Tab 3 — Variants</h3>
+      <p>An editable table of the product's size/plan variants (e.g. 500 ml, 1000 ml, trial pack). Each row is a variant.</p>
+      <div class="twrap"><table><thead><tr>
+        <th>Column</th><th>Purpose</th><th>Accepted values</th><th>Backend</th>
+      </tr></thead><tbody>
+        <tr><td><b>Display name</b></td><td>The shopper-facing variant name.</td><td>Text.</td><td><code>displayName</code> (falls back to <code>label</code>)</td></tr>
+        <tr><td><b>SKU</b></td><td>Stock-keeping code — must be unique.</td><td>Text (≤ 40).</td><td><code>sku</code>; a duplicate SKU is rejected as a conflict</td></tr>
+        <tr><td><b>Price</b></td><td>The variant's price — a daily price for subscription variants ("/day") or a fixed price for a trial variant ("fixed").</td><td>Number.</td><td><code>dailyPaise</code> or <code>fixedPaise</code> by variant type</td></tr>
+        <tr><td><b>Stock</b></td><td>Units on hand for this variant.</td><td>Number (≥ 0).</td><td><code>stock</code>; a change logs a STOCK event</td></tr>
+        <tr><td><b>Weight</b></td><td>Pack weight/size label.</td><td>Text.</td><td><code>weightG</code> / weight label</td></tr>
+        <tr><td><b>Active</b></td><td>Whether the variant is orderable.</td><td>Checkbox.</td><td><code>active</code></td></tr>
+      </tbody></table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">A variant in use can't be deleted — deactivate it</div><p>The backend refuses to hard-delete a variant that is referenced by any subscription ("This variant is used by subscriptions and cannot be deleted; deactivate it instead."). To retire such a variant, untick <b>Active</b>. New variants default to Active with a low-stock threshold of 20 units.</p></div></div>
+
+      <h3 class="sub">Tab 4 — Subscriptions (plans)</h3>
+      <p>An editable table of the recurring plans that apply across the catalogue (the delivery-cadence + discount tiers customers subscribe to).</p>
+      <div class="twrap"><table><thead><tr>
+        <th>Column</th><th>Purpose</th><th>Accepted values</th>
+      </tr></thead><tbody>
+        <tr><td><b>Plan</b></td><td>Plan name.</td><td>Text.</td></tr>
+        <tr><td><b>Days</b></td><td>The plan length / cadence in days.</td><td>Number.</td></tr>
+        <tr><td><b>Discount</b></td><td>The plan discount, entered as a percent (stored as a fraction / basis points).</td><td>Number (%).</td></tr>
+        <tr><td><b>Badge</b></td><td>An optional tag shown on the plan (e.g. "Popular").</td><td>Text.</td></tr>
+        <tr><td><b>Auto-renew</b></td><td>Whether the plan renews automatically.</td><td>Checkbox.</td></tr>
+        <tr><td><b>Active</b></td><td>Whether the plan is offered.</td><td>Checkbox.</td></tr>
+      </tbody></table></div>
+
+      <h3 class="sub">Tab 5 — Nutrition</h3>
+      <p>The nutrition panel shown on the product page. All fields are free-text so you can include units.</p>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Example</th><th>Field</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Fat</td><td>6.5 g</td><td>Sugar</td><td>4.8 g</td></tr>
+        <tr><td>SNF</td><td>9.0%</td><td>Minerals</td><td>0.7 g</td></tr>
+        <tr><td>Protein</td><td>3.4 g</td><td>Vitamins</td><td>A, D</td></tr>
+        <tr><td>Calcium</td><td>120 mg</td><td>Energy</td><td>90 kcal</td></tr>
+        <tr><td>Carbohydrates</td><td>5 g</td><td></td><td></td></tr>
+      </tbody></table></div>
+      <p class="muted-sm">Persisted via the backend <code>nutrition</code> action (fat, snf, protein, calcium, energy, carbs, sugar are stored on the product's Nutritional Information record).</p>
+
+      <h3 class="sub">Tab 6 — Quality</h3>
+      <p>The A2-milk quality parameters shown as trust signals on the product page.</p>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Example</th><th>Field</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Fat %</td><td>6.5</td><td>Batch no.</td><td>PB-20260712-0007</td></tr>
+        <tr><td>SNF</td><td>9.0</td><td>Milk type</td><td>A2</td></tr>
+        <tr><td>Lactometer</td><td>28</td><td>Animal type</td><td>Buffalo</td></tr>
+        <tr><td>Collection temp</td><td>4°C</td><td>Collection date</td><td>2026-07-12</td></tr>
+        <tr><td>Storage temp</td><td>4°C</td><td>Expiry</td><td>2026-07-14</td></tr>
+      </tbody></table></div>
+      <p class="muted-sm">Persisted via the backend <code>quality</code> action (fatPct, snf, lactometer, storageTemp, milkType, animalType, expiry live on the product's Quality Parameters record).</p>
+
+      <h3 class="sub">Tab 7 — Description</h3>
+      <p>All the storefront prose for the product.</p>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Backend field</th>
+      </tr></thead><tbody>
+        <tr><td><b>Short description</b></td><td>The one-line card/summary blurb.</td><td><code>description</code></td></tr>
+        <tr><td><b>Long description</b></td><td>The full product-page body copy.</td><td><code>longDesc</code></td></tr>
+        <tr><td><b>Product story</b></td><td>The brand/origin narrative.</td><td><code>story</code></td></tr>
+        <tr><td><b>Usage instructions</b></td><td>How to use the product.</td><td><code>usage</code></td></tr>
+        <tr><td><b>Storage instructions</b></td><td>How to store it.</td><td><code>storage</code></td></tr>
+        <tr><td><b>Ingredients</b></td><td>Ingredient list.</td><td><code>ingredients</code></td></tr>
+        <tr><td><b>Allergen info</b></td><td>Allergen declaration.</td><td><code>allergens</code></td></tr>
+      </tbody></table></div>
+
+      <h3 class="sub">Tab 8 — Badges</h3>
+      <p>The trust badges shown on the storefront (e.g. "Farm fresh", "A2 certified", "Glass bottle"). Each badge row has its icon, an editable label and a <b>Show</b> checkbox. On save the whole badge list is rebuilt from the rows, so you can rename or toggle any badge on/off.</p>
+
+      <h3 class="sub">Tab 9 — Images</h3>
+      <p>The product image gallery. Each image row shows a thumbnail and filename, a <b>Featured</b> star (radio — the featured image is the one used on cards and as the main image), and <b>↑ / ↓</b> buttons to reorder. On save the gallery order and the featured pick are stored. In production these map to the backend image actions (<code>add-image</code>, <code>delete-image</code>, <code>reorder-images</code>, <code>set-featured-image</code>).</p>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Images are added by URL</div><p>The backend stores images by URL (binary file upload needs a storage provider, which is a future step). The first image added becomes the featured image automatically; deleting the featured image promotes the next one in order.</p></div></div>
+
+      <h3 class="sub">Tab 10 — Availability</h3>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th>
+      </tr></thead><tbody>
+        <tr><td><b>Low-stock threshold (units)</b></td><td>The level at/under which the product shows "Low Stock".</td><td>Number.</td></tr>
+        <tr><td><b>Launch date (YYYY-MM-DD)</b></td><td>A future launch date — the product reads as "Coming Soon" until then.</td><td>Date.</td></tr>
+        <tr><td><b>Restock date (YYYY-MM-DD)</b></td><td>Expected restock date for an out-of-stock product.</td><td>Date.</td></tr>
+        <tr><td><b>Available cities</b></td><td>Cities where the product is offered.</td><td>Comma-separated list.</td></tr>
+        <tr><td><b>Delivery slots</b></td><td>Delivery windows for the product.</td><td>Comma-separated list.</td></tr>
+        <tr><td><b>End date</b></td><td>When availability ends.</td><td>Date.</td></tr>
+        <tr><td><b>Inventory status</b></td><td>A free-text inventory state label.</td><td>Text.</td></tr>
+      </tbody></table></div>
+
+      <h3 class="sub">Tab 11 — SEO</h3>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Backend field</th>
+      </tr></thead><tbody>
+        <tr><td><b>Meta title</b></td><td>The browser/search title for the product page.</td><td><code>metaTitle</code></td></tr>
+        <tr><td><b>Meta description</b></td><td>The search-snippet description.</td><td><code>metaDescription</code></td></tr>
+        <tr><td><b>OG image</b></td><td>The social-share preview image URL.</td><td><code>ogImageUrl</code></td></tr>
+        <tr><td><b>Canonical URL</b></td><td>The canonical page URL.</td><td><code>canonicalUrl</code></td></tr>
+        <tr><td><b>Keywords</b></td><td>SEO keywords.</td><td><code>keywords</code> (comma-separated list)</td></tr>
+      </tbody></table></div>
+
+      <h3 class="sub">Tab 12 — Analytics (read-only)</h3>
+      <p>A grid of KPI cards for the product — <b>Total orders</b>, <b>Revenue</b>, <b>Views</b>, <b>Conversion</b>, <b>Stock remaining</b> and <b>Rating</b>. This tab is read-only; the note states it is "populated from orders/payments in production", so it reflects real performance rather than anything you type.</p>
+
+      <h3 class="sub">Editor buttons</h3>
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Save changes</b></td><td>Reads every field across all 12 tabs, persists them, re-renders the product table and toasts "Saved — live across the storefront".</td><td>In production maps to the per-tab <code>PATCH /api/admin/products/[id]</code> actions (update, pricing, seo, nutrition, quality, status, feature, add/update/delete-variant, add/delete/reorder/set-featured image); each mutation logs a ProductEvent.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+        <tr><td><b>Cancel</b> / <b>×</b> / scrim / Esc</td><td>Closes the editor without saving.</td><td>None.</td><td>—</td></tr>
+        <tr><td><b>Reset all CMS edits</b></td><td>Clears <b>all</b> local catalogue overrides and reloads the page, returning to the database catalogue.</td><td>Clears the <code>DOODLY_CMS</code> override store, then reloads.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+      </tbody></table></div>
+
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — "Reset all CMS edits" wipes every local override, not just this product</div><p>The Reset button clears the entire local CMS override store and reloads. Any unsaved local edits across <b>all</b> products in this browser are discarded. It does not undo changes already written to the database (Add product, Recommendations, or production PATCH saves). Use it to start clean, not to revert one field.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 4 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Recommendations — related-products manager</p><p class="sm">Controls the storefront "You may also like" rail and each product's merchandising flags, straight against the database.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Turn the cross-sell rail on or off site-wide, set each product's merchandising flags (Featured / Best seller / New / Recommended), change its status inline, and hand-pick the ordered list of related products shown under "You may also like" on each product page.</span></div>
+
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span>. Opening the manager needs <code>products : view</code>; each change writes with <code>products : edit</code>. Other roles get "Only Admin can manage this (403)".</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Catalogue → Products → Recommendations</span></span>
+    </div>
+
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Modal — <b>Related-products recommendations</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Global toggle</b><span>A single checkbox: "Show the 'You may also like' rail on product pages" — enables/disables the whole rail.</span></div>
+          <div class="wf-cell"><b>Product rows</b><span>One block per product: its name and category.</span></div>
+          <div class="wf-cell"><b>Status dropdown</b><span>Per product — Available / Coming soon / Out of stock / Draft, changed inline.</span></div>
+          <div class="wf-cell"><b>Flag chips</b><span>Four toggle chips per product: Featured · Best seller · New · Recommended.</span></div>
+          <div class="wf-cell"><b>Related products input</b><span>A comma-separated, ordered list of related product slugs.</span></div>
+          <div class="wf-cell"><b>Footer</b><span>A "✓ Saved" flash line and a [Done] button. Every change saves immediately as you make it.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Recommendations manager. Changes autosave per control.</div></div>
+
+      <h3 class="sub">Controls</h3>
+      <div class="twrap"><table><thead><tr>
+        <th>Control</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Show the rail (global toggle)</b></td><td>Turns the "You may also like" rail on or off across all product pages.</td><td><code>POST /api/admin/products/recommendations</code> with <code>{enabled}</code>; audited.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+        <tr><td><b>Status dropdown</b></td><td>Changes a product's launch status inline (Available / Coming soon / Out of stock / Draft).</td><td><code>PATCH /api/admin/products/[id]</code> action <code>status</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+        <tr><td><b>Featured / Best seller / New / Recommended chips</b></td><td>Toggles the product's merchandising flags (they light up when on).</td><td>Action <code>reco-flag</code> with <code>{flag, value}</code> (Featured routes through the feature toggle).</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+        <tr><td><b>Related products input</b></td><td>Sets the ordered list of related product slugs shown in the rail for that product.</td><td>Action <code>set-related</code> with <code>{slugs}</code> (up to 12, lower-cased, order preserved).</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+        <tr><td><b>Done</b> / <b>×</b> / scrim / Esc</td><td>Closes the manager. (Changes have already saved as you made them.)</td><td>None.</td><td>—</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Related products are picked by slug, in order</div><p>Type the slugs of the products you want in the rail, comma-separated, in the order you want them to appear — e.g. <code>curd, paneer, ghee</code>. The list is capped at 12 and lower-cased on save. Get a slug from the product's row in the main table or its Basic tab. The rail only shows if the global toggle is on.</p></div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Curate related products deliberately — pair complementary dairy lines (milk → curd, paneer, ghee) rather than listing everything. Keep the rail short (3–4 items) and lead with your highest-margin or newest line. Use the <b>New</b> flag on a just-launched product and the <b>Best seller</b> flag on your hero SKU so shoppers get honest, useful signals.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ ERP SURFACE -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Behind the screen — the Products ERP/PIM API</p><p class="sm">Capabilities the backend exposes that this screen only partly surfaces.</p></div>
+    <div class="spec-body">
+      <p>The Products screen is the friendly front for a full Product Information Management backend. A Super Admin should know these API-level capabilities exist, because reports, bulk operations and power lookups run through them even though the static screen shows a simpler table:</p>
+      <div class="twrap"><table><thead><tr>
+        <th>Capability</th><th>Endpoint</th><th>What it does</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Rich list</b></td><td><code>GET /api/admin/products</code></td><td>Filter by status, visibility, featured, stock state, category, variant type and date range; free-text search across name/slug/id/category/SKU; sort by created / name / updated / price / stock; paginate.</td><td>products : view</td></tr>
+        <tr><td><b>KPIs</b></td><td><code>GET /api/admin/products/stats</code></td><td>Totals for active, inactive, draft, coming-soon, featured, out-of-stock and low-stock products, plus total stock value.</td><td>products : view</td></tr>
+        <tr><td><b>Detail + history</b></td><td><code>GET /api/admin/products/[id]</code></td><td>Full product detail with variants, pricing, images, SEO, nutrition, quality, derived inventory and the last 40 change events.</td><td>products : view</td></tr>
+        <tr><td><b>Bulk actions</b></td><td><code>POST /api/admin/products/bulk</code></td><td>Activate, deactivate, soft-delete, re-categorise, bulk price or bulk stock (set or increment) up to 500 products at once.</td><td>products : edit / delete</td></tr>
+        <tr><td><b>Reports</b></td><td><code>GET /api/admin/products/reports</code></td><td>Counts by status and category, low-stock and out-of-stock lists, stock value, and a top-20 sales performance table (units + revenue from paid orders).</td><td>products : view</td></tr>
+        <tr><td><b>Soft delete / restore</b></td><td><code>DELETE /api/admin/products/[id]</code></td><td>Archives a product (never hard-deletes); restore returns it to Draft.</td><td>products : delete</td></tr>
+        <tr><td><b>Public catalogue</b></td><td><code>GET /api/catalogue</code></td><td>The DB-authoritative price/availability feed the storefront overlays — this is how an admin price edit reaches shoppers with no deploy.</td><td>Public</td></tr>
+      </tbody></table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Every change is recorded</div><p>Each mutation appends a <b>ProductEvent</b> (CREATED, UPDATED, STATUS, PRICE, STOCK, VARIANT, IMAGE, SEO, FEATURE, DELETED, RESTORED) capturing the actor's role and IP, and header-level actions also write to the platform audit trail. Nothing in this module is silently changed.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOTING + FAQ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common Products-screen questions a Super Admin will field.</p></div>
+    <div class="spec-body">
+
+      <div class="twrap"><table><thead><tr>
+        <th>Symptom</th><th>Likely cause</th><th>Fix</th>
+      </tr></thead><tbody>
+        <tr><td>Table empty with "⚠ Your role can't view products (403)."</td><td>The signed-in role lacks <code>products : view</code>. Only Super Admin and Admin have the Products module.</td><td>Sign in as Super Admin/Admin, or grant the role the Products module under <span class="navpath">Admin → System → Roles &amp; Permissions</span>.</td></tr>
+        <tr><td>Table empty with "⚠ Backend offline — couldn't load live catalogue."</td><td>The backend API was unreachable at load.</td><td>Confirm the backend is running and reload. The screen shows an honest empty state rather than stale demo rows.</td></tr>
+        <tr><td>Add product fails with "A product with that slug/name already exists."</td><td>The slug or name duplicates an existing (or soft-deleted) product.</td><td>Choose a distinct slug/name. Slugs must be unique; names are checked case-insensitively among non-deleted products.</td></tr>
+        <tr><td>Set a product to Available but it still isn't buyable on the storefront.</td><td>The product has no active, priced, in-stock variant.</td><td>Open Edit → Variants: add at least one Active variant with a price and stock. Status alone doesn't create sellable inventory.</td></tr>
+        <tr><td>Price column shows "—".</td><td>The product has no variant with a daily price yet.</td><td>Add/price variants under Edit → Variants (the list column ranges over variant daily prices).</td></tr>
+        <tr><td>Can't delete a variant ("used by subscriptions").</td><td>A live subscription references that variant.</td><td>Untick <b>Active</b> to retire it instead of deleting.</td></tr>
+        <tr><td>An edit in the Edit modal didn't reach the live storefront.</td><td>The Edit CMS editor saves local overrides in this build; header Add product / Recommendations write to the DB directly.</td><td>For DB-persisted changes to status/merchandising use the header/Recommendations flows (or the production PATCH actions); reserve the local editor for previewing copy/pricing.</td></tr>
+      </tbody></table></div>
+
+      <h4>What's the fastest way to launch a new product end-to-end?</h4>
+      <p>Click <b>Add product</b>, enter name + slug + a short description, leave status on <b>Coming soon</b>, and save. Then open <b>Edit</b> to set Pricing, add and price <b>Variants</b>, upload <b>Images</b>, and write the <b>Description</b>/<b>SEO</b>. Click the <b>View</b> eye-icon to preview the storefront page. When it's right, set the status to <b>Available</b> to go live.</p>
+
+      <h4>What's the difference between Status and Visible?</h4>
+      <p><b>Status</b> is the launch state (Available, Coming Soon, Out of Stock, etc.) and drives whether the product is orderable. <b>Visible</b> is simply whether it is listed on the storefront. Setting Status to Available automatically turns Visible on, but you can independently hide an Available product or show a not-yet-orderable one.</p>
+
+      <h4>Do products ever get permanently deleted?</h4>
+      <p>No. Deleting a product <b>soft-deletes</b> it — it becomes ARCHIVED, hidden and de-listed, but the record and its history are kept so orders, invoices and reports stay accurate. Restoring returns it to Draft for re-checking before re-launch.</p>
+
+      <h4>Who can see and change the catalogue?</h4>
+      <p>Only <b>Super Admin</b> and <b>Admin</b>. The Products module isn't granted to any operational role in the default permission matrix, so Support, Operations, Accountant, Delivery Executive, Customer and the rest cannot view or edit products.</p>
+
+      <h4>How do admin price edits reach shoppers without a deploy?</h4>
+      <p>The storefront reads DB-authoritative commercial fields from <code>GET /api/catalogue</code> and overlays them onto its static presentational data by matching ids. So when you change a variant's price or a product's availability here, the next storefront load reflects it — and the same DB price is what the customer is charged at checkout.</p>
+
+    </div>
+  </div>
+
+</section>

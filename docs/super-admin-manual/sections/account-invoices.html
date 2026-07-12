@@ -1,0 +1,223 @@
+<section class="sheet" id="account-invoices">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Customer Module · Invoices</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Customer Module</span></div>
+  <h2 class="section-title">Invoices</h2>
+  <p class="lead">The customer's own record of every billed order — a searchable, filterable list of GST tax invoices that each open into a full printable document and download as a receipt.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where this lives</div><p>This is a <b>Customer-surface</b> page reached at <span class="navpath">/account/invoices.html</span>. A logged-in customer sees their own invoices; a Super Admin or Admin viewing the customer account (for support) sees the same screen. The page is built from two real pieces of code: the invoices <b>data table</b> (registered in <code>blocks.js</code>, driven by the shared DataTable engine in <code>datatable.js</code>) and the full tax-invoice <b>document</b> that opens on View (built by <code>invoice.js</code>, <code>DOODLY_INVOICE.mountB2C</code>).</p></div></div>
+
+  <!-- ============================================================= -->
+  <!-- SCREEN 1 — Invoices list -->
+  <!-- ============================================================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Invoices — list</p><p class="sm">Every tax invoice for the account, with search, filters and downloads.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the customer one place to review, verify, open and download every GST invoice raised against their orders and subscription billing.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (own account) · <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (viewing a customer for support)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → Bottles &amp; money → Invoices</span></span>
+    </div>
+    <div class="spec-body">
+      <p>The screen is intentionally simple: a page header (<b>"Invoices — Download GST invoices for every payment."</b>) sits above a single data table. The table shows one row per invoice. Every column, filter, sort control, the search box, pagination and the export menu come from the unified DataTable engine, so this page behaves exactly like the other list pages in the app.</p>
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Invoices — <b>Download GST invoices for every payment</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Toolbar</b><span>Search box · Filters button · Date-range · Save view / favorite · Export ▾ (CSV / Excel / PDF)</span></div>
+          <div class="wf-cell"><b>Filter chips</b><span>Removable chips for the active search, status filter, date range and sort</span></div>
+          <div class="wf-cell"><b>Data table</b><span>Columns: Invoice · Date · Amount · Tax · Status · Actions (View / Download)</span></div>
+          <div class="wf-cell"><b>Pager</b><span>Page size (25 default) and page navigation at the foot of the table</span></div>
+          <div class="wf-cell"><b>Empty state</b><span>Receipt icon + "No invoices yet" + "Browse products" button when the account has none</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Invoices list screen</div></div>
+
+      <h4>Table columns</h4>
+      <p>The invoices table is defined once in <code>blocks.js</code> (the <code>TABLES.invoices</code> registry entry). Each row is drawn from a single invoice record.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>Purpose</th><th>Source field</th><th>How it renders</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Invoice</b></td><td>The unique invoice number — the customer's reference for support and accounting.</td><td><code>id</code></td><td>Shown as a highlighted ID chip (<code>cell-id</code>).</td><td>INV-2026-0428</td></tr>
+          <tr><td><b>Date</b></td><td>The invoice / billing date.</td><td><code>date</code></td><td>Plain text; this field also powers the date-range filter.</td><td>26 Jun 2026</td></tr>
+          <tr><td><b>Amount</b></td><td>The total billed on the invoice.</td><td><code>amount</code></td><td>Formatted as Indian Rupees, rounded, bold (<code>inr()</code>).</td><td>₹3,588</td></tr>
+          <tr><td><b>Tax</b></td><td>Tells the customer how GST is treated on this invoice.</td><td><code>gst</code></td><td>Free text label as stored on the record.</td><td>incl. GST</td></tr>
+          <tr><td><b>Status</b></td><td>Whether the invoice is settled.</td><td><code>status</code></td><td>A coloured status badge — the label and colour come from the record (e.g. green "Paid").</td><td>Paid</td></tr>
+          <tr><td><b>(Actions)</b></td><td>Open or download the invoice. The header for this column is intentionally blank.</td><td>—</td><td>A <b>View</b> link and a <b>Download</b> icon button (see the Button table).</td><td>👁 View · ⬇</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where the invoice records come from</div><p>The table reads its rows from <code>DOODLY_DATA.invoices</code>. Each record carries exactly these fields: <code>id</code>, <code>date</code>, <code>amount</code> (a number), <code>gst</code> (a label such as "incl. GST") and <code>status</code> (a colour + label pair, e.g. <code>["green","Paid"]</code>). Per the page's own copy, invoices are <b>generated automatically after each paid order</b>; the customer never creates one by hand on this screen. The customer Dashboard reuses these same records for its "Latest Invoice" and "Pending Payments" cards (an unpaid invoice is any record whose status label is not "Paid").</p></div></div>
+
+      <h4>Table controls (DataTable engine)</h4>
+      <p>The list is powered by the shared DataTable engine. The controls below are what the customer actually gets on this table.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Control</th><th>Behaviour on this table</th></tr></thead>
+        <tbody>
+          <tr><td><b>Search</b></td><td>Instant, type-ahead box (placeholder "Search invoices…"). Matches across all visible cell text — invoice number, date, amount, tax label and status. Debounced (~180 ms) and resets to page 1 on each keystroke.</td></tr>
+          <tr><td><b>Filters</b></td><td>A <b>Filters</b> button opens a side panel with auto-detected facet groups. For invoices the engine detects a <b>Status</b> facet and lists a checkbox for each distinct status found in the data (for example "Paid", and "Pending"/"Overdue" once such invoices exist). The Status group only appears when the account has two or more distinct statuses; with a single status there is nothing to filter by.</td></tr>
+          <tr><td><b>Date range</b></td><td>Because the <b>Date</b> column holds real dates, the engine offers date-range presets plus a custom from/to range so the customer can narrow to a month, quarter or year.</td></tr>
+          <tr><td><b>Sort</b></td><td>Click any column header to sort; click again to reverse; multiple columns can be stacked. A ▲/▼ indicator marks the sorted column. Sorting is by the visible text of the cell.</td></tr>
+          <tr><td><b>Filter chips</b></td><td>Every active search term, status filter, date range and sort shows as a removable chip above the table; clicking the ✕ on a chip clears just that condition.</td></tr>
+          <tr><td><b>Saved views &amp; favorites</b></td><td>The customer's current search / filters / sort / page-size is remembered per user and per table (in local storage) so the view is restored on the next visit.</td></tr>
+          <tr><td><b>Export</b></td><td>An <b>Export ▾</b> menu offers CSV (.csv), Excel (.xls) and PDF of the currently filtered rows. On this customer page export is available (no admin module permission gates it).</td></tr>
+          <tr><td><b>Pagination</b></td><td>Rows are paged, 25 per page by default, with a pager at the foot of the table.</td></tr>
+          <tr><td><b>Empty state</b></td><td>When the account genuinely has no invoices, a designed empty state appears — a receipt icon, "No invoices yet", the line "Invoices are generated automatically after each paid order — you'll be able to view and download them here", and a <b>Browse products</b> button. When a filter simply matches nothing, a lighter "No results found — try adjusting your search or filters" message with a <b>Clear all</b> button is shown instead.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">The Status filter is data-driven, not a fixed toggle</div><p>The Status facet is generated from whatever statuses are actually present. Do not promise a customer an "All / Paid" switch: if every invoice on the account is Paid, the engine has nothing to filter and the Status group is hidden. The full list (the "All" case) is simply the table with no filter applied.</p></div></div>
+
+      <h4>Row actions</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>View</b> <span class="sm">(eye icon)</span></td>
+            <td>Opens the full tax-invoice document for that invoice on a dedicated page.</td>
+            <td>Navigates to <span class="navpath">/invoice.html?id=&lt;invoice-id&gt;</span>. That page mounts the premium B2C invoice document via <code>DOODLY_INVOICE.mountB2C</code> (see Screen 2).</td>
+            <td><span class="pill role">Customer</span>+</td>
+          </tr>
+          <tr>
+            <td><b>Download</b> <span class="sm">(download icon)</span></td>
+            <td>Instantly downloads a receipt file for that one invoice, without opening it.</td>
+            <td>A single click handler (<code>js-invoice-dl</code>, wired once in <code>layout.js</code>) builds a CSV named <code>invoice-&lt;id&gt;.csv</code> containing: Document ("DOODLY — Tax Invoice"), Invoice number, Date, Seller (legal company name), GSTIN, Registered address, Amount (₹) and GST — the seller/GSTIN/address are pulled from the brand's company profile.</td>
+            <td><span class="pill role">Customer</span>+</td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — from paid order to a downloadable invoice</div>
+        <div class="wf-flow"><span>Customer's order is paid</span><span>Invoice generated automatically</span><span>Appears as a row in this list</span><span>Customer searches / filters / sorts</span><span>View → full document · or · Download → CSV receipt</span></div>
+      </div><div class="wire-cap">Figure — how an invoice reaches, and leaves, the Invoices list</div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>When helping a customer find one invoice, use the <b>Date range</b> plus the <b>Search</b> box together (e.g. type the amount or the last four digits of the invoice number) rather than scrolling. Then use the row <b>Download</b> button for a quick receipt, and <b>View</b> only when the customer needs the full itemised, printable document.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- SCREEN 2 — Invoice document (View) -->
+  <!-- ============================================================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Invoice document</p><p class="sm">The full, printable tax invoice that opens when a customer clicks View.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Present a complete, GST-compliant tax invoice — itemised products, delivery summary, payment details and totals — that can be printed, saved as PDF, emailed or shared on WhatsApp.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (own invoice) — plus a Super-Admin-only settings control on the document</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → Invoices → View</span> (opens <span class="navpath">/invoice.html?id=…</span>)</span>
+    </div>
+    <div class="spec-body">
+      <p>Clicking <b>View</b> opens the premium customer invoice built by <code>invoice.js</code>. It is an animated, print-ready document (count-up totals, section reveals, a paid-in-full stamp; animations switch off automatically for printing and for users who prefer reduced motion).</p>
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Invoice document — <b>TAX INVOICE</b> · action bar</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Action bar</b><span>Print · Download PDF · Email · WhatsApp · (Super Admin) Settings ⚙</span></div>
+          <div class="wf-cell"><b>Header</b><span>Brand + tagline · Invoice no · Date · Billing period · Status badge</span></div>
+          <div class="wf-cell"><b>Parties</b><span>Billed to (name, customer ID, mobile, address) · Subscription (plan, delivery slot) · pay QR</span></div>
+          <div class="wf-cell"><b>Line items</b><span>Product · Qty · Unit · Unit price · GST · Amount</span></div>
+          <div class="wf-cell"><b>Delivery summary</b><span>Total · Delivered · Skipped · Paused · Bonus chips</span></div>
+          <div class="wf-cell"><b>Payment</b><span>Status · Method · Transaction ID · Paid on</span></div>
+          <div class="wf-cell"><b>Summary</b><span>Subtotal · Discount · GST · Wallet used · Referral used · Delivery · Grand total · Outstanding / Paid in full</span></div>
+          <div class="wf-cell"><b>Footer</b><span>Thank-you · support contacts · terms · authorised signatory</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the full tax-invoice document</div></div>
+
+      <h4>What the document shows</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Section</th><th>Purpose</th><th>Fields shown</th><th>Notes / backend</th></tr></thead>
+        <tbody>
+          <tr><td><b>Header</b></td><td>Identify the document.</td><td>Brand name, tagline, "TAX INVOICE", Invoice number, Date, Billing period, Status badge.</td><td>Brand name / tagline come from the Invoice Settings (see below).</td></tr>
+          <tr><td><b>Billed to</b></td><td>Who the invoice is for.</td><td>Customer name, Customer ID, mobile, delivery address.</td><td>—</td></tr>
+          <tr><td><b>Subscription</b></td><td>Which plan was billed.</td><td>Plan name, Delivery slot.</td><td>Plan label is read from the saved subscription.</td></tr>
+          <tr><td><b>Pay QR</b></td><td>Scan-to-pay / verify.</td><td>A UPI QR encoding the payee and amount.</td><td>Shown only when "Show QR code" is enabled in settings.</td></tr>
+          <tr><td><b>Line items</b></td><td>Itemise what was billed.</td><td>Product, Qty, Unit, Unit price, GST (% and value, or "Nil"), Amount.</td><td>GST percent per product is resolved from <code>DOODLY_GST</code> (e.g. milk is GST-nil, ghee 12%, curd 5%).</td></tr>
+          <tr><td><b>Delivery summary</b></td><td>Show the month's fulfilment.</td><td>Total, Delivered, Skipped, Paused, Bonus counts.</td><td>Animated count-up chips.</td></tr>
+          <tr><td><b>Payment</b></td><td>Prove settlement.</td><td>Status, Method, Transaction ID, Paid on date.</td><td>—</td></tr>
+          <tr><td><b>Summary</b></td><td>Show how the total was reached.</td><td>Subtotal, Discount, GST, Wallet used, Referral reward used, Delivery charges, Grand total, and either an Outstanding balance or a "Paid in full" stamp.</td><td>GST line hides if "Show GST" is turned off in settings.</td></tr>
+          <tr><td><b>Footer</b></td><td>Trust &amp; contact.</td><td>Thank-you message, support phone / WhatsApp / website, terms, authorised signatory line.</td><td>All four texts are editable in Invoice Settings.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Document action bar</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Print</b></td><td>Opens the browser print dialog for a clean, animation-free copy.</td><td>Calls <code>window.print()</code>.</td><td><span class="pill role">Customer</span>+</td></tr>
+          <tr><td><b>Download PDF</b></td><td>Saves the invoice as a PDF.</td><td>Uses the same print path (<code>window.print()</code> → "Save as PDF").</td><td><span class="pill role">Customer</span>+</td></tr>
+          <tr><td><b>Email</b></td><td>Starts an email with the invoice number, amount and a link to view it online.</td><td>Opens a pre-filled <code>mailto:</code> draft in the user's mail app.</td><td><span class="pill role">Customer</span>+</td></tr>
+          <tr><td><b>WhatsApp</b></td><td>Shares a message with the invoice number, amount and view link.</td><td>Opens a <code>wa.me</code> share link in a new tab.</td><td><span class="pill role">Customer</span>+</td></tr>
+          <tr><td><b>Settings ⚙</b></td><td>Opens the Invoice Settings modal to change how every invoice looks and reads.</td><td>Renders the config modal; saving audits <code>invoice.config</code>. <b>Only rendered for Super Admin.</b></td><td><span class="pill role">Super Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — the premium document is template-only on the live site</div><p>On production, the full B2C invoice document deliberately shows a clean empty state — "No invoice to display · Your tax invoice will appear here once your billing has been generated" — because these premium documents are not yet wired to live billing and must never display fabricated figures. The rich itemised document above renders with data only when demo mode is allowed. The customer's <b>Invoices list</b> (Screen 1) and its per-row <b>Download</b> CSV are the reliable path today; treat the on-screen document as a template until live billing is connected.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- SCREEN 3 — Invoice Settings (Super Admin) -->
+  <!-- ============================================================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Invoice Settings</p><p class="sm">Super-Admin control over how every invoice looks and reads.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Set the branding, numbering format and legal text applied to every generated invoice — one place, applied everywhere.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> only</span>
+      <span class="m"><b>Path</b> <span class="navpath">Invoice document → Settings ⚙</span></span>
+    </div>
+    <div class="spec-body">
+      <p>The gear button in the document action bar opens a modal. Every value is saved to the shared invoice configuration and applied to all invoices immediately; saving is written to the audit trail.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Brand name</td><td>Name printed on the invoice header.</td><td>Short text</td><td class="t-opt">Opt.</td><td>Falls back to the brand default when blank.</td><td>DOODLY</td></tr>
+          <tr><td>Tagline</td><td>Sub-line under the brand name.</td><td>Short text</td><td class="t-opt">Opt.</td><td>—</td><td>Fresh A2 buffalo milk, delivered daily</td></tr>
+          <tr><td>Invoice prefix</td><td>Prefix used when numbering invoices.</td><td>Short text</td><td class="t-opt">Opt.</td><td>—</td><td>DOODLY</td></tr>
+          <tr><td>Number format</td><td>Template that shapes the invoice number.</td><td>Pattern with tokens</td><td class="t-opt">Opt.</td><td>Should contain a running-number token like <code>{#####}</code>.</td><td>DOODLY/INV/{YYYY}/{#####}</td></tr>
+          <tr><td>Footer message</td><td>Thank-you line at the foot of the invoice.</td><td>Multi-line text</td><td class="t-opt">Opt.</td><td>—</td><td>Thank you for choosing DOODLY…</td></tr>
+          <tr><td>Terms &amp; conditions</td><td>Legal / payment terms printed on the invoice.</td><td>Multi-line text</td><td class="t-opt">Opt.</td><td>—</td><td>Payment due within the agreed credit period…</td></tr>
+          <tr><td>Signature line</td><td>Authorised-signatory text above the signature line.</td><td>Short text</td><td class="t-opt">Opt.</td><td>—</td><td>For DOODLY Foods Pvt Ltd</td></tr>
+          <tr><td>Watermark text</td><td>Optional diagonal watermark across the page.</td><td>Short text (blank = none)</td><td class="t-opt">Opt.</td><td>Blank hides the watermark.</td><td>PAID / DRAFT</td></tr>
+          <tr><td>Show GST</td><td>Whether the GST line appears in the summary.</td><td>On / Off (checkbox)</td><td class="t-opt">Opt.</td><td>Off removes the GST row.</td><td>On</td></tr>
+          <tr><td>Show QR code</td><td>Whether the scan-to-pay QR is shown.</td><td>On / Off (checkbox)</td><td class="t-opt">Opt.</td><td>Off hides the QR block.</td><td>On</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Save settings</b></td><td>Applies all changes and re-renders the invoice with the new look.</td><td>Persists the config, writes an <code>invoice.config</code> audit entry ("updated invoice settings"), then re-mounts the document.</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>✕ / backdrop</b></td><td>Closes the modal without saving.</td><td>Dismisses the dialog.</td><td><span class="pill role">Super Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip</div><p>Set the <b>Number format</b> and <b>Terms &amp; conditions</b> once, at go-live, and leave them. Changing the number format later can make new invoice numbers look inconsistent next to older ones. Use the <b>Watermark</b> field ("DRAFT") only while testing, and clear it before real invoices go out.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- Troubleshooting + FAQ -->
+  <!-- ============================================================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common questions when helping a customer with invoices.</p></div>
+    <div class="spec-body">
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>The list shows "No invoices yet" for a paying customer.</td><td>No invoice records have been generated for the account yet (invoices are raised automatically after a paid order), or you are on a fresh session with no data loaded.</td><td>Confirm the customer has at least one <b>paid</b> order. Invoices appear only after payment settles; a pending order will not have an invoice.</td></tr>
+          <tr><td>The Status filter group is missing from the Filters panel.</td><td>All invoices on the account share one status (e.g. every one is "Paid"), so there is nothing to filter by.</td><td>This is expected. The full list already is the "All" view. The Status group returns as soon as a differently-statused invoice exists.</td></tr>
+          <tr><td>Clicking <b>View</b> shows an empty "No invoice to display" page.</td><td>On the live site the premium document is template-only until live billing is wired, so it renders a safe empty state instead of fabricated figures.</td><td>Use the row-level <b>Download</b> (CSV receipt) meanwhile. The full document renders once live billing is connected (or in demo mode).</td></tr>
+          <tr><td>The downloaded file is a <code>.csv</code>, not a formatted PDF.</td><td>The row <b>Download</b> button produces a CSV receipt by design; the formatted PDF comes from inside the document via <b>Download PDF</b>.</td><td>For a formatted invoice, click <b>View</b> then <b>Download PDF</b> (or <b>Print</b>). For a quick data receipt, the row CSV is correct.</td></tr>
+          <tr><td>The GST line or QR is missing from the document.</td><td>"Show GST" or "Show QR code" is turned off in Invoice Settings.</td><td>A Super Admin can re-enable them from the Settings ⚙ modal on the document.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Is this the same as Business Invoices?</h4>
+      <p>No. This customer page shows personal (B2C) tax invoices for a household account. Commercial partners have a separate <b>Business Partner Statement</b> under <span class="navpath">Admin → Commerce → Business Invoices</span>, with credit limits, outstanding trackers and supply analytics.</p>
+
+      <h4>Can a customer edit or delete an invoice here?</h4>
+      <p>No. The list is read-only for the customer — they can only search, filter, sort, open (View) and download. Invoices are generated by the system after payment; only a Super Admin can change how they are branded and numbered, via Invoice Settings.</p>
+
+      <h4>Where do the seller name, GSTIN and address on the downloaded receipt come from?</h4>
+      <p>From the brand's company profile (legal name, GSTIN, registered address). They are stamped onto the CSV automatically at download time, so every receipt carries the correct seller details.</p>
+    </div>
+  </div>
+</section>

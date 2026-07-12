@@ -1,0 +1,248 @@
+<section class="sheet" id="account-orders">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Customer Module · My Orders</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Customer Module</span></div>
+  <h2 class="section-title">My Orders</h2>
+  <p class="lead">Every order the signed-in customer has ever placed with DOODLY — searchable, filterable and drillable — plus a live panel to rate delivered orders and earn loyalty points.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where this screen lives</div><p>My Orders is a <b>customer self-service</b> page, not an admin screen. Each customer sees only their <b>own</b> orders — the backend scopes every query to the signed-in <code>userId</code>, so one customer can never see another's orders here. It is documented in this manual so a Super Admin knows exactly what the customer is looking at during a support call. Route <span class="navpath">/account/orders.html</span>, manifest key <b>account/orders</b>. The page is assembled from three blocks: a <b>page head</b>, a <b>table</b> (dataset <code>orders</code>), and a <b>reviewsPanel</b>. To see or manage <i>everyone's</i> orders, a Super Admin uses <span class="navpath">Admin → Commerce → Orders</span> instead.</p></div></div>
+
+  <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Two data modes — this matters for support</div><p>When nobody is signed in with a real account, the page renders the sample "exploration" dataset (mock orders) so the site stays browsable. The moment a genuine customer is signed in, a startup routine (<code>hydrateAccount</code>) <b>wipes the demo seed</b> and refills the table from the customer's real orders via <code>GET /api/orders?limit=100</code>. If a customer reports "these aren't my orders", first confirm they are actually logged in — a logged-out browser only ever shows demo data.</p></div></div>
+
+  <!-- ============================================================ SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">My Orders — order history table</p><p class="sm">The full list of the customer's orders with search, filters, sort, export and pagination.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the customer one place to see every order they have placed — its number, date, items, amount paid and current status — and to open any order for full detail and self-service actions (cancel, repeat, report an issue, rate).</span></div>
+
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (own account only — the list is built from orders scoped to the signed-in user). A <span class="pill role">Super Admin</span> or <span class="pill role">Admin</span> can view the same page while signed in as a customer, but cannot see another customer's orders here — platform-wide orders live under <span class="navpath">Admin → Commerce → Orders</span>.</span>
+      <span class="m"><b>Path</b> <span class="navpath">My Account → Orders &amp; plans → My Orders</span></span>
+    </div>
+
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>My Orders</b> · action <b>+ New subscription</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Page head</b><span>Title "My Orders", sub-line "Every order you've placed with DOODLY.", and a primary button "New subscription" linking to /subscriptions.html.</span></div>
+          <div class="wf-cell"><b>Table toolbar</b><span>Instant search box, Status filter, date-range picker, sort, saved views, favourites, export (CSV / Excel / PDF), refresh and clear/reset.</span></div>
+          <div class="wf-cell"><b>Filter chips</b><span>Removable chips showing every active filter (e.g. "Status: Active", "This Month"); a "Clear all" clears them at once.</span></div>
+          <div class="wf-cell"><b>Order history table</b><span>Five columns — Order, Date, Items, Amount, Status — one row per order. Each row is clickable to open the order detail modal.</span></div>
+          <div class="wf-cell"><b>Status badge</b><span>Colour-coded pill per row: Active (green), Completed (grey), Refunded (red), Cancelled (red).</span></div>
+          <div class="wf-cell"><b>Pagination bar</b><span>Page-size selector (10 / 25 / 50 / 100, default 25), page numbers and total count.</span></div>
+          <div class="wf-cell"><b>Empty state</b><span>When there are no orders: a box icon, "No orders yet", helper text, and buttons "Browse products" and "Start a subscription".</span></div>
+          <div class="wf-cell"><b>Reviews panel</b><span>Below the table — the "Rate your deliveries" panel (documented as Screen 3). Hidden when there is nothing to rate.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the My Orders page for a signed-in customer.</div></div>
+
+      <h3 class="sub">Table columns</h3>
+      <p>The <code>orders</code> table has a fixed set of columns. Values are formatted on the client from the raw order records loaded at page start.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Column</th><th>What it shows</th><th>Backend source</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Order</b></td><td>The human-readable order number (falls back to the raw id if no number exists).</td><td><code>number</code> = <code>DOO-&lt;last 6 of id&gt;</code></td><td><code>DOO-4F9A2C</code></td></tr>
+        <tr><td><b>Date</b></td><td>The date the order was placed, formatted "DD Mon YYYY".</td><td><code>createdAt</code></td><td>08 Jul 2026</td></tr>
+        <tr><td><b>Items</b></td><td>A short summary of up to three line items ("qty× product variant"). Falls back to "Trial Pack" for sample orders or "Subscription delivery" for subscription orders.</td><td><code>itemsSummary</code></td><td>2× A2 Buffalo Milk 500ml</td></tr>
+        <tr><td><b>Amount</b></td><td>The total the customer paid, in rupees (bold).</td><td><code>totalPaise</code> ÷ 100</td><td>₹120</td></tr>
+        <tr><td><b>Status</b></td><td>A colour-coded status pill (see the status table below).</td><td>derived from <code>cancelled</code>, <code>paymentStatus</code>, <code>fulfilment</code></td><td>Active</td></tr>
+      </tbody></table></div>
+
+      <h3 class="sub">What each Status means</h3>
+      <p>The status pill is computed on the client in a fixed priority order — the first rule that matches wins. There are exactly four possible pills:</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Priority</th><th>Status pill</th><th>Colour</th><th>Condition</th><th>Meaning to the customer</th>
+      </tr></thead><tbody>
+        <tr><td>1</td><td><b>Cancelled</b></td><td>Red</td><td>the order has a <code>cancelledAt</code> timestamp</td><td>The order was cancelled (by the customer or by the business).</td></tr>
+        <tr><td>2</td><td><b>Refunded</b></td><td>Red</td><td><code>paymentStatus = REFUNDED</code></td><td>The payment was refunded (a cancelled paid order is refunded to the DOODLY Wallet).</td></tr>
+        <tr><td>3</td><td><b>Completed</b></td><td>Grey</td><td><code>fulfilment = DELIVERED</code></td><td>The order has been delivered.</td></tr>
+        <tr><td>4</td><td><b>Active</b></td><td>Green</td><td>none of the above</td><td>The order is placed and still moving through the pipeline (processing, confirmed, preparing, out for delivery, etc.).</td></tr>
+      </tbody></table></div>
+
+      <h3 class="sub">Table specification — the unified DataTable engine</h3>
+      <p>Like every DOODLY table, My Orders is upgraded by the shared DataTable engine (<code>DOODLY_TABLE</code>). It reuses the raw order rows already in memory, so search / sort / filter are instant and need no extra server calls.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Capability</th><th>Behaviour on this screen</th>
+      </tr></thead><tbody>
+        <tr><td><b>Columns</b></td><td>Order, Date, Items, Amount, Status (five, fixed).</td></tr>
+        <tr><td><b>Search</b></td><td>One instant search box; matches across every visible cell (order number, item summary, amount, status text).</td></tr>
+        <tr><td><b>Filters</b></td><td>An auto-detected <b>Status</b> facet (the manifest lists All / Active / Completed / Refunded). Only the statuses that actually occur in the customer's data appear as choices; each shows a count.</td></tr>
+        <tr><td><b>Date range</b></td><td>Filters on the order <b>Date</b> column. Presets: All time, Today, Yesterday, This Week, Last Week, This Month, Last Month, Last 30 Days, Last 90 Days, This Quarter, Last Quarter, This Year, Last Year, plus a Custom Range.</td></tr>
+        <tr><td><b>Sorting</b></td><td>Click a column header to sort; multi-column sort supported. Amount sorts numerically; Date sorts chronologically.</td></tr>
+        <tr><td><b>Pagination</b></td><td>Page sizes 10 / 25 / 50 / 100 (default 25) with page numbers and a total row count.</td></tr>
+        <tr><td><b>Saved views &amp; favourites</b></td><td>The customer can save a filter combination and star favourite rows; both are stored per-user in the browser (localStorage). The active search / filter / sort / page-size also persists across reloads.</td></tr>
+        <tr><td><b>Exports</b></td><td>CSV, Excel and PDF of the current (filtered) view. Export honours the RBAC "export" permission; on the customer account surface there is no module gate, so a signed-in customer may export their own order list.</td></tr>
+        <tr><td><b>Row actions</b></td><td>No inline buttons in a row. Clicking anywhere on a row (except a link or button) opens the <b>order detail modal</b> — see Screen 2.</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">How the data is loaded</div><p>On page start, <code>hydrateAccount</code> fetches <code>GET /api/orders?limit=100</code>. The backend caps <code>limit</code> at <b>50</b>, so up to the 50 most recent orders (newest first) are loaded. All search, filtering and paging then happen in the browser over that set. The backend also supports server-side <code>paymentStatus</code>, <code>type</code>, date <code>from</code>/<code>to</code>, free-text <code>q</code>, <code>cancelled</code> and <code>sort</code> parameters, but the customer page relies on the client DataTable for those controls.</p></div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>When a customer calls about a specific order, ask them to read out the <b>Order number</b> (DOO-XXXXXX). It is the fastest key — it matches their row here, the order id in the backend, and the invoice. Then have them click that row to open the detail modal, which carries the timeline and self-service actions.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Order detail modal</p><p class="sm">Opens when the customer clicks an order row — full breakdown, timeline and self-service actions.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Let the customer see the complete detail of one order (status, line items, money breakdown, event timeline, invoice number) and act on it — cancel, repeat, report an issue, or rate the delivery — all against the live backend.</span></div>
+
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (own order only — every action is authorised against the signed-in <code>userId</code>). The modal only wires up for a genuine signed-in customer; in demo mode the rows are not clickable.</span>
+      <span class="m"><b>Path</b> <span class="navpath">My Account → Orders &amp; plans → My Orders → (click a row)</span></span>
+    </div>
+
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Modal — <b>Order DOO-XXXXXX</b> · close ✕</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Header</b><span>"Order &lt;number&gt;" title with a close (✕) button.</span></div>
+          <div class="wf-cell"><b>Summary rows</b><span>Status (+ payment status), Placed (date &amp; time), Delivery (date · slot, when present), Invoice number (when present).</span></div>
+          <div class="wf-cell"><b>Items list</b><span>Each line item as "qty× product variant" with its line total, then Subtotal, Discount, Bottle deposit and a bold Total.</span></div>
+          <div class="wf-cell"><b>Timeline</b><span>A dotted vertical list of order events (title, optional note, date &amp; time), oldest to newest — or "No events yet."</span></div>
+          <div class="wf-cell"><b>Action bar</b><span>Buttons: Cancel order (only when still cancellable), Report issue, Rate, and a primary Repeat order.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the order detail modal (from GET /api/orders/[id]).</div></div>
+
+      <h3 class="sub">Fields shown in the modal</h3>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Status</b></td><td>The fulfilment stage of the order plus the payment status.</td><td>Processing, Confirmed, Preparing, Quality checked, Packed, Out for delivery, Arriving soon, Delivered, Cancelled · payment PENDING / PAID / FAILED / REFUNDED</td><td class="t-req">Yes</td><td>Read-only. <code>fulfilment</code> derived from the latest order event or the linked delivery; payment from <code>paymentStatus</code>.</td><td>Out for delivery · payment PAID</td></tr>
+        <tr><td><b>Placed</b></td><td>When the order was created.</td><td>date &amp; time</td><td class="t-req">Yes</td><td>Read-only. <code>createdAt</code>.</td><td>08 Jul, 6:40 AM</td></tr>
+        <tr><td><b>Delivery</b></td><td>The scheduled delivery date and slot, when the order has a linked delivery.</td><td>date · slot</td><td class="t-opt">Opt.</td><td>Read-only. Shown only when a delivery date is present.</td><td>09 Jul · Before 7 AM</td></tr>
+        <tr><td><b>Invoice</b></td><td>The invoice number, when one has been generated.</td><td>text</td><td class="t-opt">Opt.</td><td>Read-only. <code>invoice.number</code>.</td><td>DOODLY/2026/00142</td></tr>
+        <tr><td><b>Items</b></td><td>Every line item with its line total.</td><td>list</td><td class="t-req">Yes</td><td>Read-only. From <code>items[]</code> (qty, product name, variant, line total).</td><td>2× A2 Buffalo Milk 500ml — ₹120</td></tr>
+        <tr><td><b>Money breakdown</b></td><td>Subtotal, Discount, Bottle deposit (refundable) and a bold Total.</td><td>currency</td><td class="t-req">Yes</td><td>Read-only. Discount and deposit rows appear only when non-zero.</td><td>Subtotal ₹120 · Total ₹120</td></tr>
+        <tr><td><b>Timeline</b></td><td>The chronological event history of the order.</td><td>list</td><td class="t-opt">Opt.</td><td>Read-only. From <code>OrderEvent</code> records; "No events yet." when empty.</td><td>Order placed · Out for delivery</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">The backend returns more than the modal shows</div><p><code>GET /api/orders/[id]</code> also returns the delivery driver's name and phone, the delivery address, the payment method, wallet transactions tied to the order, and any bottle-ledger entries for the delivery. The current customer modal displays the subset above; the extra data is available for support tooling and richer views.</p></div></div>
+
+      <h3 class="sub">Buttons and actions</h3>
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Cancel order</b></td><td>Asks "Cancel this order? Paid amounts are refunded to your DOODLY Wallet." then cancels it. Shown <i>only</i> when the order is still cancellable (not already cancelled and not yet Out for delivery / Arriving / Delivered).</td><td><code>POST /api/orders/[id] {action:"cancel"}</code> → marks <code>cancelledAt</code>, sets any linked delivery to SKIPPED, logs a "Order cancelled" event. If the order was PAID, its total is credited back to the wallet as a refund transaction and the order becomes REFUNDED. Audited as <code>order.cancel</code>. Page reloads.</td><td><span class="pill role">Customer</span></td></tr>
+        <tr><td><b>Report issue</b></td><td>Prompts "Describe the issue with this order" and records the customer's note (up to 500 characters).</td><td><code>POST /api/orders/[id] {action:"report", issue}</code> → adds an "Issue reported" note event on the order. Modal closes with a thank-you toast.</td><td><span class="pill role">Customer</span></td></tr>
+        <tr><td><b>Rate</b></td><td>Prompts "Rate this delivery (1–5 stars)" and records a quick star rating.</td><td><code>POST /api/orders/[id] {action:"rate", rating}</code> → adds a "Delivery rated" note event (★ out of 5). This is a lightweight rating on the order timeline — distinct from the points-earning verified review in Screen 3.</td><td><span class="pill role">Customer</span></td></tr>
+        <tr><td><b>Repeat order</b></td><td>Re-creates the same order as a fresh one-time order (primary action, always shown).</td><td><code>POST /api/orders/[id] {action:"reorder"}</code> → duplicates the line items and amounts into a new PENDING one-time order, logs "Order placed / Reordered from &lt;number&gt;". Audited as <code>order.reorder</code>. Page reloads so the new order appears in the list.</td><td><span class="pill role">Customer</span></td></tr>
+      </tbody></table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — Cancel &amp; refund a paid order</div>
+        <div class="wf-flow"><span>Click Cancel order</span><span>Confirm prompt</span><span>Server checks it is not already on its way / delivered</span><span>Order marked cancelled · delivery skipped</span><span>Paid total credited to Wallet (order → Refunded)</span><span>Page reloads · status shows Refunded/Cancelled</span></div>
+      </div><div class="wire-cap">Figure — what happens when a customer cancels a paid order.</div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Cancellation is time-boxed</div><p>An order can no longer be cancelled once it is <b>Out for delivery, Arriving soon or Delivered</b> (or the linked delivery has moved to On the way / Reached / Delivered). The server enforces this and returns "This order is already on its way or delivered and can't be cancelled. Please contact support." — the Cancel button is also hidden in those states. There is no self-service <b>hard delete</b> of an order; cancelling is the terminal customer action.</p></div></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — refunds land in the Wallet, not the card</div><p>Cancelling a paid order refunds the full total to the customer's <b>DOODLY Wallet</b> (a wallet credit), not back to the original card. If a customer expects a card refund, that has to be handled by support/admin — set the right expectation on the call.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Rate your deliveries — verified reviews panel</p><p class="sm">A panel below the table where the customer reviews delivered orders and earns loyalty points.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Turn a completed order into a verified product review. The customer rates delivered orders (1–5 stars, optional title and comment); the review goes through admin moderation and, once verified, earns DOODLY Pure Rewards points — once per delivered order.</span></div>
+
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (own orders only). The server verifies order ownership, that the order is PAID, and that it was actually delivered before it accepts a review.</span>
+      <span class="m"><b>Path</b> <span class="navpath">My Account → Orders &amp; plans → My Orders → Rate your deliveries</span></span>
+    </div>
+
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Panel — <b>Rate your deliveries</b> · tag <b>⭐ +N points per review</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Panel header</b><span>"Rate your deliveries" with a points-per-review tag when the loyalty programme is enabled.</span></div>
+          <div class="wf-cell"><b>Reviewable order row</b><span>For each delivered, not-yet-reviewed order: the order number, its item label and placed date.</span></div>
+          <div class="wf-cell"><b>Star picker</b><span>Five clickable stars (1–5). The Submit button stays disabled until a rating is chosen.</span></div>
+          <div class="wf-cell"><b>Title field</b><span>Optional short title, up to 120 characters.</span></div>
+          <div class="wf-cell"><b>Comment field</b><span>Optional longer comment, up to 1000 characters.</span></div>
+          <div class="wf-cell"><b>Submit review</b><span>Sends the review; a toast confirms and shows any points awarded.</span></div>
+          <div class="wf-cell"><b>Your reviews list</b><span>Up to 8 of the customer's past reviews: stars, target, comment, a status badge and the date, each with an Edit button.</span></div>
+          <div class="wf-cell"><b>All-reviewed state</b><span>When every delivered order is reviewed: "All your delivered orders are reviewed — thank you!"</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the "Rate your deliveries" panel (GET /api/account/reviews).</div></div>
+
+      <h3 class="sub">Review form fields</h3>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Rating (stars)</b></td><td>The 1–5 star score for the delivered order.</td><td>integer 1–5</td><td class="t-req">Yes</td><td>Submit is disabled until a star is picked; server enforces an integer 1–5.</td><td>5</td></tr>
+        <tr><td><b>Title</b></td><td>An optional short headline for the review.</td><td>text ≤ 120 chars</td><td class="t-opt">Opt.</td><td>Trimmed; max 120 characters (client and server).</td><td>Rich and fresh</td></tr>
+        <tr><td><b>Comment</b></td><td>An optional longer note about the order.</td><td>text ≤ 1000 chars</td><td class="t-opt">Opt.</td><td>Trimmed; max 1000 characters on the form.</td><td>Delivered before 7 AM, sealed well.</td></tr>
+      </tbody></table></div>
+
+      <h3 class="sub">Review status badges (Your reviews)</h3>
+      <div class="twrap"><table><thead><tr>
+        <th>Badge</th><th>Colour</th><th>Meaning</th>
+      </tr></thead><tbody>
+        <tr><td><b>PENDING</b></td><td>Amber</td><td>Submitted and waiting for admin moderation — not yet public.</td></tr>
+        <tr><td><b>APPROVED</b></td><td>Green</td><td>Verified by an admin — eligible to show publicly.</td></tr>
+        <tr><td><b>REJECTED</b></td><td>Red</td><td>Reviewed by an admin and not published.</td></tr>
+        <tr><td><b>HIDDEN</b></td><td>Grey</td><td>Approved earlier but currently hidden from the public site.</td></tr>
+      </tbody></table></div>
+
+      <h3 class="sub">Buttons and actions</h3>
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>★ (star pick)</b></td><td>Sets the rating 1–5 and enables Submit.</td><td>Client-side only.</td><td><span class="pill role">Customer</span></td></tr>
+        <tr><td><b>Submit review</b></td><td>Submits the rating, title and comment for that order.</td><td><code>POST /api/account/reviews {orderId, rating, title, comment}</code> → server verifies the order is the customer's own, PAID and delivered; enforces one review per product; saves it as PENDING (moderation) and awards loyalty points once per order (idempotent). A 1–2★ review also alerts admins/support to follow up. Toast confirms points.</td><td><span class="pill role">Customer</span></td></tr>
+        <tr><td><b>Edit</b></td><td>Turns a past review row into an editor with the star picker, title and comment pre-filled.</td><td>Client-side (opens the editor).</td><td><span class="pill role">Customer</span></td></tr>
+        <tr><td><b>Save changes</b></td><td>Saves the edited review.</td><td><code>PATCH /api/account/reviews {reviewId, rating, title, comment}</code> → updates the review, resets its status to PENDING (edits go back through moderation), un-features it and recomputes the product's public rating.</td><td><span class="pill role">Customer</span></td></tr>
+        <tr><td><b>Cancel</b></td><td>Discards the in-progress edit and re-renders the panel.</td><td>Client-side only.</td><td><span class="pill role">Customer</span></td></tr>
+      </tbody></table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — Verified review → points</div>
+        <div class="wf-flow"><span>Pick 1–5 stars</span><span>Add optional title/comment</span><span>Submit review</span><span>Server verifies own · paid · delivered</span><span>Saved as PENDING (moderation)</span><span>Points awarded once per order</span><span>Admin approves → shows publicly</span></div>
+      </div><div class="wire-cap">Figure — how a delivered order becomes a public, points-earning review.</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">"Rate" in the modal vs. this panel</div><p>The <b>Rate</b> button in the order detail modal (Screen 2) just adds a quick "Delivery rated" note to the order timeline. This <b>Rate your deliveries</b> panel is the real, verified-review flow: it is server-verified, moderated, feeds the public product rating and earns loyalty points. When a customer asks "why didn't my rating give me points?", they most likely used the modal Rate button — point them here.</p></div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">One review per product</div><p>A customer can review each <b>product</b> only once. Re-buying the same product does not open a new review slot — they edit the existing review instead (which sends it back through moderation). The panel stays completely hidden when there is nothing reviewable and no past reviews.</p></div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>When encouraging reviews on a support call, remind the customer that <b>points are awarded once per delivered order</b> and only after the review passes moderation. Editing an approved review resets it to PENDING, so it temporarily drops off the public product rating until re-approved — set that expectation before they edit.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOTING + FAQ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common My Orders questions a Super Admin will field.</p></div>
+    <div class="spec-body">
+
+      <div class="twrap"><table><thead><tr>
+        <th>Symptom</th><th>Likely cause</th><th>Fix</th>
+      </tr></thead><tbody>
+        <tr><td>"These orders aren't mine / they look fake."</td><td>The customer is not signed in, so the page shows the demo exploration dataset.</td><td>Have them log in at the customer login. Once signed in, <code>hydrateAccount</code> replaces the demo data with their real orders.</td></tr>
+        <tr><td>Order list is empty with a warning banner.</td><td>The customer is signed in but the backend was unreachable or slow to respond (genuine offline/timeout).</td><td>Retry / reload. If it persists, check backend availability — the page intentionally shows an honest empty state rather than demo data.</td></tr>
+        <tr><td>An old order is missing from the list.</td><td>Only the 50 most recent orders are loaded (the request asks for 100 but the server caps at 50).</td><td>Look the order up by number under <span class="navpath">Admin → Commerce → Orders</span>, which is not capped for staff.</td></tr>
+        <tr><td>Clicking a row does nothing.</td><td>Row-click detail only wires up for a real signed-in customer; the row also ignores clicks that land on a link or button.</td><td>Confirm the customer is signed in and clicking the row body (not a link).</td></tr>
+        <tr><td>"I can't cancel my order."</td><td>The order is already Out for delivery, Arriving or Delivered, so the Cancel button is hidden and the server rejects it.</td><td>Handle it through support — self-service cancellation is closed once an order is on its way.</td></tr>
+        <tr><td>"My review isn't showing on the product page."</td><td>New and edited reviews are PENDING until an admin approves them.</td><td>Approve it under <span class="navpath">Admin → Reviews</span>. Only approved, verified reviews appear publicly.</td></tr>
+        <tr><td>"I rated my delivery but got no points."</td><td>They used the modal <b>Rate</b> button (a timeline note), not the verified review panel.</td><td>Direct them to <b>Rate your deliveries</b> below the table; only that flow earns points.</td></tr>
+      </tbody></table></div>
+
+      <h4>Can a customer delete an order from this page?</h4>
+      <p>No. There is no delete. The only terminal customer action is <b>Cancel order</b>, and only while the order is still cancellable. A cancelled paid order is refunded to the wallet and shown as Refunded/Cancelled.</p>
+
+      <h4>Where does a refund go when an order is cancelled?</h4>
+      <p>To the customer's DOODLY Wallet as a credit (a refund transaction), and the order's payment status becomes REFUNDED. It is not returned to the original card automatically.</p>
+
+      <h4>What is the difference between "Repeat order" and starting a new subscription?</h4>
+      <p>"Repeat order" duplicates that exact order as a one-time PENDING order for immediate re-purchase. The header's "New subscription" button instead sends the customer to /subscriptions.html to set up a recurring plan.</p>
+
+    </div>
+  </div>
+
+</section>

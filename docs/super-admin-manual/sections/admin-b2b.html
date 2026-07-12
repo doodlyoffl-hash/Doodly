@@ -1,0 +1,327 @@
+<section class="sheet" id="admin-b2b">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Commerce · B2B Order Management</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Commerce</span></div>
+  <h2 class="section-title">B2B Order Management</h2>
+  <p class="lead">Register commercial customers (hotels, cafés, caterers), create bulk milk &amp; dairy orders, move them through a fixed delivery workflow, record payments, raise invoices, and read per-business and portfolio reports — all in one place.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where this module lives</div><p>Open it from <span class="navpath">Admin → Commerce → B2B Orders</span>. The whole module is one page with five tabs across the top: <b>Businesses</b>, <b>Register</b>, <b>Create Order</b>, <b>Orders</b> and <b>Reports</b>. Every record you create gets a permanent, sequential ID that is never reused: a business is <b>DOO-B2B-000001</b>, an order is <b>B2B-ORD-2026-000125</b>, and an invoice is <b>DOODLY/B2B/2026/00001</b>.</p></div></div>
+
+  <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Who may use this module</div><p>The B2B module is restricted to <b>Admin</b> and <b>Super Admin</b> only. Managers, Accountants, Delivery Executives and Customers cannot open it. This is enforced on the server (<code>canUseB2B</code> in <code>lib/b2b/guard.ts</code>) — hiding the menu item is only a convenience. One action, <b>Delete a business</b>, is reserved for <b>Super Admin</b> alone.</p></div></div>
+
+  <!-- ==================================================================== -->
+  <!-- SCREEN 1 — BUSINESSES -->
+  <!-- ==================================================================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Businesses</p><p class="sm">The directory of every commercial customer, with a full drill-down profile.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Find any business, review its trading history and outstanding money, and jump straight into a new order, an edit, or negotiated pricing.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → B2B Orders → Businesses</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>B2B Order Management</b> · tabs: Businesses · Register · Create Order · Orders · Reports</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Search bar</b><span>One box that matches on Business ID, name, mobile or GST number</span></div>
+          <div class="wf-cell"><b>Businesses table</b><span>ID · Name · Type · Contact · Mobile · Terms · Status · View</span></div>
+          <div class="wf-cell"><b>Profile drawer (on View)</b><span>Address, GST/PAN, discount &amp; credit limit, 4 KPI cards, negotiated prices, order history</span></div>
+          <div class="wf-cell"><b>Row action strip</b><span>+ New order · Disable/Enable · Edit · Pricing &amp; Commercials → · Delete</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Businesses list with an expanded profile drawer.</div></div>
+
+      <h4>Table — Businesses list</h4>
+      <div class="twrap"><table><thead><tr><th>Property</th><th>Detail</th></tr></thead><tbody>
+        <tr><td>Columns</td><td>Business ID · Name · Type · Contact (person) · Mobile · Terms (payment) · Status (Active / Inactive badge) · View</td></tr>
+        <tr><td>Search</td><td>Single field — matches Business ID, name, mobile number and GST number (case-insensitive, partial match)</td></tr>
+        <tr><td>Filters / Sorting</td><td>No column filters or sort controls; the list shows all non-deleted businesses. Soft-deleted businesses are hidden automatically.</td></tr>
+        <tr><td>Row action</td><td><b>View / Close</b> expands or collapses the full profile drawer for that business</td></tr>
+        <tr><td>Empty state</td><td>"No businesses. Use the Register tab to add one."</td></tr>
+      </tbody></table></div>
+
+      <h4>Profile drawer — buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td>+ New order</td><td>Opens the Create Order tab with this business already selected</td><td>Pre-loads the business, its payment terms, discount and negotiated prices</td><td><span class="pill role">Admin</span>+</td></tr>
+        <tr><td>Disable</td><td>Marks the business Inactive (kept for history, hidden from new work)</td><td><code>setActive(id,false)</code> → audit <code>b2b.business.update</code></td><td><span class="pill role">Admin</span>+</td></tr>
+        <tr><td>Enable</td><td>Re-activates a disabled business</td><td><code>setActive(id,true)</code> → audit <code>b2b.business.update</code></td><td><span class="pill role">Admin</span>+</td></tr>
+        <tr><td>Edit</td><td>Loads the business into the Register form to change any detail</td><td>Opens Register in edit mode; save runs <code>updateBusiness</code></td><td><span class="pill role">Admin</span>+</td></tr>
+        <tr><td>Pricing &amp; Commercials →</td><td>Jumps to the B2B Pricing screen scoped to this business</td><td>Stores the business id and opens <code>/admin/b2b-pricing.html</code></td><td><span class="pill role">Admin</span>+</td></tr>
+        <tr><td>Delete</td><td>Soft-deletes the business (order history is retained)</td><td><code>softDelete(id)</code> sets <code>deleted=true</code> + <code>active=false</code> → audit <code>b2b.business.delete</code>; asks for confirmation first</td><td><span class="pill role">Super Admin</span></td></tr>
+        <tr><td>Reorder <span class="muted-sm">(per history row)</span></td><td>Recreates a past order for tomorrow's date</td><td><code>reorder(id)</code> clones the items into a new Pending order</td><td><span class="pill role">Admin</span>+</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">What the profile shows</div><p>The drawer lists the full address, email &amp; alternate number, GST / PAN, the business discount and credit limit, and preferred delivery time. Four KPI cards summarise <b>Total orders</b>, <b>Revenue</b>, <b>Outstanding</b> and <b>Avg daily quantity</b>, followed by last delivery date and the top preferred products. A <b>Negotiated prices</b> block shows any custom per-product rates (with a "% off" badge) or a prompt to set them. The last eight orders appear as a mini history, each with its code, date, item count, status, total, payment badge, invoice number and a Reorder link.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- SCREEN 2 — REGISTER / EDIT BUSINESS -->
+  <!-- ==================================================================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Register business</p><p class="sm">The onboarding form for a new commercial customer (also used to edit an existing one).</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Capture everything the business needs to trade: contact, delivery address with map pin, tax details, and payment &amp; delivery commercials.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → B2B Orders → Register</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Form — <b>Register business</b> · four grouped sections · Register / Save button</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Business information</b><span>Name, type, contact person, mobile, alternate number, email</span></div>
+          <div class="wf-cell"><b>Address</b><span>Address, landmark, area, city, state, pincode + Latitude/Longitude from a Google Maps pin</span></div>
+          <div class="wf-cell"><b>GST &amp; billing (optional)</b><span>GST number, PAN, billing address</span></div>
+          <div class="wf-cell"><b>Payment &amp; delivery</b><span>Payment terms, discount %, credit limit, preferred time, delivery notes</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the four-section registration form.</div></div>
+
+      <h4>Field reference</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Business name</td><td>Legal / trading name</td><td>Text, 2–120 chars</td><td class="t-req">Yes</td><td><code>min 2</code>, <code>max 120</code></td><td>Grand Park Hotel</td></tr>
+        <tr><td>Business type</td><td>Category of establishment</td><td>Hotel, Restaurant, Café, Bakery, Sweet Shop, Tea Stall, Catering, Hostel, Hospital, Corporate Office, Other</td><td class="t-req">Yes</td><td>Fixed dropdown (enum)</td><td>Hotel</td></tr>
+        <tr><td>Contact person</td><td>Who to call for orders</td><td>Text, min 2 chars</td><td class="t-req">Yes</td><td><code>min 2</code></td><td>Mr. Suresh</td></tr>
+        <tr><td>Mobile</td><td>Primary phone</td><td>Indian 10-digit mobile (optional +91)</td><td class="t-req">Yes</td><td>Regex <code>[6-9]\d{9}</code></td><td>98480 22113</td></tr>
+        <tr><td>Alternate number</td><td>Backup phone</td><td>Indian mobile</td><td class="t-opt">Opt.</td><td>Same mobile regex when filled</td><td>90000 55221</td></tr>
+        <tr><td>Email</td><td>For invoices &amp; alerts</td><td>Valid email</td><td class="t-opt">Opt.</td><td>Email format when filled</td><td>orders@grandpark.in</td></tr>
+        <tr><td>Business address</td><td>Delivery address line 1</td><td>Text, min 4 chars</td><td class="t-req">Yes</td><td><code>min 4</code></td><td>Benz Circle, Vijayawada</td></tr>
+        <tr><td>Landmark</td><td>Helps the driver find it</td><td>Text</td><td class="t-opt">Opt.</td><td>Up to 200 chars</td><td>Opp. bus stand</td></tr>
+        <tr><td>Area</td><td>Locality / zone</td><td>Text</td><td class="t-opt">Opt.</td><td>Up to 200 chars</td><td>Benz Circle</td></tr>
+        <tr><td>City</td><td>Delivery city</td><td>Text</td><td class="t-opt">Opt.</td><td>Defaults to <b>Vijayawada</b></td><td>Vijayawada</td></tr>
+        <tr><td>State</td><td>Delivery state</td><td>Text</td><td class="t-opt">Opt.</td><td>Defaults to <b>Andhra Pradesh</b></td><td>Andhra Pradesh</td></tr>
+        <tr><td>Pincode</td><td>Postal code for routing</td><td>6-digit PIN (first digit 1–9)</td><td class="t-req">Yes</td><td>Regex <code>[1-9]\d{5}</code></td><td>520010</td></tr>
+        <tr><td>Latitude</td><td>Exact map position</td><td>Decimal number</td><td class="t-opt">Opt.</td><td>Dropped from a Google Maps pin</td><td>16.5062</td></tr>
+        <tr><td>Longitude</td><td>Exact map position</td><td>Decimal number</td><td class="t-opt">Opt.</td><td>Dropped from a Google Maps pin</td><td>80.6480</td></tr>
+        <tr><td>GST number</td><td>Tax registration</td><td>Text, up to 20 chars</td><td class="t-opt">Opt.</td><td>Stored as-is</td><td>37ABCDE1234F1Z5</td></tr>
+        <tr><td>PAN</td><td>Tax account number</td><td>Text, up to 12 chars</td><td class="t-opt">Opt.</td><td>Stored as-is</td><td>ABCDE1234F</td></tr>
+        <tr><td>Billing address</td><td>If different from delivery</td><td>Text, up to 300 chars</td><td class="t-opt">Opt.</td><td>Stored as-is</td><td>Head office, Hyderabad</td></tr>
+        <tr><td>Payment terms</td><td>How this business pays</td><td>Cash, Credit, Weekly Billing, Monthly Billing, Advance Payment</td><td class="t-opt">Opt.</td><td>Defaults to <b>Cash</b>; drives payment-status logic</td><td>Monthly Billing</td></tr>
+        <tr><td>Business discount %</td><td>Standing discount on every order</td><td>Percent (0–100)</td><td class="t-opt">Opt.</td><td>Stored as basis points (5% → 500 bps; 0–10000)</td><td>5</td></tr>
+        <tr><td>Credit limit (₹)</td><td>Max unpaid exposure allowed</td><td>Whole rupees, ≥ 0</td><td class="t-opt">Opt.</td><td>Warns at order time if the total would exceed it</td><td>50000</td></tr>
+        <tr><td>Preferred delivery time</td><td>Standing delivery slot</td><td>Free text</td><td class="t-opt">Opt.</td><td>Pre-fills new orders' time</td><td>7:00 AM</td></tr>
+        <tr><td>Delivery notes</td><td>Standing instructions</td><td>Text, up to 500 chars</td><td class="t-opt">Opt.</td><td>Stored on the business</td><td>Use rear service gate</td></tr>
+      </tbody></table></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td>Register business</td><td>Creates the business and shows its new DOO-B2B ID</td><td><code>registerBusiness</code> → assigns next sequential code → audit <code>b2b.business.create</code></td><td><span class="pill role">Admin</span>+</td></tr>
+        <tr><td>Save changes <span class="muted-sm">(edit mode)</span></td><td>Applies edits to an existing business</td><td><code>updateBusiness</code> → audit <code>b2b.business.update</code></td><td><span class="pill role">Admin</span>+</td></tr>
+        <tr><td>Cancel <span class="muted-sm">(edit mode)</span></td><td>Discards edits and returns to Businesses</td><td>No write</td><td><span class="pill role">Admin</span>+</td></tr>
+        <tr><td>View businesses →</td><td>Appears after a successful register; opens the list</td><td>No write</td><td><span class="pill role">Admin</span>+</td></tr>
+      </tbody></table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Two layers of validation</div><p>The on-screen form only blocks a save when <b>name</b>, <b>mobile</b> or <b>address</b> is empty. The production backend (<code>BusinessSchema</code> in <code>lib/b2b/validation.ts</code>) is stricter — it also rejects a bad mobile number, an invalid 6-digit pincode, a name under 2 characters, and a contact person under 2 characters. Always fill every starred field correctly so the record saves cleanly end-to-end.</p></div></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — set discount and credit limit at registration</div><p>The business discount is applied automatically to every future order, and the credit limit triggers an on-screen warning if an order would push the business over its exposure. Setting both here saves you from repeating them on each order.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- SCREEN 3 — CREATE ORDER -->
+  <!-- ==================================================================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Create Order</p><p class="sm">Build a bulk order line by line, with live pricing, discount, GST and a running grand total.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Turn a business's request into a priced, saved order that enters the delivery workflow as <b>Pending</b>.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → B2B Orders → Create Order</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Form — <b>Create Order</b> · select business → add products → delivery → totals → Submit</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Business selector</b><span>Search box + Find; matching businesses appear as pick buttons. Once picked, a header shows code, contact, terms and credit limit with a Change link.</span></div>
+          <div class="wf-cell"><b>Product rows</b><span>Product · Qty · Unit · Unit price ₹ · business (base) price with slab/retail badge and GST% · line total · Remove · + Add product</span></div>
+          <div class="wf-cell"><b>Override reason</b><span>Appears on any row whose unit price differs from the business price; a reason is mandatory</span></div>
+          <div class="wf-cell"><b>Delivery &amp; review</b><span>Delivery date, preferred time, discount %, additional charges, remarks</span></div>
+          <div class="wf-cell"><b>Totals panel</b><span>Subtotal, Discount, Additional charges, GST, Grand total + credit-limit warning</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Create Order builder with the live totals panel.</div></div>
+
+      <h4>Field reference</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Business (search)</td><td>Pick who the order is for</td><td>Business ID / name / mobile / GST, then click a match</td><td class="t-req">Yes</td><td>Must resolve to an existing business</td><td>DOO-B2B-000001</td></tr>
+        <tr><td>Product</td><td>What to supply</td><td>A2 Buffalo Milk, Buffalo Pot Curd, Malai Paneer, Palkova, Buffalo Ghee</td><td class="t-req">Yes</td><td>From the live catalogue</td><td>A2 Buffalo Milk</td></tr>
+        <tr><td>Qty</td><td>How much</td><td>Number &gt; 0</td><td class="t-req">Yes</td><td><code>quantity positive</code>; can retrigger a quantity slab price</td><td>40</td></tr>
+        <tr><td>Unit</td><td>Measure for this product</td><td>Milk: Litres/Bottles · Curd: KG/Litres/Tubs · Paneer: KG/Packs · Palkova: KG/Packs · Ghee: KG/Litres/Tins</td><td class="t-req">Yes</td><td>Product-specific list</td><td>Litres</td></tr>
+        <tr><td>Unit price ₹</td><td>Charged price per unit</td><td>Number ≥ 0</td><td class="t-req">Yes</td><td>Auto-loads the business (negotiated/slab/retail) price; editable only if you have override permission</td><td>66</td></tr>
+        <tr><td>Override reason</td><td>Why the price differs from the business default</td><td>Free text</td><td class="t-req">Yes (only when overridden)</td><td>Order is blocked until every overridden line has a reason</td><td>Negotiated for 250 L</td></tr>
+        <tr><td>Delivery date</td><td>When to deliver</td><td>Date</td><td class="t-req">Yes</td><td>Defaults to tomorrow</td><td>2026-07-13</td></tr>
+        <tr><td>Preferred delivery time</td><td>Delivery slot</td><td>Free text</td><td class="t-req">Yes</td><td>Defaults to 7:00 AM (or the business's preferred time)</td><td>5:30 AM</td></tr>
+        <tr><td>Discount %</td><td>Order-level discount</td><td>Percent</td><td class="t-opt">Opt.</td><td>Pre-filled from the business discount; stored as basis points</td><td>5</td></tr>
+        <tr><td>Additional charges ₹</td><td>Delivery / packaging add-on</td><td>Number</td><td class="t-opt">Opt.</td><td>Added after discount, before/with GST into the total</td><td>150</td></tr>
+        <tr><td>Remarks</td><td>Free note on the order</td><td>Text</td><td class="t-opt">Opt.</td><td>Stored on the order</td><td>Festival week — extra curd</td></tr>
+      </tbody></table></div>
+
+      <h4>How the total is calculated</h4>
+      <div class="twrap"><table><thead><tr><th>Line</th><th>How it is worked out</th></tr></thead><tbody>
+        <tr><td>Subtotal</td><td>Sum of every line's (unit price × quantity), rounded per line</td></tr>
+        <tr><td>Discount</td><td>Subtotal × discount % (held internally as basis points)</td></tr>
+        <tr><td>Additional charges</td><td>Added as entered</td></tr>
+        <tr><td>GST</td><td>Sum of each line's GST, using that product's live GST slab (0 / 5 / 12 / 18%)</td></tr>
+        <tr><td>Grand total</td><td>Subtotal − Discount + Additional charges + GST</td></tr>
+      </tbody></table></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td>Find</td><td>Searches for a business to order for</td><td><code>lookup(query)</code> lists matches</td><td><span class="pill role">Admin</span>+</td></tr>
+        <tr><td>+ Add product</td><td>Adds another product row</td><td>Pre-fills the business price + GST for the chosen product</td><td><span class="pill role">Admin</span>+</td></tr>
+        <tr><td>Remove</td><td>Deletes a product row</td><td>Recalculates totals live</td><td><span class="pill role">Admin</span>+</td></tr>
+        <tr><td>Change</td><td>Switches to a different business (clears the draft)</td><td>Resets the order form</td><td><span class="pill role">Admin</span>+</td></tr>
+        <tr><td>Submit order</td><td>Saves the order as Pending</td><td><code>createOrder</code> → next B2B-ORD code, records any price overrides, audit <code>b2b.order.create</code>; opens the Orders tab</td><td><span class="pill role">Admin</span>+</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Price overrides are traceable</div><p>Each product row shows its <b>business price</b> ("Biz ₹…") with a <span class="badge blue">slab</span> or <span class="badge grey">retail</span> badge and the GST %. If you change the unit price away from that base, the row is flagged as overridden and a mandatory <b>Override reason</b> appears. On submit, every override is recorded against the order and the business in B2B Pricing — the business's standing default is never altered. If your role lacks override permission the unit-price box is disabled.</p></div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Credit-limit warning</div><p>If the grand total would push the business over its <b>credit limit</b>, a red "⚠ Exceeds credit limit of ₹…" banner appears in the totals panel. It is a warning, not a hard block — use judgment and, if needed, take a payment or raise the limit before submitting.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- SCREEN 4 — ORDERS -->
+  <!-- ==================================================================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Orders</p><p class="sm">The working list of every B2B order, with status changes, payments and invoicing in one drawer.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Track and move orders through the delivery workflow, record money against them, and raise invoices.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → B2B Orders → Orders</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">List — <b>Orders</b> · status filter chips · search · Manage drawer</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Filter chips</b><span>All + Pending · Confirmed · Preparing · Out for Delivery · Delivered · Completed · Cancelled</span></div>
+          <div class="wf-cell"><b>Search box</b><span>Matches order code or business name</span></div>
+          <div class="wf-cell"><b>Orders table</b><span>Order · Business · Delivery (date + time) · Items · Total · Payment · Status · Manage</span></div>
+          <div class="wf-cell"><b>Manage drawer</b><span>Next-status buttons, record payment, generate invoice, reorder, print, item list, outstanding, notes</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Orders list with the Manage drawer open on one row.</div></div>
+
+      <h4>Table — Orders list</h4>
+      <div class="twrap"><table><thead><tr><th>Property</th><th>Detail</th></tr></thead><tbody>
+        <tr><td>Columns</td><td>Order (code) · Business · Delivery (date + time) · Items (count) · Total · Payment (badge) · Status (badge) · Manage</td></tr>
+        <tr><td>Filters</td><td>Status chips: <b>All</b>, Pending, Confirmed, Preparing, Out for Delivery, Delivered, Completed, Cancelled</td></tr>
+        <tr><td>Search</td><td>Matches order code and business name (case-insensitive)</td></tr>
+        <tr><td>Sorting</td><td>Newest first (by created date)</td></tr>
+        <tr><td>Row action</td><td><b>Manage / Close</b> opens the action drawer for that order</td></tr>
+        <tr><td>Empty state</td><td>"No orders yet."</td></tr>
+      </tbody></table></div>
+
+      <h4>Manage drawer — buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td>Next-status buttons</td><td>Move the order one step forward (e.g. Confirmed →, Preparing →) or Cancel</td><td><code>setStatus</code> — only the allowed next step is offered; audit <code>b2b.order.status</code></td><td><span class="pill role">Admin</span>+</td></tr>
+        <tr><td>Record payment</td><td>Adds a payment for the amount typed in the box</td><td><code>recordPayment</code> — updates paid amount &amp; payment status; audit <code>b2b.order.pay</code></td><td><span class="pill role">Admin</span>+</td></tr>
+        <tr><td>Generate invoice</td><td>Raises a numbered invoice (DOODLY/B2B/…)</td><td><code>genInvoice</code> — assigns the next invoice number once; audit <code>b2b.invoice</code></td><td><span class="pill role">Admin</span>+</td></tr>
+        <tr><td>Reorder</td><td>Clones this order for tomorrow as a new Pending order</td><td><code>reorder</code> — copies items into a fresh order</td><td><span class="pill role">Admin</span>+</td></tr>
+        <tr><td>Print</td><td>Opens the browser print dialog for the order</td><td><code>window.print()</code></td><td><span class="pill role">Admin</span>+</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">What else the drawer shows</div><p>Below the buttons the drawer lists the full items (quantity, unit and product), the <b>Outstanding</b> amount, and any remarks. Once an invoice exists, a green "Invoice DOODLY/B2B/…" badge replaces the Generate button. The Record-payment controls disappear automatically once an order is fully <b>Paid</b>.</p></div></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — B2B order status lifecycle</div>
+        <div class="wf-flow"><span>Pending</span><span>Confirmed</span><span>Preparing</span><span>Out for Delivery</span><span>Delivered</span><span>Completed</span></div>
+      </div><div class="wire-cap">Figure — the forward path. From Pending through Out for Delivery, any step can also go to <b>Cancelled</b>. Delivered can only move to Completed; Completed and Cancelled are final.</div></div>
+
+      <h4>Status rules</h4>
+      <div class="twrap"><table><thead><tr><th>Current status</th><th>Allowed next steps</th></tr></thead><tbody>
+        <tr><td>Pending</td><td>Confirmed, Cancelled</td></tr>
+        <tr><td>Confirmed</td><td>Preparing, Cancelled</td></tr>
+        <tr><td>Preparing</td><td>Out for Delivery, Cancelled</td></tr>
+        <tr><td>Out for Delivery</td><td>Delivered, Cancelled</td></tr>
+        <tr><td>Delivered</td><td>Completed</td></tr>
+        <tr><td>Completed</td><td>— (final)</td></tr>
+        <tr><td>Cancelled</td><td>— (final)</td></tr>
+      </tbody></table></div>
+
+      <h4>Payment status — how it is decided</h4>
+      <div class="twrap"><table><thead><tr><th>Badge</th><th>When it shows</th></tr></thead><tbody>
+        <tr><td><span class="badge green">Paid</span></td><td>Amount paid is greater than or equal to the total</td></tr>
+        <tr><td><span class="badge amber">Partially Paid</span></td><td>Some money is paid, but less than the total</td></tr>
+        <tr><td><span class="badge blue">Credit</span></td><td>Nothing paid yet and the terms are Credit / Weekly / Monthly billing</td></tr>
+        <tr><td><span class="badge grey">Pending</span></td><td>Nothing paid yet on Cash or Advance terms</td></tr>
+      </tbody></table></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — advance a status only when it is physically true</div><p>Move an order to <b>Out for Delivery</b> only when it is actually loaded, and to <b>Delivered</b> only when the customer has it. The workflow is forward-only past each step, so an accidental jump cannot be quietly walked back — the only escape from a mid-workflow status is Cancelled.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- SCREEN 5 — REPORTS -->
+  <!-- ==================================================================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Reports</p><p class="sm">Portfolio-level revenue, collection and outstanding numbers with top businesses and products.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> See how the whole B2B book is performing over a chosen date range and export it.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → B2B Orders → Reports</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Report — <b>Reports</b> · date presets · Export CSV</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Date presets</b><span>All · Last 7d · Last 30d</span></div>
+          <div class="wf-cell"><b>KPI cards</b><span>Orders · Revenue · Collected · Outstanding</span></div>
+          <div class="wf-cell"><b>Top businesses / Top products</b><span>Two ranked tables by revenue</span></div>
+          <div class="wf-cell"><b>Outstanding payments / Orders by status</b><span>Money owed per order and a status breakdown</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the four-KPI header over the four report tables.</div></div>
+
+      <h4>What each block means</h4>
+      <div class="twrap"><table><thead><tr><th>Block</th><th>What it shows</th></tr></thead><tbody>
+        <tr><td>Orders</td><td>Count of non-cancelled orders in the range</td></tr>
+        <tr><td>Revenue</td><td>Total value of those orders</td></tr>
+        <tr><td>Collected</td><td>Money actually received against them</td></tr>
+        <tr><td>Outstanding</td><td>Revenue minus Collected — money still owed</td></tr>
+        <tr><td>Top businesses</td><td>Business · orders · revenue, ranked by revenue</td></tr>
+        <tr><td>Top products</td><td>Product · quantity · revenue, ranked by revenue</td></tr>
+        <tr><td>Outstanding payments</td><td>Order · business · amount still owed, per unpaid order</td></tr>
+        <tr><td>Orders by status</td><td>Count of orders in each status</td></tr>
+      </tbody></table></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td>All / Last 7d / Last 30d</td><td>Sets the date range for every figure and table</td><td>Recomputes <code>reports(from,to)</code> live</td><td><span class="pill role">Admin</span>+</td></tr>
+        <tr><td>Export CSV</td><td>Downloads the KPIs, top businesses and top products as a CSV file</td><td>Builds <code>doodly-b2b-report.csv</code> in the browser</td><td><span class="pill role">Admin</span>+</td></tr>
+      </tbody></table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — the range filters by delivery date</div><p>The date presets bracket orders by their <b>delivery date</b>, and cancelled orders are excluded from every figure. Use "Last 30d" for a monthly review and export the CSV before a billing run so Accounts has the same numbers you see on screen.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- TROUBLESHOOTING + FAQ -->
+  <!-- ==================================================================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Quick fixes for the most common B2B snags.</p></div>
+    <div class="spec-body">
+
+      <div class="twrap"><table><thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead><tbody>
+        <tr><td>Submit order stays greyed out</td><td>No product rows added yet</td><td>Click <b>+ Add product</b> and set a quantity — the button enables once at least one line exists.</td></tr>
+        <tr><td>"Add a reason for each overridden price"</td><td>You changed a unit price away from the business price without a reason</td><td>Fill the red <b>Override reason</b> box on each flagged row, then submit.</td></tr>
+        <tr><td>"Cannot move to …" when changing status</td><td>The step isn't allowed from the current status</td><td>Follow the workflow: only the next forward step (or Cancel) is valid. See the Status rules table.</td></tr>
+        <tr><td>Record-payment controls are missing</td><td>The order is already fully Paid</td><td>None needed — the box hides automatically once paid in full.</td></tr>
+        <tr><td>"⚠ Exceeds credit limit" banner</td><td>Order total is above the business's credit limit</td><td>Take a payment, lower the order, or raise the credit limit on the business (Edit) — it is a warning, not a block.</td></tr>
+        <tr><td>Business won't save</td><td>Missing name, mobile or address (or an invalid mobile/pincode on the backend)</td><td>Complete every starred field with a valid 10-digit mobile and 6-digit pincode.</td></tr>
+        <tr><td>Delete button not visible on a business</td><td>You are signed in as Admin, not Super Admin</td><td>Deleting a business is Super-Admin only; ask a Super Admin, or just <b>Disable</b> it instead.</td></tr>
+      </tbody></table></div>
+
+      <h4>Q. Can I change a business's standing price from the order screen?</h4>
+      <p>No. Editing a unit price on an order overrides it <b>for that one order only</b>, and the change is logged with your reason. To change the standing negotiated price, use <b>Pricing &amp; Commercials →</b> (the B2B Pricing screen).</p>
+
+      <h4>Q. What is the difference between Disable and Delete?</h4>
+      <p><b>Disable</b> keeps the business and all its order history but marks it Inactive so it is set aside from new work — any Admin can do it and it is reversible with <b>Enable</b>. <b>Delete</b> is a Super-Admin-only soft delete that hides the business from the list while still retaining its order history.</p>
+
+      <h4>Q. Do I have to invoice before I can take payment?</h4>
+      <p>No. Payments and invoices are independent — you can record a payment on any not-fully-paid order, and generate the invoice before or after. An order gets at most one invoice number, assigned the first time you click Generate invoice.</p>
+
+      <h4>Q. Why do some order numbers reset each year?</h4>
+      <p>Order and invoice numbers include the year and run a fresh sequence per year (e.g. B2B-ORD-2026-000001, DOODLY/B2B/2026/00001). Business IDs are a single lifetime sequence (DOO-B2B-000001) that never resets and never reuses a number.</p>
+
+    </div>
+  </div>
+
+</section>

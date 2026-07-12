@@ -1,0 +1,537 @@
+<section class="sheet" id="admin-b2b-pricing">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Commerce · B2B Pricing</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Commerce</span></div>
+  <h2 class="section-title">B2B Pricing</h2>
+  <p class="lead">Give every commercial customer its own negotiated product prices, quantity slabs and effective dates — with a full change history, bulk tools, reports and an order-time override log that never touches the saved default.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">What this screen is for</div>
+      <p>Retail (storefront) customers pay one published price. A hotel, café or reseller usually negotiates a different rate. B2B Pricing is where you record that negotiated rate <b>per business, per product</b>, so every B2B order automatically fills in the right price. If a business has no custom price for a product, the order simply uses the normal retail price. Prices are stored as whole rupees on screen; the DOODLY database keeps them as paise (₹1 = 100 paise) for exactness.</p>
+    </div>
+  </div>
+
+  <div class="call warn">
+    <span class="ci">⚠️</span>
+    <div class="cbody">
+      <div class="ctitle">Who can do what</div>
+      <p><b>Viewing</b> pricing is open to Admin and Super Admin. <b>Every change</b> — editing a price, setting slabs, bulk updates, copy/import, scheduling, deactivating a business's pricing and editing settings — is restricted to the <b>Super Admin</b>. The server (<code>/api/b2b/pricing</code>) additionally blocks any role that is not Admin or Super Admin with a <code>403 Forbidden</code>. Managers, Accountants, Delivery Executives and Customers cannot open this module.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Pricing Workspace &amp; Header</p><p class="sm">The four live counters and the seven-tab shell that every B2B Pricing task lives inside.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give a one-glance summary of how much custom pricing exists, and switch between the seven work areas.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> full · <span class="pill role">Admin</span> view-only</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → B2B Pricing</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">B2B Pricing — <b>Dynamic B2B Pricing</b> · live-from-database banner · Run tests</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>KPI strip (4 counters)</b><span>Businesses priced · Custom prices · Order overrides · Scheduled</span></div>
+          <div class="wf-cell"><b>Run tests</b><span>Self-test button; shows a green/red "X/Y tests" badge</span></div>
+          <div class="wf-cell"><b>Tab bar (7)</b><span>Product Pricing · Bulk &amp; Schedule · Copy/Import/Export · Price History · Order Overrides · Reports · Settings</span></div>
+          <div class="wf-cell"><b>Tab body</b><span>The selected tab's content renders here</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the persistent header (KPIs + tabs) that frames all seven screens.</div></div>
+
+      <p>When the page loads it first pulls live pricing rules from the DOODLY database (<code>GET /api/b2b/pricing?limit=500</code>) and shows a green banner such as <span class="navpath">● Live — B2B pricing from the DOODLY database (12 rule(s)).</span> For each business + product it keeps the rule with the smallest minimum quantity and converts paise to rupees for display.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Counter</th><th>What it counts</th><th>Where the number comes from</th></tr></thead>
+        <tbody>
+          <tr><td>Businesses priced</td><td>How many businesses have at least one custom price saved</td><td>Businesses in the pricing store with a numeric price on any product</td></tr>
+          <tr><td>Custom prices</td><td>Total number of custom product prices across all businesses</td><td>Count of products with a set price</td></tr>
+          <tr><td>Order overrides</td><td>Total order-time price overrides recorded</td><td>The Order Overrides log</td></tr>
+          <tr><td>Scheduled</td><td>Future price changes not yet applied</td><td>Scheduled-changes list where <code>applied = false</code></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Tip — the "Run tests" button is safe</div>
+          <p>"Run tests" runs a built-in self-check of the pricing engine (slab selection, effective-date handling, bulk maths, override logging and a 500-business speed test). It snapshots and restores your real data, so it never changes any live price. A green <b>X/Y tests</b> badge means the engine is healthy.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Product Pricing (main tab)</p><p class="sm">Set, reset, enable/disable and slab-price every product for one chosen business.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Maintain the negotiated price list for a single business, product by product.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> edit · <span class="pill role">Admin</span> view</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → B2B Pricing → Product Pricing</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Product Pricing — business picker · product search · Deactivate/Activate pricing · Customer preview</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Business dropdown</b><span>Choose which business's prices you are editing (code · name)</span></div>
+          <div class="wf-cell"><b>Search product</b><span>Filter the table by product name or slug</span></div>
+          <div class="wf-cell"><b>Deactivate / Activate pricing</b><span>Turns all custom pricing for the business on or off at once</span></div>
+          <div class="wf-cell"><b>Customer preview</b><span>Shows the catalogue exactly as this business sees it</span></div>
+          <div class="wf-cell"><b>Price table</b><span>Product · Retail price (+GST%) · Business price (+% off) · Status · row actions</span></div>
+          <div class="wf-cell"><b>Edit / Slab drawer</b><span>Inline row editor and quantity-slab editor open here</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Product Pricing tab with picker row, action buttons and price table.</div></div>
+
+      <p>Each row shows the product's normal <b>retail price</b> (with its GST %), the <b>business price</b> in effect, a savings badge (<b>% off</b> in green, or <b>+%</b> in amber if the business price is higher than retail), and a <b>status</b> badge. When custom pricing is deactivated for the business a warning strip appears and every product falls back to retail.</p>
+
+      <p class="lead" style="margin-top:14px">Row action buttons (Super Admin only — Admins see "View only")</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Edit</td><td>Opens the inline editor to type a new business price and notes</td><td><code>setPrice()</code> saves the price; blank clears it. Writes a Price History entry and an audit log</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td>Save</td><td>Confirms the edited price + notes</td><td><code>setPrice()</code> + <code>setNotes()</code>; empty price calls <code>resetToRetail()</code></td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td>Cancel</td><td>Discards the inline edit</td><td>Closes the editor — no save</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td>Slabs</td><td>Opens the quantity-slab editor for that product</td><td>Toggles the slab drawer (see field table below)</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td>Reset</td><td>Clears the custom price and slabs → back to retail (shown only if a custom price exists)</td><td><code>resetToRetail()</code>; logs a "Reset to retail price" history entry + audit</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td>Disable / Enable</td><td>Marks the product unavailable / available to this business</td><td><code>toggleProduct()</code>; a disabled product resolves as "Disabled" and falls back to retail for pricing</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td>Deactivate / Activate pricing</td><td>Turns the whole business's custom pricing off/on in one click</td><td><code>setBizActive()</code>; while off, all products use retail</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td>Customer preview</td><td>Shows a read-only "your negotiated catalogue" card (your price / unit, retail struck through, you-save badge)</td><td>Renders <code>catalogue()</code> for enabled products — no data change</td><td><span class="pill role">Admin</span>+</td></tr>
+        </tbody>
+      </table></div>
+
+      <p class="lead" style="margin-top:14px">Inline edit — fields</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Business price ₹</td><td>The negotiated per-unit price for this business</td><td>Number ₹0 or more</td><td class="t-req">Yes</td><td>Must be ≥ 0 and ≤ 1,000,000; blank clears the custom price back to retail. Placeholder shows the retail price</td><td>78</td></tr>
+          <tr><td>Notes</td><td>Free note explaining the rate (shown under the product name)</td><td>Any text</td><td class="t-opt">Opt.</td><td>Saved via <code>setNotes()</code></td><td>Negotiated bulk rate</td></tr>
+        </tbody>
+      </table></div>
+
+      <p class="lead" style="margin-top:14px">Quantity-slab editor — fields (per slab row)</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Min qty</td><td>Lowest order quantity this slab applies to</td><td>Whole number</td><td class="t-req">Yes</td><td>Defaults to 0 if blank</td><td>101</td></tr>
+          <tr><td>Max (∞)</td><td>Highest quantity for the slab; leave blank for "and above"</td><td>Whole number or blank</td><td class="t-opt">Opt.</td><td>Blank = no upper limit (infinity)</td><td>250</td></tr>
+          <tr><td>Price ₹</td><td>Per-unit price when the order quantity falls in this band</td><td>Number</td><td class="t-req">Yes</td><td>Rows with no price are dropped when saving (<code>setSlabs()</code>)</td><td>77</td></tr>
+        </tbody>
+      </table></div>
+
+      <p>Slab editor buttons: <b>+ Add slab</b> adds a new band, <b>Remove</b> deletes a row, <b>Save slabs</b> stores them and logs a history entry, and <b>Close</b> discards. Slabs only take effect if slab pricing is enabled in Settings.</p>
+
+      <p class="lead" style="margin-top:14px">Price table — columns &amp; controls</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td>Columns</td><td>Product (+ notes + "N qty slab(s)" hint) · Retail price (+ GST %) · Business price (+ % off / +%) · Status · Actions</td></tr>
+          <tr><td>Search</td><td>Live filter on product name + slug (the "Search product" box)</td></tr>
+          <tr><td>Filters</td><td>Business dropdown selects whose price list is shown</td></tr>
+          <tr><td>Row actions</td><td>Edit · Slabs · Reset · Disable/Enable (Super Admin) — Admins see "View only"</td></tr>
+          <tr><td>Status badges</td><td>Custom (green) · Slab (blue) · Retail (grey) · Disabled (red) · Scheduled (amber) · Expired (amber)</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — how a price is resolved for a B2B order line</div>
+        <div class="wf-flow"><span>Business pricing off? → Retail</span><span>Product disabled? → Disabled</span><span>Effective date not started / expired? → Retail</span><span>Slab matches qty (slabs on)? → Slab price</span><span>Flat business price set? → Business price</span><span>Otherwise → Retail</span></div>
+      </div><div class="wire-cap">Figure — the fixed order of checks the engine (<code>resolveCfg</code>) runs to pick a price.</div></div>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">Best Practice</div>
+          <p>Always type a clear <b>reason</b> when you change a price so the Price History stays useful during audits and contract reviews. Use slabs for volume deals (for example ₹78 up to 100 L, ₹77 for 101–250 L, ₹75 for 501 L and above) instead of editing the price by hand every time the order size changes.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Bulk &amp; Schedule</p><p class="sm">Change many products at once, or set a price to take effect on a future date.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Apply a percentage change across products in one action, and queue price changes for a future start date.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> only</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → B2B Pricing → Bulk &amp; Schedule</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Bulk &amp; Schedule — business picker</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Bulk price update</b><span>Product checkboxes · Action · Percentage · Reason · Apply</span></div>
+          <div class="wf-cell"><b>Schedule a future price</b><span>Product · New price · Effective from · Reason · Schedule change</span></div>
+          <div class="wf-cell"><b>Upcoming changes list</b><span>Each scheduled row with a Cancel link</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — two side-by-side panels: bulk update (left) and scheduling (right).</div></div>
+
+      <p class="lead">Bulk price update — fields</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Product checkboxes</td><td>Which products to change</td><td>One or more products</td><td class="t-opt">Opt.</td><td>Leave <b>all unchecked</b> to apply to every product</td><td>☑ A2 Buffalo Milk</td></tr>
+          <tr><td>Action</td><td>The kind of change</td><td>Increase by % · Reduce by % · Promotional (% off retail)</td><td class="t-req">Yes</td><td>Increase/Reduce work off the current business price; Promotional works off retail</td><td>Increase by %</td></tr>
+          <tr><td>Percentage</td><td>How much to change by</td><td>Number</td><td class="t-req">Yes</td><td>Applied and rounded to whole rupees; a result below 0 becomes 0</td><td>5</td></tr>
+          <tr><td>Reason</td><td>Note stored on every history entry the bulk run creates</td><td>Any text</td><td class="t-opt">Opt.</td><td>Falls back to an auto reason like "Bulk increase 5%"</td><td>Seasonal increase</td></tr>
+        </tbody>
+      </table></div>
+      <p><b>Apply bulk update</b> runs <code>bulkUpdate()</code>, updates the chosen products, records a history entry for each and one audit line, then jumps back to Product Pricing showing the new prices.</p>
+
+      <p class="lead" style="margin-top:14px">Schedule a future price — fields</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Product</td><td>Which product the future price is for</td><td>Product from the list</td><td class="t-req">Yes</td><td>—</td><td>A2 Buffalo Milk</td></tr>
+          <tr><td>New price ₹</td><td>The price to switch to on the start date</td><td>Number</td><td class="t-req">Yes</td><td>Must be a valid number (<code>schedule()</code>)</td><td>75</td></tr>
+          <tr><td>Effective from</td><td>The date the new price starts</td><td>Date (defaults to today)</td><td class="t-req">Yes</td><td>A start date is required</td><td>2026-08-01</td></tr>
+          <tr><td>Reason</td><td>Note kept with the scheduled change</td><td>Any text</td><td class="t-opt">Opt.</td><td>Defaults to "Scheduled price change"</td><td>New contract rate</td></tr>
+        </tbody>
+      </table></div>
+      <p><b>Schedule change</b> queues the change; it appears in the "Upcoming changes" list with a <b>Cancel</b> link. Scheduled changes whose date has arrived are applied automatically each time the module opens (<code>applyScheduled()</code>), which then writes the price and a history entry as if you had set it by hand.</p>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Note — "Promotional" resets from retail</div>
+          <p>Increase and Reduce adjust the <b>current business price</b>. Promotional is different: it computes the new price as a percentage <b>off the retail price</b>, ignoring whatever custom price was there. Use Promotional for festival or launch offers, and Reduce for shaving a few percent off an already-negotiated rate.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 4 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Copy / Import / Export</p><p class="sm">Reuse one business's price list on another, or move price lists in and out as CSV/Excel.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Speed up setting up new businesses by copying an existing price map, and exchange price lists with spreadsheets.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> for copy/import · <span class="pill role">Admin</span> can export</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → B2B Pricing → Copy / Import / Export</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Copy / Import / Export — target business picker</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Copy pricing</b><span>"Copy from" source dropdown → Copy pricing button</span></div>
+          <div class="wf-cell"><b>Export</b><span>Export CSV · Export Excel of the current price list</span></div>
+          <div class="wf-cell"><b>Import</b><span>Paste box (product, price, notes) → Import price list · Download template</span></div>
+          <div class="wf-cell"><b>Import result</b><span>Shows count imported and any skipped rows</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — copy panel (left) and import/export panel (right).</div></div>
+
+      <p class="lead">Buttons</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Copy pricing →</td><td>Copies the full product price map (and slabs) from the source business into the target</td><td><code>copyPricing()</code>; existing prices on the target are overwritten; logs a history + audit entry</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td>Export CSV</td><td>Downloads the current business's price list as a .csv file</td><td><code>exportPriceList("csv")</code> — Product, Retail, Business, Status, GST, Notes</td><td><span class="pill role">Admin</span>+</td></tr>
+          <tr><td>Export Excel</td><td>Downloads the same list as an Excel (.xls) file</td><td><code>exportPriceList("xls")</code></td><td><span class="pill role">Admin</span>+</td></tr>
+          <tr><td>Import price list</td><td>Reads the pasted lines and sets each product's price</td><td><code>importList()</code>; matches by slug or exact product name; unknown products are skipped and listed</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td>Download template</td><td>Downloads a starter CSV (<code>product,price,notes</code>) you can fill in</td><td>Generates <code>doodly-price-template.csv</code></td><td><span class="pill role">Super Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <p class="lead" style="margin-top:14px">Import — fields</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Copy from</td><td>Source business whose prices you want to reuse</td><td>Any other business (the target is excluded)</td><td class="t-req">Yes</td><td>Source and target must differ and the source must have custom pricing</td><td>DB-000002 · Grand Café</td></tr>
+          <tr><td>Price list (paste box)</td><td>One product per line to import</td><td><code>product or slug, price, notes</code></td><td class="t-req">Yes</td><td>A header line beginning "product," is ignored; rows without a product and price are dropped</td><td>A2 Buffalo Milk, 78, Bulk rate</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Warning — Copy overwrites</div>
+          <p>Copying a price list <b>replaces</b> the target business's existing prices for every product it copies. Check the target in the dropdown before you press <b>Copy pricing →</b>. Use Price History afterwards to confirm exactly what changed.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 5 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Price History</p><p class="sm">A dated log of every price change, who made it and why.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Provide an audit trail of all pricing changes for a business or across all businesses.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Admin</span>+ view · <span class="pill role">Super Admin</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → B2B Pricing → Price History</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Price History — business filter · search · Export CSV</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Business filter</b><span>"All businesses" or a specific business</span></div>
+          <div class="wf-cell"><b>Search</b><span>Filter by product, reason, user or business code</span></div>
+          <div class="wf-cell"><b>History table</b><span>Product · Previous · New price · Changed by · Reason · Effective date</span></div>
+          <div class="wf-cell"><b>Export CSV</b><span>Downloads the filtered history</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Price History log with filters and export.</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td>Columns</td><td>Product (+ business code) · Previous · New price · Changed by · Reason · Effective</td></tr>
+          <tr><td>Search</td><td>Matches product, reason, changed-by user and business code</td></tr>
+          <tr><td>Filters</td><td>Business dropdown (including "All businesses")</td></tr>
+          <tr><td>Rows shown</td><td>Most recent first, up to 300 on screen (the store keeps up to 2,000)</td></tr>
+          <tr><td>Exports</td><td>Export CSV (Date, Business, Product, Previous, New, Changed by, Reason)</td></tr>
+          <tr><td>Row actions</td><td>None — this is a read-only record</td></tr>
+        </tbody>
+      </table></div>
+
+      <p>The DOODLY database keeps a matching per-rule history (<code>BusinessPricingHistory</code>) recording each action — <b>created, updated, deleted, restored</b> — with the old and new price, old and new GST, the reason and the role that made the change. This is the tamper-evident source of truth behind the on-screen log.</p>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 6 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Order Overrides</p><p class="sm">Every one-off price change made while creating a B2B order — the saved default is never touched.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Track ad-hoc negotiations at order time so you can see how often, and by how much, staff deviate from the agreed price.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Admin</span>+ view</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → B2B Pricing → Order Overrides</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Order Overrides — business filter · Export CSV</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Business filter</b><span>"All businesses" or a specific one</span></div>
+          <div class="wf-cell"><b>Overrides table</b><span>Order · Product · Qty · Business price · Charged · Δ · Reason · By</span></div>
+          <div class="wf-cell"><b>Export CSV</b><span>Downloads the filtered overrides</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Order Overrides log with delta badges.</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td>Columns</td><td>Order (+ business code) · Product · Qty · Business price · Charged · Δ (difference) · Reason · By (+ date/time)</td></tr>
+          <tr><td>Delta badge</td><td>Green "−₹X" when charged below the business price; amber "+₹X" when charged above</td></tr>
+          <tr><td>Filters</td><td>Business dropdown (including "All businesses")</td></tr>
+          <tr><td>Rows shown</td><td>Most recent first, up to 300 (store keeps up to 2,000)</td></tr>
+          <tr><td>Exports</td><td>Export CSV (Date, Order, Business, Product, Qty, Business price, Charged, Reason, By)</td></tr>
+          <tr><td>Row actions</td><td>None — read-only record</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Note — where overrides come from</div>
+          <p>Overrides are created over in <span class="navpath">B2B Orders → Create order</span>. When an authorized user changes a line price while building an order and gives a reason, that change is logged here (<code>recordOverride</code>) and the order is charged the new amount — but the business's saved price is left exactly as it was. Order-time overriding is allowed for the Super Admin, or anyone granted the pricing <b>override</b> permission or B2B <b>edit</b> permission.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 7 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Reports</p><p class="sm">Pricing analytics — average selling price, margin, discount given and sales by business.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> See how negotiated pricing affects revenue, discount and margin across products and businesses.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Admin</span>+ view</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → B2B Pricing → Reports</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Reports — Pricing analytics · CSV · Excel · PDF</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>KPI cards (4)</b><span>Orders · Revenue · Discount given · Est. margin</span></div>
+          <div class="wf-cell"><b>Average selling price &amp; margin</b><span>Product · Qty · Avg price · Retail · Disc % · Margin %</span></div>
+          <div class="wf-cell"><b>Business-wise pricing</b><span>Business · Custom/Total · Avg disc · Status</span></div>
+          <div class="wf-cell"><b>Sales by business</b><span>Business · Orders · Revenue</span></div>
+          <div class="wf-cell"><b>Recent price overrides</b><span>Order · Product · Biz→Final · Reason</span></div>
+          <div class="wf-cell"><b>Export bar</b><span>CSV · Excel · PDF (print)</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — four KPI cards over four analytics tables.</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Report block</th><th>What it tells you</th></tr></thead>
+        <tbody>
+          <tr><td>Orders</td><td>Number of live (non-cancelled) B2B orders in range</td></tr>
+          <tr><td>Revenue</td><td>Total value of those orders</td></tr>
+          <tr><td>Discount given</td><td>Rupees of discount vs retail, summed across products</td></tr>
+          <tr><td>Est. margin</td><td>Estimated margin using the cost prices set in Settings</td></tr>
+          <tr><td>Average selling price &amp; margin</td><td>Per product: qty sold, average charged price, retail, discount % and margin %</td></tr>
+          <tr><td>Business-wise pricing</td><td>Per business: how many products are custom-priced, average discount and whether pricing is Active/Off</td></tr>
+          <tr><td>Sales by business</td><td>Per business: order count and revenue</td></tr>
+          <tr><td>Recent price overrides</td><td>The latest order-time overrides (biz price → final)</td></tr>
+        </tbody>
+      </table></div>
+
+      <p class="lead" style="margin-top:14px">Buttons</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>CSV</td><td>Downloads the average-price/margin report as CSV</td><td><code>exportReports("csv")</code></td><td><span class="pill role">Admin</span>+</td></tr>
+          <tr><td>Excel</td><td>Downloads the same report as .xls</td><td><code>exportReports("xls")</code></td><td><span class="pill role">Admin</span>+</td></tr>
+          <tr><td>PDF</td><td>Opens the browser print dialog to save a PDF</td><td><code>window.print()</code></td><td><span class="pill role">Admin</span>+</td></tr>
+        </tbody>
+      </table></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 8 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Settings</p><p class="sm">Platform-wide pricing switches and the cost prices used for margin analysis.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Turn slab pricing and override approval on/off, record product costs, and (carefully) reset all pricing data.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> only</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → B2B Pricing → Settings</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Pricing settings</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Slab pricing switch</b><span>Enable quantity-slab pricing platform-wide</span></div>
+          <div class="wf-cell"><b>Override approval switch</b><span>Require approval for order-time price overrides</span></div>
+          <div class="wf-cell"><b>Product cost prices</b><span>One ₹ field per product, used for margin analysis</span></div>
+          <div class="wf-cell"><b>Save / Reset</b><span>Save settings · Reset all pricing data (danger)</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — two toggles, the cost-price grid, and the save/reset controls.</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Enable quantity-slab pricing platform-wide</td><td>Master switch for slab pricing everywhere</td><td>On / Off</td><td class="t-opt">Opt.</td><td>When off, orders use the flat business price and ignore slabs</td><td>On</td></tr>
+          <tr><td>Require approval for order-time price overrides</td><td>Flags that overrides should be approved</td><td>On / Off</td><td class="t-opt">Opt.</td><td>Stored on the settings record</td><td>Off</td></tr>
+          <tr><td>Product cost ₹ (per product)</td><td>The cost used to work out margin % in Reports</td><td>Number</td><td class="t-opt">Opt.</td><td>Defaults to a sensible per-product cost if left blank</td><td>52</td></tr>
+        </tbody>
+      </table></div>
+
+      <p class="lead" style="margin-top:14px">Buttons</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Save settings</td><td>Saves both switches and all cost prices</td><td><code>saveSettings()</code> + audit "settings updated"</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td>Reset all pricing data</td><td>Deletes ALL pricing, history, overrides, scheduled changes and settings</td><td>Clears every pricing store key; asks for confirmation first; writes an audit line</td><td><span class="pill role">Super Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call danger">
+        <span class="ci">⛔</span>
+        <div class="cbody">
+          <div class="ctitle">Caution — Reset all pricing data is irreversible</div>
+          <p><b>Reset all pricing data</b> wipes every negotiated price, the whole change history, all order overrides and every scheduled change in this workspace. There is no undo. Only use it to clear demo/test data on a fresh setup, and export a CSV backup first.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ BACKEND -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Under the hood — the pricing rule in the database</p><p class="sm">What a saved price looks like on the server, and the validation it must pass.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Explain the real backend fields so you can read the database and API responses confidently.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> (API)</span>
+      <span class="m"><b>API</b> <span class="navpath">/api/b2b/pricing · /api/b2b/pricing/[id] · /api/b2b/pricing/reports · /api/b2b/pricing/products</span></span>
+    </div>
+    <div class="spec-body">
+
+      <p>Each negotiated price is one <code>BusinessPricing</code> row with an auto code like <b>B2BP-000001</b>. Money is stored as integer <b>paise</b> and GST as <b>basis points</b> (bps): 500 bps = 5%. The system derives the discount and the GST-inclusive price from the base and B2B prices.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>businessId</td><td>Which business the rule belongs to</td><td>Existing business id</td><td class="t-req">Yes</td><td>Business must exist and be active</td><td>cuid…</td></tr>
+          <tr><td>productSlug</td><td>Which product</td><td>Product slug</td><td class="t-req">Yes</td><td>—</td><td>milk</td></tr>
+          <tr><td>productName</td><td>Display name saved with the rule</td><td>Text</td><td class="t-req">Yes</td><td>—</td><td>A2 Buffalo Milk</td></tr>
+          <tr><td>variantLabel</td><td>Optional variant this rule targets</td><td>Text up to 40 chars</td><td class="t-opt">Opt.</td><td>Blank = applies to the base product</td><td>500 ml</td></tr>
+          <tr><td>unit</td><td>The selling unit the price is per</td><td>A unit for the product</td><td class="t-req">Yes</td><td>—</td><td>Litres</td></tr>
+          <tr><td>basePricePaise</td><td>The retail/base price to discount from</td><td>Whole paise &gt; 0</td><td class="t-req">Yes</td><td>Must be a positive whole number</td><td>6600 (₹66)</td></tr>
+          <tr><td>b2bPricePaise</td><td>The negotiated B2B price</td><td>Whole paise &gt; 0</td><td class="t-req">Yes</td><td>Must be &gt; 0 and <b>≤ base price</b> (discount can't be negative)</td><td>6400 (₹64)</td></tr>
+          <tr><td>gstBps</td><td>GST rate in basis points</td><td>0 – 10000 (0%–100%)</td><td class="t-opt">Opt.</td><td>Defaults to 0; used for the GST-inclusive price</td><td>500 (5%)</td></tr>
+          <tr><td>minQty</td><td>Minimum quantity this rule applies to (slab)</td><td>Whole number ≥ 1</td><td class="t-opt">Opt.</td><td>Defaults to 1; part of the duplicate-prevention key</td><td>101</td></tr>
+          <tr><td>effectiveFrom</td><td>When the price starts</td><td>Date</td><td class="t-opt">Opt.</td><td>Defaults to now</td><td>2026-08-01</td></tr>
+          <tr><td>effectiveUntil</td><td>When the price stops</td><td>Date or blank</td><td class="t-opt">Opt.</td><td>Blank = open-ended</td><td>2026-12-31</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Warning — no duplicate rules</div>
+          <p>The server refuses a second active rule for the same <b>business + product + variant + minimum quantity</b> and returns the existing rule's code (for example "A pricing rule already exists … B2BP-000004. Edit it instead."). To change that price, edit the existing rule rather than creating a new one.</p>
+        </div>
+      </div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — API lifecycle of a pricing rule</div>
+        <div class="wf-flow"><span>POST create (B2BP code)</span><span>GET list / detail (+ history)</span><span>PATCH update (logs old→new)</span><span>PATCH enable / disable</span><span>PATCH delete (soft) / restore</span></div>
+      </div><div class="wire-cap">Figure — create → read → update → enable/disable → soft-delete/restore, each logged.</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Endpoint</th><th>Method</th><th>Does</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>/api/b2b/pricing</td><td>GET</td><td>List rules with filters (businessId, productSlug, active, q, priceFrom/To, sort, limit, offset, includeDeleted)</td><td>Admin / Super Admin</td></tr>
+          <tr><td>/api/b2b/pricing</td><td>POST</td><td>Create a rule (auto B2BP code)</td><td>Admin / Super Admin</td></tr>
+          <tr><td>/api/b2b/pricing/[id]</td><td>GET</td><td>One rule plus its change history</td><td>Admin / Super Admin</td></tr>
+          <tr><td>/api/b2b/pricing/[id]</td><td>PATCH</td><td>action = update · delete · restore · enable · disable</td><td>Admin / Super Admin</td></tr>
+          <tr><td>/api/b2b/pricing/reports</td><td>GET</td><td>Coverage, average discount, by-business and by-product breakdowns</td><td>Admin / Super Admin</td></tr>
+          <tr><td>/api/b2b/pricing/products</td><td>GET</td><td>The product lookup (slug, name, units, base price)</td><td>Admin / Super Admin</td></tr>
+        </tbody>
+      </table></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOT + FAQ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common issues and quick answers.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Resolve the most frequent B2B Pricing questions without escalating.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Admin</span>+</span><span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → B2B Pricing</span></span></div>
+    <div class="spec-body">
+
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>All rows show "View only", no Edit/Slabs buttons</td><td>You are signed in as Admin (or lower), not Super Admin</td><td>Pricing changes are Super-Admin only. Ask a Super Admin, or switch role if you hold that account.</td></tr>
+          <tr><td>The whole module shows "Access restricted"</td><td>Your role lacks the b2bPricing view permission</td><td>Ask a Super Admin to grant view access, or use an Admin/Super Admin account.</td></tr>
+          <tr><td>A slab price isn't being applied at order time</td><td>Slab pricing is turned off in Settings, or the quantity falls outside every slab band</td><td>Enable "quantity-slab pricing" in Settings and check the min/max bands cover the order quantity.</td></tr>
+          <tr><td>A saved custom price is showing as retail on the order</td><td>The product is disabled, the business's pricing is deactivated, or an effective-from date hasn't started / effective-until has passed</td><td>Re-enable the product, Activate pricing for the business, or adjust the effective dates.</td></tr>
+          <tr><td>Server rejects a new price with a "already exists" message</td><td>A rule already covers that business + product + variant + quantity</td><td>Edit the existing rule (its code is in the message) instead of creating a new one.</td></tr>
+          <tr><td>New price won't save — "B2B price cannot exceed the base price"</td><td>You entered a B2B price higher than the base/retail price</td><td>Enter a B2B price at or below the base price; the discount can't be negative on the server.</td></tr>
+          <tr><td>Prices look wrong right after loading</td><td>The live banner hasn't finished hydrating from the database yet</td><td>Wait for the green "● Live — B2B pricing from the DOODLY database" banner, then refresh the tab.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Does changing a business price affect orders already placed?</h4>
+      <p>No. A price change only affects <b>new</b> orders from that point. Past orders keep the price they were charged, and any order-time override is logged separately in Order Overrides.</p>
+
+      <h4>What happens if a business has no custom price for a product?</h4>
+      <p>The order simply uses the normal retail price. You don't have to price every product — only the ones you've negotiated.</p>
+
+      <h4>Why are there two prices for one product (₹78 and ₹77)?</h4>
+      <p>Those are quantity slabs. Small orders pay the higher rate; larger orders automatically drop to the lower slab. The engine picks the slab that matches the order quantity, as long as slab pricing is enabled in Settings.</p>
+
+      <h4>Is GST included in the price I type?</h4>
+      <p>The price you type is the pre-GST unit price. The retail column shows the product's GST %, and the database also stores a GST-inclusive figure derived from the GST rate on the rule.</p>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">Best Practice — set up a new B2B customer's pricing fast</div>
+          <p>Register the business first under <span class="navpath">B2B Orders → Register</span>. Then, if a similar customer already exists, use <b>Copy / Import / Export → Copy pricing</b> to clone their price map, and tweak the few products that differ. Finish by opening <b>Customer preview</b> to confirm the customer sees exactly the rates you intended.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</section>

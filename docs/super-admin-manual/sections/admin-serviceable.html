@@ -1,0 +1,482 @@
+<section class="sheet" id="admin-serviceable">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Operations · Serviceable Areas</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Operations</span></div>
+  <h2 class="section-title">Serviceable Areas</h2>
+  <p class="lead">The map of where DOODLY delivers — the list of pincodes you cover, the delivery charge, slot and ETA for each, the zone it belongs to, plus the customer waitlist for areas you have not reached yet. Add a pincode here and the storefront starts accepting orders from it the same instant, with no code change and no redeploy.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">What this screen controls</div>
+      <p>This page is the <b>single source of truth</b> for delivery coverage. Whenever a customer types their pincode on the website — on the home-page checker, at checkout, or while adding an address — the storefront asks this list whether it can deliver there. A brand-new employee can think of it as: <i>"the switchboard that turns delivery on or off for each pincode, and the sign-up sheet for people who want us in their area."</i> Turn a pincode on and its customers can order; turn it off (or remove it) and checkout politely refuses and offers the waitlist instead.</p>
+    </div>
+  </div>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Where the data lives</div>
+      <p>Every serviceable pincode is one row in the <b>ServiceablePincode</b> database table, grouped into <b>DeliveryZone</b> records (the same zones the routing and address systems use). The screen reads the list with <span class="navpath">GET /api/admin/delivery/pincodes</span> and the zones with <span class="navpath">GET /api/admin/delivery/zones</span>. Adding, editing, toggling and removing rows call <span class="navpath">POST</span>, <span class="navpath">PATCH</span> and <span class="navpath">DELETE /api/admin/delivery/pincodes</span> — and each write is recorded in the audit log. The public storefront checks the very same table through <span class="navpath">GET /api/geo/serviceable?pincode=</span>, which is why your changes go live instantly.</p>
+    </div>
+  </div>
+
+  <div class="call warn">
+    <span class="ci">⚠️</span>
+    <div class="cbody">
+      <div class="ctitle">The waitlist is stored in the browser, not the database</div>
+      <p>Unlike the pincode list, the <b>waitlist</b> capture (name, mobile, e-mail and locality of people in areas you don't yet cover) is saved in the visitor's own browser storage and mirrored into the admin panel. There is no server table for it. That is why the only thing you can do with it here is read it and <b>Export CSV</b> — always export before clearing browser data, or the entries are gone.</p>
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 1 : SERVICEABLE AREAS BOARD -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Serviceable Areas — coverage board</p><p class="sm">The live KPI strip, the editable pincode table, and the waitlist — all on one page.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> See coverage at a glance, add or edit a serviceable pincode, enable or disable delivery for it, remove one you no longer serve, and review who is waiting for areas you have not launched.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> (add / edit / remove) · <span class="pill role">Operations</span> (add / edit, but <b>not</b> remove) — every other role is refused (403)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Serviceable Areas</span> (<span class="navpath">/admin/serviceable-areas.html</span>)</span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Serviceable Areas</b> · live-status banner (● Live — N serviceable pincode(s) across N zone(s) from the DOODLY database)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>KPI strip (six cards)</b><span>Total Areas · Active Areas · Serviceable Pincodes · Delivery Zones · Customers Covered · Orders Today.</span></div>
+          <div class="wf-cell"><b>Serviceable areas panel</b><span>Green "Live" badge · intro line · one editable table row per pincode.</span></div>
+          <div class="wf-cell"><b>Editable table</b><span>Columns: Pincode · Area · City · State · Zone · Charge · Slot · ETA · On · Delete (×).</span></div>
+          <div class="wf-cell"><b>Action row</b><span>+ Add pincode · Save areas · Reset · "✓ Saved — live on storefront" note.</span></div>
+          <div class="wf-cell"><b>Waitlist panel</b><span>Count badge · Export CSV · one group per pincode with the people waiting.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Serviceable Areas screen</div></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Live vs local</div>
+          <p>On open, the page loads the pincodes and zones from the database and shows a green banner: <i>"● Live — N serviceable pincode(s) across N zone(s) from the DOODLY database (&lt;api-base&gt;)."</i> If the backend cannot be reached it shows a red banner — <i>"⚠ Backend offline … couldn't load live pincodes."</i> — or, if your role is not allowed, <i>"⚠ Your role can't view serviceable areas (403)."</i> This manual documents the <b>live</b>, database-backed behaviour.</p>
+        </div>
+      </div>
+
+      <!-- ---------- KPI STRIP ---------- -->
+      <h4>The six coverage KPIs</h4>
+      <p>The strip above the table is calculated fresh from the database every time the page loads (numbers are formatted in the Indian style, e.g. 1,20,000). An "area" is a unique Area + City pair, so two pincodes in the same locality count as one area.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Card</th><th>What it counts</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td><b>Total Areas</b></td><td>How many distinct Area + City localities you have on file (enabled or not), excluding removed rows.</td><td><code>stats.totalAreas</code></td></tr>
+          <tr><td><b>Active Areas</b></td><td>Localities that have at least one <b>enabled</b> pincode — i.e. places you are actually delivering to now.</td><td><code>stats.activeAreas</code></td></tr>
+          <tr><td><b>Serviceable Pincodes</b></td><td>The total number of live (non-removed) pincode rows in the table.</td><td><code>stats.total</code></td></tr>
+          <tr><td><b>Delivery Zones</b></td><td>How many distinct zones your pincodes are grouped into.</td><td><code>stats.zones</code></td></tr>
+          <tr><td><b>Customers Covered</b></td><td>Distinct customers whose saved address pincode falls inside an enabled serviceable pincode.</td><td><code>stats.customersCovered</code> (from the Address table)</td></tr>
+          <tr><td><b>Orders Today</b></td><td>Deliveries scheduled for today across all areas — a quick pulse of activity.</td><td><code>stats.ordersToday</code> (from the Delivery table)</td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- ---------- TABLE SPEC ---------- -->
+      <h4>The Serviceable-areas table</h4>
+      <p>Each row is one pincode and is <b>inline-editable</b> — you type straight into the cells and click <b>Save areas</b> to push every change to the database at once. The table is not paginated; it shows the whole coverage list, ordered by City then Pincode as returned by the backend.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Behaviour on this screen</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td>Pincode · Area · City · State · Zone (drop-down) · Charge (₹) · Slot · ETA · On (enable checkbox) · Delete (× button).</td></tr>
+          <tr><td><b>Sorting</b></td><td>Fixed — the backend returns rows ordered by City (A→Z) then Pincode (ascending). There are no clickable column sorts on this table.</td></tr>
+          <tr><td><b>Search &amp; filters</b></td><td>No search box on the admin table itself. (The underlying <span class="navpath">GET /api/admin/delivery/pincodes</span> endpoint does accept <code>search</code>, <code>status</code> = active/inactive/deleted and <code>zoneId</code> filters for API callers.)</td></tr>
+          <tr><td><b>Pagination</b></td><td>None — the full list is shown so you always see every covered pincode.</td></tr>
+          <tr><td><b>Row actions</b></td><td>Edit any cell inline · toggle the <b>On</b> checkbox to enable/disable delivery · click <b>×</b> to remove the row (takes effect on the next Save).</td></tr>
+          <tr><td><b>Exports</b></td><td>The table has no export. Only the <b>Waitlist</b> panel exports (CSV) — see Screen 3.</td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- ---------- FIELD TABLE (row) ---------- -->
+      <h4>Every editable field in a row</h4>
+      <p>These are the exact cells you can edit, with the limits the server enforces (so a bad value can never reach the database). The same fields appear, more clearly labelled, in the Add-pincode modal on Screen 2.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Pincode</b><br><code>data-k="pincode"</code></td>
+            <td>The 6-digit postal code delivery is switched on for. This is the unique key of the row.</td>
+            <td>Exactly six digits</td>
+            <td class="t-req">Yes</td>
+            <td>Must match <code>/^\d{6}$/</code>; must be unique — a duplicate is rejected with a 409 conflict ("That pincode is already serviceable.").</td>
+            <td>520013</td>
+          </tr>
+          <tr>
+            <td><b>Area</b><br><code>data-k="area"</code></td>
+            <td>The locality / neighbourhood name shown to customers ("we deliver to &lt;Area&gt;, &lt;City&gt;").</td>
+            <td>Text</td>
+            <td class="t-req">Yes</td>
+            <td>Trimmed, 1–80 characters; cannot be blank.</td>
+            <td>Krishnalanka</td>
+          </tr>
+          <tr>
+            <td><b>City</b><br><code>data-k="city"</code></td>
+            <td>The city the pincode sits in.</td>
+            <td>Text</td>
+            <td class="t-req">Yes</td>
+            <td>Trimmed, 1–80 characters; cannot be blank. New rows default to "Vijayawada".</td>
+            <td>Vijayawada</td>
+          </tr>
+          <tr>
+            <td><b>State</b><br><code>data-k="state"</code></td>
+            <td>The state, shown in the coverage details.</td>
+            <td>Text</td>
+            <td class="t-opt">Opt.</td>
+            <td>Trimmed, max 80 characters. Defaults to "Andhra Pradesh" when left blank.</td>
+            <td>Andhra Pradesh</td>
+          </tr>
+          <tr>
+            <td><b>Zone</b><br><code>data-k="zone"</code></td>
+            <td>The delivery zone this pincode belongs to — used to group areas and link them to an executive and routes.</td>
+            <td>One of the existing zones (drop-down)</td>
+            <td class="t-opt">Opt.</td>
+            <td>Stored as <code>zoneId</code>; may be left as "— No zone —". Zones come from the DeliveryZone table.</td>
+            <td>Central Vijayawada</td>
+          </tr>
+          <tr>
+            <td><b>Charge</b><br><code>data-k="charge"</code></td>
+            <td>The delivery fee charged for this pincode at checkout. Zero means free delivery.</td>
+            <td>Whole rupees, 0 or more</td>
+            <td class="t-opt">Opt.</td>
+            <td>Whole number, clamped to 0–100000 on the server. Defaults to 0.</td>
+            <td>0</td>
+          </tr>
+          <tr>
+            <td><b>Slot</b><br><code>data-k="slot"</code></td>
+            <td>The delivery window label shown to the customer for this pincode.</td>
+            <td>Free-text label</td>
+            <td class="t-opt">Opt.</td>
+            <td>Trimmed, max 40 characters. Server default "Before 7 AM".</td>
+            <td>6:00–8:00 AM</td>
+          </tr>
+          <tr>
+            <td><b>ETA</b><br><code>data-k="eta"</code></td>
+            <td>A short "expected by" promise shown alongside the slot.</td>
+            <td>Free-text label</td>
+            <td class="t-opt">Opt.</td>
+            <td>Trimmed, max 40 characters; may be blank (stored as null).</td>
+            <td>By 8:00 AM</td>
+          </tr>
+          <tr>
+            <td><b>On</b> (enabled)<br><code>data-k="enabled"</code></td>
+            <td>The master switch for the pincode. Ticked = delivery on and checkout accepts it; un-ticked = checkout refuses and offers the waitlist.</td>
+            <td>On / Off checkbox</td>
+            <td class="t-opt">Opt.</td>
+            <td>Boolean; new rows are on by default. A disabled pincode still appears in your list but is not serviceable to customers.</td>
+            <td>On</td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Disable vs remove</div>
+          <p>To <b>pause</b> a pincode (say a zone is temporarily out of stock), just un-tick its <b>On</b> box and Save — the row stays in your list and you can switch it back on later. Use the <b>×</b> Delete only when you genuinely stop serving an area. Deletes are a <b>soft-delete</b> on the server (the row is hidden and disabled but kept for history), so nothing is truly lost.</p>
+        </div>
+      </div>
+
+      <!-- ---------- BUTTON TABLE ---------- -->
+      <h4>Buttons &amp; actions</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>+ Add pincode</b><br><code>#pc-add</code></td>
+            <td>Opens the validated "Add serviceable pincode" modal (Screen 2). It does <b>not</b> add a blank row — the click is intercepted so every new pincode goes through the checked, one-shot form.</td>
+            <td>Opens the modal; the actual save is a <span class="navpath">POST /api/admin/delivery/pincodes</span> from the modal.</td>
+            <td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Operations</span></td>
+          </tr>
+          <tr>
+            <td><b>Save areas</b><br><code>#pc-save</code></td>
+            <td>Reads every row and syncs the whole table to the database in one pass — new pincodes are created, changed ones are updated, and any you removed are deleted. Shows a "✓ Saved — live on storefront" note and a "Serviceable areas synced to the database" toast.</td>
+            <td>For each row: <span class="navpath">POST</span> (new) or <span class="navpath">PATCH /api/admin/delivery/pincodes/&lt;id&gt;</span> (existing); any pincode dropped from the list is sent to <span class="navpath">DELETE</span>. The sync is idempotent and keyed by pincode.</td>
+            <td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Operations</span> (delete part needs <span class="pill role">Admin</span>+)</td>
+          </tr>
+          <tr>
+            <td><b>Reset</b><br><code>#pc-reset</code></td>
+            <td>Discards your unsaved edits and re-draws the table from the last loaded list. It does not touch the database.</td>
+            <td>Client-only — clears the local working copy; reload the page to pull a fresh list from the server.</td>
+            <td>Any viewer</td>
+          </tr>
+          <tr>
+            <td><b>Delete (×)</b><br><code>.pc-del</code></td>
+            <td>Removes that row from the table. The removal is applied to the database on the next <b>Save areas</b>.</td>
+            <td><span class="navpath">DELETE /api/admin/delivery/pincodes/&lt;id&gt;</span> — a soft-delete (sets <code>deletedAt</code> and disables the row). Audited as <code>delivery.pincode.delete</code>.</td>
+            <td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> (Operations cannot delete)</td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Operations can add and edit, but not remove</div>
+          <p>The <b>Operations</b> role has "manage" rights on Serviceable Areas — it can view, add, edit and enable/disable pincodes. It does <b>not</b> have delete rights. A DELETE from that role is refused with a 403. Only <b>Admin</b> and <b>Super Admin</b> can remove a pincode.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 2 : ADD PINCODE MODAL -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Add serviceable pincode — modal</p><p class="sm">The validated, one-shot form for launching delivery in a new pincode.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Add a single pincode to your coverage with all the details filled in and checked before it is saved — so the storefront starts accepting orders from it the moment you click Add.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> · <span class="pill role">Operations</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Serviceable Areas → + Add pincode</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Dialog — <b>Add serviceable pincode</b> · close (×)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Row 1</b><span>Pincode * · Zone (drop-down).</span></div>
+          <div class="wf-cell"><b>Area *</b><span>Full-width locality name.</span></div>
+          <div class="wf-cell"><b>Row 2</b><span>City * (default Vijayawada) · State (default Andhra Pradesh).</span></div>
+          <div class="wf-cell"><b>Row 3</b><span>Delivery charge (₹) · ETA.</span></div>
+          <div class="wf-cell"><b>Delivery slot</b><span>Full-width slot label.</span></div>
+          <div class="wf-cell"><b>Serviceable checkbox</b><span>"Serviceable (enabled on storefront)" — ticked by default.</span></div>
+          <div class="wf-cell"><b>Footer</b><span>Inline error line · Cancel · Add pincode.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Add-pincode modal</div></div>
+
+      <!-- ---------- FIELD TABLE (modal) ---------- -->
+      <h4>Every field in the modal</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Pincode</b><br><code>#dap-pin</code></td>
+            <td>The postal code to switch on.</td>
+            <td>Exactly 6 digits (non-digits are stripped as you type)</td>
+            <td class="t-req">Yes</td>
+            <td>Client checks the 6-digit format and that it is not already in your list, then the server re-checks format and uniqueness (409 if a duplicate).</td>
+            <td>520013</td>
+          </tr>
+          <tr>
+            <td><b>Zone</b><br><code>#dap-zone</code></td>
+            <td>Which delivery zone to file the pincode under.</td>
+            <td>"— No zone —" or an existing zone</td>
+            <td class="t-opt">Opt.</td>
+            <td>Sent as <code>zoneId</code>; options are loaded live from <span class="navpath">GET /api/admin/delivery/zones</span>.</td>
+            <td>Central Vijayawada</td>
+          </tr>
+          <tr>
+            <td><b>Area</b><br><code>#dap-area</code></td>
+            <td>The locality name customers will see.</td>
+            <td>Text</td>
+            <td class="t-req">Yes</td>
+            <td>Required (1–80 chars). A blank Area shows "Area is required." and blocks the save.</td>
+            <td>Krishnalanka</td>
+          </tr>
+          <tr>
+            <td><b>City</b><br><code>#dap-city</code></td>
+            <td>The city.</td>
+            <td>Text (pre-filled "Vijayawada")</td>
+            <td class="t-req">Yes</td>
+            <td>Required (1–80 chars). A blank City shows "City is required."</td>
+            <td>Vijayawada</td>
+          </tr>
+          <tr>
+            <td><b>State</b><br><code>#dap-state</code></td>
+            <td>The state.</td>
+            <td>Text (pre-filled "Andhra Pradesh")</td>
+            <td class="t-opt">Opt.</td>
+            <td>Max 80 chars; falls back to "Andhra Pradesh" if cleared.</td>
+            <td>Andhra Pradesh</td>
+          </tr>
+          <tr>
+            <td><b>Delivery charge (₹)</b><br><code>#dap-charge</code></td>
+            <td>The delivery fee at checkout for this pincode.</td>
+            <td>Whole rupees (non-digits stripped), default 0</td>
+            <td class="t-opt">Opt.</td>
+            <td>Coerced to a whole number ≥ 0 and clamped to 100000 on the server.</td>
+            <td>0</td>
+          </tr>
+          <tr>
+            <td><b>ETA</b><br><code>#dap-eta</code></td>
+            <td>The "expected by" promise line.</td>
+            <td>Free text (pre-filled "By 8:00 AM")</td>
+            <td class="t-opt">Opt.</td>
+            <td>Trimmed, max 40 chars; blank is stored as null.</td>
+            <td>By 8:00 AM</td>
+          </tr>
+          <tr>
+            <td><b>Delivery slot</b><br><code>#dap-slot</code></td>
+            <td>The delivery window label.</td>
+            <td>Free text (pre-filled "6:00–8:00 AM")</td>
+            <td class="t-opt">Opt.</td>
+            <td>Trimmed, max 40 chars; server default "Before 7 AM" if blank.</td>
+            <td>6:00–8:00 AM</td>
+          </tr>
+          <tr>
+            <td><b>Serviceable</b> (enabled)<br><code>#dap-enabled</code></td>
+            <td>Whether the pincode is live on the storefront immediately.</td>
+            <td>On / Off checkbox (ticked by default)</td>
+            <td class="t-opt">Opt.</td>
+            <td>Sent as <code>enabled</code>. Leave ticked to launch straight away; un-tick to add it but keep delivery off for now.</td>
+            <td>On</td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <!-- ---------- BUTTON TABLE (modal) ---------- -->
+      <h4>Modal buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Add pincode</b><br><code>#dap-save</code></td>
+            <td>Validates the fields, saves the new pincode, reloads the coverage board and shows a toast — e.g. "520013 · Krishnalanka added — live on the storefront". The button reads "Adding…" while it works.</td>
+            <td><span class="navpath">POST /api/admin/delivery/pincodes</span> with all the fields. On success the board is refreshed; audited as <code>delivery.pincode.create</code>.</td>
+            <td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Operations</span></td>
+          </tr>
+          <tr>
+            <td><b>Cancel</b> / close (×)</td>
+            <td>Closes the modal without saving. Pressing <kbd>Esc</kbd> or clicking the dim background does the same.</td>
+            <td>None.</td>
+            <td>Any viewer</td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Friendly error messages</div>
+          <p>The modal turns backend errors into plain English on the inline error line: a duplicate reads <i>"&lt;pincode&gt; is already serviceable."</i>, a permission problem reads <i>"Your role can't add pincodes (403)."</i>, and a connection problem reads <i>"Backend offline — can't add right now."</i> The <b>Enter</b> key inside any field submits the form, so you can add a pincode without reaching for the mouse.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 3 : WAITLIST -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Waitlist — demand for areas you don't cover yet</p><p class="sm">Everyone who asked to be notified when DOODLY reaches their pincode.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> See where customer demand is building so you know which pincode to launch next, and export the contacts so you can tell them the day you go live.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> · <span class="pill role">Operations</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Serviceable Areas → Waitlist panel</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Panel — <b>Waitlist</b> · total-count badge · Export CSV</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Pincode group header</b><span>Pincode · known area (or "Unknown area") · "N waiting" badge.</span></div>
+          <div class="wf-cell"><b>Group rows</b><span>Each person: Name · Mobile · Email (or —) · date added.</span></div>
+          <div class="wf-cell"><b>Empty state</b><span>"No waitlist requests yet." when nobody has signed up.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Waitlist panel</div></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">How people get onto the waitlist</div>
+          <p>When a visitor checks a pincode on the storefront and it is <b>not</b> serviceable, the checker shows a short form — Full name, Mobile, Email, Pincode and locality — under the message <i>"Join the waitlist and we'll tell you the moment we launch near you."</i> Name and Mobile are required. On submit they see <i>"You're on the waitlist — we'll be in touch the moment we launch."</i> Those entries are what appear here, grouped by pincode and sorted so the areas with the most demand are easy to spot.</p>
+        </div>
+      </div>
+
+      <h4>Waitlist actions</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Export CSV</b><br><code>#pc-csv</code></td>
+            <td>Downloads the whole waitlist as <code>doodly-waitlist.csv</code> with the columns Name, Mobile, Email, Address, Pincode and Date — ready for a "we've launched near you!" campaign.</td>
+            <td>Client-side download; no server call. Values are quoted so commas in an address don't break the file.</td>
+            <td>Any viewer of this page</td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Use the waitlist to choose your next launch</div>
+          <p>The "N waiting" badge on each pincode group is a ready-made demand signal. When one pincode has clearly the most people waiting, add it on Screen 2, then export the CSV and reach out to exactly those contacts — you launch where demand already exists.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= WORKFLOW + REFERENCE -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">How coverage flows end-to-end</p><p class="sm">From adding a pincode here to a customer being able to order.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Understand exactly what happens on the storefront the moment you change coverage.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> and other allowed roles</span><span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Serviceable Areas</span></span></div>
+    <div class="spec-body">
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — launching (and gating) a pincode</div>
+        <div class="wf-flow">
+          <span>Add / enable a pincode here</span>
+          <span>Saved to ServiceablePincode (database)</span>
+          <span>Customer types their pincode on the storefront</span>
+          <span>Storefront asks GET /api/geo/serviceable</span>
+          <span>Serviceable → checkout allowed, shows area · slot · ETA · charge</span>
+          <span>Not serviceable → checkout refuses, waitlist form shown</span>
+          <span>Waitlist entry appears here → Export CSV → launch there next</span>
+        </div>
+      </div><div class="wire-cap">Figure — the add → live → order (or waitlist) path</div></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">One list, checked everywhere</div>
+          <p>The same coverage list gates the home-page pincode checker, the checkout, and the address picker. Because they all read the live database through <span class="navpath">GET /api/geo/serviceable</span>, there is never a stale copy: enable a pincode and orders open immediately; disable or remove it and checkout closes for that area at once, with the waitlist offered in its place.</p>
+        </div>
+      </div>
+
+      <!-- ---------- ROLE REFERENCE ---------- -->
+      <h4>Who can do what</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Role</th><th>View</th><th>Add</th><th>Edit / enable / disable</th><th>Remove (delete)</th></tr></thead>
+        <tbody>
+          <tr><td><b>Super Admin</b></td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td><b>Admin</b></td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td><b>Operations</b></td><td>Yes</td><td>Yes</td><td>Yes</td><td class="t-opt">No (403)</td></tr>
+          <tr><td>All other roles</td><td class="t-opt">No (403)</td><td>No</td><td>No</td><td>No</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">Best Practice</div>
+          <p>Before adding a new pincode, decide its <b>zone</b>, <b>delivery charge</b> and <b>slot</b> up front so customers see consistent promises across an area — two pincodes in the same locality should share the same charge and window. When you retire an area, prefer <b>disabling</b> (un-tick On) over deleting so the row and its history stay available if you return. After every Save, confirm the green "Serviceable areas synced to the database" toast, then open the storefront checker in another tab and type the pincode to verify the customer-facing result matches what you set.</p>
+        </div>
+      </div>
+
+      <!-- ---------- TROUBLESHOOTING ---------- -->
+      <h4>Troubleshooting</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>Red banner "⚠ Your role can't view serviceable areas (403)."</td><td>The signed-in role has no <code>serviceableAreas:view</code> right.</td><td>Sign in as Super Admin, Admin or Operations to view the page.</td></tr>
+          <tr><td>Add pincode fails with "…is already serviceable."</td><td>That pincode already exists in the list (it is the unique key).</td><td>Find the existing row and edit it instead of adding a new one.</td></tr>
+          <tr><td>Delete (×) does nothing / errors with 403.</td><td>The role is Operations, which cannot delete.</td><td>Ask an Admin or Super Admin to remove the pincode.</td></tr>
+          <tr><td>Customer says checkout won't accept a pincode you added.</td><td>Its <b>On</b> box is un-ticked, or Save wasn't clicked, or the change didn't reach the database.</td><td>Tick On, click Save areas, confirm the sync toast, then re-check on the storefront.</td></tr>
+          <tr><td>Waitlist is empty on another computer.</td><td>The waitlist lives in the browser that captured it, not the database.</td><td>Export the CSV from the machine that has the entries; don't rely on it appearing everywhere.</td></tr>
+          <tr><td>Red banner "⚠ Backend offline … couldn't load live pincodes."</td><td>The API is unreachable.</td><td>Restore connectivity and reload the page.</td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- ---------- FAQ ---------- -->
+      <h4>Frequently asked questions</h4>
+      <h4>Q: Does disabling a pincode cancel the orders already placed from it?</h4>
+      <p>A: No. The On switch only decides whether <b>new</b> checkouts are accepted from that pincode. Orders and subscriptions already placed are unaffected — disable it and existing deliveries carry on while new orders from the area are turned away.</p>
+      <h4>Q: If I delete a pincode by mistake, is it gone forever?</h4>
+      <p>A: Not physically. Delete is a soft-delete — the row is hidden and disabled but kept in the database (with a <code>deletedAt</code> stamp) for history, and the server supports restoring it. Re-adding the same pincode is also always possible.</p>
+      <h4>Q: The charge and slot I set here — do they actually reach checkout?</h4>
+      <p>A: Yes. The public serviceability check returns the pincode's area, city, state, delivery charge, slot and ETA, so the customer sees exactly the values you entered and is charged the delivery fee you set.</p>
+      <h4>Q: What does a Zone add beyond grouping?</h4>
+      <p>A: A zone ties a set of pincodes to a delivery executive and to routes, and it drives the "Delivery Zones" KPI. Leaving a pincode with no zone still makes it serviceable; assigning one keeps your coverage organised for routing and reporting.</p>
+
+    </div>
+  </div>
+</section>

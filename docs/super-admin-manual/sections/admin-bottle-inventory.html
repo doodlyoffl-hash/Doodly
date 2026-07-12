@@ -1,0 +1,233 @@
+<section class="sheet" id="admin-bottle-inventory">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Catalogue · Bottle Inventory</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Catalogue</span></div>
+  <h2 class="section-title">Bottle Inventory</h2>
+  <p class="lead">Track DOODLY's reusable glass-bottle fleet across its full lifecycle — from sanitised stock, out on delivery, back for collection and cleaning, to damaged or lost — and see the customer deposits the business is holding against those bottles.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Why this screen exists</div><p>Every DOODLY bottle is a reusable asset the company owns, not packaging that is thrown away. A single bottle is issued to a customer, returned empty, washed, and sent out again many times. Bottle Inventory is the asset register for that fleet: it counts how many bottles sit in each stage, warns when too many are stuck with customers, and keeps an append-only ledger of every movement so the physical count and the books always agree.</p></div></div>
+
+  <!-- ============================ SCREEN 1 ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Fleet Overview &amp; Movement Ledger</p><p class="sm">The main Bottle Inventory page — six live fleet counters, a pending-return alert, and the movement history table.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give a one-glance view of where the whole glass-bottle fleet is right now, flag bottles overdue for collection, and list every recorded fleet movement.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Inventory</span> — needs the <code>bottleInventory:view</code> permission. Any other role receives a 403 and an "Your role can't view bottle inventory" banner.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Catalogue → Bottle Inventory</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Bottle Inventory</b> · "The glass bottle fleet and deposits." · <b>[ Record movement ]</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>KPI strip (6 tiles)</b><span>Total bottles owned · In sanitised stock · In circulation · Pending return · Lost / damaged (mo) · Deposits held</span></div>
+          <div class="wf-cell"><b>Amber notice bar</b><span>Live "X bottles awaiting collection · Y in circulation · fleet utilisation Z%" alert</span></div>
+          <div class="wf-cell"><b>Movement ledger table</b><span>Time · Capacity · Movement · Qty · Reason · By — newest first, with a live-data banner</span></div>
+          <div class="wf-cell"><b>Live-data banner</b><span>Green "● Live — fleet of N bottles · M recent movement(s) from the DOODLY database" line above the table</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Bottle Inventory page</div></div>
+
+      <p class="lead" style="font-size:1rem">The KPI tiles and the ledger below are populated the moment the page opens by two backend calls — <code>GET /api/admin/bottles/overview</code> (the counters, notice and fleet matrix) and <code>GET /api/admin/bottles/movements?pageSize=100</code> (the ledger). Until those return, the tiles show demo placeholder numbers; the green banner confirms when live database figures have replaced them.</p>
+
+      <h4>The six fleet counters (KPI tiles)</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Tile</th><th>What it counts</th><th>How it is calculated (backend)</th>
+      </tr></thead><tbody>
+        <tr><td><b>Total bottles owned</b></td><td>Every physical bottle the company still owns, across all capacities.</td><td>Sum of the <i>Available</i>, <i>In circulation</i>, <i>Awaiting collection</i>, <i>Cleaning</i> and <i>Damaged</i> stages. <b>Lost bottles are excluded</b> — a lost bottle is written off, not owned.</td></tr>
+        <tr><td><b>In sanitised stock</b></td><td>Clean, filled/ready bottles sitting in the hub, available to send out.</td><td>The <code>AVAILABLE</code> stage total.</td></tr>
+        <tr><td><b>In circulation</b></td><td>Bottles currently out with customers.</td><td>The <code>IN_CIRCULATION</code> stage total.</td></tr>
+        <tr><td><b>Pending return</b></td><td>Empties overdue for pickup — the number to chase.</td><td>The <code>AWAITING_COLLECTION</code> stage total. (The customer-ledger equivalent is <i>Issued − Returned − Lost</i>.)</td></tr>
+        <tr><td><b>Lost / damaged (mo)</b></td><td>Bottles broken or gone missing.</td><td><code>LOST</code> + <code>DAMAGED</code> stage totals added together.</td></tr>
+        <tr><td><b>Deposits held</b></td><td>Money the company is holding as bottle deposits against customers.</td><td>Deposits charged minus deposits refunded, from the customer bottle ledger; shown compact (e.g. ₹1.0L, ₹52k).</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Two views of the same fleet</div><p>The backend keeps <b>two coupled records</b>. The <b>bottle stock</b> side counts physical bottles by capacity and stage (the six tiles above). The <b>customer ledger</b> side records per-customer <i>Issued / Returned / Lost</i> events and the deposit money. "Pending return" and "Deposits held" come from the customer ledger; the other four tiles come from the physical stock.</p></div></div>
+
+      <h4>The amber notice bar</h4>
+      <p class="lead" style="font-size:1rem">Directly under the tiles sits a warning banner. On a live page it is rewritten to read, for example: <i>"<b>418 bottles</b> awaiting collection · <b>6,722</b> in circulation · fleet utilisation <b>85%</b>."</i> <b>Fleet utilisation</b> is the share of owned bottles that are out working — <i>(In circulation + Awaiting collection) ÷ Total owned</i>, as a percentage. A high figure means most of the fleet is in the field; a rising "awaiting collection" count is the cue to run a collection-reminder campaign.</p>
+
+      <h4>The movement ledger table</h4>
+      <p class="lead" style="font-size:1rem">Every fleet transition ever recorded appears here, newest first. It is an <b>append-only</b> ledger — rows are never edited or deleted, which is what lets the counts above be trusted.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Column</th><th>Shows</th><th>Source field</th>
+      </tr></thead><tbody>
+        <tr><td><b>Time</b></td><td>When the movement was recorded, e.g. "26 Jun, 6:40 AM".</td><td><code>createdAt</code></td></tr>
+        <tr><td><b>Capacity</b></td><td>Bottle size — 1000 ml, 500 ml or 300 ml.</td><td><code>capacityMl</code></td></tr>
+        <tr><td><b>Movement</b></td><td>The transition, as "<i>From stage</i> → <span class="pill">To stage</span>" with a colour badge. A brand-new batch shows "New stock →".</td><td><code>fromLabel</code> → <code>toLabel</code> (coloured by <code>toTone</code>)</td></tr>
+        <tr><td><b>Qty</b></td><td>How many bottles moved.</td><td><code>qty</code></td></tr>
+        <tr><td><b>Reason</b></td><td>Why it moved; if a note was added it is appended after " · ".</td><td><code>reason</code> (+ <code>note</code>)</td></tr>
+        <tr><td><b>By</b></td><td>The role of the person who recorded the movement (e.g. admin, inventory).</td><td><code>actorRole</code></td></tr>
+      </tbody></table></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Table behaviour</th><th>Detail</th>
+      </tr></thead><tbody>
+        <tr><td><b>Columns</b></td><td>Time · Capacity · Movement · Qty · Reason · By (6 columns, read-only).</td></tr>
+        <tr><td><b>Filters</b></td><td>The page shows a single <b>All</b> filter chip. The backend additionally supports filtering by <i>capacity</i> and by <i>stage</i> (a movement matches if the stage is either its <i>from</i> or its <i>to</i>).</td></tr>
+        <tr><td><b>Sorting</b></td><td>Fixed newest-first by time (<code>createdAt</code> descending) from the server; the client DataTable can re-sort the loaded rows by any column.</td></tr>
+        <tr><td><b>Search</b></td><td>Backend search matches the <i>reason</i>, <i>note</i> and <i>role</i> text (case-insensitive). The client DataTable also has its own quick search box over the loaded rows.</td></tr>
+        <tr><td><b>Pagination</b></td><td>Server-paginated (default 20, maximum 100 per page). The page loads the 100 most recent movements; the DataTable paginates those on screen.</td></tr>
+        <tr><td><b>Exports</b></td><td>Standard DataTable export of the visible rows (the shared table toolbar).</td></tr>
+        <tr><td><b>Row actions</b></td><td>None — the ledger is a historical record. To change stock, use <b>Record movement</b> (Screen 2), which adds a new row.</td></tr>
+      </tbody></table></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Read the KPI tiles top-to-bottom before your morning dispatch. If <b>In sanitised stock</b> is running thin while <b>Pending return</b> and <b>In circulation</b> are high, the fleet is cash-flow-starved of clean bottles — prioritise a collection round or clean a backlog rather than buying new glass.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================ SCREEN 2 ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Record Bottle Movement</p><p class="sm">The pop-up form that moves bottles between lifecycle stages (or adds brand-new stock) and writes one ledger row.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Post a single, reasoned fleet transition — assign to customers, mark empties awaiting collection, send to cleaning, return to available, or write off damaged/lost bottles — while keeping every stage count non-negative.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Inventory</span> — needs the <code>bottleInventory:adjust</code> permission, a full-level special. A view-only user can open the page but the save is rejected with 403.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Catalogue → Bottle Inventory → Record movement</span></span></div>
+    <div class="spec-body">
+
+      <p class="lead" style="font-size:1rem">Clicking the blue <b>Record movement</b> button in the page header opens this dialog. (If the fleet is still loading, the button shows a "Fleet is still loading — try again in a moment" toast and does nothing, because it needs the stage list first.)</p>
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Modal — <b>Record bottle movement</b> · [ × close ]</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Row 1</b><span>Capacity (dropdown) · Quantity (number)</span></div>
+          <div class="wf-cell"><b>Row 2</b><span>From stage (dropdown, incl. "New stock") · To stage (dropdown)</span></div>
+          <div class="wf-cell"><b>Reason</b><span>Required free-text line</span></div>
+          <div class="wf-cell"><b>Note</b><span>Optional extra detail</span></div>
+          <div class="wf-cell"><b>Error line</b><span>Red inline validation message</span></div>
+          <div class="wf-cell"><b>Footer</b><span>[ Cancel ] · [ Record movement ]</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Record bottle movement dialog</div></div>
+
+      <h4>Form fields</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr>
+          <td><b>Capacity</b></td>
+          <td>Which bottle size is moving.</td>
+          <td>Dropdown: 1000 ml, 500 ml, 300 ml.</td>
+          <td class="t-req">Yes</td>
+          <td>Server rejects anything other than 300, 500 or 1000 ml ("Capacity must be 300, 500 or 1000 ml.").</td>
+          <td>1000 ml</td>
+        </tr>
+        <tr>
+          <td><b>Quantity</b></td>
+          <td>How many bottles to move.</td>
+          <td>Whole number, 1 or more.</td>
+          <td class="t-req">Yes</td>
+          <td>Must be a positive whole number (client: "Enter a positive quantity."). Server caps at 1,000,000 and re-checks &gt; 0. Cannot exceed the count available in the <i>From</i> stage.</td>
+          <td>24</td>
+        </tr>
+        <tr>
+          <td><b>From stage</b></td>
+          <td>Where the bottles are leaving. Choose "New stock" when adding bottles that weren't in the fleet yet.</td>
+          <td>Dropdown: "— New stock (procurement) —" plus the six stages. Defaults to <i>In circulation</i>.</td>
+          <td class="t-opt">Opt.</td>
+          <td>If left as "New stock" the source count is untouched (a pure addition). If a stage is chosen it must have enough bottles, and must differ from <i>To</i>.</td>
+          <td>In circulation</td>
+        </tr>
+        <tr>
+          <td><b>To stage</b></td>
+          <td>Where the bottles are going.</td>
+          <td>Dropdown: the six stages. Defaults to <i>Cleaning</i>.</td>
+          <td class="t-req">Yes</td>
+          <td>Must be a known stage and must differ from <i>From</i> (client: "From and To stages must differ.").</td>
+          <td>Cleaning</td>
+        </tr>
+        <tr>
+          <td><b>Reason</b></td>
+          <td>Why the movement happened — the audit trail.</td>
+          <td>Free text, up to 300 characters.</td>
+          <td class="t-req">Yes</td>
+          <td>Cannot be blank (client: "A reason is required."; server: "A reason is required for every bottle movement.").</td>
+          <td>Empties collected on route R3</td>
+        </tr>
+        <tr>
+          <td><b>Note</b></td>
+          <td>Extra detail, shown after the reason in the ledger.</td>
+          <td>Free text, up to 500 characters.</td>
+          <td class="t-opt">Opt.</td>
+          <td>Optional; trimmed and stored alongside the reason.</td>
+          <td>3 chipped, rest fine</td>
+        </tr>
+      </tbody></table></div>
+
+      <h4>The six lifecycle stages</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Stage</th><th>Meaning</th><th>Badge colour</th><th>Counts toward "owned"?</th>
+      </tr></thead><tbody>
+        <tr><td><b>Available</b></td><td>Clean, sanitised, ready to fill and dispatch.</td><td>Green</td><td>Yes</td></tr>
+        <tr><td><b>In circulation</b></td><td>Out with a customer right now.</td><td>Blue</td><td>Yes</td></tr>
+        <tr><td><b>Awaiting collection</b></td><td>Empty at the customer, waiting to be picked up.</td><td>Amber</td><td>Yes</td></tr>
+        <tr><td><b>Cleaning</b></td><td>Back at the hub, being washed and sterilised.</td><td>Blue</td><td>Yes</td></tr>
+        <tr><td><b>Damaged</b></td><td>Chipped or broken; may be recovered or written off.</td><td>Red</td><td>Yes</td></tr>
+        <tr><td><b>Lost</b></td><td>Gone missing — written off the owned fleet.</td><td>Red</td><td>No</td></tr>
+      </tbody></table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — the natural bottle cycle</div><p>The recommended path a bottle follows is: <b>Available → In circulation → Awaiting collection → Cleaning → Available</b>, looping forever. Damaged and Lost are the exits. The dialog lets you post any transition (physical reality varies), but staying on the natural cycle keeps the counts easy to reconcile.</p></div></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr>
+          <td><b>Record movement</b> (header)</td>
+          <td>Opens the Record bottle movement dialog.</td>
+          <td>None until you save — just loads the fleet stage list into the dropdowns.</td>
+          <td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Inventory</span></td>
+        </tr>
+        <tr>
+          <td><b>Record movement</b> (dialog footer)</td>
+          <td>Validates the form and posts the movement. Shows "Recording…" while it saves, then a success toast like "1000 ml · 24 → Cleaning (now 132)" and refreshes the whole page.</td>
+          <td><code>POST /api/admin/bottles/movement</code> in one database transaction: decrement the <i>From</i> stock (skipped for New stock), increment the <i>To</i> stock, append a bottle-movement ledger row, and write a central audit-log entry (<code>bottle.move.&lt;from&gt;.&lt;to&gt;</code>).</td>
+          <td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Inventory</span> (<code>adjust</code>)</td>
+        </tr>
+        <tr>
+          <td><b>Cancel</b> / <b>×</b></td>
+          <td>Closes the dialog without saving. Pressing Esc or clicking the dark backdrop does the same.</td>
+          <td>None.</td>
+          <td>—</td>
+        </tr>
+      </tbody></table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — recording a movement</div>
+        <div class="wf-flow"><span>Click "Record movement"</span><span>Pick capacity &amp; quantity</span><span>Choose From → To stage</span><span>Type a reason (+ note)</span><span>Save — transaction runs</span><span>Stock counts update &amp; ledger row appended</span><span>Audit log written · page refreshes</span></div>
+      </div><div class="wire-cap">Figure — end-to-end flow of a recorded bottle movement</div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — you cannot move more than you have</div><p>If you try to move more bottles out of a stage than it holds, the save is rejected with, for example, <i>"Only 12 1000 ml bottle(s) in Available — cannot move 24."</i> No stage can ever go negative. When that happens, count the physical bottles and correct the earlier movement by posting a fresh, opposite one — never assume the number is wrong.</p></div></div>
+
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — movements are permanent</div><p>The ledger is append-only. There is no edit or delete. A movement you post cannot be undone from the screen — the only correction is to record a compensating movement in the other direction, with a reason that explains the fix. Marking bottles <b>Lost</b> removes them from "Total bottles owned"; recover them only by recording a Lost → Available movement.</p></div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Write reasons a colleague could audit months later. "Empties collected on route R3, driver Ramesh" beats "collected". The reason and note are searchable in the ledger, so specific text pays off during stock reconciliation.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================ TROUBLESHOOTING ============================ -->
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table><thead><tr>
+    <th>Symptom</th><th>Likely cause</th><th>Fix</th>
+  </tr></thead><tbody>
+    <tr><td>Red banner: "Your role can't view bottle inventory (403)."</td><td>Your role lacks <code>bottleInventory:view</code> (only Super Admin, Admin and Inventory have it by default).</td><td>Ask a Super Admin to grant your role the Bottle Inventory permission, or have someone with access do the task.</td></tr>
+    <tr><td>Save fails: "Only N … bottle(s) in &lt;stage&gt; — cannot move X."</td><td>The <i>From</i> stage doesn't hold enough bottles for the quantity entered.</td><td>Lower the quantity, or first record the movement that should have put those bottles into that stage.</td></tr>
+    <tr><td>Save fails: "From and To stages must differ."</td><td>Same stage chosen on both sides.</td><td>Pick a different destination stage (or "New stock" as the source for a pure addition).</td></tr>
+    <tr><td>"Record movement" button does nothing / shows "Fleet is still loading".</td><td>The overview call hasn't returned yet, so the stage dropdowns aren't ready.</td><td>Wait a moment for the green live banner, then click again.</td></tr>
+    <tr><td>Banner: "Backend offline … couldn't load live fleet." and KPIs show demo numbers.</td><td>The next-app backend isn't reachable from the browser.</td><td>Confirm the backend is running and the API base URL is correct; reload once it's up.</td></tr>
+    <tr><td>KPI numbers look stale after a movement.</td><td>—</td><td>Saving already re-fetches automatically; if in doubt, reload the page to re-pull the overview.</td></tr>
+  </tbody></table></div>
+
+  <!-- ============================ FAQ ============================ -->
+  <h4>Frequently asked questions</h4>
+
+  <h4>Q. What is the difference between "In sanitised stock" and "Available"?</h4>
+  <p>They are the same thing. The KPI tile is labelled "In sanitised stock" for readability, but it counts the <code>AVAILABLE</code> stage — clean bottles ready to go out.</p>
+
+  <h4>Q. Why doesn't "Total bottles owned" include lost bottles?</h4>
+  <p>A lost bottle is written off — the company no longer has it, so counting it as "owned" would overstate the fleet. Lost bottles appear only in the "Lost / damaged" tile. If a lost bottle turns up, record a Lost → Available movement and it re-joins the owned count.</p>
+
+  <h4>Q. Do I need a customer to record a movement?</h4>
+  <p>No. This screen moves the fleet in bulk by capacity and stage — it is the warehouse/asset view. Per-customer issue/return and deposit tracking live in the customer bottle ledger (surfaced on the customer's account and in "Pending return" / "Deposits held").</p>
+
+  <h4>Q. Who shows up in the "By" column?</h4>
+  <p>The role of whoever recorded the movement (for example, admin or inventory). The system also stores the actor's ID and IP address behind the scenes for the audit trail, though only the role is shown in the table.</p>
+
+</section>

@@ -1,0 +1,248 @@
+<section class="sheet" id="account-subscription">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Customer Module · My Subscription &amp; History</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Customer Module</span></div>
+  <h2 class="section-title">My Subscription &amp; History</h2>
+  <p class="lead">The customer's self-service home for their recurring milk plan — see the live plan, pause or resume it, skip a day, switch auto-renew on or off, manage AutoPay, and read a timeline of every change and renewal.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Where this lives</div>
+      <p>These are <b>customer-facing</b> account pages served from the storefront (<span class="navpath">/account/subscription.html</span> and <span class="navpath">/account/subscription-history.html</span>). As a Super Admin you will use them when helping a customer over the phone, or after switching into a customer view. To manage <i>anyone's</i> subscription from the back office, use <span class="navpath">Admin → Commerce → Subscriptions</span> (<span class="navpath">/admin/subscriptions.html</span>) — a separate module. Every page here loads the signed-in customer's <b>own</b> data only; the panels stay blank (honest empty states) until a real account is signed in.</p>
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">My Subscription — plan overview &amp; controls</p><p class="sm">The customer's live recurring plan with one-tap lifecycle actions.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Show the active plan (bottle, schedule, price, renewal) and let the customer pause, resume, skip the next delivery, toggle auto-renew, or cancel — all against their own subscription record.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (signed-in, own account) · <span class="pill role">Super Admin</span> when viewing as the customer</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → Orders &amp; plans → My Subscription</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>My Subscription</b> · "Manage your plan, bottle size and delivery." · <b>Pause</b> button (top-right → Pause / Vacation)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Your live plan</b><span>Status chip (Active / Paused until… / Cancelled) + plan detail list + action buttons. Injected right under the header for a signed-in customer.</span></div>
+          <div class="wf-cell"><b>AutoPay panel</b><span>Right column — live Razorpay mandate: next renewal, amount, retry attempts, pause / resume / retry / cancel.</span></div>
+          <div class="wf-cell"><b>Manage — quick tiles</b><span>Four shortcuts: Pause / Vacation · Extra milk · Change plan · Cancel.</span></div>
+          <div class="wf-cell"><b>Auto-renew notice</b><span>Reminder strip: "Your subscription auto-renews. You can pause, skip a day, or cancel anytime before the renewal date."</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the My Subscription screen (signed-in customer)</div></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Two rendering paths</div>
+          <p>For a <b>real signed-in customer</b> the page fetches <span class="navpath">GET /api/account/subscription</span> and draws a live <b>"Your live plan"</b> panel plus the real AutoPay mandate. For a guest / demo preview (not signed in) it instead shows a local sample "Active subscription" card so the layout can be explored. This manual documents the <b>live</b> behaviour, which is what a Super Admin sees when assisting a customer.</p>
+        </div>
+      </div>
+
+      <h4>The "Your live plan" panel — fields shown</h4>
+      <p>Read straight from the customer's subscription record. Every row is display-only; the buttons below the list drive the changes.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Status chip</td><td>Current state of the plan</td><td>Active · Paused (with "until" date) · the raw status for other states</td><td class="t-req">Yes</td><td>From <code>status</code> (<code>SubStatus</code>: ACTIVE, PAUSED, VACATION, CANCELLED, COMPLETED); "Paused" is shown for VACATION with <code>pausedUntil</code></td><td>● Active</td></tr>
+          <tr><td>Plan</td><td>The subscription plan name</td><td>Text (from the Plan catalogue)</td><td class="t-req">Yes</td><td><code>plan.name</code> via the linked Plan</td><td>Daily 30-day</td></tr>
+          <tr><td>Bottle</td><td>What is delivered each time</td><td>quantity × variant label + product</td><td class="t-req">Yes</td><td>First subscription item: <code>qty × items[0].label items[0].product</code></td><td>2× 500 ml A2 Buffalo Milk</td></tr>
+          <tr><td>Next delivery</td><td>When the next bottle arrives + slot</td><td>Date · time-slot text</td><td class="t-opt">Opt.</td><td><code>nextDeliveryAt</code> + <code>deliverySlot</code> (default 06:00-08:00); "—" if none scheduled</td><td>13 Jul 2026 · 06:00-08:00</td></tr>
+          <tr><td>Per delivery</td><td>Amount charged for one delivery</td><td>Rupee amount</td><td class="t-req">Yes</td><td>Computed <code>perDeliveryPaise</code> = Σ(item qty × variant <code>dailyPaise</code>), formatted to ₹</td><td>₹110</td></tr>
+          <tr><td>Ends</td><td>Plan end / expiry date</td><td>Date or "—"</td><td class="t-opt">Opt.</td><td><code>endDate</code> (set when cancelled or plan term ends)</td><td>12 Aug 2026</td></tr>
+          <tr><td>Auto-renew</td><td>Whether the plan renews automatically</td><td>On / Off</td><td class="t-req">Yes</td><td><code>autoRenew</code> boolean</td><td>On</td></tr>
+          <tr><td>Skipped days</td><td>How many upcoming deliveries are skipped</td><td>Count (row hidden when zero)</td><td class="t-opt">Opt.</td><td>Length of the <code>skipDates</code> array</td><td>1</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Buttons on the "Your live plan" panel</h4>
+      <p>Which buttons appear depends on the current status. Every action calls <span class="navpath">POST /api/account/subscription</span> with the subscription id and an <code>action</code>, then re-renders the panel with the fresh record.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Pause</b> <span class="t-opt">(only when Active)</span></td><td>Asks "Pause for how many days?" (1–90). Deliveries resume automatically on the return date.</td><td><code>action:"pause"</code> with <code>until</code> = now + N days → status VACATION, sets <code>pausedFrom</code> = now and <code>pausedUntil</code> = until</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Skip next delivery</b> <span class="t-opt">(only when Active)</span></td><td>Confirms, then skips just the next scheduled delivery — "Skipped days are never charged."</td><td><code>action:"skip"</code> → pushes <code>nextDeliveryAt</code> (or supplied <code>date</code>) onto the <code>skipDates</code> array; errors if there is no upcoming delivery</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Resume deliveries</b> <span class="t-opt">(only when Paused / Vacation)</span></td><td>Ends the pause and restarts deliveries.</td><td><code>action:"resume"</code> → status ACTIVE, clears <code>pausedFrom</code> and <code>pausedUntil</code></td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Turn auto-renew on / off</b></td><td>Toggles automatic renewal. Label flips to match current state.</td><td><code>action:"autopay_on"</code> or <code>"autopay_off"</code> → sets <code>autoRenew</code> true / false</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Cancel plan</b> <span class="t-opt">(hidden once Cancelled)</span></td><td>Confirms "Cancel your subscription? You can start a new plan anytime.", then cancels.</td><td><code>action:"cancel"</code> → status CANCELLED, stamps <code>endDate</code> = now, sets <code>autoRenew</code> = false</td><td><span class="pill role">Customer</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call danger">
+        <span class="ci">⛔</span>
+        <div class="cbody">
+          <div class="ctitle">Caution — Cancel plan is a one-way action</div>
+          <p>"Cancel plan" sets the subscription to <b>CANCELLED</b> and turns auto-renew off. There is no "un-cancel" — the customer must start a fresh subscription from <span class="navpath">/subscriptions.html</span>. When in doubt, use <b>Pause</b> instead: it stops (and un-charges) deliveries but keeps the plan alive.</p>
+        </div>
+      </div>
+
+      <h4>The action request (POST /api/account/subscription)</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>id</td><td>Which subscription to act on</td><td>Subscription id</td><td class="t-req">Yes</td><td>Non-empty string; must belong to the signed-in user or a 404 is returned</td><td>clx8k2…</td></tr>
+          <tr><td>action</td><td>What to do</td><td>pause · resume · cancel · skip · autopay_on · autopay_off</td><td class="t-req">Yes</td><td>Enum-validated (Zod); anything else is rejected</td><td>pause</td></tr>
+          <tr><td>until</td><td>Vacation end date (pause only)</td><td>ISO date-time</td><td class="t-opt">Opt.</td><td>Stored as <code>pausedUntil</code>; null if omitted</td><td>2026-07-20T00:00:00Z</td></tr>
+          <tr><td>date</td><td>Which delivery to skip (skip only)</td><td>ISO date-time</td><td class="t-opt">Opt.</td><td>Defaults to <code>nextDeliveryAt</code> when omitted</td><td>2026-07-13T00:00:00Z</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Every change is audited</div>
+          <p>The backend writes an audit record on each action — <code>subscription.pause</code>, <code>subscription.resume</code>, <code>subscription.cancel</code>, <code>subscription.skip</code>, <code>subscription.autopay_on/off</code> — tagged with the customer's user id and role. These feed the enterprise Audit Trail, so a Super Admin can always see who changed a plan and when.</p>
+        </div>
+      </div>
+
+      <h4>Header &amp; "Manage" quick tiles</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button / tile</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Pause</b> (header, top-right)</td><td>Opens the Pause / Vacation page to schedule a pause window.</td><td>Navigation → <span class="navpath">/account/vacation.html</span> (the pause form posts <code>action:"pause"</code> with the chosen resume date)</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Pause / Vacation</b> (tile)</td><td>Same as above — going-away pause with auto-resume.</td><td>→ <span class="navpath">/account/vacation.html</span></td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Extra milk</b> (tile)</td><td>Add a one-off extra bottle to tomorrow's delivery (guests over).</td><td>→ <span class="navpath">/account/extra-milk.html</span></td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Change plan</b> (tile)</td><td>Pick a different bottle / plan.</td><td>→ <span class="navpath">/subscriptions.html</span></td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Cancel</b> (tile)</td><td>Shortcut back to this page, where the live "Cancel plan" button performs the real cancellation.</td><td>→ <span class="navpath">/account/subscription.html</span> (the actual cancel runs through <code>action:"cancel"</code>)</td><td><span class="pill role">Customer</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Tip</div>
+          <p>The <b>Cancel</b> tile only navigates back to this page — it does not cancel anything by itself. The cancellation only happens when the customer clicks the red <b>Cancel plan</b> button on the live plan panel and confirms. Point customers to that button if they say "I clicked Cancel but nothing happened."</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 2 : AUTOPAY PANEL -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">AutoPay settings panel</p><p class="sm">The live Razorpay recurring mandate attached to the subscription.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Show and control hands-free renewals: next charge date, amount, retry attempts, and the ability to pause, resume, retry, change method, view history, or cancel the mandate.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (own AutoPay) · <span class="pill role">Super Admin</span> when assisting</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → My Subscription → AutoPay (right column)</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Panel — <b>AutoPay</b> · status badge</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Mandate rows</b><span>Plan · Next renewal · Renewal amount · Retry attempts.</span></div>
+          <div class="wf-cell"><b>Failure alert</b><span>Shown when the last renewal failed (RETRY / SUSPENDED) with a "retry it now" prompt.</span></div>
+          <div class="wf-cell"><b>Action buttons</b><span>Pause · Resume · Retry payment · Change method · View history · Cancel.</span></div>
+          <div class="wf-cell"><b>Payment history</b><span>Collapsible list of past renewal charges with success / failed dots.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — AutoPay mandate panel on the My Subscription screen</div></div>
+
+      <p>This panel is fed by <span class="navpath">GET /api/subscriptions/autopay</span> and is fully documented in the <b>AutoPay (Subscription Billing)</b> section — here is the customer-side summary as it appears on this page.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Row / control</th><th>What it shows or does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Plan</td><td>Plan / plan-slug the mandate renews</td><td>Read from the mandate (<code>plan</code> / <code>planSlug</code>)</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Next renewal</td><td>Date of the next automatic charge</td><td><code>nextRenewalAt</code></td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Renewal amount</td><td>Rupee amount that will be charged</td><td><code>amountPaise</code> → ₹</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Retry attempts</td><td>How many times a failed charge has been retried</td><td><code>attempts</code></td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Pause AutoPay</b> (Active)</td><td>Stops automatic charging temporarily</td><td><code>PATCH …/autopay {action:"pause"}</code></td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Resume AutoPay</b> (Inactive / Suspended)</td><td>Restarts automatic charging</td><td><code>PATCH …/autopay {action:"resume"}</code></td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Retry payment</b> (Retry / Suspended)</td><td>Re-attempts the failed renewal charge now</td><td><code>PATCH …/autopay {action:"retry"}</code></td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Change payment method</b></td><td>Explains that the card/UPI can't be swapped silently — cancel and re-enable at next checkout so the bank re-authorises the mandate</td><td>Shows an inline note only (no API call)</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>View payment history</b></td><td>Expands the list of past renewal charges (amount, status, date)</td><td>Reads the mandate's <code>renewals[]</code></td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Cancel AutoPay</b></td><td>Confirms, then cancels the mandate — subscription stops renewing automatically</td><td><code>DELETE …/autopay?id=&lt;gatewaySubId&gt;</code></td><td><span class="pill role">Customer</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">When AutoPay isn't set up</div>
+          <p>If the subscription has no mandate the panel shows a friendly "AutoPay isn't set up for this subscription" state with a <b>Start / renew a subscription</b> button. AutoPay can only be enabled <b>at checkout</b> (the bank must authorise the e-mandate), so there is no "enable" button on this page.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 3 : HISTORY -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Subscription History</p><p class="sm">A read-only timeline of every plan change and renewal.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the customer (and support staff) a chronological record — started, paused, resumed, cancelled, renewed, cashback, refunds — built from their own subscription data. Never fabricated.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (own history) · <span class="pill role">Super Admin</span> when assisting</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → Orders &amp; plans → Subscription History</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Subscription History</b> · "A record of every plan change and renewal."</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Timeline panel</b><span>Newest-first list of lifecycle events, each with a coloured dot (done / active / paused / warning) and a date.</span></div>
+          <div class="wf-cell"><b>Empty state</b><span>"No subscription history yet" — shown until the customer has ever subscribed.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Subscription History timeline</div></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — how the timeline is built</div>
+        <div class="wf-flow"><span>GET /api/account/subscription-history</span><span>Derive lifecycle from each subscription (started / active / paused / cancelled)</span><span>Add explicit events (RENEWED · RESUMED · RESCHEDULED · CASHBACK · REFUND)</span><span>Sort newest-first</span><span>Render dots &amp; dates — or keep empty state</span></div>
+      </div><div class="wire-cap">Figure — data flow for Subscription History</div></div>
+
+      <h4>Timeline event types</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Event</th><th>Meaning</th><th>Dot / style</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td>Started — {plan}</td><td>The subscription began; shows the per-delivery price</td><td>Done (check)</td><td>Derived from <code>startDate</code></td></tr>
+          <tr><td>Active — {plan}</td><td>Currently running; shows the next delivery date</td><td>Active (highlight)</td><td>Derived from ACTIVE status</td></tr>
+          <tr><td>Paused — {plan}</td><td>Plan was paused (Vacation Mode)</td><td>Neutral</td><td>Derived from VACATION + <code>pausedFrom</code></td></tr>
+          <tr><td>Cancelled — {plan}</td><td>Plan was cancelled</td><td>Warning (amber/red)</td><td>Derived from CANCELLED + <code>endDate</code></td></tr>
+          <tr><td>Renewed / Resumed / Rescheduled</td><td>Explicit lifecycle events</td><td>Done</td><td><code>SubscriptionEvent</code> rows (RENEWED, RESUMED, RESCHEDULED)</td></tr>
+          <tr><td>Cashback / Refund</td><td>Money movement tied to the plan</td><td>Warning for refund</td><td><code>SubscriptionEvent</code> rows (CASHBACK, REFUND)</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Honest empty state</div>
+          <p>If the customer has never subscribed, the page keeps its seeded "No subscription history yet" message rather than inventing records. The client also has a fallback: if the dedicated history endpoint is unavailable it rebuilds a basic timeline from the plain subscription list, so the page never breaks.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= BEST PRACTICE / TROUBLESHOOTING / FAQ -->
+  <div class="call best">
+    <span class="ci">✅</span>
+    <div class="cbody">
+      <div class="ctitle">Best Practice</div>
+      <p>When a customer wants to stop deliveries for a trip, always steer them to <b>Pause</b> (with a resume date) rather than <b>Cancel</b>. Pause keeps their plan, pricing and AutoPay intact and auto-resumes on the chosen date; Cancel is permanent and forces a fresh signup. For a single day off, use <b>Skip next delivery</b> — it removes just that day and never charges for it.</p>
+    </div>
+  </div>
+
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>"You don't have a subscription yet" on the page</td><td>The signed-in account has no subscription record</td><td>Start one at <span class="navpath">/subscriptions.html</span>; the live plan panel appears once a subscription exists.</td></tr>
+      <tr><td>Pause button won't accept the days</td><td>Value entered is outside 1–90</td><td>Enter a whole number between 1 and 90 days.</td></tr>
+      <tr><td>"No upcoming delivery to skip"</td><td>No <code>nextDeliveryAt</code> is scheduled (paused, ended, or none yet)</td><td>Resume the plan or wait for the next scheduled delivery before skipping.</td></tr>
+      <tr><td>AutoPay panel shows "Not set up"</td><td>No recurring mandate on this subscription</td><td>Enable AutoPay at the next checkout — it can't be turned on from this page (bank must authorise the e-mandate).</td></tr>
+      <tr><td>Can't change the AutoPay card here</td><td>Razorpay mandates can't be swapped silently</td><td>Cancel AutoPay, then re-enable it at the next checkout so the bank re-authorises the new card/UPI.</td></tr>
+      <tr><td>Subscription History is blank</td><td>Customer has never subscribed (honest empty state)</td><td>This is expected; events appear after the first subscription and each change.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Frequently asked questions</h4>
+  <h4>Q. What is the difference between "Cancel plan" and "Turn auto-renew off"?</h4>
+  <p>A. "Turn auto-renew off" keeps the plan running for its remaining term but stops it renewing at the end. "Cancel plan" stops the subscription immediately (status CANCELLED, end date set today) and also turns auto-renew off — it cannot be undone.</p>
+  <h4>Q. Will the customer be charged for a skipped or paused day?</h4>
+  <p>A. No. Skipped days are added to the <code>skipDates</code> list and are never charged, and a paused (Vacation) plan makes no deliveries and no charges until it resumes.</p>
+  <h4>Q. Can a Super Admin change a customer's plan from here?</h4>
+  <p>A. Only by acting as that customer (their own account). To manage subscriptions across all customers from the back office, use <span class="navpath">Admin → Commerce → Subscriptions</span> instead.</p>
+
+</section>

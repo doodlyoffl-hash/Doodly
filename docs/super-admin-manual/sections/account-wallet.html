@@ -1,0 +1,264 @@
+<section class="sheet" id="account-wallet">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Customer Module · Wallet</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Customer Module</span></div>
+  <h2 class="section-title">Wallet</h2>
+  <p class="lead">The customer's own money hub inside DOODLY — live balance, Trial Pack cashback, referral and bottle-deposit refunds, a secure "Add Money" flow, and a searchable record of every rupee that has ever moved in or out.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Where this screen lives</div>
+      <p>This is a <b>customer-facing</b> page. A signed-in customer opens it from the account sidebar under <span class="navpath">Bottles &amp; money → Wallet</span>. A Super Admin never edits money from here — staff use the separate <b>Admin → System → Wallet Management</b> screen (same <code>DOODLY_WALLET</code> engine, admin view) to credit, debit, refund, freeze or reverse. This manual page documents what the customer sees so support staff can walk a caller through it and read the same numbers.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">DOODLY Wallet (customer dashboard)</p>
+      <p class="sm">Balance hero, quick actions, savings metrics, benefit cards, activity charts and full transaction history — all on one page.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Show the customer their real wallet balance and every transaction, and let them top the wallet up or carry it to checkout.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (own wallet only) · viewable by <span class="pill role">Super Admin</span> for support</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → Bottles &amp; money → Wallet</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">DOODLY Wallet — <b>balance ₹ hero</b> · ＋ Add Money · Use at checkout</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Balance hero</b><span>Big animated ₹ balance, "Secure" lock chip (or red "Frozen" badge), "Available at checkout · ₹X cashback pending", buttons ＋ Add Money and Use at checkout</span></div>
+          <div class="wf-cell"><b>Quick actions row</b><span>Add Money · Use Wallet · History · Cashback · Bottle Refunds · Referrals · Help</span></div>
+          <div class="wf-cell"><b>Savings metrics</b><span>7 tiles: Available balance, Pending credits, Lifetime cashback, Referral rewards, Trial Pack cashback, Bottle deposit refunds, Total wallet savings</span></div>
+          <div class="wf-cell"><b>Benefit cards</b><span>Trial Pack Benefit status · Bottle Deposit Refunds · Referral Rewards</span></div>
+          <div class="wf-cell"><b>Insights charts</b><span>"Monthly wallet activity" (6-month Credited vs Used bars) and "Where your credits came from" (source breakdown bars)</span></div>
+          <div class="wf-cell"><b>Transaction history</b><span>Search box + source filter + paged table (Date &amp; time, Source, Amount, Before, After, Reference)</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the customer Wallet dashboard (top to bottom).</div></div>
+
+      <h4>What the page loads</h4>
+      <p>For a real signed-in customer the panel first paints from the cached balance already in the account summary, then calls <code>GET /api/wallet</code> and re-renders with the authoritative ledger. Demo/guest visitors see a local sample wallet; a genuine signed-in customer never sees demo data — an empty or failed fetch shows a real (possibly zero) balance, never a seeded name.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Backend field (<code>/api/wallet</code>)</th><th>Shown as</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>balancePaise</code></td><td>Hero balance</td><td>Current spendable wallet balance (stored in paise on <code>User.walletPaise</code>; shown in ₹).</td></tr>
+          <tr><td><code>transactions[]</code></td><td>Transaction history rows</td><td>Up to the last 100 ledger entries, newest first — id, type, kind, amount, balance-after, reference, description, date.</td></tr>
+          <tr><td><code>summary.cashbackEarnedPaise</code></td><td>Lifetime / Trial Pack cashback tile</td><td>Sum of all <code>cashback</code> credits.</td></tr>
+          <tr><td><code>summary.referralRewardsPaise</code></td><td>Referral rewards tile</td><td>Sum of all <code>referral</code> credits.</td></tr>
+          <tr><td><code>summary.promoCreditsPaise</code></td><td>Feeds the credit-source breakdown</td><td>Sum of all <code>promo</code> credits.</td></tr>
+          <tr><td><code>summary.usedPaise</code></td><td>"Used" in the activity chart</td><td>Sum of all debits (money spent from the wallet).</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Savings metric tiles</h4>
+      <p>The seven tiles are computed from the transaction list on the client (money reversed by staff is excluded from every total):</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Tile</th><th>What it shows</th><th>How it is calculated</th></tr></thead>
+        <tbody>
+          <tr><td>Available balance</td><td>Money the customer can spend now</td><td>Equals the hero balance.</td></tr>
+          <tr><td>Pending credits</td><td>Cashback waiting to be claimed</td><td>Configured cashback amount if the Trial Pack was bought, the promo is active, and cashback is not yet credited — otherwise ₹0. Tile turns amber with "Upgrade to claim".</td></tr>
+          <tr><td>Lifetime cashback</td><td>All cashback ever earned</td><td>Sum of <code>cashback</code> credits.</td></tr>
+          <tr><td>Referral rewards</td><td>Earned from inviting friends</td><td>Sum of <code>referral</code> credits.</td></tr>
+          <tr><td>Trial Pack cashback</td><td>Cashback from the ₹200 Trial Pack rule</td><td>Same as lifetime cashback (the cashback kind).</td></tr>
+          <tr><td>Bottle deposit refunds</td><td>Glass-bottle deposits returned to wallet</td><td>Sum of <code>refund</code> credits whose note mentions "deposit"/"bottle".</td></tr>
+          <tr><td>Total wallet savings</td><td>Everything the wallet has saved them</td><td>cashback + referral + promo + refunds.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Benefit cards</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Card</th><th>Rows shown</th><th>Call to action</th></tr></thead>
+        <tbody>
+          <tr><td>Trial Pack Benefit</td><td>Trial Pack purchased (✓/✕) · Eligible for wallet credit (✓ / "Already claimed" / ✕) · Wallet credit status badge (Credited / Pending / Not started / Promotion unavailable) · Credited-on date</td><td>If eligible: "Upgrade to a 30-day plan &amp; get ₹200 back →" (to <span class="navpath">/subscriptions.html</span>). If not yet bought and promo is live: "Start with the Trial Pack →".</td></tr>
+          <tr><td>Bottle Deposit Refunds</td><td>Refunded to wallet (₹) · link "Track your bottles"</td><td>Opens <span class="navpath">Account → Bottle Tracking</span>.</td></tr>
+          <tr><td>Referral Rewards</td><td>Earned so far (₹) · "Invite &amp; earn"</td><td>Opens <span class="navpath">Account → Referrals</span>.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">The Trial Pack cashback rule (why "Pending" shows)</div>
+          <p>A customer who completed the paid ₹200 Trial Pack and then subscribes to an <b>eligible plan</b> (by default the 30-Day or 90-Day plan) is credited a one-time ₹200 to their wallet. The backend enforces this <b>once per customer</b> — <code>TrialCashback.userId</code> is unique, so even two payments at the same moment can only credit once. The credit fires automatically after the eligible subscription is <b>paid</b>; a refunded Trial Pack disqualifies it. Amount, eligible plans and on/off are all admin-configurable (no code change).</p>
+        </div>
+      </div>
+
+      <h4>Insights charts</h4>
+      <ul>
+        <li><b>Monthly wallet activity</b> — a grouped bar chart of the last 6 months with a "Credited" bar and a "Used" bar per month (legend above). Reversed transactions are ignored. Bars animate up on load (skipped if the visitor prefers reduced motion).</li>
+        <li><b>Where your credits came from</b> — horizontal bars for Recharge, Cashback, Referral, Promo and Refunds; each shows the amount and its share of total credits. Shows a friendly empty line until the customer has any credits.</li>
+      </ul>
+
+      <h4>Transaction history table</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Behaviour (from the real panel)</th></tr></thead>
+        <tbody>
+          <tr><td>Columns</td><td>Date &amp; time · Source · Amount (+green credit / −grey debit) · Before (balance before) · After (balance after) · Reference (<code>WTX-XXXXXX</code>)</td></tr>
+          <tr><td>Source labels</td><td>Wallet Recharge, Trial Pack Cashback, Referral Reward, Promo Credit, Bottle Deposit Refund, Refund, Order Payment, Manual Credit, Manual Debit, Reversal (each row also shows the raw description; reversed rows are struck through and tagged "· reversed").</td></tr>
+          <tr><td>Search</td><td>Free-text box matches description, reference, source label and amount.</td></tr>
+          <tr><td>Filter</td><td>"All sources" dropdown with the 10 source labels above.</td></tr>
+          <tr><td>Sorting</td><td>Fixed newest-first (backend orders by created date descending).</td></tr>
+          <tr><td>Pagination</td><td>8 rows per page with ‹ Prev / Next › and a "Page X of Y" indicator; a live "N transactions" count badge in the header.</td></tr>
+          <tr><td>Row actions</td><td>None for the customer — the history is read-only. (Reversal/credit/debit live only in the admin screen.)</td></tr>
+          <tr><td>Export</td><td>Not available to the customer. CSV export exists only in Admin → Wallet Management.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Buttons on the dashboard</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>＋ Add Money (hero) / Add Money (quick action)</td><td>Opens the secure "Add Money" flow (Screen 2)</td><td>None until payment — see recharge flow</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Use at checkout / Use Wallet</td><td>Navigates to <span class="navpath">/subscriptions.html</span> to spend the balance on an order</td><td>Balance applied at checkout via <code>POST /api/wallet/apply</code> (server caps to min of balance and order total)</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>History</td><td>Smooth-scrolls to the transaction table</td><td>Client only</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Cashback</td><td>Jumps to history pre-filtered to "Trial Pack Cashback"</td><td>Client filter</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Bottle Refunds</td><td>Opens <span class="navpath">Account → Bottle Tracking</span></td><td>Client navigation</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Referrals</td><td>Opens <span class="navpath">Account → Referrals</span></td><td>Client navigation</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Help</td><td>Opens the Help Center</td><td>Client navigation</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Search / source filter / ‹ Prev / Next ›</td><td>Filter and page the transaction list</td><td>Client only (list already loaded)</td><td><span class="pill role">Customer</span></td></tr>
+        </tbody>
+      </table></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Add Money (Wallet recharge)</p>
+      <p class="sm">A guided pop-up: choose an amount, pick a method, pay on the Razorpay secure screen, and watch the balance update the instant payment succeeds.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Let the customer top up their wallet safely, with the credit created only after the payment is signature-verified on the server.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (must be signed in)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → Wallet → ＋ Add Money</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">💰 Add money to wallet — <b>modal dialog</b> · closes on ✕ / Esc / backdrop</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Step 1 — Amount</b><span>Current balance line · preset amount chips · custom amount input (₹) · "Secured by DOODLY Pay" note with min/max · Proceed to pay button</span></div>
+          <div class="wf-cell"><b>Step 2 — Method</b><span>"Adding ₹X" summary · UPI / Card / Net Banking toggles · Razorpay note · Back and Pay securely buttons</span></div>
+          <div class="wf-cell"><b>Processing</b><span>Spinner + "Contacting the gateway… / Verifying your payment…" · "Please don't close this window"</span></div>
+          <div class="wf-cell"><b>Success</b><span>Coins animation · ✓ badge · "₹X added!" · new balance · reference id · Done</span></div>
+          <div class="wf-cell"><b>Failure</b><span>! badge · reason message · Cancel and Retry payment buttons</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the five states of the Add Money dialog.</div></div>
+
+      <h4>Fields (Step 1 — Amount)</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Preset amount chips</td><td>One-tap common top-up amounts</td><td>The admin-configured preset list (default ₹100, ₹250, ₹500, ₹1,000, ₹2,000, ₹5,000)</td><td class="t-opt">Opt.</td><td>Selecting a chip fills the custom field; still checked against min/max</td><td>₹500</td></tr>
+          <tr><td>Custom amount (₹)</td><td>Any amount the customer wants to add</td><td>Whole number, min to max</td><td class="t-req">Yes</td><td>Client checks <code>rechargeMin</code>–<code>rechargeMax</code>; the server re-validates in <code>/recharge/order</code> against <code>getRechargeConfig()</code> before creating the gateway order</td><td>750</td></tr>
+          <tr><td>Payment method (Step 2)</td><td>Which rail to pay by</td><td>UPI · Card · Net Banking</td><td class="t-req">Yes</td><td>Passed as a label; actual method is chosen on the Razorpay screen</td><td>UPI</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Two different limit numbers — read carefully</div>
+          <p>The <b>storefront</b> config defaults to min ₹100 and max ₹1,00,000 with presets ₹100–₹5,000. The <b>backend</b> recharge config (<code>appSetting "wallet.recharge"</code>) defaults to <code>minPaise</code> 10000 (₹100), <code>maxPaise</code> 1,00,00,000 (₹1,00,000) and preset paise values. The server number is the one that actually gates a real payment — if the two ever disagree, the customer sees a clear "Minimum/Maximum recharge is ₹X" error from the server. Keep them aligned when you change limits.</p>
+        </div>
+      </div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Proceed to pay ₹X</td><td>Moves from amount to the method step (disabled until a valid amount is entered)</td><td>Re-checks min/max client-side</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Back</td><td>Returns to the amount step</td><td>Client only</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Pay ₹X securely</td><td>Starts the real gateway payment</td><td><code>POST /api/wallet/recharge/order</code> creates a Razorpay order tagged with the customer id → Razorpay Checkout pop-up opens</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Razorpay Checkout (external)</td><td>Customer pays via UPI/card/net-banking</td><td>Razorpay returns <code>razorpay_order_id</code>, <code>razorpay_payment_id</code>, <code>razorpay_signature</code></td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>(auto) Verify &amp; credit</td><td>Confirms the payment and credits the wallet</td><td><code>POST /api/wallet/recharge/confirm</code> verifies the signature, re-fetches the order (server-trusted amount + owner tag), then credits idempotently using the payment id as the unique reference</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Done</td><td>Closes the dialog and refreshes the panel with the new balance</td><td>Panel re-reads the ledger</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Retry payment</td><td>Returns to the method step to try again</td><td>Restarts the flow</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Cancel / ✕ / Esc</td><td>Closes the dialog with no charge</td><td>None</td><td><span class="pill role">Customer</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — secure wallet recharge</div>
+        <div class="wf-flow">
+          <span>Enter amount</span>
+          <span>Pick method</span>
+          <span>Server creates Razorpay order (validates min/max)</span>
+          <span>Pay on Razorpay screen</span>
+          <span>Server verifies signature + order owner</span>
+          <span>Wallet credited (idempotent by payment id)</span>
+          <span>Balance updates instantly</span>
+        </div>
+      </div><div class="wire-cap">Figure — money never lands in the wallet until the server has verified the payment.</div></div>
+
+      <div class="call danger">
+        <span class="ci">⛔</span>
+        <div class="cbody">
+          <div class="ctitle">Caution — the client can never mint balance</div>
+          <p>In production, credits happen <b>only</b> through the signature-verified <code>/recharge/confirm</code> path. The plain <code>POST /api/wallet/recharge</code> route refuses unverified credits when the gateway is configured (returns <code>use_gateway</code>). A repeated confirm with the same payment id returns the original credit instead of adding money twice. On localhost a simulated payment path exists for demos only.</p>
+        </div>
+      </div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Recharge blocked states</div>
+          <p>If an admin has switched recharge off, the dialog shows "Wallet recharge is currently unavailable." If the specific wallet is <b>frozen</b>, it shows "Your wallet is temporarily frozen. Please contact support…" and no payment can start. Freezing/unfreezing is done from Admin → Wallet Management.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ NOTIFICATIONS / RELATED -->
+  <div class="call tip">
+    <span class="ci">💡</span>
+    <div class="cbody">
+      <div class="ctitle">Tip — what the customer gets notified about</div>
+      <p>A fresh top-up, a Trial Pack cashback, a referral reward and a bottle-deposit refund each fire an in-app notification, and (where the customer has opted in) a WhatsApp message — the recharge and cashback also send a branded email. Idempotent replays never re-notify, so a caller who refreshes will not get duplicate messages.</p>
+    </div>
+  </div>
+
+  <div class="call best">
+    <span class="ci">✅</span>
+    <div class="cbody">
+      <div class="ctitle">Best Practice</div>
+      <p>When a customer says "I paid but my balance didn't change", ask for the Razorpay <b>payment id</b> shown on the success screen (or their bank statement). Search that id in Admin → Wallet Management: because every credit uses the payment id as its unique reference, you can instantly tell whether the credit landed, and if the gateway charged but confirmation failed, the amount is auto-refunded by the gateway — never manually credit a second time without confirming the first did not post.</p>
+    </div>
+  </div>
+
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>Balance shows ₹0 for a real customer</td><td><code>/api/wallet</code> failed or the customer is not truly signed in (no token)</td><td>Confirm they are logged in; reload. A signed-in customer is shown a real (possibly zero) balance, never demo data — a persistent zero means no credits yet.</td></tr>
+      <tr><td>"Add Money" says wallet is frozen</td><td>The wallet was frozen by an admin</td><td>Unfreeze from Admin → Wallet Management → Freeze/Unfreeze after resolving the reason.</td></tr>
+      <tr><td>"Wallet recharge is currently unavailable"</td><td>Recharge switched off in admin settings</td><td>Enable "Allow customers to add money" in Admin → Wallet Management → Settings.</td></tr>
+      <tr><td>"Minimum/Maximum recharge is ₹X" on paying</td><td>Amount outside the server recharge limits</td><td>Enter an amount within range, or adjust <code>minPaise</code>/<code>maxPaise</code> in Settings.</td></tr>
+      <tr><td>Paid on Razorpay but no credit</td><td>Signature/confirm step failed after charge</td><td>Search the payment id in Wallet Management; the gateway auto-refunds an unconfirmed charge. Do not double-credit.</td></tr>
+      <tr><td>Trial Pack cashback stuck on "Pending"</td><td>Eligible plan not yet paid, or Trial Pack refunded</td><td>Confirm a PAID Trial Pack (SAMPLE order) exists and the customer paid an eligible (30/90-day) plan; credit fires automatically once both are true.</td></tr>
+      <tr><td>Payments not configured (503)</td><td>Razorpay keys missing in the environment</td><td>Set the Razorpay keys in the deployment env; recharge order creation needs them.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>FAQ</h4>
+  <h4>Q. Can a customer spend more than their balance at checkout?</h4>
+  <p>No. When the wallet is applied to an order the server takes the smaller of the wallet balance and the order total, and the debit is idempotent per order, so a retry can never over-spend.</p>
+
+  <h4>Q. Why does the same cashback amount appear under both "Lifetime cashback" and "Trial Pack cashback"?</h4>
+  <p>Both tiles read the <code>cashback</code> credit total. Trial Pack cashback is the only kind of cashback DOODLY issues today, so the two figures match by design.</p>
+
+  <h4>Q. Does wallet money expire?</h4>
+  <p>Not currently. The config has an "Expiry (days)" setting and the reports expose an "expired credits" field, but the expiry policy is future-ready and left blank (never expires) by default.</p>
+
+  <h4>Q. Can support add money to a customer's wallet directly?</h4>
+  <p>Yes, but not from this customer page. Staff use Admin → Wallet Management to post a Manual Credit, Manual Debit, or Bottle Deposit Refund — each is audited and appears in the customer's history with the matching source label.</p>
+
+</section>

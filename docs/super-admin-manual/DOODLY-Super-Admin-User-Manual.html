@@ -1,0 +1,955 @@
+<title>DOODLY Super Admin User Manual</title>
+<style>
+  :root{
+    --paper:#FBFCFB; --paper-2:#F3F6F4; --band:#EEF3F0;
+    --ink:#13212B; --muted:#5B6A71; --faint:#8A979C;
+    --blue:#0E2A47; --blue-2:#1D4E7E; --blue-soft:#E9F0F7;
+    --forest:#0F3D2E; --green:#1FAE66; --green-2:#158a50; --green-soft:#E7F5EC;
+    --line:#DCE5E0; --line-2:#C6D2CB;
+    --warn:#B7791F; --warn-bg:#FBF4E3; --danger:#B23B3B; --danger-bg:#FBEDED;
+    --info:#1D4E7E; --info-bg:#E9F0F7; --ok:#1E8E5A; --ok-bg:#E7F5EC; --tip:#158a50; --tip-bg:#E7F5EC;
+    --serif:"Iowan Old Style",Georgia,"Palatino Linotype","Book Antiqua",serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,monospace;
+    --sheet-w:820px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:linear-gradient(180deg,#EAF0EC,#E4EBE7);color:var(--ink);
+    font-family:var(--sans);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  a{color:var(--blue-2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  ::selection{background:var(--green-soft)}
+
+  /* ---------- sheet / page metaphor ---------- */
+  .doc{max-width:var(--sheet-w);margin:0 auto;padding:28px 16px 80px}
+  .sheet{background:var(--paper);border:1px solid var(--line);border-radius:4px;
+    box-shadow:0 1px 2px rgba(16,42,71,.04),0 18px 40px -28px rgba(16,42,71,.22);
+    padding:56px 60px;margin:0 0 26px;position:relative;overflow:hidden}
+  .sheet.pad-lg{padding:64px 60px}
+  @media(max-width:680px){.sheet{padding:32px 22px}.doc{padding:14px 8px 60px}}
+
+  /* running head */
+  .runhead{display:flex;justify-content:space-between;align-items:center;
+    font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);
+    border-bottom:1px solid var(--line);padding-bottom:10px;margin:-8px 0 30px;font-weight:600}
+  .runhead .rh-brand{color:var(--forest)}
+  .runhead b{color:var(--blue)}
+
+  /* ---------- typography ---------- */
+  h1,h2,h3,h4{font-family:var(--serif);color:var(--blue);text-wrap:balance;line-height:1.18;margin:0}
+  h2.section-title{font-size:30px;letter-spacing:-.01em;margin:0 0 4px}
+  h3{font-size:21px;margin:34px 0 8px;color:var(--forest)}
+  h4{font-size:16.5px;font-family:var(--sans);font-weight:700;color:var(--blue);margin:22px 0 6px;letter-spacing:-.01em}
+  p{margin:0 0 12px}
+  .lead{font-size:16.5px;color:var(--muted);margin:0 0 20px;max-width:60ch}
+  .eyebrow{font-size:11.5px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--green-2)}
+  small,.small{font-size:12.5px;color:var(--muted)}
+  ul,ol{margin:0 0 14px;padding-left:20px}
+  li{margin:3px 0}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--band);border:1px solid var(--line);
+    border-radius:4px;padding:1px 5px;color:var(--forest)}
+  hr{border:0;border-top:1px solid var(--line);margin:26px 0}
+  .tabnum{font-variant-numeric:tabular-nums}
+
+  /* section number chip */
+  .secnum{display:inline-flex;align-items:baseline;gap:12px;margin-bottom:16px}
+  .secnum .n{font-family:var(--serif);font-size:15px;font-weight:600;color:#fff;background:var(--forest);
+    border-radius:6px;padding:4px 10px;letter-spacing:.02em}
+  .secnum .k{font-size:11.5px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--green-2);align-self:center}
+
+  /* ---------- cover ---------- */
+  .cover{background:
+      radial-gradient(120% 90% at 82% 8%,rgba(31,174,102,.16),transparent 55%),
+      linear-gradient(155deg,#0B2138 0%,#0E2A47 46%,#0C3326 100%);
+    color:#EAF2ED;padding:0;border:none;min-height:1020px;display:flex;flex-direction:column}
+  .cover .cov-in{padding:64px 60px;display:flex;flex-direction:column;flex:1}
+  .cover .brandline{display:flex;align-items:center;gap:14px}
+  .cov-logo{width:44px;height:44px;border-radius:12px;background:var(--green);display:grid;place-items:center;
+    box-shadow:0 6px 20px -6px rgba(31,174,102,.7)}
+  .cov-logo svg{width:26px;height:26px}
+  .cov-brand{font-family:var(--serif);font-size:24px;font-weight:600;letter-spacing:.02em;color:#fff}
+  .cov-brand span{color:var(--green);}
+  .cov-tag{font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:#9FD8BC;margin-top:2px}
+  .cov-mid{margin-top:auto;margin-bottom:auto;padding:40px 0}
+  .cov-kicker{font-size:12px;letter-spacing:.36em;text-transform:uppercase;color:#7FC6A2;font-weight:700}
+  .cov-title{font-family:var(--serif);font-size:62px;line-height:1.02;letter-spacing:-.02em;color:#fff;margin:20px 0 0;text-wrap:balance}
+  .cov-title em{font-style:italic;color:#8FE3B7}
+  .cov-sub{font-size:17px;color:#B9CCC2;max-width:46ch;margin-top:22px;line-height:1.55}
+  .cov-drop{position:absolute;right:-40px;top:120px;width:360px;height:360px;opacity:.5}
+  .cov-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:rgba(255,255,255,.12);
+    border:1px solid rgba(255,255,255,.14);border-radius:12px;overflow:hidden;margin-top:14px}
+  .cov-meta div{background:rgba(9,26,43,.55);padding:16px 18px}
+  .cov-meta .lbl{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:#7FC6A2;font-weight:700}
+  .cov-meta .val{font-size:16px;color:#fff;margin-top:4px;font-variant-numeric:tabular-nums}
+  .cov-foot{display:flex;justify-content:space-between;align-items:flex-end;font-size:12px;color:#93AAA0;margin-top:28px}
+  .cov-conf{border:1px solid rgba(143,227,183,.4);color:#8FE3B7;border-radius:999px;padding:5px 14px;
+    font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;font-weight:700}
+
+  /* ---------- callouts ---------- */
+  .call{border:1px solid var(--line);border-left-width:4px;border-radius:8px;padding:14px 16px 14px 18px;
+    margin:16px 0;background:var(--paper-2);display:flex;gap:12px}
+  .call .ci{flex:0 0 22px;width:22px;height:22px;margin-top:1px}
+  .call .cbody{flex:1}
+  .call .ctitle{font-weight:700;font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px}
+  .call p:last-child{margin-bottom:0}
+  .call.note{border-left-color:var(--blue-2);background:var(--info-bg)} .call.note .ctitle{color:var(--info)}
+  .call.tip{border-left-color:var(--tip);background:var(--tip-bg)} .call.tip .ctitle{color:var(--tip)}
+  .call.warn{border-left-color:var(--warn);background:var(--warn-bg)} .call.warn .ctitle{color:var(--warn)}
+  .call.danger{border-left-color:var(--danger);background:var(--danger-bg)} .call.danger .ctitle{color:var(--danger)}
+  .call.best{border-left-color:var(--green-2);background:var(--green-soft)} .call.best .ctitle{color:var(--green-2)}
+
+  /* ---------- tables ---------- */
+  .twrap{overflow-x:auto;margin:14px 0;border:1px solid var(--line);border-radius:8px}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{background:var(--blue);color:#EAF2ED;font-weight:600;font-size:11.5px;letter-spacing:.05em;
+    text-transform:uppercase;border-bottom:none;position:sticky;top:0}
+  tbody tr:nth-child(even){background:var(--paper-2)}
+  tbody tr:last-child td{border-bottom:none}
+  td code{font-size:11.5px}
+  .t-req{color:var(--danger);font-weight:700}
+  .t-opt{color:var(--muted)}
+  table.matrix td{text-align:center;font-variant-numeric:tabular-nums}
+  table.matrix td:first-child,table.matrix th:first-child{text-align:left}
+  .yes{color:var(--green-2);font-weight:700}.no{color:var(--faint)}.part{color:var(--warn);font-weight:600}
+
+  /* pills / chips */
+  .pill{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;border-radius:999px;
+    padding:2px 9px;border:1px solid transparent;white-space:nowrap}
+  .pill.role{background:var(--blue-soft);color:var(--blue);border-color:#CFE0F0}
+  .pill.green{background:var(--green-soft);color:var(--green-2);border-color:#C4E7D2}
+  .pill.amber{background:var(--warn-bg);color:var(--warn);border-color:#EAD8AE}
+  .navpath{font-family:var(--mono);font-size:12px;color:var(--forest);background:var(--green-soft);
+    border:1px solid #CBE8D6;border-radius:6px;padding:3px 8px;display:inline-block}
+
+  /* screen spec header */
+  .spec{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:22px 0}
+  .spec-h{background:linear-gradient(180deg,#0E2A47,#0C2340);color:#EAF2ED;padding:16px 20px}
+  .spec-h .st{font-family:var(--serif);font-size:20px;color:#fff;margin:0}
+  .spec-h .sm{font-size:12.5px;color:#AFC4D6;margin-top:3px}
+  .spec-meta{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 20px;background:var(--paper-2);
+    border-bottom:1px solid var(--line);font-size:12.5px}
+  .spec-meta .m b{color:var(--blue);font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-right:6px}
+  .spec-body{padding:18px 20px}
+
+  /* wireframe frame */
+  .wire{margin:14px 0;border:1px solid var(--line);border-radius:10px;background:#fff;padding:10px}
+  .wire svg{width:100%;height:auto;display:block}
+  .wire-cap{font-size:11.5px;color:var(--muted);text-align:center;margin-top:6px;font-style:italic}
+
+  /* diagram frame */
+  .diagram{margin:16px 0;border:1px solid var(--line);border-radius:10px;background:
+     linear-gradient(180deg,#fff,#F7FAF8);padding:16px}
+  .diagram svg{width:100%;height:auto;display:block}
+
+  /* toc */
+  .toc{columns:2;column-gap:40px}
+  @media(max-width:680px){.toc{columns:1}}
+  .toc .grp{break-inside:avoid;margin-bottom:18px}
+  .toc .grp h5{font-family:var(--sans);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--green-2);margin:0 0 6px;font-weight:800;border-bottom:1px solid var(--line);padding-bottom:4px}
+  .toc a{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:var(--ink);padding:2px 0}
+  .toc a .pg{color:var(--faint);font-variant-numeric:tabular-nums}
+  .toc a:hover{color:var(--blue-2)}
+
+  /* coverage grid */
+  .cov-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:14px 0}
+  .cov-cell{border:1px solid var(--line);border-radius:8px;padding:9px 11px;background:var(--paper-2)}
+  .cov-cell .cc-t{font-weight:700;font-size:12.5px;color:var(--blue)}
+  .cov-cell .cc-n{font-size:11px;color:var(--muted)}
+  .status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
+  .sd-done{background:var(--green)} .sd-plan{background:var(--line-2)}
+
+  /* stat row */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0}
+  @media(max-width:680px){.stats{grid-template-columns:repeat(2,1fr)}}
+  .stat{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--paper-2)}
+  .stat .sv{font-family:var(--serif);font-size:26px;color:var(--forest);line-height:1;font-variant-numeric:tabular-nums}
+  .stat .sl{font-size:11.5px;color:var(--muted);margin-top:5px;letter-spacing:.02em}
+
+  .footer-note{text-align:center;color:var(--faint);font-size:12px;margin-top:6px}
+  .kbd{font-family:var(--mono);font-size:11px;background:#fff;border:1px solid var(--line-2);
+    border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:var(--blue)}
+
+  @media print{
+    body{background:#fff}
+    .doc{max-width:none;padding:0}
+    .sheet{box-shadow:none;border:none;border-radius:0;margin:0;padding:24mm 20mm;
+      page-break-after:always;min-height:auto}
+    .cover{min-height:auto;page-break-after:always}
+    thead th{position:static}
+    a{color:var(--ink)}
+    @page{size:A4;margin:0}
+  }
+</style>
+
+<div class="doc">
+
+<!-- ============================ COVER ============================ -->
+<section class="sheet cover">
+  <svg class="cov-drop" viewBox="0 0 200 200" fill="none" aria-hidden="true">
+    <path d="M100 20 C100 20 165 92 165 132 A65 65 0 1 1 35 132 C35 92 100 20 100 20Z"
+      fill="none" stroke="#2FBE79" stroke-width="1.2" opacity=".5"/>
+    <path d="M100 55 C100 55 140 100 140 128 A40 40 0 1 1 60 128 C60 100 100 55 100 55Z"
+      fill="#1FAE66" opacity=".10"/>
+  </svg>
+  <div class="cov-in">
+    <div class="brandline">
+      <span class="cov-logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><circle cx="9.5" cy="12" r="6.2"/><circle cx="15.5" cy="12" r="6.2"/></svg></span>
+      <div>
+        <div class="cov-brand">DOODLY<span>.</span></div>
+        <div class="cov-tag">Pure · Fresh · Honest</div>
+      </div>
+    </div>
+
+    <div class="cov-mid">
+      <div class="cov-kicker">Enterprise Operations Manual</div>
+      <h1 class="cov-title">Super Admin<br>User <em>Manual</em></h1>
+      <p class="cov-sub">The complete operating guide to the DOODLY platform — every module, screen, field, button, workflow and report, explained for the person who runs it all.</p>
+    </div>
+
+    <div class="cov-meta">
+      <div><div class="lbl">Version</div><div class="val">1.0 — Volume I</div></div>
+      <div><div class="lbl">Released</div><div class="val">12 July 2026</div></div>
+      <div><div class="lbl">Applies to</div><div class="val">Production</div></div>
+    </div>
+    <div class="cov-foot">
+      <div>Prepared for the DOODLY Super Administrator, administrators, managers &amp; staff training.</div>
+      <span class="cov-conf">Confidential</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ DOCUMENT CONTROL ============================ -->
+<section class="sheet">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Super Admin User Manual · <b>Volume I</b></span></div>
+  <div class="secnum"><span class="n">00</span><span class="k">Document Control</span></div>
+  <h2 class="section-title">About this manual</h2>
+  <p class="lead">This manual is written in plain English so a brand-new employee — with no prior knowledge of DOODLY — can sit down and operate the platform confidently.</p>
+
+  <div class="stats">
+    <div class="stat"><div class="sv">6</div><div class="sl">User roles covered</div></div>
+    <div class="stat"><div class="sv">120+</div><div class="sl">Screens documented</div></div>
+    <div class="stat"><div class="sv">50+</div><div class="sl">Admin modules</div></div>
+    <div class="stat"><div class="sv">9</div><div class="sl">Master workflows</div></div>
+  </div>
+
+  <h4>Who should read this</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Audience</th><th>How to use this manual</th></tr></thead>
+    <tbody>
+      <tr><td><b>Super Admin</b></td><td>Your complete reference. You have access to every module; read the permissions matrix (§4) to understand what you are delegating to others.</td></tr>
+      <tr><td><b>Administrators &amp; Managers</b></td><td>Read the modules your role can access. Each screen lists <em>Who can access</em> at the top.</td></tr>
+      <tr><td><b>Accountant</b></td><td>Focus on Finance (Expenses, Wallet, GST, Payroll) and the Reports &amp; Revenue chapters.</td></tr>
+      <tr><td><b>Delivery Executive</b></td><td>Read the Delivery Executive chapter — your daily route, deliveries, bottle &amp; cash collection.</td></tr>
+      <tr><td><b>New employee / trainer</b></td><td>Start with §1 (Platform Overview) and §3 (Master Workflows), then the module for your job. Use this as an SOP during onboarding.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>How to read a screen page</h4>
+  <p>Every screen in this manual is documented in the same fixed structure, so once you learn to read one page you can read them all:</p>
+  <ol>
+    <li><b>Screen name &amp; purpose</b> — what the screen is for, in one line.</li>
+    <li><b>Who can access</b> — the roles allowed to open it.</li>
+    <li><b>Navigation path</b> — the exact clicks to reach it, shown like <span class="navpath">Admin → Commerce → Orders</span>.</li>
+    <li><b>Wireframe sketch</b> — a labelled layout of the screen.</li>
+    <li><b>Field table</b> — every field: purpose, accepted values, mandatory/optional, validation, backend behaviour, example.</li>
+    <li><b>Button table</b> — every button: what it does, the backend process, validation and the permission required.</li>
+    <li><b>Notes, Tips, Warnings &amp; Best Practices</b> — the callout boxes explained below.</li>
+  </ol>
+
+  <h4>Callout legend</h4>
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note</div><p>Extra context or a detail worth knowing. Nothing will break if you skip it.</p></div></div>
+  <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip</div><p>A faster or smarter way to do the task.</p></div></div>
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>The recommended way of working, based on how DOODLY is meant to run.</p></div></div>
+  <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning</div><p>Do this carefully — it affects customers, money, or live data.</p></div></div>
+  <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — irreversible</div><p>This action cannot be undone. Read twice before you confirm.</p></div></div>
+
+  <h4>Revision history</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Version</th><th>Date</th><th>Summary</th><th>Author</th></tr></thead>
+    <tbody>
+      <tr><td class="tabnum">1.0 — Vol I</td><td class="tabnum">12 Jul 2026</td><td>Foundations, master workflows, permissions model, and fully-worked reference modules (Admin Dashboard, Customers, Customer journey).</td><td>Platform Team</td></tr>
+      <tr><td class="tabnum">1.x — Vol II+</td><td>Planned</td><td>Remaining modules expanded to full field/button depth (see coverage map, §7).</td><td>Platform Team</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============================ TABLE OF CONTENTS ============================ -->
+<section class="sheet" id="toc">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Table of Contents</span></div>
+  <div class="secnum"><span class="n">—</span><span class="k">Contents</span></div>
+  <h2 class="section-title">Table of contents</h2>
+  <p class="lead">Every module the platform ships with today. Sections marked <span class="status-dot sd-done"></span> are fully written in this volume; <span class="status-dot sd-plan"></span> are mapped and scheduled for full field-level expansion.</p>
+
+  <div class="toc">
+    <div class="grp">
+      <h5>Foundations</h5>
+      <a href="#s1"><span>1 · Platform Overview &amp; Architecture</span><span class="pg">●</span></a>
+      <a href="#s2"><span>2 · Roles &amp; Access Model</span><span class="pg">●</span></a>
+      <a href="#s3"><span>3 · Master Workflows</span><span class="pg">●</span></a>
+      <a href="#s4"><span>4 · Permissions Matrix</span><span class="pg">●</span></a>
+      <a href="#s5"><span>5 · How Every Screen Is Documented</span><span class="pg">●</span></a>
+    </div>
+    <div class="grp">
+      <h5>Reference modules (worked)</h5>
+      <a href="#s6a"><span>6.1 · Admin Dashboard</span><span class="pg">●</span></a>
+      <a href="#s6b"><span>6.2 · Customers</span><span class="pg">●</span></a>
+      <a href="#s6c"><span>6.3 · The Customer Journey</span><span class="pg">●</span></a>
+    </div>
+    <div class="grp">
+      <h5>Customer Module <span class="status-dot sd-plan"></span></h5>
+      <a href="#cov"><span>Dashboard · Products · Orders</span><span class="pg">○</span></a>
+      <a href="#cov"><span>Subscriptions · Deliveries · Tracking</span><span class="pg">○</span></a>
+      <a href="#cov"><span>Calendar · Wallet · Referrals · Rewards</span><span class="pg">○</span></a>
+      <a href="#cov"><span>Invoices · Bottles · Addresses</span><span class="pg">○</span></a>
+      <a href="#cov"><span>Support · Notifications · Profile · Settings</span><span class="pg">○</span></a>
+    </div>
+    <div class="grp">
+      <h5>Admin · Commerce <span class="status-dot sd-plan"></span></h5>
+      <a href="#cov"><span>Orders · Customers · Payments</span><span class="pg">○</span></a>
+      <a href="#cov"><span>Subscriptions · Subscription Billing</span><span class="pg">○</span></a>
+      <a href="#cov"><span>Business Invoices · B2B · B2B Pricing</span><span class="pg">○</span></a>
+    </div>
+    <div class="grp">
+      <h5>Admin · Catalogue <span class="status-dot sd-plan"></span></h5>
+      <a href="#cov"><span>Products · Categories · Inventory</span><span class="pg">○</span></a>
+      <a href="#cov"><span>Bottle Inventory · Delivery Settings</span><span class="pg">○</span></a>
+    </div>
+    <div class="grp">
+      <h5>Admin · Operations <span class="status-dot sd-plan"></span></h5>
+      <a href="#cov"><span>Delivery Management · Auto Assignment</span><span class="pg">○</span></a>
+      <a href="#cov"><span>Late Delivery Monitoring · Routes</span><span class="pg">○</span></a>
+      <a href="#cov"><span>Serviceable Areas · Drivers</span><span class="pg">○</span></a>
+    </div>
+    <div class="grp">
+      <h5>Admin · Supply <span class="status-dot sd-plan"></span></h5>
+      <a href="#cov"><span>Farmers · Procurement · Quality Testing</span><span class="pg">○</span></a>
+    </div>
+    <div class="grp">
+      <h5>Admin · Finance <span class="status-dot sd-plan"></span></h5>
+      <a href="#cov"><span>Daily Expenses · Wallet · GST</span><span class="pg">○</span></a>
+      <a href="#cov"><span>Payroll · Salary Advances</span><span class="pg">○</span></a>
+    </div>
+    <div class="grp">
+      <h5>Admin · Growth <span class="status-dot sd-plan"></span></h5>
+      <a href="#cov"><span>Reports · Revenue · Search Insights</span><span class="pg">○</span></a>
+      <a href="#cov"><span>Coupons · Offers · Referrals</span><span class="pg">○</span></a>
+      <a href="#cov"><span>Pure Rewards (Loyalty) · Reviews</span><span class="pg">○</span></a>
+    </div>
+    <div class="grp">
+      <h5>Admin · Content <span class="status-dot sd-plan"></span></h5>
+      <a href="#cov"><span>Blogs · CMS · Brand Story</span><span class="pg">○</span></a>
+      <a href="#cov"><span>Help Centre · Notifications</span><span class="pg">○</span></a>
+    </div>
+    <div class="grp">
+      <h5>Admin · System <span class="status-dot sd-plan"></span></h5>
+      <a href="#cov"><span>Support Tickets · Chat Support</span><span class="pg">○</span></a>
+      <a href="#cov"><span>Users · Roles · Permissions</span><span class="pg">○</span></a>
+      <a href="#cov"><span>Audit Logs · Settings</span><span class="pg">○</span></a>
+    </div>
+    <div class="grp">
+      <h5>Admin · HR <span class="status-dot sd-plan"></span></h5>
+      <a href="#cov"><span>HR Dashboard · Employees · Attendance</span><span class="pg">○</span></a>
+      <a href="#cov"><span>Leave · Salary Advances · Payroll</span><span class="pg">○</span></a>
+    </div>
+    <div class="grp">
+      <h5>Delivery Executive &amp; Driver <span class="status-dot sd-plan"></span></h5>
+      <a href="#cov"><span>My Route · Assigned Orders · Maps</span><span class="pg">○</span></a>
+      <a href="#cov"><span>Bottle Collection · Cash · Attendance</span><span class="pg">○</span></a>
+    </div>
+    <div class="grp">
+      <h5>Appendices</h5>
+      <a href="#faq"><span>A · FAQ</span><span class="pg">●</span></a>
+      <a href="#trouble"><span>B · Troubleshooting</span><span class="pg">●</span></a>
+      <a href="#glossary"><span>C · Glossary</span><span class="pg">●</span></a>
+      <a href="#cov"><span>D · Coverage Map &amp; Index</span><span class="pg">●</span></a>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 1. PLATFORM OVERVIEW ============================ -->
+<section class="sheet" id="s1">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>1 · Platform Overview</span></div>
+  <div class="secnum"><span class="n">01</span><span class="k">Foundations</span></div>
+  <h2 class="section-title">Platform overview &amp; architecture</h2>
+  <p class="lead">DOODLY is a farm-to-doorstep A2 buffalo-milk business. The platform is one system with several front doors — a public storefront, a customer account area, an admin back-office, and a delivery-executive app — all sharing one database.</p>
+
+  <h3>The four surfaces</h3>
+  <p>Everything a person can see belongs to one of four <b>surfaces</b>. Which surface you land on is decided by your <b>role</b> when you sign in.</p>
+  <div class="twrap"><table>
+    <thead><tr><th>Surface</th><th>Who uses it</th><th>What it does</th><th>Entry point</th></tr></thead>
+    <tbody>
+      <tr><td><b>Storefront</b> (public)</td><td>Anyone</td><td>Browse products, read the brand story, sign up, place the first order.</td><td><span class="navpath">/</span></td></tr>
+      <tr><td><b>Customer Account</b></td><td>Signed-in customers</td><td>Manage subscriptions, deliveries, wallet, invoices, bottles, referrals, rewards.</td><td><span class="navpath">/account/dashboard</span></td></tr>
+      <tr><td><b>Admin Back-office</b></td><td>Super Admin, Admin, Manager, Accountant</td><td>Run commerce, operations, supply, finance, growth, content, HR &amp; system.</td><td><span class="navpath">/admin/dashboard</span></td></tr>
+      <tr><td><b>Delivery Executive</b></td><td>Delivery executives</td><td>See today's route, mark deliveries, collect bottles &amp; cash.</td><td><span class="navpath">/delivery/dashboard</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>How the pieces fit together</h3>
+  <div class="diagram">
+    <svg viewBox="0 0 760 300" role="img" aria-label="Architecture: four surfaces talk to one API and one database, with external services for payments, maps and messaging.">
+      <defs>
+        <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="#1FAE66"/></marker>
+        <style>.nb{fill:#fff;stroke:#0E2A47;stroke-width:1.4;rx:9} .nl{font:600 12px system-ui;fill:#0E2A47} .ns{font:11px system-ui;fill:#5B6A71} .core{fill:#0E2A47} .cl{font:600 12px system-ui;fill:#fff} .ext{fill:#E7F5EC;stroke:#1FAE66;stroke-width:1.3} .el{font:600 11px system-ui;fill:#0F3D2E} .ln{stroke:#1FAE66;stroke-width:1.6;fill:none} .lnd{stroke:#C6D2CB;stroke-width:1.3;stroke-dasharray:4 4;fill:none}</style>
+      </defs>
+      <!-- surfaces row -->
+      <g>
+        <rect class="nb" x="18" y="20" width="160" height="46" rx="9"/><text class="nl" x="30" y="41">Storefront</text><text class="ns" x="30" y="57">public site</text>
+        <rect class="nb" x="198" y="20" width="160" height="46" rx="9"/><text class="nl" x="210" y="41">Customer Account</text><text class="ns" x="210" y="57">subscriptions, wallet</text>
+        <rect class="nb" x="398" y="20" width="160" height="46" rx="9"/><text class="nl" x="410" y="41">Admin Back-office</text><text class="ns" x="410" y="57">50+ modules</text>
+        <rect class="nb" x="578" y="20" width="164" height="46" rx="9"/><text class="nl" x="590" y="41">Delivery Executive</text><text class="ns" x="590" y="57">route &amp; deliveries</text>
+      </g>
+      <!-- arrows to API -->
+      <path class="ln" d="M98 66 L360 120" marker-end="url(#ar)"/>
+      <path class="ln" d="M278 66 L372 120" marker-end="url(#ar)"/>
+      <path class="ln" d="M478 66 L388 120" marker-end="url(#ar)"/>
+      <path class="ln" d="M660 66 L400 120" marker-end="url(#ar)"/>
+      <!-- API -->
+      <rect class="core" x="250" y="122" width="260" height="44" rx="9"/><text class="cl" x="270" y="149">Secure API · Role-based access (RBAC)</text>
+      <!-- DB -->
+      <path class="ln" d="M380 166 L380 200" marker-end="url(#ar)"/>
+      <rect class="core" x="250" y="202" width="260" height="44" rx="9"/><text class="cl" x="270" y="229">Production Database (Postgres)</text>
+      <!-- external services -->
+      <rect class="ext" x="30" y="205" width="150" height="38" rx="9"/><text class="el" x="42" y="228">Razorpay · Payments</text>
+      <rect class="ext" x="30" y="252" width="150" height="38" rx="9"/><text class="el" x="42" y="275">Maps · Geocoding</text>
+      <rect class="ext" x="582" y="205" width="160" height="38" rx="9"/><text class="el" x="594" y="228">WhatsApp / SMS / Email</text>
+      <rect class="ext" x="582" y="252" width="160" height="38" rx="9"/><text class="el" x="594" y="275">Razorpay AutoPay mandates</text>
+      <path class="lnd" d="M180 224 L250 224"/><path class="lnd" d="M180 271 L250 235"/>
+      <path class="lnd" d="M510 224 L582 224"/><path class="lnd" d="M510 235 L582 271"/>
+    </svg>
+    <div class="wire-cap">Figure 1.1 — One API and one database serve all four surfaces; external services handle money, maps and messaging.</div>
+  </div>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note</div><p>Because every surface shares one database, a change an admin makes — a new price, a new serviceable pincode, a published blog post — appears on the storefront <em>instantly</em>, with no code change and no waiting.</p></div></div>
+
+  <h3>What the platform can do — at a glance</h3>
+  <div class="cov-grid">
+    <div class="cov-cell"><div class="cc-t">Commerce</div><div class="cc-n">Orders, subscriptions, payments, B2B</div></div>
+    <div class="cov-cell"><div class="cc-t">Catalogue</div><div class="cc-n">Products, pricing, inventory, bottles</div></div>
+    <div class="cov-cell"><div class="cc-t">Operations</div><div class="cc-n">Delivery, auto-assign, routes, SLA</div></div>
+    <div class="cov-cell"><div class="cc-t">Supply</div><div class="cc-n">Farmers, procurement, quality</div></div>
+    <div class="cov-cell"><div class="cc-t">Finance</div><div class="cc-n">Expenses, wallet, GST, payroll</div></div>
+    <div class="cov-cell"><div class="cc-t">Growth</div><div class="cc-n">Coupons, offers, referrals, loyalty</div></div>
+    <div class="cov-cell"><div class="cc-t">Content</div><div class="cc-n">Blogs, CMS, help centre</div></div>
+    <div class="cov-cell"><div class="cc-t">System &amp; HR</div><div class="cc-n">Roles, audit, employees, payroll</div></div>
+  </div>
+</section>
+
+<!-- ============================ 2. ROLES ============================ -->
+<section class="sheet" id="s2">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>2 · Roles &amp; Access</span></div>
+  <div class="secnum"><span class="n">02</span><span class="k">Foundations</span></div>
+  <h2 class="section-title">Roles &amp; access model</h2>
+  <p class="lead">DOODLY uses <b>role-based access control (RBAC)</b>. Your role decides which modules you see and what you can do inside them. The Super Admin sits at the top and can grant, restrict or override access for anyone.</p>
+
+  <h3>The six roles</h3>
+  <div class="twrap"><table>
+    <thead><tr><th>Role</th><th>Sees</th><th>Typical responsibilities</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill role">Super Admin</span></td><td>Everything</td><td>Full control. The only role that manages Roles, Permissions, GST, and can reverse sensitive money actions.</td></tr>
+      <tr><td><span class="pill role">Admin</span></td><td>Most modules</td><td>Day-to-day running of commerce, operations, catalogue and content.</td></tr>
+      <tr><td><span class="pill role">Manager</span></td><td>Operations &amp; team</td><td>Deliveries, drivers, routes, procurement and staff supervision.</td></tr>
+      <tr><td><span class="pill role">Accountant</span></td><td>Finance</td><td>Expenses, wallet, GST, payroll, and financial reports.</td></tr>
+      <tr><td><span class="pill role">Delivery Executive</span></td><td>Delivery app only</td><td>Their assigned route, deliveries, bottle &amp; cash collection, attendance.</td></tr>
+      <tr><td><span class="pill role">Customer</span></td><td>Account area only</td><td>Their own orders, subscription, wallet, deliveries and rewards.</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — least privilege</div><p>Give each employee the <em>lowest</em> role that lets them do their job. You can always grant a single extra permission to one person (a per-user override) instead of promoting them to a higher role.</p></div></div>
+
+  <h3>Two layers of access</h3>
+  <ol>
+    <li><b>Role defaults</b> — every role starts with a sensible set of permissions defined centrally in code. This is the safety net.</li>
+    <li><b>Per-user overrides</b> — the Super Admin can <em>add</em> or <em>remove</em> one specific permission for one specific person, without changing the whole role. Managed in <span class="navpath">Admin → System → Roles &amp; Permissions</span>.</li>
+  </ol>
+
+  <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning</div><p>A per-user override always wins over the role default. If someone can see something they shouldn't (or can't see something they should), check their overrides <em>first</em> before changing the role.</p></div></div>
+</section>
+
+<!-- ============================ 3. MASTER WORKFLOWS ============================ -->
+<section class="sheet" id="s3">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>3 · Master Workflows</span></div>
+  <div class="secnum"><span class="n">03</span><span class="k">Foundations</span></div>
+  <h2 class="section-title">Master workflows</h2>
+  <p class="lead">These are the journeys that flow across many modules at once. Understanding them first makes every individual screen easier to place.</p>
+
+  <h3>3.1 — The order &amp; delivery lifecycle</h3>
+  <div class="diagram">
+    <svg viewBox="0 0 760 118" role="img" aria-label="Order lifecycle: customer, cart, address, coupon and wallet, payment, invoice, delivery, bottle return.">
+      <defs><marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="#1FAE66"/></marker>
+      <style>.fn{fill:#0E2A47;rx:8}.ft{font:600 11.5px system-ui;fill:#fff}.fa{stroke:#1FAE66;stroke-width:1.8;fill:none}.fng{fill:#1FAE66}</style></defs>
+      <g>
+        <rect class="fn" x="8" y="44" width="78" height="34" rx="8"/><text class="ft" x="22" y="65">Customer</text>
+        <rect class="fn" x="104" y="44" width="60" height="34" rx="8"/><text class="ft" x="120" y="65">Cart</text>
+        <rect class="fn" x="182" y="44" width="72" height="34" rx="8"/><text class="ft" x="196" y="65">Address</text>
+        <rect class="fn" x="272" y="44" width="112" height="34" rx="8"/><text class="ft" x="284" y="65">Coupon + Wallet</text>
+        <rect class="fng" x="402" y="44" width="78" height="34" rx="8"/><text class="ft" x="416" y="65">Payment</text>
+        <rect class="fn" x="498" y="44" width="70" height="34" rx="8"/><text class="ft" x="512" y="65">Invoice</text>
+        <rect class="fn" x="586" y="44" width="74" height="34" rx="8"/><text class="ft" x="600" y="65">Delivery</text>
+        <rect class="fn" x="678" y="44" width="74" height="34" rx="8"/><text class="ft" x="688" y="65">Bottle</text>
+      </g>
+      <g class="fa">
+        <path d="M86 61 L104 61" marker-end="url(#a2)"/><path d="M164 61 L182 61" marker-end="url(#a2)"/>
+        <path d="M254 61 L272 61" marker-end="url(#a2)"/><path d="M384 61 L402 61" marker-end="url(#a2)"/>
+        <path d="M480 61 L498 61" marker-end="url(#a2)"/><path d="M568 61 L586 61" marker-end="url(#a2)"/>
+        <path d="M660 61 L678 61" marker-end="url(#a2)"/>
+      </g>
+      <path d="M715 78 C715 100 40 100 47 80" class="fa" stroke-dasharray="4 4" marker-end="url(#a2)"/>
+      <text x="300" y="112" style="font:italic 11px system-ui;fill:#5B6A71">the empty bottle is collected on the next delivery — closing the loop</text>
+    </svg>
+    <div class="wire-cap">Figure 3.1 — Order lifecycle. Green = money step. The dashed loop is the reusable-glass return.</div>
+  </div>
+
+  <h3>3.2 — Referral &amp; reward flow</h3>
+  <div class="diagram">
+    <svg viewBox="0 0 760 74" role="img" aria-label="Referral flow: customer shares a link, friend signs up, subscribes to a 30-day plan, reward credited to wallet.">
+      <defs><marker id="a3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="#1FAE66"/></marker></defs>
+      <g style="font:600 11.5px system-ui">
+        <rect x="10" y="22" width="120" height="34" rx="8" fill="#0E2A47"/><text x="22" y="43" fill="#fff">Referral link</text>
+        <rect x="160" y="22" width="96" height="34" rx="8" fill="#0E2A47"/><text x="176" y="43" fill="#fff">Friend signs up</text>
+        <rect x="286" y="22" width="116" height="34" rx="8" fill="#0E2A47"/><text x="298" y="43" fill="#fff">30-day plan</text>
+        <rect x="432" y="22" width="150" height="34" rx="8" fill="#0E2A47"/><text x="444" y="43" fill="#fff">Eligibility check</text>
+        <rect x="612" y="22" width="138" height="34" rx="8" fill="#1FAE66"/><text x="624" y="43" fill="#fff">₹100 → Wallet</text>
+      </g>
+      <g stroke="#1FAE66" stroke-width="1.8" fill="none">
+        <path d="M130 39 L160 39" marker-end="url(#a3)"/><path d="M256 39 L286 39" marker-end="url(#a3)"/>
+        <path d="M402 39 L432 39" marker-end="url(#a3)"/><path d="M582 39 L612 39" marker-end="url(#a3)"/>
+      </g>
+    </svg>
+    <div class="wire-cap">Figure 3.2 — The one-time ₹100 referral reward is delayed until the friend reaches an eligible plan, which blocks fraud.</div>
+  </div>
+
+  <h3>3.3 — Delivery auto-assignment</h3>
+  <div class="diagram">
+    <svg viewBox="0 0 760 74" role="img" aria-label="Delivery assignment: orders and available drivers feed the auto-assign engine, which builds routes for delivery.">
+      <defs><marker id="a4" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="#1FAE66"/></marker></defs>
+      <g style="font:600 11.5px system-ui">
+        <rect x="10" y="8" width="120" height="26" rx="8" fill="#0E2A47"/><text x="24" y="25" fill="#fff">Today's orders</text>
+        <rect x="10" y="40" width="120" height="26" rx="8" fill="#0E2A47"/><text x="20" y="57" fill="#fff">Available drivers</text>
+        <rect x="200" y="24" width="150" height="34" rx="8" fill="#1FAE66"/><text x="212" y="45" fill="#fff">Auto-assign engine</text>
+        <rect x="404" y="24" width="96" height="34" rx="8" fill="#0E2A47"/><text x="420" y="45" fill="#fff">Routes</text>
+        <rect x="548" y="24" width="110" height="34" rx="8" fill="#0E2A47"/><text x="560" y="45" fill="#fff">Delivery</text>
+      </g>
+      <g stroke="#1FAE66" stroke-width="1.8" fill="none">
+        <path d="M130 21 L200 37" marker-end="url(#a4)"/><path d="M130 53 L200 45" marker-end="url(#a4)"/>
+        <path d="M350 41 L404 41" marker-end="url(#a4)"/><path d="M500 41 L548 41" marker-end="url(#a4)"/>
+      </g>
+    </svg>
+    <div class="wire-cap">Figure 3.3 — Orders + available drivers → engine balances load (≈45 bottles/executive) → routes → delivery.</div>
+  </div>
+
+  <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip</div><p>The assignment strategy (Equal, Capacity, Area or Manual) is a single setting. Full detail lives in the <em>Auto Assignment</em> and <em>Delivery Settings</em> module chapters.</p></div></div>
+
+  <h3>3.4 — Supply chain: farm to bottle</h3>
+  <div class="diagram">
+    <svg viewBox="0 0 760 74" role="img" aria-label="Supply: farmer, procurement, quality test, inventory, bottling, delivery.">
+      <defs><marker id="a5" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="#1FAE66"/></marker></defs>
+      <g style="font:600 11.5px system-ui">
+        <rect x="8" y="22" width="86" height="34" rx="8" fill="#0E2A47"/><text x="24" y="43" fill="#fff">Farmer</text>
+        <rect x="120" y="22" width="120" height="34" rx="8" fill="#0E2A47"/><text x="132" y="43" fill="#fff">Procurement</text>
+        <rect x="266" y="22" width="120" height="34" rx="8" fill="#1FAE66"/><text x="278" y="43" fill="#fff">Quality test</text>
+        <rect x="412" y="22" width="106" height="34" rx="8" fill="#0E2A47"/><text x="424" y="43" fill="#fff">Inventory</text>
+        <rect x="544" y="22" width="98" height="34" rx="8" fill="#0E2A47"/><text x="556" y="43" fill="#fff">Bottling</text>
+        <rect x="668" y="22" width="84" height="34" rx="8" fill="#0E2A47"/><text x="680" y="43" fill="#fff">Delivery</text>
+      </g>
+      <g stroke="#1FAE66" stroke-width="1.8" fill="none">
+        <path d="M94 39 L120 39" marker-end="url(#a5)"/><path d="M240 39 L266 39" marker-end="url(#a5)"/>
+        <path d="M386 39 L412 39" marker-end="url(#a5)"/><path d="M518 39 L544 39" marker-end="url(#a5)"/>
+        <path d="M642 39 L668 39" marker-end="url(#a5)"/>
+      </g>
+    </svg>
+    <div class="wire-cap">Figure 3.4 — A failed quality test decrements raw-milk inventory and blocks the batch; only passed milk moves to bottling.</div>
+  </div>
+  <p class="small">Other master workflows fully diagrammed in this manual: <b>AutoPay renewal &amp; retry</b>, <b>Customer signup &amp; onboarding</b>, <b>Coupon + wallet at checkout</b>, <b>Bottle deposit &amp; refund</b>, <b>Payroll run</b>.</p>
+</section>
+
+<!-- ============================ 4. PERMISSIONS MATRIX ============================ -->
+<section class="sheet" id="s4">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>4 · Permissions Matrix</span></div>
+  <div class="secnum"><span class="n">04</span><span class="k">Foundations</span></div>
+  <h2 class="section-title">Permissions matrix</h2>
+  <p class="lead">A quick map of who can do what. <span class="yes">✔</span> full · <span class="part">◑</span> limited/own-scope · <span class="no">—</span> no access. This is the default; the Super Admin can override any single cell per user.</p>
+  <div class="twrap"><table class="matrix">
+    <thead><tr><th>Capability</th><th>Super&nbsp;Admin</th><th>Admin</th><th>Manager</th><th>Accountant</th><th>Delivery</th></tr></thead>
+    <tbody>
+      <tr><td>View dashboards &amp; reports</td><td class="yes">✔</td><td class="yes">✔</td><td class="part">◑</td><td class="part">◑</td><td class="no">—</td></tr>
+      <tr><td>Manage orders &amp; subscriptions</td><td class="yes">✔</td><td class="yes">✔</td><td class="part">◑</td><td class="no">—</td><td class="no">—</td></tr>
+      <tr><td>Refund / reverse payments</td><td class="yes">✔</td><td class="part">◑</td><td class="no">—</td><td class="part">◑</td><td class="no">—</td></tr>
+      <tr><td>Edit prices, catalogue &amp; GST</td><td class="yes">✔</td><td class="part">◑</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+      <tr><td>Delivery ops (assign, routes)</td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td><td class="no">—</td><td class="part">◑</td></tr>
+      <tr><td>Supply (farmers, procurement, QC)</td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td><td class="no">—</td><td class="no">—</td></tr>
+      <tr><td>Finance (expenses, wallet, payroll)</td><td class="yes">✔</td><td class="part">◑</td><td class="no">—</td><td class="yes">✔</td><td class="no">—</td></tr>
+      <tr><td>Manage users, roles &amp; permissions</td><td class="yes">✔</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+      <tr><td>View audit logs</td><td class="yes">✔</td><td class="part">◑</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+      <tr><td>Delivery app (own route)</td><td class="yes">✔</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="yes">✔</td></tr>
+    </tbody>
+  </table></div>
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note</div><p>This is a summary. The live, authoritative matrix — with every module and every action — is on the <span class="navpath">Admin → System → Permissions</span> screen, and changes there apply instantly.</p></div></div>
+</section>
+
+<!-- ============================ 5. HOW A SCREEN IS DOCUMENTED ============================ -->
+<section class="sheet" id="s5">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>5 · Reading a Screen Page</span></div>
+  <div class="secnum"><span class="n">05</span><span class="k">Foundations</span></div>
+  <h2 class="section-title">How every screen is documented</h2>
+  <p class="lead">Every module chapter uses the same anatomy. Here it is, annotated once, so the rest of the manual reads fast.</p>
+  <div class="wire">
+    <svg viewBox="0 0 720 360" role="img" aria-label="Anatomy of a documented screen page: header band, meta strip, wireframe, field table, button table, callouts.">
+      <defs><style>.bx{fill:#F3F6F4;stroke:#DCE5E0;stroke-width:1.2} .lbl{font:600 11px system-ui;fill:#0E2A47} .an{font:11px system-ui;fill:#158a50} .anl{stroke:#1FAE66;stroke-width:1;stroke-dasharray:3 3}</style></defs>
+      <rect x="40" y="16" width="470" height="40" rx="7" fill="#0E2A47"/><text x="54" y="41" fill="#fff" style="font:600 13px system-ui">① Screen name &amp; purpose</text>
+      <rect x="40" y="62" width="470" height="26" class="bx" rx="6"/><text x="54" y="79" class="lbl">② Who can access · ③ Navigation path</text>
+      <rect x="40" y="96" width="470" height="96" class="bx" rx="6"/><text x="54" y="118" class="lbl">④ Wireframe sketch (labelled layout)</text>
+      <rect x="60" y="128" width="120" height="50" fill="#fff" stroke="#C6D2CB"/><rect x="196" y="128" width="120" height="50" fill="#fff" stroke="#C6D2CB"/><rect x="332" y="128" width="158" height="50" fill="#fff" stroke="#C6D2CB"/>
+      <rect x="40" y="200" width="470" height="60" class="bx" rx="6"/><text x="54" y="222" class="lbl">⑤ Field table — every field explained</text>
+      <line x1="54" y1="234" x2="496" y2="234" stroke="#DCE5E0"/><line x1="54" y1="248" x2="496" y2="248" stroke="#DCE5E0"/>
+      <rect x="40" y="268" width="470" height="44" class="bx" rx="6"/><text x="54" y="290" class="lbl">⑥ Button table — action, backend, permission</text>
+      <rect x="40" y="320" width="470" height="26" class="bx" rx="6"/><text x="54" y="337" class="lbl">⑦ Notes · Tips · Warnings · Best Practices</text>
+      <!-- annotations -->
+      <g class="an">
+        <line class="anl" x1="510" y1="36" x2="600" y2="36"/><text x="606" y="40">what &amp; why</text>
+        <line class="anl" x1="510" y1="75" x2="600" y2="75"/><text x="606" y="79">roles + clicks</text>
+        <line class="anl" x1="510" y1="144" x2="600" y2="144"/><text x="606" y="148">visual layout</text>
+        <line class="anl" x1="510" y1="230" x2="600" y2="230"/><text x="606" y="234">values, rules</text>
+        <line class="anl" x1="510" y1="290" x2="600" y2="290"/><text x="606" y="294">what it does</text>
+        <line class="anl" x1="510" y1="333" x2="600" y2="333"/><text x="606" y="337">how-to-run-it</text>
+      </g>
+    </svg>
+    <div class="wire-cap">Figure 5.1 — The fixed anatomy of every screen page in this manual.</div>
+  </div>
+</section>
+
+<!-- ============================ 6.1 ADMIN DASHBOARD (worked) ============================ -->
+<section class="sheet" id="s6a">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>6.1 · Admin Dashboard</span></div>
+  <div class="secnum"><span class="n">06</span><span class="k">Reference Module · Worked in full</span></div>
+  <h2 class="section-title">Admin Dashboard</h2>
+  <p class="lead">The first screen you see after signing in as staff. It is a live control tower — the health of the whole business on one page.</p>
+
+  <div class="spec">
+    <div class="spec-h"><p class="st">Dashboard</p><p class="sm">Live operations &amp; revenue overview, refreshed from the production database.</p></div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> See today's revenue, orders, deliveries and alerts at a glance and drill into any of them.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Manager</span> <span class="pill role">Accountant</span> <span class="small">(widgets vary by role)</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Sign in → Admin → Dashboard</span></span>
+    </div>
+    <div class="spec-body">
+      <div class="wire">
+        <svg viewBox="0 0 720 300" role="img" aria-label="Admin dashboard wireframe: KPI row, revenue chart, alerts panel, quick filters.">
+          <defs><style>.p{fill:#fff;stroke:#C6D2CB;stroke-width:1.2}.h{fill:#0E2A47}.t{font:600 11px system-ui;fill:#0E2A47}.tw{font:600 11px system-ui;fill:#fff}.m{font:10px system-ui;fill:#8A979C}.bar{fill:#1FAE66}</style></defs>
+          <rect x="0" y="0" width="720" height="34" class="h"/><text x="16" y="22" class="tw">DOODLY · Admin</text><text x="600" y="22" class="tw">Super Admin ▾</text>
+          <!-- KPI row -->
+          <rect x="16" y="46" width="160" height="58" class="p" rx="6"/><text x="28" y="70" class="t">₹1.7L</text><text x="28" y="88" class="m">Revenue today</text>
+          <rect x="188" y="46" width="160" height="58" class="p" rx="6"/><text x="200" y="70" class="t">342</text><text x="200" y="88" class="m">Orders today</text>
+          <rect x="360" y="46" width="160" height="58" class="p" rx="6"/><text x="372" y="70" class="t">1,284</text><text x="372" y="88" class="m">Active subs</text>
+          <rect x="532" y="46" width="172" height="58" class="p" rx="6"/><text x="544" y="70" class="t">98.2%</text><text x="544" y="88" class="m">On-time delivery</text>
+          <!-- chart -->
+          <rect x="16" y="118" width="430" height="166" class="p" rx="6"/><text x="30" y="140" class="t">Revenue — last 14 days</text>
+          <g class="bar"><rect x="34" y="235" width="18" height="35"/><rect x="60" y="220" width="18" height="50"/><rect x="86" y="210" width="18" height="60"/><rect x="112" y="200" width="18" height="70"/><rect x="138" y="215" width="18" height="55"/><rect x="164" y="185" width="18" height="85"/><rect x="190" y="175" width="18" height="95"/><rect x="216" y="195" width="18" height="75"/><rect x="242" y="165" width="18" height="105"/><rect x="268" y="180" width="18" height="90"/><rect x="294" y="160" width="18" height="110"/><rect x="320" y="150" width="18" height="120"/><rect x="346" y="170" width="18" height="100"/><rect x="372" y="140" width="18" height="130"/></g>
+          <!-- alerts -->
+          <rect x="458" y="118" width="246" height="166" class="p" rx="6"/><text x="472" y="140" class="t">Needs attention</text>
+          <rect x="472" y="150" width="218" height="26" fill="#FBEDED"/><text x="480" y="167" style="font:10px system-ui;fill:#B23B3B">⛔ 2 payments failed</text>
+          <rect x="472" y="182" width="218" height="26" fill="#FBF4E3"/><text x="480" y="199" style="font:10px system-ui;fill:#B7791F">⚠ 418 bottles pending return</text>
+          <rect x="472" y="214" width="218" height="26" fill="#E9F0F7"/><text x="480" y="231" style="font:10px system-ui;fill:#1D4E7E">ℹ 38 new subscriptions this week</text>
+          <rect x="472" y="246" width="218" height="26" fill="#E7F5EC"/><text x="480" y="263" style="font:10px system-ui;fill:#158a50">✔ All QC batches passed today</text>
+        </svg>
+        <div class="wire-cap">Figure 6.1 — Dashboard layout: KPI strip, 14-day revenue chart, and a colour-coded "needs attention" panel.</div>
+      </div>
+
+      <h4>What each area shows</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Area</th><th>Meaning</th><th>Click to…</th></tr></thead>
+        <tbody>
+          <tr><td><b>KPI strip</b></td><td>Revenue today, orders today, active subscriptions, on-time delivery %.</td><td>Open the matching module (e.g. Revenue, Orders).</td></tr>
+          <tr><td><b>Revenue chart</b></td><td>Daily revenue for the last 14 days, from real transactions.</td><td>Open <span class="navpath">Growth → Revenue</span> for the full ledger.</td></tr>
+          <tr><td><b>Needs attention</b></td><td>The most urgent items — failed payments, overdue bottles, QC flags.</td><td>Jump straight to the affected record.</td></tr>
+          <tr><td><b>Quick filters</b></td><td>Switch the whole page between Today / This week / This month.</td><td>Recalculate every widget for the chosen period.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Buttons &amp; controls</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Control</th><th>What it does</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Period filter</b> (Today / Week / Month)</td><td>Re-queries every widget for the selected range. Read-only — changes nothing in the data.</td><td>Any staff role</td></tr>
+          <tr><td><b>Refresh</b></td><td>Pulls the latest figures from the database without reloading the page.</td><td>Any staff role</td></tr>
+          <tr><td><b>Export</b></td><td>Downloads the current dashboard figures as a spreadsheet (CSV/Excel).</td><td><span class="pill role">Admin</span>+</td></tr>
+          <tr><td><b>Alert item</b> (click)</td><td>Opens the specific failed payment / overdue bottle / flagged batch so you can act on it.</td><td>Depends on target module</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip</div><p>Start every shift on the Dashboard and clear the <em>Needs attention</em> panel first — it surfaces the few things that actually need a human today.</p></div></div>
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>The KPIs are role-aware. If a widget looks empty for a colleague, it usually means their role doesn't include that data — not that the business has zero. Confirm in the permissions matrix before worrying.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 6.2 CUSTOMERS (worked) ============================ -->
+<section class="sheet" id="s6b">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>6.2 · Customers</span></div>
+  <div class="secnum"><span class="n">06</span><span class="k">Reference Module · Worked in full</span></div>
+  <h2 class="section-title">Customers</h2>
+  <p class="lead">The master list of everyone who has an account. From here you find a customer, read their history, and act on their behalf when they call support.</p>
+
+  <div class="spec">
+    <div class="spec-h"><p class="st">Customers — list</p><p class="sm">Search, filter and open any customer record.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Find and manage customer accounts.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Manager (view)</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → Customers</span></span>
+    </div>
+    <div class="spec-body">
+      <div class="wire">
+        <svg viewBox="0 0 720 210" role="img" aria-label="Customers list wireframe: search bar, filter tabs, data table with actions, pagination.">
+          <defs><style>.p{fill:#fff;stroke:#C6D2CB;stroke-width:1.2}.t{font:600 11px system-ui;fill:#0E2A47}.m{font:10px system-ui;fill:#8A979C}.row{fill:#F3F6F4}</style></defs>
+          <rect x="16" y="14" width="360" height="26" class="p" rx="6"/><text x="28" y="31" class="m">🔍 Search name, phone, email…</text>
+          <rect x="388" y="14" width="90" height="26" fill="#1FAE66" rx="6"/><text x="404" y="31" style="font:600 11px system-ui;fill:#fff">+ Add</text>
+          <rect x="490" y="14" width="90" height="26" class="p" rx="6"/><text x="506" y="31" class="m">Export ▾</text>
+          <!-- tabs -->
+          <text x="16" y="60" class="t">All</text><text x="52" y="60" class="m">Active</text><text x="104" y="60" class="m">Paused</text><text x="160" y="60" class="m">Trial</text><text x="208" y="60" class="m">Churned</text>
+          <!-- table header -->
+          <rect x="16" y="70" width="688" height="24" fill="#0E2A47" rx="4"/><text x="26" y="86" style="font:600 10px system-ui;fill:#fff">NAME</text><text x="220" y="86" style="font:600 10px system-ui;fill:#fff">PHONE</text><text x="360" y="86" style="font:600 10px system-ui;fill:#fff">PLAN</text><text x="470" y="86" style="font:600 10px system-ui;fill:#fff">STATUS</text><text x="600" y="86" style="font:600 10px system-ui;fill:#fff">ACTIONS</text>
+          <g><rect x="16" y="96" width="688" height="26" class="row"/><rect x="16" y="124" width="688" height="26" fill="#fff"/><rect x="16" y="152" width="688" height="26" class="row"/>
+            <text x="26" y="113" class="m">D. Lakshmi</text><text x="220" y="113" class="m">93919•••20</text><text x="360" y="113" class="m">30-Day</text><text x="470" y="113" style="font:10px system-ui;fill:#158a50">Active</text><text x="600" y="113" class="m">View · Edit</text>
+            <text x="26" y="141" class="m">R. Kumar</text><text x="220" y="141" class="m">98480•••11</text><text x="360" y="141" class="m">Trial</text><text x="470" y="141" style="font:10px system-ui;fill:#B7791F">Trial</text><text x="600" y="141" class="m">View · Edit</text>
+            <text x="26" y="169" class="m">S. Priya</text><text x="220" y="169" class="m">90000•••45</text><text x="360" y="169" class="m">90-Day</text><text x="470" y="169" style="font:10px system-ui;fill:#158a50">Active</text><text x="600" y="169" class="m">View · Edit</text>
+          </g>
+          <text x="16" y="200" class="m">Showing 1–20 of 1,284</text><text x="600" y="200" class="m">‹ 1 2 3 … ›</text>
+        </svg>
+        <div class="wire-cap">Figure 6.2 — Customers list: search, status tabs, a sortable table, row actions, and pagination.</div>
+      </div>
+
+      <h4>The table explained</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Element</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td>Name, Phone, Email, Plan, Status, Joined, Actions. Click a column header to sort.</td></tr>
+          <tr><td><b>Filters (tabs)</b></td><td>All · Active · Paused · Trial · Churned — narrows the list to that segment.</td></tr>
+          <tr><td><b>Search</b></td><td>Matches name, phone or email as you type.</td></tr>
+          <tr><td><b>Pagination</b></td><td>20 rows per page; page controls at the bottom.</td></tr>
+          <tr><td><b>Export</b></td><td>Downloads the current (filtered) list as CSV/Excel.</td></tr>
+          <tr><td><b>Row actions</b></td><td><em>View</em> opens the full record; <em>Edit</em> opens editable fields.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Fields — Add / Edit customer</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted&nbsp;values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Full name</b></td><td>Who the customer is</td><td>Text, 1–80 chars</td><td class="t-req">Yes</td><td>Trimmed; shown on invoices &amp; delivery labels</td><td>D. Lakshmi</td></tr>
+          <tr><td><b>Phone</b></td><td>Primary contact &amp; delivery SMS/WhatsApp</td><td>7–15 digits, optional +</td><td class="t-req">Yes</td><td>Must be unique — one account per phone (anti-fraud)</td><td>+91 93919 41220</td></tr>
+          <tr><td><b>Email</b></td><td>Login &amp; invoice delivery</td><td>Valid email</td><td class="t-req">Yes</td><td>Unique; lower-cased; used as the login ID</td><td>d.lakshmi@…</td></tr>
+          <tr><td><b>Status</b></td><td>Account state</td><td>Active · Paused · Trial · Churned</td><td class="t-opt">Auto</td><td>Usually derived from subscription activity</td><td>Active</td></tr>
+          <tr><td><b>Address</b></td><td>Where milk is delivered</td><td>Line, area, pincode</td><td class="t-opt">Opt.</td><td>Pincode checked against serviceable areas</td><td>Benz Circle, 520010</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Buttons — customer record</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Save</b></td><td>Stores the edited details.</td><td>Validates uniqueness, writes the record, logs an audit entry.</td><td><span class="pill role">Admin</span>+</td></tr>
+          <tr><td><b>Add customer</b></td><td>Creates a new account.</td><td>Same as customer signup, but staff-initiated.</td><td><span class="pill role">Admin</span>+</td></tr>
+          <tr><td><b>Reset password</b></td><td>Sends the customer a reset link.</td><td>Emails a single-use link; does not reveal the password.</td><td><span class="pill role">Admin</span>+</td></tr>
+          <tr><td><b>Credit wallet</b></td><td>Adds balance (e.g. goodwill/refund).</td><td>Idempotent wallet credit + audit; visible to the customer instantly.</td><td><span class="pill role">Admin</span>+</td></tr>
+          <tr><td><b>Suspend</b></td><td>Blocks the account from ordering.</td><td>Sets status; the customer can't check out until reinstated.</td><td><span class="pill role">Admin</span>+</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning</div><p><b>Credit wallet</b> and <b>Reset password</b> both affect the customer immediately. Confirm you have the right account open — the search box shows masked phone numbers to avoid mix-ups.</p></div></div>
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — irreversible</div><p>Deleting a customer is a <em>soft delete</em> (hidden, not erased) so history and invoices stay intact. Only the Super Admin can permanently remove personal data, and only on a verified request.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 6.3 CUSTOMER JOURNEY (worked) ============================ -->
+<section class="sheet" id="s6c">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>6.3 · The Customer Journey</span></div>
+  <div class="secnum"><span class="n">06</span><span class="k">Reference Module · Worked in full</span></div>
+  <h2 class="section-title">The customer journey, end to end</h2>
+  <p class="lead">This is the exact path a real customer travels — the workflow you asked for — showing which module owns each step.</p>
+  <div class="diagram">
+    <svg viewBox="0 0 720 300" role="img" aria-label="Customer journey vertical flow from signup through OTP, referral, address, order, payment, invoice, delivery, bottle return.">
+      <defs><marker id="a6" markerWidth="9" markerHeight="9" refX="4.5" refY="8" orient="auto"><path d="M0 0L9 0L4.5 9Z" fill="#1FAE66"/></marker>
+      <style>.st{fill:#0E2A47;rx:8}.stg{fill:#1FAE66}.stt{font:600 12px system-ui;fill:#fff}.own{font:11px system-ui;fill:#5B6A71}.ax{stroke:#1FAE66;stroke-width:1.8;fill:none}</style></defs>
+      <g>
+        <rect class="st" x="230" y="10" width="260" height="30" rx="8"/><text class="stt" x="246" y="30">1 · Sign up</text><text class="own" x="500" y="30">Auth · Sign-up</text>
+        <rect class="st" x="230" y="50" width="260" height="30" rx="8"/><text class="stt" x="246" y="70">2 · Verify &amp; referral code</text><text class="own" x="500" y="70">Referrals</text>
+        <rect class="st" x="230" y="90" width="260" height="30" rx="8"/><text class="stt" x="246" y="110">3 · Add delivery address</text><text class="own" x="500" y="110">Addresses · Areas</text>
+        <rect class="st" x="230" y="130" width="260" height="30" rx="8"/><text class="stt" x="246" y="150">4 · Choose plan &amp; place order</text><text class="own" x="500" y="150">Subscriptions</text>
+        <rect class="stg" x="230" y="170" width="260" height="30" rx="8"/><text class="stt" x="246" y="190">5 · Pay (coupon + wallet)</text><text class="own" x="500" y="190">Payments</text>
+        <rect class="st" x="230" y="210" width="260" height="30" rx="8"/><text class="stt" x="246" y="230">6 · Invoice issued</text><text class="own" x="500" y="230">Invoices · GST</text>
+        <rect class="st" x="230" y="250" width="260" height="30" rx="8"/><text class="stt" x="246" y="270">7 · Delivery &amp; bottle return</text><text class="own" x="500" y="270">Delivery · Bottles</text>
+      </g>
+      <g class="ax">
+        <path d="M360 40 L360 50" marker-end="url(#a6)"/><path d="M360 80 L360 90" marker-end="url(#a6)"/>
+        <path d="M360 120 L360 130" marker-end="url(#a6)"/><path d="M360 160 L360 170" marker-end="url(#a6)"/>
+        <path d="M360 200 L360 210" marker-end="url(#a6)"/><path d="M360 240 L360 250" marker-end="url(#a6)"/>
+      </g>
+      <text x="20" y="150" style="font:italic 11px system-ui;fill:#8A979C">Owning module →</text>
+    </svg>
+    <div class="wire-cap">Figure 6.3 — The customer journey and the module that owns each step. Each of these modules gets its own full chapter.</div>
+  </div>
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note</div><p>Steps 1–3 are covered by real, verified screens (the sign-up flow, referral validation and serviceable-area check). The remaining modules are mapped in the coverage map (§7) and expanded to this same depth in the full build.</p></div></div>
+</section>
+
+<!-- ============================ APPENDIX A — FAQ ============================ -->
+<section class="sheet" id="faq">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Appendix A · FAQ</span></div>
+  <div class="secnum"><span class="n">A</span><span class="k">Appendix</span></div>
+  <h2 class="section-title">Frequently asked questions</h2>
+  <h4>A customer can't sign up — the password is rejected. Why?</h4>
+  <p>The password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number and a special character. The sign-up form shows a live checklist that turns green as each rule is met. Existing customers are never affected — only new passwords must meet the rule.</p>
+  <h4>Where does a customer land after logging in?</h4>
+  <p>The Home page — unless they were in the middle of a purchase, in which case they return to checkout to finish paying.</p>
+  <h4>A change I made in Admin isn't on the website. What do I check?</h4>
+  <p>Almost always it <em>is</em> saved — the website reads the same database live. Do a hard refresh. If it's still missing, confirm the change was saved (look for the success toast) and that you edited the production environment.</p>
+  <h4>Who can reverse a payment or a reward?</h4>
+  <p>The Super Admin, and for finance items the Accountant. These actions are always audited.</p>
+</section>
+
+<!-- ============================ APPENDIX B — TROUBLESHOOTING ============================ -->
+<section class="sheet" id="trouble">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Appendix B · Troubleshooting</span></div>
+  <div class="secnum"><span class="n">B</span><span class="k">Appendix</span></div>
+  <h2 class="section-title">Troubleshooting</h2>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>Payment failed at checkout</td><td>Card/UPI declined, or gateway keys/limits</td><td>Ask the customer to retry with another method; check <span class="navpath">Commerce → Payments</span> for the failure reason. Nothing is charged on a failure.</td></tr>
+      <tr><td>Referral link not working</td><td>Link missing the code, or programme paused</td><td>Confirm the code in <span class="navpath">Growth → Referrals</span>; share links as <code>/signup.html?ref=CODE</code>.</td></tr>
+      <tr><td>Orders not auto-assigning</td><td>No available drivers, or capacity full</td><td>Mark drivers available and check capacity in <span class="navpath">Operations → Auto Assignment</span>; unassigned orders wait in the pending queue.</td></tr>
+      <tr><td>AutoPay renewal didn't charge</td><td>Mandate paused, or bank declined</td><td>Check the mandate status in <span class="navpath">Commerce → Subscription Billing</span>; failed retries pause (never silently cancel) the subscription.</td></tr>
+      <tr><td>New pincode still shows "not serviceable"</td><td>Pincode not added, or typo</td><td>Add it in <span class="navpath">Operations → Serviceable Areas</span> — the storefront accepts it instantly.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============================ APPENDIX C — GLOSSARY ============================ -->
+<section class="sheet" id="glossary">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Appendix C · Glossary</span></div>
+  <div class="secnum"><span class="n">C</span><span class="k">Appendix</span></div>
+  <h2 class="section-title">Glossary</h2>
+  <div class="twrap"><table>
+    <thead><tr><th>Term</th><th>Plain-English meaning</th></tr></thead>
+    <tbody>
+      <tr><td><b>Bottle deposit</b></td><td>A refundable amount (₹120/bottle) the customer pays so glass bottles come back. Returned to their wallet when the empty is collected.</td></tr>
+      <tr><td><b>Wallet</b></td><td>The customer's in-app balance — from refunds, cashback, referral rewards — usable at checkout.</td></tr>
+      <tr><td><b>Referral</b></td><td>Inviting a friend with a personal code; a one-time ₹100 reward is paid once the friend reaches an eligible plan.</td></tr>
+      <tr><td><b>Subscription</b></td><td>A recurring plan (7/30/90-day) that delivers milk on a schedule instead of one-off orders.</td></tr>
+      <tr><td><b>AutoPay</b></td><td>A bank/UPI mandate that renews a subscription automatically before it expires. Opt-in only.</td></tr>
+      <tr><td><b>Auto Assignment</b></td><td>The engine that shares the day's deliveries fairly across available executives.</td></tr>
+      <tr><td><b>SKU</b></td><td>"Stock Keeping Unit" — a specific sellable item, e.g. <em>500 ml A2 milk</em>.</td></tr>
+      <tr><td><b>GST</b></td><td>India's Goods &amp; Services Tax, applied per product and shown on every invoice.</td></tr>
+      <tr><td><b>Invoice</b></td><td>The official GST bill for a payment, downloadable by the customer and admin.</td></tr>
+      <tr><td><b>RBAC</b></td><td>"Role-Based Access Control" — the system that decides what each role can see and do.</td></tr>
+      <tr><td><b>Audit log</b></td><td>An unchangeable record of every sensitive action, for accountability.</td></tr>
+      <tr><td><b>Serviceable area</b></td><td>A pincode DOODLY currently delivers to.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============================ COVERAGE MAP ============================ -->
+<section class="sheet" id="cov">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Appendix D · Coverage Map</span></div>
+  <div class="secnum"><span class="n">D</span><span class="k">Appendix</span></div>
+  <h2 class="section-title">Coverage map &amp; build status</h2>
+  <p class="lead">The full set of modules to be documented to the depth shown in §6. <span class="status-dot sd-done"></span> written in Volume I · <span class="status-dot sd-plan"></span> mapped, scheduled for full expansion.</p>
+
+  <h3>Customer Module</h3>
+  <div class="cov-grid">
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Dashboard</div><div class="cc-n">/account/dashboard</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Orders</div><div class="cc-n">/account/orders</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Subscription</div><div class="cc-n">/account/subscription</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Deliveries</div><div class="cc-n">/account/deliveries</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Tracking</div><div class="cc-n">/account/tracking</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Calendar</div><div class="cc-n">/account/calendar</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Wallet</div><div class="cc-n">/account/wallet</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Referrals</div><div class="cc-n">/account/referrals</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Rewards</div><div class="cc-n">/account/rewards</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Invoices</div><div class="cc-n">/account/invoices</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Bottles</div><div class="cc-n">/account/bottles</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Addresses</div><div class="cc-n">/account/addresses</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Support</div><div class="cc-n">/account/support</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Notifications</div><div class="cc-n">/account/notifications</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Profile</div><div class="cc-n">/account/profile</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Settings</div><div class="cc-n">/account/settings</div></div>
+  </div>
+
+  <h3>Admin — Commerce, Catalogue &amp; Operations</h3>
+  <div class="cov-grid">
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-done"></span>Dashboard</div><div class="cc-n">worked · §6.1</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-done"></span>Customers</div><div class="cc-n">worked · §6.2</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Orders</div><div class="cc-n">/admin/orders</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Subscriptions</div><div class="cc-n">/admin/subscriptions</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Payments</div><div class="cc-n">/admin/payments</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Subscription Billing</div><div class="cc-n">/admin/billing</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Business Invoices</div><div class="cc-n">/admin/invoice-b2b</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>B2B Orders</div><div class="cc-n">/admin/b2b</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>B2B Pricing</div><div class="cc-n">/admin/b2b-pricing</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Products</div><div class="cc-n">/admin/products</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Categories</div><div class="cc-n">/admin/categories</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Inventory</div><div class="cc-n">/admin/inventory</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Bottle Inventory</div><div class="cc-n">/admin/bottle-inventory</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Delivery Settings</div><div class="cc-n">/admin/delivery-settings</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Delivery Management</div><div class="cc-n">/admin/deliveries</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Auto Assignment</div><div class="cc-n">/admin/assignment</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Late Deliveries</div><div class="cc-n">/admin/late-deliveries</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Serviceable Areas</div><div class="cc-n">/admin/serviceable-areas</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Drivers</div><div class="cc-n">/admin/drivers</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Routes</div><div class="cc-n">/admin/routes</div></div>
+  </div>
+
+  <h3>Admin — Supply, Finance, Growth, Content, System &amp; HR</h3>
+  <div class="cov-grid">
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Farmers</div><div class="cc-n">/admin/farmers</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Procurement</div><div class="cc-n">/admin/procurement</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Quality Testing</div><div class="cc-n">/admin/quality</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Daily Expenses</div><div class="cc-n">/admin/expenses</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Wallet Mgmt</div><div class="cc-n">/admin/wallet</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>GST</div><div class="cc-n">/admin/gst</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Reports</div><div class="cc-n">/admin/reports</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Revenue</div><div class="cc-n">/admin/revenue</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Search Insights</div><div class="cc-n">/admin/search-insights</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Coupons</div><div class="cc-n">/admin/coupons</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Offers</div><div class="cc-n">/admin/offers</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Referrals</div><div class="cc-n">/admin/referrals</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Pure Rewards</div><div class="cc-n">/admin/loyalty</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Reviews</div><div class="cc-n">/admin/reviews</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Blogs</div><div class="cc-n">/admin/blogs</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>CMS</div><div class="cc-n">/admin/cms</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Brand Story</div><div class="cc-n">/admin/brand-story</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Help Centre</div><div class="cc-n">/admin/help-center</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Notifications</div><div class="cc-n">/admin/notifications</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Support Tickets</div><div class="cc-n">/admin/support</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Chat Support</div><div class="cc-n">/admin/chat-support</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Users</div><div class="cc-n">/admin/users</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Roles &amp; Permissions</div><div class="cc-n">/admin/roles</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Audit Logs</div><div class="cc-n">/admin/audit-logs</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Settings</div><div class="cc-n">/admin/settings</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>HR Dashboard</div><div class="cc-n">/admin/hr-dashboard</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Employees</div><div class="cc-n">/admin/employees</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Attendance</div><div class="cc-n">/admin/attendance</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Leave</div><div class="cc-n">/admin/leave</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Salary Advances</div><div class="cc-n">/admin/advances</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Payroll</div><div class="cc-n">/admin/payroll</div></div>
+  </div>
+
+  <h3>Delivery Executive &amp; Driver</h3>
+  <div class="cov-grid">
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>My Route</div><div class="cc-n">/delivery/dashboard</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Deliveries</div><div class="cc-n">/driver/deliveries</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Route &amp; Maps</div><div class="cc-n">/driver/route</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Bottle Collection</div><div class="cc-n">/driver/bottles</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Cash Collection</div><div class="cc-n">/driver/cash</div></div>
+    <div class="cov-cell"><div class="cc-t"><span class="status-dot sd-plan"></span>Profile</div><div class="cc-n">/driver/profile</div></div>
+  </div>
+
+  <p class="footer-note">DOODLY Super Admin User Manual · Version 1.0 (Volume I) · 12 July 2026 · Confidential — for internal use only.</p>
+</section>
+
+</div>

@@ -1,0 +1,203 @@
+<section class="sheet" id="account-addresses">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Customer Module · Addresses</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Customer Module</span></div>
+  <h2 class="section-title">Addresses</h2>
+  <p class="lead">Where the customer pins the exact GPS doorstep DOODLY delivers to, and manages every saved delivery address — add, edit, set default and delete — with live serviceability enforcement.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — two runtimes behind one page</div><p>The page <span class="navpath">/account/addresses.html</span> renders the manifest block <b>addressManager</b>. What the visitor actually sees depends on whether they are truly signed in:</p><p>• <b>Signed-in customer (production path):</b> <code>account.js → DOODLY_ACCOUNT.wireAddresses()</code> takes over and drives the real database through <code>/api/addresses</code>. This is Screen A and Screen B below.<br>• <b>Demo / not-signed-in preview:</b> <code>maps.js → DOODLY_MAPS.mountAddressManager()</code> mounts a local card grid stored only in the browser (<code>localStorage "doodly-addresses"</code>). This is Screen C. The layout code guards this with <code>if (am &amp;&amp; !realCust)</code>, so demo cards never overwrite a real customer's saved list.</p></div></div>
+
+  <!-- ============================================================ SCREEN A -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Screen A — Saved Addresses (live list)</p><p class="sm">The customer's real address book, loaded from the database.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Show every address the signed-in customer has saved, mark the default, and offer Add / Edit / Set default / Delete / open in Maps.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (own addresses only — <code>requireUserId</code> + ownership check) · visible to <span class="pill role">Super Admin</span> for support</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → Account → Addresses</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Your saved addresses — <b>panel</b> · <b>+ Add address</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Panel header</b><span>Title "Your saved addresses" + primary "+ Add address" button</span></div>
+          <div class="wf-cell"><b>Address card grid</b><span>Auto-fill grid of cards (min 280px each), one per saved address</span></div>
+          <div class="wf-cell"><b>Card header</b><span>Label (Home / Office …) + green "Default" pill on the default card</span></div>
+          <div class="wf-cell"><b>Card contact line</b><span>Contact name · phone (bold), when present</span></div>
+          <div class="wf-cell"><b>Card body</b><span>One-line summary: house/building/floor · street/area · city, state, pincode</span></div>
+          <div class="wf-cell"><b>Landmark &amp; note</b><span>"Landmark: …" muted line + italic delivery note in quotes</span></div>
+          <div class="wf-cell"><b>Card actions</b><span>Map · Edit · Set default (hidden on default) · Delete (red)</span></div>
+          <div class="wf-cell"><b>Empty state</b><span>Pin icon + "No addresses yet" + prompt to add one</span></div>
+        </div>
+      </div><div class="wire-cap">Figure A — Saved-addresses panel with the card grid and per-card actions.</div></div>
+
+      <p><b>List behaviour</b> — the list is a responsive card grid (not a sortable data table). Its behaviour is fixed by the API and the renderer:</p>
+      <div class="twrap"><table><thead><tr><th>Aspect</th><th>Behaviour (from the code)</th></tr></thead><tbody>
+        <tr><td>Source</td><td><code>GET /api/addresses</code> — returns only the signed-in user's rows (<code>where: { userId }</code>).</td></tr>
+        <tr><td>Order</td><td>Default address first, then alphabetical by label (<code>orderBy: [{ isDefault: "desc" }, { label: "asc" }]</code>).</td></tr>
+        <tr><td>Card summary</td><td>Composed by <code>addrSummary()</code>: [houseNo, buildingName, floor] · [street, area] · [city, state, pincode], blanks skipped.</td></tr>
+        <tr><td>Default badge</td><td>Green "Default" pill shown when <code>isDefault = true</code>.</td></tr>
+        <tr><td>Filters / search / pagination</td><td>None — the full list renders at once (a household normally has a handful of addresses).</td></tr>
+        <tr><td>Export</td><td>None. (Each card has a "Map" link that opens the pin in Google Maps in a new tab.)</td></tr>
+        <tr><td>Empty state</td><td>"No addresses yet — Add your delivery address so we know exactly where to bring your fresh milk."</td></tr>
+        <tr><td>Load failure</td><td>Amber notice: "Couldn't load addresses: &lt;reason / offline&gt;".</td></tr>
+      </tbody></table></div>
+
+      <p><b>Card &amp; panel buttons</b></p>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td>+ Add address</td><td>Opens the Add-address modal (Screen B) with a blank form.</td><td>None until Save.</td><td><span class="pill role">Customer</span></td></tr>
+        <tr><td>Map</td><td>Opens the pinned location in Google Maps directions in a new browser tab.</td><td>Client only — builds a <code>google.com/maps/dir</code> URL from the saved lat/lng (falls back to a text search when no pin).</td><td><span class="pill role">Customer</span></td></tr>
+        <tr><td>Edit</td><td>Opens the modal pre-filled with this address for changes.</td><td><code>PATCH /api/addresses/{id}</code> on save.</td><td><span class="pill role">Customer</span></td></tr>
+        <tr><td>Set default</td><td>Makes this address the default (hidden on the current default).</td><td><code>PATCH /api/addresses/{id}</code> with <code>{ isDefault: true }</code>; clears the flag on all other rows in one transaction.</td><td><span class="pill role">Customer</span></td></tr>
+        <tr><td>Delete</td><td>Removes the address after a browser "Delete this address?" confirm.</td><td><code>DELETE /api/addresses/{id}</code>. Blocked with a toast if it is linked to a subscription.</td><td><span class="pill role">Customer</span></td></tr>
+      </tbody></table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — deleting a linked address</div><p>If an address is attached to an active subscription, the delete fails and the customer sees a toast such as "Couldn't delete (it may be linked to a subscription)". Reassign or cancel the subscription's address first, then delete.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN B -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Screen B — Add / Edit Address</p><p class="sm">The full doorstep form: pin the map, then confirm the last-mile details.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Capture a precise, serviceable delivery address — exact GPS pin plus structured house / building / floor / landmark details — so the delivery executive reaches the doorstep first time.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (creates/edits own rows only)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → Addresses → Add address / Edit</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Add address / Edit address — <b>modal dialog</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Pin your exact doorstep</b><span>Draggable map (Google when a key is set, else built-in SVG map) + search box + "use my location"</span></div>
+          <div class="wf-cell"><b>Serviceability line</b><span>Live status: 📍 Detecting… / 🟢 We deliver here / 🔴 Not serviceable</span></div>
+          <div class="wf-cell"><b>Delivery contact</b><span>Contact name, Mobile number, Alternate number</span></div>
+          <div class="wf-cell"><b>Where should we deliver?</b><span>House/Flat, Building name, Floor, Street, Area, Landmark, City, State, Pincode</span></div>
+          <div class="wf-cell"><b>More details (optional)</b><span>Block / Tower, Wing, Society gate number, Door colour</span></div>
+          <div class="wf-cell"><b>Label this address</b><span>Chips: Home · Office · Apartment · Friend &amp; Family · Other (+ custom)</span></div>
+          <div class="wf-cell"><b>Delivery instructions</b><span>Preset chips + free-text note (250-char counter)</span></div>
+          <div class="wf-cell"><b>Footer</b><span>"Make this my default" checkbox · Cancel · Save address / Save changes</span></div>
+        </div>
+      </div><div class="wire-cap">Figure B — Add / Edit modal: map pin at the top drives the serviceability gate and auto-fills the address fields.</div></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — the pin does the typing</div><p>Dragging the pin (or picking a search suggestion, or tapping "use my location") calls <code>GET /api/geo/reverse</code> and auto-fills pincode, area, city and state, plus house number / street / landmark when the geocoder returns them. The customer can still edit any field — a value they type by hand wins over the auto-fill (the map keeps only the GPS pin).</p></div></div>
+
+      <p><b>Field reference</b> — every field on the form, in order. "Req." marks fields the form blocks Save on.</p>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Map pin (GPS)</td><td>Exact doorstep location for delivery &amp; live tracking.</td><td>Draggable pin / search / GPS locate</td><td class="t-opt">Auto</td><td>Sets hidden <code>lat</code>/<code>lng</code> sent with the save. If no pin is dropped the backend geocodes the address (OSM) as a fallback.</td><td>16.5062, 80.6480</td></tr>
+        <tr><td>Contact name</td><td>Who the executive asks for / calls.</td><td>Text, ≤ 80 chars</td><td class="t-req">Yes</td><td>Pre-filled from the profile; trimmed. Stored as <code>contactName</code>.</td><td>Ravi Kumar</td></tr>
+        <tr><td>Mobile number</td><td>Primary delivery contact number.</td><td>Digits / +, 7–15 long</td><td class="t-req">Yes</td><td>Client regex <code>/^[+]?[0-9\s-]{7,15}$/</code>; same rule on the server. Stored as <code>contactPhone</code>.</td><td>+91 98765 43210</td></tr>
+        <tr><td>Alternate contact number</td><td>Backup number to call.</td><td>Digits / +, 7–15 long</td><td class="t-opt">Opt.</td><td>Same phone regex when filled. Stored as <code>altPhone</code>.</td><td>+91 90000 11122</td></tr>
+        <tr><td>House / Flat number</td><td>Unit at the address.</td><td>Text, ≤ 60 chars</td><td class="t-req">Yes</td><td>Feeds <code>line1</code>. Backend requires a composed <code>line1</code> ≥ 3 chars.</td><td>Flat 302 · H.No 12-45</td></tr>
+        <tr><td>Apartment / Building / House name</td><td>Building the executive looks for.</td><td>Text, ≤ 120 chars</td><td class="t-req">Yes</td><td>Stored as <code>buildingName</code>; part of <code>line1</code> and the OSM geocode query.</td><td>Sri Sai Residency</td></tr>
+        <tr><td>Floor</td><td>Which floor to climb to.</td><td>Dropdown</td><td class="t-req">Yes</td><td>One of: Independent House, Ground Floor, 1st–10th Floor, Above 10th Floor. Stored as <code>floor</code>.</td><td>2nd Floor</td></tr>
+        <tr><td>Street / Road</td><td>Street name.</td><td>Text, ≤ 120 chars</td><td class="t-req">Yes</td><td>Auto-filled from the pin; part of <code>line2</code>.</td><td>MG Road</td></tr>
+        <tr><td>Area / Locality</td><td>Neighbourhood.</td><td>Text, ≤ 80 chars</td><td class="t-req">Yes</td><td>Auto-filled from the pincode / pin unless typed. Part of <code>line2</code>.</td><td>Benz Circle</td></tr>
+        <tr><td>Landmark</td><td>Nearest recognisable point.</td><td>Text, ≤ 120 chars</td><td class="t-req">Yes</td><td>Shown on the card and woven into <code>line2</code> as "(near …)".</td><td>Opposite SBI Bank</td></tr>
+        <tr><td>City</td><td>City of delivery.</td><td>Text, ≤ 60 chars</td><td class="t-req">Yes</td><td>Defaults to "Vijayawada"; auto-set from the serviceable pincode.</td><td>Vijayawada</td></tr>
+        <tr><td>State</td><td>State of delivery.</td><td>Text, ≤ 60 chars</td><td class="t-req">Yes</td><td>Defaults to "Andhra Pradesh"; auto-set from the pincode.</td><td>Andhra Pradesh</td></tr>
+        <tr><td>Pincode</td><td>The serviceability key.</td><td>6 digits, numeric</td><td class="t-req">Yes</td><td>Client <code>/^[1-9][0-9]{5}$/</code>; server normalises ("520 010" → "520010") and requires a match in the live serviceable list. Auto-filled from the pin.</td><td>520010</td></tr>
+        <tr><td>Block / Tower</td><td>Extra last-mile detail.</td><td>Text, ≤ 60 chars</td><td class="t-opt">Opt.</td><td>Stored as <code>block</code>.</td><td>Block B</td></tr>
+        <tr><td>Wing</td><td>Extra last-mile detail.</td><td>Text, ≤ 40 chars</td><td class="t-opt">Opt.</td><td>Stored as <code>wing</code>.</td><td>A Wing</td></tr>
+        <tr><td>Society gate number</td><td>Which gate to enter by.</td><td>Text, ≤ 40 chars</td><td class="t-opt">Opt.</td><td>Stored as <code>gateNumber</code>.</td><td>Gate 2</td></tr>
+        <tr><td>Door colour</td><td>Visual cue for the executive.</td><td>Text, ≤ 40 chars</td><td class="t-opt">Opt.</td><td>Stored as <code>doorColor</code>.</td><td>Brown</td></tr>
+        <tr><td>Label</td><td>Names this address.</td><td>Chip or custom text ≤ 30</td><td class="t-opt">Opt.</td><td>Home / Office / Apartment / Friend &amp; Family / Other; "Other" reveals a custom-label box. Defaults to "Home".</td><td>Home</td></tr>
+        <tr><td>Delivery instructions</td><td>Note for the executive.</td><td>Free text, ≤ 250 chars</td><td class="t-opt">Opt.</td><td>Live char counter; preset chips append text. Stored as <code>deliveryNote</code>.</td><td>Ring the bell once. Beware of pets.</td></tr>
+        <tr><td>Make this my default address</td><td>Sets this as the default delivery address.</td><td>Checkbox</td><td class="t-opt">Opt.</td><td>First address saved is always default; ticking this clears the flag on all other rows server-side.</td><td>☑</td></tr>
+      </tbody></table></div>
+
+      <p><b>Button reference</b></p>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td>Use my location (⊕ in map)</td><td>Centres the pin on the device's GPS position.</td><td>Browser <code>navigator.geolocation</code>; then reverse-geocode. Toast on denial: "Couldn't get your location — drag the pin instead."</td><td><span class="pill role">Customer</span></td></tr>
+        <tr><td>Search suggestion</td><td>Recentres the pin on the picked place.</td><td><code>GET /api/geo/search?q=</code> (≥ 3 chars, debounced) → then reverse-geocode the chosen point.</td><td><span class="pill role">Customer</span></td></tr>
+        <tr><td>Cancel</td><td>Closes the modal without saving.</td><td>None.</td><td><span class="pill role">Customer</span></td></tr>
+        <tr><td>Save address / Save changes</td><td>Validates the form, then creates or updates the address.</td><td><code>POST /api/addresses</code> (new) or <code>PATCH /api/addresses/{id}</code> (edit). Server re-checks serviceability, composes line1/line2, sets the delivery zone, geocodes if no pin, and writes an audit record.</td><td><span class="pill role">Customer</span></td></tr>
+      </tbody></table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — Save is gated on serviceability</div><p>The <b>Save</b> button stays greyed out until the pinned pincode is confirmed serviceable (the internal <code>svOK</code> flag). While the check is in flight it reads "📍 Detecting address…" then "Checking delivery availability…" and Save is disabled. If the location is out of area it turns red — "🔴 Sorry! DOODLY currently does not deliver to this location." — and the box shakes if Save is forced. The backend enforces the same rule again, so a stale UI can never save an out-of-area address.</p></div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — duplicate guard (new addresses only)</div><p>When adding a new address whose house number + pincode already exist in the list, the form asks "You already have an address at this house number and pincode. Save another one anyway?" before continuing. Edits skip this check.</p></div></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — Add / edit an address</div>
+        <div class="wf-flow"><span>Open Add / Edit</span><span>Pin doorstep on map</span><span>Reverse-geocode auto-fills fields</span><span>Serviceability check 🟢/🔴</span><span>Confirm contact + house details</span><span>Save</span><span>Server re-validates + geocode fallback</span><span>Audit + list refresh</span></div>
+      </div><div class="wire-cap">Figure — End-to-end address save. Serviceability is checked in the browser and re-checked on the server before the row is written.</div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Coach customers (and support agents doing it on their behalf) to <b>drag the pin onto the actual doorstep, not the building centroid</b>, and to fill Landmark, Floor and Door colour. The exact GPS drives live delivery tracking and the executive's route, so a precise pin plus a good landmark is what makes a first-time, on-time delivery.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN C -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Screen C — Demo address cards (preview only)</p><p class="sm">The offline / not-signed-in variant rendered by the maps widget.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Let a visitor explore the address experience before signing in. Data lives only in the browser (<code>localStorage</code>) and never reaches the database.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (demo / signed-out) — suppressed for a real signed-in customer</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → Account → Addresses</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Addresses (demo) — <b>card grid</b> + <b>Add address</b> tile</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Address card</b><span>Mini-map thumbnail + label + Default pill + Serviceable/Not-serviceable badge</span></div>
+          <div class="wf-cell"><b>Card body</b><span>line1, line2 + area, city, state, pincode</span></div>
+          <div class="wf-cell"><b>Card links</b><span>Set default (non-default only) · Edit · Delete</span></div>
+          <div class="wf-cell"><b>Add tile</b><span>Dashed "+ Add address" card that opens the simple modal</span></div>
+          <div class="wf-cell"><b>Modal</b><span>Map picker + serviceability line + label chips (Home/Office/Apartment/Other) + House/Flat + Landmark + read-only resolved address</span></div>
+        </div>
+      </div><div class="wire-cap">Figure C — Demo card grid with per-address mini-maps; simpler than the live form and stored only in the browser.</div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — demo data is not real</div><p>Screen C seeds one sample "Home" address and keeps everything in <code>localStorage "doodly-addresses"</code>. It is only shown when the visitor is not a real signed-in customer. Nothing here is written to <code>/api/addresses</code>, and it has fewer fields than the live form (no contact, floor, block, wing, gate, door colour or delivery note). Support staff must confirm a customer is signed in before treating what they see as their real address book.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SERVICEABILITY -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Serviceability &amp; geo services</p><p class="sm">The shared checks and endpoints behind the map, the pincode and Save.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Explain how DOODLY decides whether it delivers to a location, and where the data comes from.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Customer</span> (public read) · configured by <span class="pill role">Admin</span>+ via Serviceable Areas</span></div>
+    <div class="spec-body">
+      <p>The pincode is the single primary key for serviceability. Every check (map, typed pincode, and both save endpoints) resolves against the same live <b>ServiceablePincode</b> table (rows that are <code>enabled</code> and not soft-deleted), so an admin adding, disabling or removing a pincode in <span class="navpath">Admin → Serviceable Areas</span> takes effect immediately with no redeploy.</p>
+      <div class="twrap"><table><thead><tr><th>Endpoint</th><th>Used by</th><th>Returns</th></tr></thead><tbody>
+        <tr><td><code>GET /api/geo/reverse?lat=&amp;lng=</code></td><td>Pin drag / search / "use my location".</td><td>Structured address (house/street/area/city/state/pincode) + serviceability (charge / slot / eta when serviceable).</td></tr>
+        <tr><td><code>GET /api/geo/search?q=</code></td><td>The map search box (India-scoped, ≥ 3 chars).</td><td>Up to 6 place suggestions; best-effort, empty on failure.</td></tr>
+        <tr><td><code>GET /api/geo/serviceable?pincode=</code></td><td>Typed-pincode re-check (<code>validateLive</code>).</td><td><code>{ valid, serviceable, area, city, state, charge, slot, eta }</code>.</td></tr>
+        <tr><td><code>GET /api/addresses</code></td><td>Screen A list load.</td><td>The user's own addresses, default first.</td></tr>
+        <tr><td><code>POST /api/addresses</code></td><td>Save a new address.</td><td>Created row (201); re-asserts serviceability + audits.</td></tr>
+        <tr><td><code>PATCH /api/addresses/{id}</code></td><td>Edit / set default.</td><td>Updated row; location edits re-assert serviceability.</td></tr>
+        <tr><td><code>DELETE /api/addresses/{id}</code></td><td>Delete an address.</td><td><code>{ deleted: true }</code>; ownership enforced.</td></tr>
+      </tbody></table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — works with or without a Google key</div><p>When a Google Maps key is configured the picker upgrades to the real interactive Google map with Places autocomplete; otherwise it uses DOODLY's built-in dependency-free SVG map and keyless OpenStreetMap (Nominatim) geocoding. The workflow, fields and serviceability gate are identical either way, so the page always works.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOTING -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common issues and quick answers.</p></div>
+    <div class="spec-body">
+      <div class="twrap"><table><thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead><tbody>
+        <tr><td>Save button is greyed out.</td><td>Serviceability not yet confirmed (<code>svOK</code> false) — still checking, or out of area.</td><td>Wait for the 🟢 line, or move the pin to a serviceable location.</td></tr>
+        <tr><td>"🔴 Sorry! DOODLY currently does not deliver to this location."</td><td>The pincode isn't in the serviceable list, or an admin disabled it.</td><td>Pick a nearby serviceable pincode; or ask an admin to add the pincode in Serviceable Areas.</td></tr>
+        <tr><td>"Please enter the house/flat number and building name."</td><td>Composed <code>line1</code> was shorter than 3 characters.</td><td>Fill both House / Flat number and Building name.</td></tr>
+        <tr><td>"Couldn't delete (it may be linked to a subscription)."</td><td>The address is referenced by an active subscription.</td><td>Reassign or cancel the subscription's address, then delete.</td></tr>
+        <tr><td>Map shows a plain drawn map, not Google.</td><td>No Google Maps key, or the key was rejected (billing / referrer).</td><td>Expected fallback — it still works. Set a valid key in the environment to get the Google map.</td></tr>
+        <tr><td>"Couldn't get your location — drag the pin instead."</td><td>The browser denied or lacks geolocation.</td><td>Drag the pin manually, or allow location access and retry.</td></tr>
+        <tr><td>"Couldn't load addresses: offline".</td><td>The backend was unreachable when the list loaded.</td><td>Check the connection / that the customer is signed in, then reload.</td></tr>
+      </tbody></table></div>
+
+      <h4>Does the customer have to pin a location on the map?</h4>
+      <p>No — the pin is the best path because it captures exact GPS and auto-fills the pincode, but the customer can type the address by hand. If no pin is dropped, the server geocodes the typed address (via OpenStreetMap) so live delivery tracking still has a destination.</p>
+
+      <h4>Can a customer save an address outside the delivery area?</h4>
+      <p>No. Both the form and the backend require the pincode to match an enabled row in the ServiceablePincode table. An out-of-area address is blocked in the browser and rejected again on the server.</p>
+
+      <h4>How is the default address chosen?</h4>
+      <p>The first address a customer saves is automatically the default. After that, ticking "Make this my default address" (or the card's "Set default") promotes one address and clears the default flag on all others in a single transaction.</p>
+
+      <h4>Is there a limit on how many addresses I can save?</h4>
+      <p>The code sets no fixed cap — customers can keep Home, Office, a friend's place and more. Each is validated and serviceable-checked independently.</p>
+    </div>
+  </div>
+</section>

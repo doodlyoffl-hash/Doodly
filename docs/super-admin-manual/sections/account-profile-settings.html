@@ -1,0 +1,225 @@
+<section class="sheet" id="account-profile-settings">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Customer Module · Profile, Notifications &amp; Settings</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Customer Module</span></div>
+  <h2 class="section-title">Profile, Notifications &amp; Settings</h2>
+  <p class="lead">The signed-in customer's self-service account hub — edit personal details, read and clear the in-app inbox, and control language, notification opt-ins and password security.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — who sees these screens</div><p>These three screens live under the storefront <b>Account</b> menu, not the Admin console. Every one of them is strictly <b>own-data only</b>: the backend scopes every read and write to the verified signed-in user id, so a customer (or any staff member who is also a signed-in account holder) can only ever see and change their own record. A Super Admin previewing these pages sees their own profile — never another customer's. To edit a <em>different</em> customer's details as an operator, use <span class="navpath">Admin → Commerce → Customers</span> instead.</p></div></div>
+
+  <!-- ============================================================ SCREEN 1: PROFILE -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">My Profile</p><p class="sm">Edit your name, phone and email; the record that drives every invoice, delivery and reward.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Let the customer keep their own personal details current. The saved name/email flow onto invoices and notifications; completing all three fields unlocks a one-time loyalty bonus.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Customer</span> self-service · any signed-in account (own record only)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → Profile</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Profile</b> · "Your personal details."</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Full name</b><span>Text input, pre-filled from the live account</span></div>
+          <div class="wf-cell"><b>Phone</b><span>Tel input, pre-filled with the account phone</span></div>
+          <div class="wf-cell"><b>Email</b><span>Email input, pre-filled with the account email</span></div>
+          <div class="wf-cell"><b>Area</b><span>Text input (display only — not persisted here)</span></div>
+          <div class="wf-cell"><b>Save profile</b><span>Primary button — PATCHes the profile</span></div>
+          <div class="wf-cell"><b>Reset</b><span>Ghost button — clears edits back to loaded values</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — two-column profile form (name · phone / email · area) with Save and Reset.</div></div>
+
+      <p>The form renders from the manifest as a two-column card. On page load the client calls <b>GET&nbsp;/api/account/profile</b> and fills the first three inputs from the live record. When you press <b>Save profile</b>, a submit handler collects the inputs and sends <b>PATCH&nbsp;/api/account/profile</b>.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Full name</td><td>The name shown on invoices, greetings and delivery slips</td><td>Free text, up to 80 characters</td><td class="t-req">Yes</td><td>Server: trimmed, min 1, max 80. Saved to <span class="navpath">User.name</span></td><td>Vivek Devineni</td></tr>
+        <tr><td>Phone</td><td>Contact number for delivery and OTP-style updates</td><td>Digits, spaces, dashes and an optional leading +, 7–15 chars</td><td class="t-opt">Opt.</td><td>Server regex <code>^[+]?[0-9\s-]{7,15}$</code>; a blank value is sent as "unchanged". Must be unique — a clash returns <b>409 Conflict</b> "already in use by another account."</td><td>+91 91177 99143</td></tr>
+        <tr><td>Email</td><td>Where invoices, receipts and account emails are sent</td><td>A valid email address</td><td class="t-opt">Opt.</td><td>Server lower-cases and validates; a blank value is sent as "unchanged". Must be unique — a clash returns <b>409 Conflict</b>.</td><td>you@example.com</td></tr>
+        <tr><td>Area</td><td>Locality hint shown in the form only</td><td>Free text</td><td class="t-opt">Opt.</td><td><b>Not saved by this form.</b> Only inputs 1–3 (name, phone, email) are read on submit. Manage the real delivery locality under <span class="navpath">Account → Addresses</span>.</td><td>Benz Circle, Vijayawada</td></tr>
+      </tbody></table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — the "Area" box is cosmetic here</div><p>The renderer only reads the first three inputs on submit, so anything typed into <b>Area</b> is ignored and never stored. Serviceable delivery locality, house number, landmark and GPS pin all belong to the <b>Addresses</b> screen. Don't rely on the profile Area for delivery routing.</p></div></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td>Save profile</td><td>Sends the edited name/phone/email</td><td>PATCH /api/account/profile → validates + uniqueness check → updates User → writes audit <code>account.profile.update</code> → mirrors name/email into the local session → toast "Profile saved ✓". If name + email + phone are all present it also awards the one-time profile-complete loyalty bonus (idempotent).</td><td><span class="pill role">Customer</span> (self)</td></tr>
+        <tr><td>Reset</td><td>Reverts the form fields to the values last loaded, discarding unsaved edits</td><td>Client-side form reset only — no request</td><td><span class="pill role">Customer</span> (self)</td></tr>
+      </tbody></table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — saving a profile edit</div>
+        <div class="wf-flow"><span>Page loads → GET profile</span><span>Fields pre-fill</span><span>Customer edits name / phone / email</span><span>Save profile → PATCH</span><span>Validate + uniqueness</span><span>User updated + audit</span><span>Toast + loyalty bonus if complete</span></div>
+      </div><div class="wire-cap">Figure — end-to-end profile save, from pre-fill to the profile-complete reward.</div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Encourage customers to fill <b>all three</b> of name, email and phone. Beyond keeping invoices and delivery contact correct, a complete profile triggers a one-time DOODLY Pure Rewards bonus, and a verified email/phone is what makes password-reset and notifications actually reach them.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2: NOTIFICATIONS -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Notifications</p><p class="sm">The in-app inbox — delivery updates, reminders and rewards, with read and delete controls.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Show the customer their latest account notifications and let them mark items read, delete them, or clear everything at once.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Customer</span> self-service · own inbox only</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → Notifications</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Notifications</b> · "Delivery updates, reminders and rewards." · <b>Mark all as read</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Feed list</b><span>Latest 50 items, newest first, each with an icon</span></div>
+          <div class="wf-cell"><b>Unread marker</b><span>Highlighted row until it is read</span></div>
+          <div class="wf-cell"><b>Title + subtitle</b><span>The notification message and its detail line</span></div>
+          <div class="wf-cell"><b>Row actions</b><span>✓ Mark as read (unread only) · ✕ Delete</span></div>
+          <div class="wf-cell"><b>Empty state</b><span>"You're all caught up — No notifications right now."</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — scrolling notification feed with per-row read/delete and a bulk "Mark all as read".</div></div>
+
+      <p>On load the feed is hydrated from <b>GET&nbsp;/api/account/notifications</b>, which returns the 50 most recent notifications (newest first) plus the unread count. Each row shows an icon, a bold title and a subtitle. The client then attaches the action controls to every row, and adds a <b>Mark all as read</b> button to the page header when at least one item is unread.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Element</th><th>Detail</th>
+      </tr></thead><tbody>
+        <tr><td>Source</td><td>GET /api/account/notifications — <code>Notification</code> rows scoped to the signed-in user id</td></tr>
+        <tr><td>Order</td><td>Newest first (<code>createdAt desc</code>)</td></tr>
+        <tr><td>Limit</td><td>Latest 50 items per load</td></tr>
+        <tr><td>Unread</td><td>Rows with no <code>readAt</code> render with an "unread" highlight; the endpoint also returns the total unread count</td></tr>
+        <tr><td>Columns shown</td><td>Icon · Title (message) · Subtitle (detail line)</td></tr>
+        <tr><td>Row actions</td><td>✓ Mark as read (shown only while unread) · ✕ Delete</td></tr>
+        <tr><td>Bulk action</td><td>Mark all as read (page header — appears only when something is unread)</td></tr>
+        <tr><td>Empty state</td><td>An honest "You're all caught up / No notifications right now." panel</td></tr>
+      </tbody></table></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td>✓ Mark as read</td><td>Clears the unread highlight on one row and removes its ✓ control</td><td>POST /api/account/notifications <code>{ action:"read", id }</code> → stamps <code>readAt</code> on that row (scoped to the user id) → toast "Marked as read"</td><td><span class="pill role">Customer</span> (self)</td></tr>
+        <tr><td>✕ Delete</td><td>Fades out and removes one notification</td><td>POST /api/account/notifications <code>{ action:"delete", id }</code> → deletes that row (scoped to the user id)</td><td><span class="pill role">Customer</span> (self)</td></tr>
+        <tr><td>Mark all as read</td><td>Clears every unread highlight and removes the ✓ controls at once</td><td>POST /api/account/notifications <code>{ action:"readAll" }</code> → stamps <code>readAt</code> on all of the user's unread rows → toast "All caught up ✓"</td><td><span class="pill role">Customer</span> (self)</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — read vs delete</div><p><b>Mark as read</b> keeps the item but stops it counting as unread. <b>Delete</b> permanently removes it from the inbox. Both operations only ever touch rows that belong to the signed-in user, so there is no way to affect another customer's notifications.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3: SETTINGS -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Settings</p><p class="sm">Four tabs — General, Notifications, Security and Billing — for preferences and account control.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Central place for the customer to set their language, choose which channels DOODLY may contact them on, change their password, sign out everywhere, and jump to billing pages.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Customer</span> self-service · own preferences only</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → Settings</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Settings</b> · "Preferences, notifications and account." · tabbed</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Tab bar</b><span>General · Notifications · Security · Billing</span></div>
+          <div class="wf-cell"><b>General panel</b><span>Language selector + Save settings</span></div>
+          <div class="wf-cell"><b>Notifications panel</b><span>Five On/Off channel toggles + Save</span></div>
+          <div class="wf-cell"><b>Security panel</b><span>Change password + sign out of all devices</span></div>
+          <div class="wf-cell"><b>Billing panel</b><span>Quick tiles to Subscription / Wallet / Invoices</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the four-tab Settings screen; General and Notifications persist, Security acts, Billing links out.</div></div>
+
+      <h3 style="font-family:'Fraunces',serif;color:var(--forest);margin:18px 0 6px">Tab 1 — General</h3>
+      <p>A single-field form for the customer's interface language. It pre-fills from <b>GET&nbsp;/api/account/settings</b> and saves via <b>PATCH&nbsp;/api/account/settings</b>.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Language</td><td>Preferred interface / communication language</td><td>English · తెలుగు (coming soon, disabled) · हिन्दी (coming soon, disabled)</td><td class="t-req">Yes</td><td>Mapped to a code and validated as one of <code>en</code> / <code>te</code> / <code>hi</code>; upserted onto <span class="navpath">CustomerPreference.language</span> (default <code>en</code>)</td><td>English</td></tr>
+      </tbody></table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note</div><p>Only English is selectable today — Telugu and Hindi appear as disabled "coming soon" options. The subtitle on the panel says exactly that.</p></div></div>
+
+      <h3 style="font-family:'Fraunces',serif;color:var(--forest);margin:18px 0 6px">Tab 2 — Notifications</h3>
+      <p>Five On/Off dropdowns control which channels DOODLY may use. Each pre-fills from the customer's saved preferences and saves back with <b>PATCH&nbsp;/api/account/settings</b> as booleans. These opt-ins are honoured by the transactional messaging layer, so turning a channel Off genuinely stops those messages.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Default</th>
+      </tr></thead><tbody>
+        <tr><td>Email updates</td><td>Transactional emails (orders, deliveries, receipts)</td><td>On / Off</td><td class="t-opt">Opt.</td><td>Boolean → <code>emailOptIn</code></td><td>On</td></tr>
+        <tr><td>SMS updates</td><td>Text-message alerts</td><td>On / Off</td><td class="t-opt">Opt.</td><td>Boolean → <code>smsOptIn</code></td><td>Off</td></tr>
+        <tr><td>WhatsApp updates</td><td>Transactional WhatsApp messages</td><td>On / Off</td><td class="t-opt">Opt.</td><td>Boolean → <code>whatsappOptIn</code></td><td>On</td></tr>
+        <tr><td>Push notifications</td><td>Browser / app push alerts</td><td>On / Off</td><td class="t-opt">Opt.</td><td>Boolean → <code>pushOptIn</code></td><td>On</td></tr>
+        <tr><td>Promotions &amp; offers</td><td>Marketing messages and deals</td><td>On / Off</td><td class="t-opt">Opt.</td><td>Boolean → <code>marketingOptIn</code></td><td>On</td></tr>
+      </tbody></table></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td>Save settings (General)</td><td>Persists the chosen language</td><td>PATCH /api/account/settings <code>{ language }</code> → upserts CustomerPreference → audit <code>account.settings.update</code> → toast "Settings saved ✓"</td><td><span class="pill role">Customer</span> (self)</td></tr>
+        <tr><td>Save notifications</td><td>Persists all five channel opt-ins</td><td>PATCH /api/account/settings <code>{ emailOptIn, smsOptIn, whatsappOptIn, pushOptIn, marketingOptIn }</code> → upserts CustomerPreference → audit → toast "Notification preferences saved ✓"</td><td><span class="pill role">Customer</span> (self)</td></tr>
+      </tbody></table></div>
+
+      <h3 style="font-family:'Fraunces',serif;color:var(--forest);margin:18px 0 6px">Tab 3 — Security</h3>
+      <p>Two real actions: change the account password, and sign out of every device. A reset-by-email link is offered for customers who have forgotten their current password.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Current password</td><td>Proves it is really you before changing the password</td><td>Your existing password</td><td class="t-req">Yes</td><td>Client requires it; server re-verifies it against the stored bcrypt hash (when a password is set). Wrong value → "Your current password is incorrect."</td><td>••••••••</td></tr>
+        <tr><td>New password</td><td>The password you want to switch to</td><td>Strong password</td><td class="t-req">Yes</td><td>Client: at least 8 characters. Server (authoritative): 8–72 chars and must include an uppercase letter, a lowercase letter, a number and a special character.</td><td>Milk@2026</td></tr>
+        <tr><td>Confirm new password</td><td>Guards against typos in the new password</td><td>Must equal New password</td><td class="t-req">Yes</td><td>Client: must match New password ("New passwords don't match.")</td><td>Milk@2026</td></tr>
+      </tbody></table></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td>Update password</td><td>Validates the three fields, then changes the password and signs you out to re-authenticate</td><td>POST /api/account/password <code>{ currentPassword, newPassword }</code> → rate-limited (8 / minute) → verifies current → writes new bcrypt hash, clears forcePwReset, increments tokenVersion (revokes every session) → audit <code>account.password.change</code> → after ~1.4 s the client clears its token and redirects to the customer login.</td><td><span class="pill role">Customer</span> (self)</td></tr>
+        <tr><td>Sign out of all devices</td><td>Ends every logged-in session, including this one</td><td>Confirm prompt → POST /api/logout → increments tokenVersion so all bearer tokens are instantly rejected → audit <code>auth.logout</code> → local token cleared and redirect to login</td><td><span class="pill role">Customer</span> (self)</td></tr>
+        <tr><td>Reset it via email →</td><td>Link for a forgotten current password</td><td>Navigates to <span class="navpath">/forgot-password.html</span> (email-based reset flow)</td><td><span class="pill role">Customer</span> (self)</td></tr>
+      </tbody></table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — changing your password</div>
+        <div class="wf-flow"><span>Enter current + new + confirm</span><span>Client checks (≥8, match)</span><span>Update password → POST</span><span>Server verifies current + strength</span><span>Hash saved, tokenVersion bumped</span><span>All sessions revoked</span><span>Redirect to login → sign in again</span></div>
+      </div><div class="wire-cap">Figure — a password change deliberately signs the customer out everywhere and forces a fresh sign-in.</div></div>
+
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — both Security actions log you out everywhere</div><p>Updating the password and "Sign out of all devices" each bump the account's <b>tokenVersion</b>, which instantly invalidates <em>every</em> active session — including the one you are using. This is intentional (it locks out anyone else who was signed in), but it means you must sign in again straight afterwards. Warn customers before they click.</p></div></div>
+
+      <h3 style="font-family:'Fraunces',serif;color:var(--forest);margin:18px 0 6px">Tab 4 — Billing</h3>
+      <p>An informational panel with three quick-link tiles. It stores nothing; it simply routes the customer to the relevant billing pages.</p>
+      <div class="twrap"><table><thead><tr>
+        <th>Tile</th><th>Goes to</th>
+      </tr></thead><tbody>
+        <tr><td>Subscription</td><td><span class="navpath">/account/subscription.html</span></td></tr>
+        <tr><td>Wallet</td><td><span class="navpath">/account/wallet.html</span></td></tr>
+        <tr><td>Invoices</td><td><span class="navpath">/account/invoices.html</span></td></tr>
+      </tbody></table></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Set notification preferences <b>with intent</b>: keep at least one transactional channel (Email or WhatsApp) On so delivery and payment alerts still arrive, and use <b>Promotions &amp; offers</b> as the single switch for marketing. If a customer complains about "too many messages," check this tab first — turning off Promotions usually solves it without silencing the essential delivery updates.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOTING -->
+  <h3 style="font-family:'Fraunces',serif;color:var(--forest);margin:22px 0 8px">Troubleshooting</h3>
+  <div class="twrap"><table><thead><tr>
+    <th>Symptom</th><th>Likely cause</th><th>Fix</th>
+  </tr></thead><tbody>
+    <tr><td>"That email / phone is already in use by another account."</td><td>Another DOODLY account already holds that email or phone number (uniqueness is enforced)</td><td>Use a different value, or locate and merge the duplicate account under <span class="navpath">Admin → Commerce → Customers</span>.</td></tr>
+    <tr><td>Profile "Area" edit doesn't stick</td><td>The Area box on Profile is display-only and never saved</td><td>Set the delivery locality on <span class="navpath">Account → Addresses</span> instead.</td></tr>
+    <tr><td>"New password must be at least 8 characters" / "New passwords don't match"</td><td>Client-side checks failed before sending</td><td>Enter a new password of 8+ characters and type it identically in Confirm.</td></tr>
+    <tr><td>Password rejected even though it is 8+ characters</td><td>Server strength rules are stricter than the client hint</td><td>Include an uppercase letter, a lowercase letter, a number and a special character (max 72 chars).</td></tr>
+    <tr><td>"Your current password is incorrect."</td><td>The current password entered doesn't match the stored hash</td><td>Re-enter it carefully, or use "Reset it via email →" to reset without knowing it.</td></tr>
+    <tr><td>Signed out immediately after changing the password</td><td>Expected — the change revokes all sessions</td><td>Sign in again with the new password; this is by design.</td></tr>
+    <tr><td>"Please try again" on password change after several attempts</td><td>Rate limit hit (8 changes per minute per account)</td><td>Wait about a minute and retry.</td></tr>
+    <tr><td>Notifications list is empty</td><td>No notifications exist for this account yet</td><td>None needed — the "You're all caught up" state is correct.</td></tr>
+    <tr><td>Fields don't pre-fill / saves fail silently</td><td>The page is in demo mode (not truly signed in) or the token expired</td><td>Confirm a real sign-in (a valid token in the session); sign in again if needed.</td></tr>
+  </tbody></table></div>
+
+  <!-- ============================================================ FAQ -->
+  <h3 style="font-family:'Fraunces',serif;color:var(--forest);margin:22px 0 8px">Frequently asked questions</h3>
+  <h4>Can a Super Admin edit another customer's profile from these screens?</h4>
+  <p>No. Every request here is scoped to the signed-in user's own id, so these pages only ever show and change your own account. To edit another customer's details as an operator, use the Customers module in the Admin console.</p>
+
+  <h4>Why does changing my password log me out of this device too?</h4>
+  <p>Changing the password (and "Sign out of all devices") increments the account's token version, which invalidates every existing session for security. You'll be redirected to sign in again with the new password.</p>
+
+  <h4>If I turn off WhatsApp or Email here, will I still get delivery alerts?</h4>
+  <p>Those alerts respect your opt-ins, so turning a channel Off stops its messages. Keep at least one transactional channel (Email or WhatsApp) On so you still receive delivery and payment notifications; use the Promotions &amp; offers toggle to silence marketing only.</p>
+
+  <h4>What does completing my profile unlock?</h4>
+  <p>Once your name, email and phone are all filled in and saved, DOODLY awards a one-time Pure Rewards "profile complete" loyalty bonus. It is idempotent, so it is granted only the first time all three are present.</p>
+</section>

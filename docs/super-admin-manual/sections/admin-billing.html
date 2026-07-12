@@ -1,0 +1,241 @@
+<section class="sheet" id="admin-billing">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Commerce · Subscription Billing (AutoPay)</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Commerce</span></div>
+  <h2 class="section-title">Subscription Billing (AutoPay)</h2>
+  <p class="lead">One control room for every recurring-payment mandate — see who has hands-free renewals, which renewals are coming up, which have failed, and step in to retry, pause, resume or cancel any customer's AutoPay.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">What "AutoPay" means at DOODLY</div>
+      <p>AutoPay is a <b>Razorpay recurring e-mandate</b> attached to a customer's milk <b>subscription</b>. Once the customer authorises it (their bank / UPI app approves a standing instruction), DOODLY charges the renewal amount automatically before the plan expires — so the morning delivery never stops. AutoPay is <b>subscription-only</b> and <b>strictly opt-in</b>: a mandate is only ever created when a customer ticks "Enable AutoPay" <b>at checkout</b>. This admin screen does <b>not</b> create mandates — it monitors and manages the ones that already exist.</p>
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 1 : BILLING DASHBOARD -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Subscription Billing — AutoPay dashboard</p><p class="sm">Live KPIs plus a searchable, filterable table of every AutoPay mandate.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Monitor the health of recurring billing at a glance (active mandates, upcoming renewals, failures) and manage any individual mandate — retry a failed charge, suspend, resume or cancel — without leaving the page.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> · <span class="pill role">Accountant</span> (view) — actions need the same roles (billing "edit")</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → Subscription Billing</span> (<span class="navpath">/admin/billing.html</span>)</span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Subscription Billing</b> · live-status banner (● Live — N mandates from the DOODLY database)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>KPI strip</b><span>Six tiles: Active mandates · Upcoming (7d) · Failed renewals (30d) · Paused · Cancelled · Total.</span></div>
+          <div class="wf-cell"><b>Filters bar</b><span>Search box (customer / phone / email) · Status dropdown · <b>Export CSV</b> button.</span></div>
+          <div class="wf-cell"><b>AutoPay mandates table</b><span>Customer · Plan · Amount · Next renewal · Attempts · Status badge · row actions.</span></div>
+          <div class="wf-cell"><b>Row actions</b><span>Per mandate, only the buttons valid for its status: Retry · Resume · Suspend · Cancel.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Subscription Billing (AutoPay) screen</div></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Live vs demo</div>
+          <p>When the backend is reachable the screen loads real mandates from <span class="navpath">GET /api/admin/autopay</span> and shows a green banner: <i>"● Live — N AutoPay mandate(s) from the DOODLY database"</i> with the API base. If the backend is offline (and demo mode is allowed) it shows a red <i>"⚠ Backend offline — showing demo AutoPay data"</i> banner over a sample table. In production with no demo mode the list is driven purely by real mandates and simply shows an empty state when there are none. <b>This manual documents the live behaviour.</b></p>
+        </div>
+      </div>
+
+      <!-- ---------- KPI STRIP ---------- -->
+      <h4>The KPI strip — six live tiles</h4>
+      <p>Each tile is computed by the backend (<code>adminAutopayStats()</code>) directly from the mandate and renewal tables — never hand-entered.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Tile</th><th>What it counts</th><th>How it is calculated (backend)</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Active mandates</b></td><td>Mandates currently charging automatically</td><td>Count of AutoPay rows with status <code>ACTIVE</code></td><td>128</td></tr>
+          <tr><td><b>Upcoming (7d)</b></td><td>Active renewals due in the next seven days</td><td><code>ACTIVE</code> mandates whose <code>nextRenewalAt</code> ≤ now + 7 days</td><td>19</td></tr>
+          <tr><td><b>Failed renewals (30d)</b></td><td>Renewal charges that failed in the last month</td><td>Count of <code>RenewalHistory</code> rows with status <code>FAILED</code> and <code>chargedAt</code> in the last 30 days</td><td>4</td></tr>
+          <tr><td><b>Paused</b></td><td>Mandates temporarily stopped by the customer or an admin</td><td>Count of AutoPay rows with status <code>INACTIVE</code></td><td>6</td></tr>
+          <tr><td><b>Cancelled</b></td><td>Mandates that have been terminated</td><td>Count of AutoPay rows with status <code>CANCELLED</code></td><td>11</td></tr>
+          <tr><td><b>Total</b></td><td>Every mandate on record, any status</td><td>Sum of all statuses</td><td>145</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">"Failed" vs "Suspended"</div>
+          <p><b>Failed renewals (30d)</b> counts individual failed <i>charges</i> in the payment history — a mandate can fail once, be retried by Razorpay, and still recover. A mandate only moves to <b>Suspended</b> after Razorpay <i>exhausts</i> its automatic retries. Suspended and Retry-pending mandates are the ones that need a human — filter the table by <b>Suspended</b> or <b>Retry</b> to find them.</p>
+        </div>
+      </div>
+
+      <!-- ---------- FILTERS ---------- -->
+      <h4>Filters &amp; search controls</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Control</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Search box</td><td>Find a mandate by the customer</td><td>Free text — matches customer name, phone or email</td><td class="t-opt">Opt.</td><td>Sent as <code>?q=</code> after a 300 ms pause; backend matches <code>user.name</code>/<code>email</code> (case-insensitive) or <code>phone</code> contains</td><td>Ananya</td></tr>
+          <tr><td>Status dropdown</td><td>Narrow the list to one mandate state</td><td>All statuses · Active · Paused · Retry · Suspended · Cancelled</td><td class="t-opt">Opt.</td><td>Sent as <code>?status=</code> (ACTIVE / INACTIVE / RETRY / SUSPENDED / CANCELLED); "Paused" maps to <code>INACTIVE</code>. Reloads the table on change</td><td>Suspended</td></tr>
+          <tr><td>Export CSV</td><td>Download the currently shown rows</td><td>Button</td><td class="t-opt">Opt.</td><td>Client-side export of the rows on screen (respects the active filter/search)</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- ---------- TABLE SPEC ---------- -->
+      <h4>The AutoPay mandates table</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Behaviour (from the real table config)</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td>Customer (name + phone/email subline) · Plan · Amount (₹, from <code>amountPaise</code>) · Next renewal (short date) · Attempts (retry count) · Status (colour badge) · Actions.</td></tr>
+          <tr><td><b>Sorting</b></td><td>Fixed server order: soonest renewal first (<code>nextRenewalAt</code> ascending), so the mandates about to charge sit at the top.</td></tr>
+          <tr><td><b>Search</b></td><td>The header search box (customer / phone / email), debounced 300 ms, re-queries the backend.</td></tr>
+          <tr><td><b>Filters</b></td><td>Status dropdown (see above). Search and status combine.</td></tr>
+          <tr><td><b>Pagination</b></td><td>No page controls — the backend returns up to <b>300</b> mandates in one load, ordered by next renewal. Use search/status to narrow larger sets.</td></tr>
+          <tr><td><b>Exports</b></td><td><b>Export CSV</b> → file <code>autopay-mandates-YYYY-MM-DD.csv</code> with columns Customer, Phone, Email, Plan, Amount (₹), Next renewal, Attempts, Status, Mandate (gateway id).</td></tr>
+          <tr><td><b>Row actions</b></td><td>Status-aware buttons in the last column — Retry, Resume, Suspend, Cancel (see the button table below).</td></tr>
+          <tr><td><b>Empty state</b></td><td>"No AutoPay mandates match." when the filter/search returns nothing.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Status badges</h4>
+      <p>The <code>Status</code> column colour-codes each mandate's backend state so problem mandates jump out.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Backend status</th><th>Badge shown</th><th>Colour</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>ACTIVE</code></td><td>Active</td><td>Green</td><td>Charging automatically each cycle.</td></tr>
+          <tr><td><code>INACTIVE</code></td><td>Paused</td><td>Grey</td><td>Temporarily stopped (customer or admin); can be resumed.</td></tr>
+          <tr><td><code>RETRY</code></td><td>Retry pending</td><td>Amber</td><td>A charge failed; an automatic retry is queued.</td></tr>
+          <tr><td><code>SUSPENDED</code></td><td>Suspended</td><td>Red</td><td>Razorpay's retries were exhausted — needs attention.</td></tr>
+          <tr><td><code>CANCELLED</code></td><td>Cancelled</td><td>Grey</td><td>Mandate terminated; no further charges.</td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- ---------- ROW ACTIONS ---------- -->
+      <h4>Row actions — what each button does</h4>
+      <p>Only the buttons that make sense for a mandate's current status are shown. Every action posts to <span class="navpath">POST /api/admin/autopay</span> with the mandate's gateway id, calls the corresponding Razorpay control, updates the mandate, writes an audit record, then reloads the table. While an action is in flight the row's buttons are disabled, and on success a toast confirms ("AutoPay retried ✓", etc.).</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>Shown when status is…</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Retry</b></td><td>Suspended or Retry</td><td>Re-attempts the failed renewal charge now and reactivates the mandate.</td><td><code>{action:"retry"}</code> → resumes the Razorpay subscription, sets status <code>ACTIVE</code> and resets <code>attempts</code> to 0</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Accountant</span></td></tr>
+          <tr><td><b>Resume</b></td><td>Paused (Inactive)</td><td>Restarts automatic charging on a paused mandate.</td><td><code>{action:"resume"}</code> → Razorpay resume, status <code>ACTIVE</code>, <code>attempts</code> reset to 0</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Accountant</span></td></tr>
+          <tr><td><b>Suspend</b></td><td>Active</td><td>Temporarily stops automatic charging (the plan itself stays alive).</td><td><code>{action:"suspend"}</code> → Razorpay pause, status <code>INACTIVE</code></td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Accountant</span></td></tr>
+          <tr><td><b>Cancel</b> <span class="t-opt">(red)</span></td><td>Any status except Cancelled</td><td>Asks "Cancel this customer's AutoPay mandate?", then terminates it — the subscription stops renewing automatically.</td><td><code>{action:"cancel"}</code> → Razorpay cancel, status <code>CANCELLED</code>, and the subscription's <code>autoRenew</code> is turned off</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Accountant</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Why "Retry" and "Resume" behave the same</div>
+          <p>Under the hood both <b>Retry</b> and <b>Resume</b> tell Razorpay to resume the subscription and flip the mandate back to <b>Active</b> with the attempt counter cleared. "Retry" is simply the label used when a mandate is in a failed state (Suspended / Retry), and "Resume" when it was deliberately paused (Inactive) — the customer or gateway then re-attempts the outstanding cycle. "Suspend" is the mirror of "Resume": it pauses an Active mandate.</p>
+        </div>
+      </div>
+
+      <!-- ---------- THE ACTION REQUEST ---------- -->
+      <h4>The action request (POST /api/admin/autopay)</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>action</td><td>What to do to the mandate</td><td>retry · resume · suspend · cancel</td><td class="t-req">Yes</td><td>Enum-validated (Zod); anything else is rejected with a 400</td><td>cancel</td></tr>
+          <tr><td>gatewaySubId</td><td>Which mandate to act on</td><td>Razorpay subscription id</td><td class="t-req">Yes</td><td>Must exist, or the API returns <b>404 "Mandate not found."</b>; the request needs the <code>billing</code> "edit" permission</td><td>sub_Nm2c…</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Warning — permission is enforced on the server</div>
+          <p>The buttons you see are filtered by your role in the browser, but the real security check is on the backend: <span class="navpath">GET /api/admin/autopay</span> requires <code>billing → view</code> and <span class="navpath">POST</span> requires <code>billing → edit</code>. A role without <code>billing</code> access gets a <b>403</b> and the page shows "Your role can't view subscription billing." Do not rely on hidden buttons alone — the server is the boundary.</p>
+        </div>
+      </div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Warning — you cannot change a customer's card/UPI from here</div>
+          <p>Razorpay mandates are bound to the exact card or UPI the customer authorised; they cannot be swapped silently. To move a customer to a new payment method, they must <b>cancel</b> AutoPay and <b>re-enable it at their next checkout</b>, where their bank re-authorises a fresh e-mandate. There is no "change method" action on the admin table.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= MANDATE LIFECYCLE -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Mandate lifecycle</p><p class="sm">How an AutoPay mandate is born, charges, fails and recovers.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Understand the states behind the badges so you know what a mandate will do next — and when a human needs to step in.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> (reference)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → Subscription Billing</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — AutoPay mandate lifecycle</div>
+        <div class="wf-flow"><span>Customer opts in at Checkout</span><span>Mandate created — INACTIVE (pending bank auth)</span><span>Bank / UPI authorises → webhook → ACTIVE</span><span>Renewal charged each cycle (RenewalHistory)</span><span>Charge fails → RETRY (auto re-attempt)</span><span>Retries exhausted → SUSPENDED (notify + never silent-cancel)</span><span>Admin/customer Retry or Resume → ACTIVE</span></div>
+      </div><div class="wire-cap">Figure — the states an AutoPay mandate moves through</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Stage</th><th>What happens</th><th>Where it is driven</th></tr></thead>
+        <tbody>
+          <tr><td><b>Opt-in</b></td><td>Customer ticks "Enable AutoPay (Recommended)" at checkout — OFF by default, never pre-checked.</td><td>Checkout toggle → the mandate is actually created by <code>/api/checkout</code> at pay time</td></tr>
+          <tr><td><b>Created</b></td><td>A Razorpay recurring subscription + an <code>AutopaySubscription</code> row are created, status <b>INACTIVE</b>, awaiting the bank's authorisation.</td><td><code>enableAutopay()</code></td></tr>
+          <tr><td><b>Activated</b></td><td>The bank/UPI authorises the standing instruction; a Razorpay webhook flips the mandate to <b>ACTIVE</b> and the customer is notified ("AutoPay is on").</td><td><code>activateMandate()</code> via <span class="navpath">/api/payments/webhook</span></td></tr>
+          <tr><td><b>Charged</b></td><td>Each cycle the renewal amount is charged and written to the payment history (SUCCESS / FAILED).</td><td><code>recordRenewal()</code></td></tr>
+          <tr><td><b>Reminder</b></td><td>Two days before a renewal, a daily cron reminds the customer (opt-ins respected) — at most one reminder per renewal.</td><td><code>autopayRenewalReminders()</code> via <span class="navpath">/api/cron/notifications</span></td></tr>
+          <tr><td><b>Halted</b></td><td>If Razorpay exhausts its retries the mandate becomes <b>SUSPENDED</b> — the customer is notified and told deliveries are paused, <i>not</i> cancelled. DOODLY never silently cancels.</td><td><code>onMandateHalted()</code></td></tr>
+          <tr><td><b>Recovered / ended</b></td><td>A Retry/Resume reactivates the mandate; a Cancel terminates it and turns the subscription's auto-renew off.</td><td>This admin screen, or the customer's own AutoPay panel</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call danger">
+        <span class="ci">⛔</span>
+        <div class="cbody">
+          <div class="ctitle">Caution — Cancel is a hard stop</div>
+          <p><b>Cancel</b> tells Razorpay to cancel the recurring subscription and sets the mandate to <b>CANCELLED</b> and the subscription's <code>autoRenew</code> to off. There is no "un-cancel" — the customer must enable AutoPay again at a future checkout, which requires a brand-new bank authorisation. If the goal is only to stop charging for a while, use <b>Suspend</b> (reversible with Resume) instead of Cancel.</p>
+        </div>
+      </div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Every action is audited</div>
+          <p>Each admin action writes an audit record — <code>admin.autopay.retry</code> / <code>admin.autopay.resume</code> / <code>admin.autopay.suspend</code> / <code>admin.autopay.cancel</code> — tagged with your role and the mandate id, on top of the service-level audit (<code>autopay.resume</code>, <code>autopay.pause</code>, <code>autopay.cancel</code>). A Super Admin can always trace who touched a mandate and when in the <span class="navpath">Admin → System → Audit Logs</span> trail.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= BEST PRACTICE / TROUBLESHOOTING / FAQ -->
+  <div class="call best">
+    <span class="ci">✅</span>
+    <div class="cbody">
+      <div class="ctitle">Best Practice</div>
+      <p>Work the failures first. Each morning, filter the table by <b>Suspended</b> and then <b>Retry</b>, and clear that queue: call or message the customer to check their card/UPI, then hit <b>Retry</b> once they confirm. Keep an eye on <b>Failed renewals (30d)</b> as a trend — a rising number usually means an expired-card wave, not a one-off. Reserve <b>Cancel</b> for genuine churn; for a customer who simply wants a break, use <b>Suspend</b> so their plan and mandate survive.</p>
+    </div>
+  </div>
+
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>"Your role can't view subscription billing" / a 403 banner</td><td>Signed-in role lacks the <code>billing</code> permission</td><td>Use a Super Admin, Admin or Accountant account, or have a Super Admin grant billing access in <span class="navpath">Admin → System → Roles &amp; Permissions</span>.</td></tr>
+      <tr><td>Red "Backend offline — showing demo AutoPay data" banner</td><td>The Next.js API isn't reachable from the storefront</td><td>Confirm the backend is running and the API base is correct; the numbers shown are sample data until it reconnects.</td></tr>
+      <tr><td>A row action button does nothing / "Backend offline — action not applied"</td><td>No live API connection when the button was clicked</td><td>Reconnect the backend, reload the page, and retry the action.</td></tr>
+      <tr><td>Action fails with "Mandate not found."</td><td>The mandate's gateway id no longer exists (already cancelled/removed)</td><td>Reload the table to refresh the list; the row is likely stale.</td></tr>
+      <tr><td>Customer says their card was declined but the mandate still shows Active</td><td>Razorpay is still inside its automatic retry window</td><td>Check the status — it moves to Retry, then Suspended only after retries are exhausted; you can Retry manually once the customer fixes their payment method.</td></tr>
+      <tr><td>Can't find a specific customer's mandate</td><td>They may have no AutoPay, or the search term doesn't match their stored details</td><td>Search by phone or email; remember AutoPay only exists if the customer opted in at checkout.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Frequently asked questions</h4>
+  <h4>Q. Can I set up AutoPay for a customer from this screen?</h4>
+  <p>A. No. A mandate can only be created when the customer opts in <b>at checkout</b>, because their bank must authorise the recurring e-mandate. This screen manages existing mandates — it has no "create" or "enable" action.</p>
+
+  <h4>Q. What is the difference between Suspend and Cancel?</h4>
+  <p>A. <b>Suspend</b> pauses automatic charging but keeps the mandate — you can <b>Resume</b> it later with no re-authorisation. <b>Cancel</b> terminates the mandate permanently and turns the subscription's auto-renew off; re-enabling requires a fresh authorisation at a future checkout.</p>
+
+  <h4>Q. Does cancelling AutoPay cancel the customer's subscription?</h4>
+  <p>A. No. Cancelling the mandate only stops <i>automatic</i> renewals — it sets the subscription's <code>autoRenew</code> to off. The subscription itself continues for its remaining term; the customer can renew manually or re-enable AutoPay at checkout.</p>
+
+  <h4>Q. Why does a mandate show "Suspended" instead of just being cancelled after a failed payment?</h4>
+  <p>A. By design DOODLY never silently cancels. When Razorpay's retries are exhausted the mandate is set to <b>Suspended</b> and the customer is notified that deliveries are paused (not cancelled) so they can fix their payment method and resume — protecting both the customer's service and DOODLY's recurring revenue.</p>
+
+  <h4>Q. What does the Export CSV include?</h4>
+  <p>A. The rows currently on screen (respecting your active search and status filter), with Customer, Phone, Email, Plan, Amount in rupees, Next renewal date, Attempts, Status and the gateway Mandate id — saved as <code>autopay-mandates-YYYY-MM-DD.csv</code>.</p>
+
+</section>

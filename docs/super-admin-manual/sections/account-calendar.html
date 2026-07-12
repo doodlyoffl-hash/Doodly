@@ -1,0 +1,119 @@
+<section class="sheet" id="account-calendar">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Customer Module · Delivery Calendar</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Customer Module</span></div>
+  <h2 class="section-title">Delivery Calendar</h2>
+  <p class="lead">A month-at-a-glance grid that shows the signed-in customer every delivery, skip and pause on their own account, painted directly from their real delivery records.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where this screen lives</div><p>The Delivery Calendar is a <b>customer self-service</b> page, not an admin screen. Each customer sees only their own deliveries. It is documented here so a Super Admin understands exactly what the customer is looking at when they call in about a "missing dot" or a "wrong month". Route <span class="navpath">/account/calendar.html</span>, manifest key <b>account/calendar</b>, block type <b>calendar</b>.</p></div></div>
+
+  <!-- ============================================================ SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Delivery Calendar — month grid</p><p class="sm">One printed month showing delivered / missed / upcoming deliveries as coloured day cells.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the customer a single visual view of their delivery history and next scheduled drop, so they can spot at a glance which mornings were delivered, which were skipped or failed, and when milk is coming next.</span></div>
+
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (own account only — the grid is built from deliveries scoped to the signed-in user). A <span class="pill role">Super Admin</span> or <span class="pill role">Admin</span> can view the same page while signed in as a customer, or reproduce it during support by impersonating / exploring the account.</span>
+      <span class="m"><b>Path</b> <span class="navpath">My Account → Deliveries → Calendar</span></span>
+    </div>
+
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Delivery Calendar — <b>June 2026</b> · month navigation <b>‹ Month ›</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Page head</b><span>Title "Delivery Calendar" and the sub-line "See your deliveries, skips and pauses at a glance."</span></div>
+          <div class="wf-cell"><b>Month header</b><span>Current month + year (e.g. "June 2026") on the left; segmented control ‹ / Month / › on the right.</span></div>
+          <div class="wf-cell"><b>Day-of-week row</b><span>Seven single-letter headers: S M T W T F S.</span></div>
+          <div class="wf-cell"><b>Calendar grid</b><span>Blank leading cells to align weekday 1, then one numbered cell per real day of the month, colour-coded by delivery status.</span></div>
+          <div class="wf-cell"><b>Delivered cell</b><span>Green cell with a small dot for every DELIVERED day.</span></div>
+          <div class="wf-cell"><b>Missed / skipped cell</b><span>Amber cell for FAILED or SKIPPED deliveries.</span></div>
+          <div class="wf-cell"><b>Next-delivery cell</b><span>Outlined green box marking the next scheduled delivery day.</span></div>
+          <div class="wf-cell"><b>Today marker</b><span>Today's date carries a dark forest outline so the customer can orient instantly.</span></div>
+          <div class="wf-cell"><b>Legend</b><span>Three keys: ● Delivered, ● Missed / skipped, ◻ Next delivery.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the live Delivery Calendar for a signed-in customer.</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Two render modes — this matters for support</div><p>The page ships a <b>static demo grid</b> (a fixed "June 2026" with sample dots and a paused day) that renders for anyone exploring the site who is <b>not</b> signed in with a real account. The moment a genuine customer is signed in, a live routine (<code>wireCalendar</code>) replaces that whole panel with the customer's real month built from their delivery rows. If a customer says "the calendar shows the wrong month / fake dots", first confirm they are actually logged in — a logged-out browser only ever sees the demo grid.</p></div></div>
+
+      <h3 class="sub">What every day cell means</h3>
+      <p>The live grid maps each delivery's status onto one day cell. Days with no delivery record stay blank (plain white cells). These are the only states the code produces:</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Delivery status</th><th>Cell appearance</th><th>Meaning to the customer</th><th>Backend source</th>
+      </tr></thead><tbody>
+        <tr><td><b>DELIVERED</b></td><td>Green cell with a filled dot</td><td>Milk was delivered that morning.</td><td><code>status = DELIVERED</code></td></tr>
+        <tr><td><b>FAILED</b> or <b>SKIPPED</b></td><td>Amber cell (no dot)</td><td>The delivery could not be completed, or was skipped/paused for that day.</td><td><code>status = FAILED / SKIPPED</code></td></tr>
+        <tr><td><b>SCHEDULED, ASSIGNED, ACCEPTED, PACKED, OUT_FOR_DELIVERY, ON_THE_WAY, REACHED</b></td><td>Green cell (no dot)</td><td>A delivery record exists for that day and is in progress or upcoming.</td><td>any other live status</td></tr>
+        <tr><td><b>Next scheduled delivery</b></td><td>Green cell with an inset outline box</td><td>The very next delivery due today or later — highlighted so the customer knows when milk arrives next.</td><td><code>summary.nextDelivery.date</code></td></tr>
+        <tr><td><b>Today</b></td><td>Dark forest outline around the cell</td><td>"You are here" marker for the current date, layered on top of any status colour.</td><td>device clock (browser date)</td></tr>
+        <tr><td><i>No record</i></td><td>Plain cell, number only</td><td>Nothing scheduled or delivered that day.</td><td>—</td></tr>
+      </tbody></table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">The "Next delivery" outline only shows when today's cell is not already outlined</div><p>Today's forest outline takes priority over the green next-delivery box on the same cell. So when the next delivery is <b>today</b>, the customer sees the "today" outline rather than the "next delivery" box — this is expected, not a bug.</p></div></div>
+
+      <h3 class="sub">Buttons and controls</h3>
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>‹</b> (Previous month)</td><td>Steps the visible month back by one and repaints the grid.</td><td>None — client-side only. Re-uses the delivery rows already loaded; no new request is sent.</td><td><span class="pill role">Customer</span></td></tr>
+        <tr><td><b>Month</b> (centre)</td><td>Active-state label indicating the calendar is in month view. It is not a menu — there is no week or day view.</td><td>None (display only).</td><td><span class="pill role">Customer</span></td></tr>
+        <tr><td><b>›</b> (Next month)</td><td>Steps the visible month forward by one and repaints the grid.</td><td>None — client-side only, same loaded data set.</td><td><span class="pill role">Customer</span></td></tr>
+      </tbody></table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — the calendar has no filters, search, sort, export or pagination</div><p>Unlike the admin data tables in this manual, the Delivery Calendar is a pure visual grid. There is nothing to search, no columns to sort, and no export button. Navigation is limited to the ‹ and › month arrows. If a customer needs a line-by-line list they can export, point them to <b>My Account → Deliveries</b> (the Deliveries table) or their <b>Invoices</b>, not the calendar.</p></div></div>
+
+      <h3 class="sub">Data behind the calendar</h3>
+      <p>The live grid is assembled from two backend calls that fire once when any account page loads (the account hydrator), then cached on the page. The calendar itself sends no requests when you flip months.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Data</th><th>Endpoint</th><th>Fields used</th><th>Scope / security</th>
+      </tr></thead><tbody>
+        <tr><td>Delivery history (each coloured cell)</td><td><code>GET /api/deliveries</code></td><td><code>date</code>, <code>status</code> (also available: <code>slot</code>, <code>deliveredAt</code>, <code>bottlesOut</code>, <code>bottlesIn</code>, <code>bottleCount</code>, <code>driver.name</code>, <code>orderRef</code>, <code>planName</code>, <code>itemsSummary</code>, <code>address</code>)</td><td>Strictly scoped to the signed-in user via <code>subscription.userId</code> OR <code>order.userId</code> — one customer can never see another's deliveries. Returns newest-first, up to 180 rows.</td></tr>
+        <tr><td>Next scheduled delivery (outline box)</td><td><code>GET /api/account/summary</code></td><td><code>nextDelivery.date</code>, <code>nextDelivery.status</code></td><td>The first open-status delivery dated today or later, ordered soonest-first. Open statuses: SCHEDULED, ASSIGNED, ACCEPTED, PACKED, OUT_FOR_DELIVERY, ON_THE_WAY, REACHED.</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">180-row window</div><p><code>/api/deliveries</code> returns at most the 180 most recent deliveries. For a daily subscriber that is roughly the last six months. Flip far enough back and older months will simply show blank cells — the data has scrolled off the window, it was not deleted.</p></div></div>
+
+      <!-- ============================================================ WORKFLOW -->
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — how a delivery becomes a coloured cell</div>
+        <div class="wf-flow">
+          <span>Ops schedules / drivers deliver → Delivery rows get a status</span>
+          <span>Customer opens any account page</span>
+          <span>Hydrator loads /api/deliveries + /api/account/summary</span>
+          <span>Rows cached on the page (raw dates &amp; statuses)</span>
+          <span>Calendar groups rows by day and paints the current month</span>
+          <span>Customer taps ‹ / › to walk months (no reload)</span>
+        </div>
+      </div><div class="wire-cap">Figure — from a real Delivery record to a coloured day on the customer's calendar.</div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best practice — fix the data, not the calendar</div><p>The calendar never invents anything — every dot is a real Delivery row. If a customer's calendar looks wrong (a delivered day showing amber, a missing green dot, or no "next delivery" box), the correct fix is in the operational data: update the delivery's status in <b>Delivery Management</b> or reschedule the subscription. Once the underlying Delivery record is corrected, the customer's calendar reflects it on their next page load. Do not chase it as a display bug.</p></div></div>
+
+      <h3 class="sub">Troubleshooting</h3>
+      <div class="twrap"><table><thead><tr>
+        <th>Symptom</th><th>Likely cause</th><th>Fix</th>
+      </tr></thead><tbody>
+        <tr><td>Calendar shows a fixed "June 2026" with sample dots and a paused day 16.</td><td>The browser is not signed in with a real customer account, so the static demo grid is showing.</td><td>Have the customer log in at <span class="navpath">/login/customer.html</span>. The live grid replaces the demo automatically.</td></tr>
+        <tr><td>All cells are blank — no dots at all for a real customer.</td><td>No delivery records yet, or the backend fetch timed out / the session expired.</td><td>Confirm the customer has an active subscription or a paid order that generated deliveries. Check for the offline banner; a session that expired after a password reset bounces to re-login.</td></tr>
+        <tr><td>A delivered morning shows amber instead of green.</td><td>The Delivery row is marked FAILED or SKIPPED, not DELIVERED.</td><td>Correct the delivery status in Delivery Management; the cell turns green on the customer's next load.</td></tr>
+        <tr><td>No outlined "next delivery" box anywhere.</td><td>There is no open-status delivery dated today or later (subscription paused, ended, or all future days already delivered/failed).</td><td>Verify the subscription is ACTIVE with upcoming deliveries scheduled; the summary endpoint only surfaces a future open delivery.</td></tr>
+        <tr><td>Very old months are empty even though deliveries happened.</td><td>Those rows fell outside the 180 most-recent-deliveries window.</td><td>Expected behaviour. Use the Deliveries list or Invoices for older history.</td></tr>
+      </tbody></table></div>
+
+      <h3 class="sub">FAQ</h3>
+      <h4>Can the customer change a delivery from the calendar (skip, pause, reschedule)?</h4>
+      <p>No. The calendar is read-only. The only interactive controls are the ‹ and › month arrows. Skips, pauses and reschedules are done from <b>My Subscription</b>, and the results then show up here as amber (skipped) or moved dots.</p>
+
+      <h4>Why does today's cell look different from the "next delivery" cell?</h4>
+      <p>They are two separate markers. "Today" is a dark outline that always tracks the current date. "Next delivery" is a green outline box on the soonest upcoming delivery. When both fall on the same day, the "today" marker wins.</p>
+
+      <h4>Does flipping to another month reload data or cost a request?</h4>
+      <p>No. All the customer's delivery rows are loaded once when the account page opens. The ‹ / › arrows only re-draw the grid from that cached data, so month navigation is instant and offline-safe.</p>
+
+      <h4>Can a customer see another customer's deliveries here?</h4>
+      <p>Never. The <code>/api/deliveries</code> query is locked to the signed-in user's own subscriptions and orders, so the calendar can only ever contain that customer's own deliveries.</p>
+
+    </div>
+  </div>
+</section>

@@ -1,0 +1,175 @@
+<section class="sheet" id="account-support">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Customer Module · Support</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Customer Module</span></div>
+  <h2 class="section-title">Support</h2>
+  <p class="lead">The customer's self-service help desk — raise a support ticket, watch its status change as staff work it, and reach DOODLY by WhatsApp, phone or help articles.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where this lives</div><p>This is a <b>Customer-facing</b> screen inside the customer account area at <span class="navpath">Admin → Customer Module → Support</span> (<b>/account/support.html</b>). Every ticket a customer raises here lands in the staff desk at <span class="navpath">Admin → System → Support Tickets</span> (/admin/support.html). A Super Admin uses this page to understand exactly what a customer sees and does; the staff-side triage, assignment and reply tools are documented in the Support Tickets module.</p></div></div>
+
+  <!-- ============================================================ SCREEN 1: Support home -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Support home</p><p class="sm">Raise a ticket, review your open tickets, and jump to live channels — all on one page.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Let a signed-in customer log a written support request and track its progress without calling in, while still offering WhatsApp, phone and help-article shortcuts.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (must be signed in) — a <span class="pill role">Super Admin</span> can view the same page while impersonating or reviewing a customer account.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Customer Module → Support</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Support — <b>Raise a ticket or browse help</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Page header</b><span>Title "Support" and sub-line "Raise a ticket or browse help."</span></div>
+          <div class="wf-cell"><b>"Raise a ticket" form</b><span>Two-column card: Subject, Category (dropdown), Message (full-width). Green "Submit ticket" button.</span></div>
+          <div class="wf-cell"><b>"Your tickets" panel</b><span>Live table of this customer's past tickets — Ticket no., Subject, Category, Status badge, Raised date. Empty state when none.</span></div>
+          <div class="wf-cell"><b>Contact cards (×3)</b><span>Live chat (WhatsApp), Call us (phone), Help articles (Help Center).</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Support home screen (top to bottom: header, ticket form, live ticket list, contact cards)</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">The list you see is live, not the demo table</div><p>The page recipe includes a placeholder "tickets" data table, but on load the account script hides it and injects the real <b>"Your tickets"</b> panel above it, fed by the backend. So a customer never sees stale sample rows — only their own tickets.</p></div></div>
+
+      <!-- ---------- Raise a ticket form ---------- -->
+      <h4>Form — "Raise a ticket"</h4>
+      <p>Three fields, laid out in two columns (the Message box spans the full width). The form submits to the backend as a new ticket; identity (name, email, phone) is taken from the signed-in account and is never typed here.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Subject <span class="mono">(subject)</span></td>
+            <td>A short one-line summary of the problem so staff can scan the queue quickly.</td>
+            <td>Free text.</td>
+            <td class="t-req">Yes</td>
+            <td>Browser + script require it; the client blocks anything shorter than 3 characters. Backend (Zod) enforces trimmed length 3–200; shorter is rejected with "Please add a short subject".</td>
+            <td>Milk not delivered this morning</td>
+          </tr>
+          <tr>
+            <td>Category <span class="mono">(category)</span></td>
+            <td>Buckets the ticket so the desk can route and report on it.</td>
+            <td>Dropdown, one of: <b>Delivery issue</b>, <b>Billing &amp; payments</b>, <b>Bottle return</b>, <b>Subscription</b>, <b>Product quality</b>, <b>Other</b>.</td>
+            <td class="t-opt">Opt.</td>
+            <td>Optional; backend trims and caps at 40 characters, stored as-is. If left blank it shows as "—" in the list.</td>
+            <td>Delivery issue</td>
+          </tr>
+          <tr>
+            <td>Message <span class="mono">(message)</span></td>
+            <td>The full description of the issue — what happened, when, and any order/bottle details.</td>
+            <td>Free text (multi-line textarea, full width).</td>
+            <td class="t-req">Yes</td>
+            <td>Client requires non-empty; backend requires trimmed length 1–20,000 ("Please describe your issue"). This text becomes the first customer message on the ticket thread.</td>
+            <td>My 7 AM delivery didn't arrive and the app still shows "out for delivery".</td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Field names are auto-derived</div><p>The form builder turns each label into a lowercase machine name (Subject → <span class="mono">subject</span>, Category → <span class="mono">category</span>, Message → <span class="mono">message</span>). The submit handler reads those exact names, so renaming a label in the recipe would also rename the field the backend receives.</p></div></div>
+
+      <!-- ---------- Buttons ---------- -->
+      <h4>Buttons &amp; actions</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Submit ticket</b></td>
+            <td>Validates the form, then raises a new support ticket and refreshes the "Your tickets" list. On success a toast reads "Ticket TK-#### raised ✓" and the form clears; on failure it shows the error message.</td>
+            <td><span class="mono">POST /api/account/support</span> with <span class="mono">{ subject, category, message }</span>. The call is intercepted at capture phase so the generic demo form handler never runs — a real record is written every time.</td>
+            <td><span class="pill role">Customer</span></td>
+          </tr>
+          <tr>
+            <td><b>Start chat</b> (card)</td>
+            <td>Opens WhatsApp chat with the DOODLY support line for the fastest reply.</td>
+            <td>Link to <span class="mono">https://wa.me/919117799143</span> — no backend write.</td>
+            <td><span class="pill role">Customer</span></td>
+          </tr>
+          <tr>
+            <td><b>Call now</b> (card)</td>
+            <td>Dials the support phone number from a mobile device.</td>
+            <td>Link to <span class="mono">tel:+919117799143</span>. The displayed number comes from the brand config (<span class="mono">+91 91177 99143</span>).</td>
+            <td><span class="pill role">Customer</span></td>
+          </tr>
+          <tr>
+            <td><b>Browse</b> (card)</td>
+            <td>Opens the public Help Center for self-serve answers on delivery, bottles and billing.</td>
+            <td>Link to <span class="mono">/help.html</span> — no backend write.</td>
+            <td><span class="pill role">Customer</span></td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — support hours &amp; channels</div><p>The brand config publishes support hours of <b>Mon–Sat, 8 AM – 8 PM</b>, a support phone of <b>+91 91177 99143</b>, a WhatsApp line, and the support email <b>doodlyoffl@gmail.com</b>. A ticket can be raised any time; the WhatsApp and phone cards are best used inside those hours.</p></div></div>
+
+      <!-- ---------- Your tickets table ---------- -->
+      <h4>Table — "Your tickets"</h4>
+      <p>Below the form, the page loads the customer's own tickets (newest first) into a live panel. It only ever shows tickets belonging to the signed-in account — the request is filtered server-side by the authenticated user, so no other customer's tickets can appear.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Behaviour (from the code)</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td>Ticket (number, e.g. <span class="mono">TK-2042</span>, bold) · Subject · Category (or "—") · Status (coloured badge) · Raised (created date).</td></tr>
+          <tr><td><b>Status badge colours</b></td><td>Green for <b>Resolved / Closed</b>; blue for <b>In Progress / Assigned</b>; amber for everything else (Open, Waiting for Customer). The badge text is the human status label.</td></tr>
+          <tr><td><b>Sorting</b></td><td>Fixed — newest ticket first (server orders by creation date, descending).</td></tr>
+          <tr><td><b>Filters / Search</b></td><td>None on this customer view — the built-in demo table's toolbar and pager are switched off in the recipe, and the live panel is a plain read-only list.</td></tr>
+          <tr><td><b>Pagination</b></td><td>None shown; the request fetches up to 100 of the customer's tickets in one page.</td></tr>
+          <tr><td><b>Row actions</b></td><td>None — the customer view is read-only. Replies, status changes and assignment happen staff-side in Support Tickets.</td></tr>
+          <tr><td><b>Empty state</b></td><td>"No support tickets yet — Raise a ticket above and we'll get back to you."</td></tr>
+          <tr><td><b>Error state</b></td><td>If the list can't load, a warning reads "Couldn't load your tickets: &lt;reason&gt;" (e.g. offline).</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">What the customer can and cannot see</div><p>The backend deliberately returns only safe fields to the customer: <b>ticket number, subject, category, status &amp; status label, priority &amp; priority label, and the created / updated / resolved dates</b>. Internal details — the assignee, SLA due date, internal notes, resolution text and tags — are never sent to the browser.</p></div></div>
+
+      <!-- ---------- Workflow ---------- -->
+      <h4>Ticket lifecycle</h4>
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — a customer ticket from raise to close</div>
+        <div class="wf-flow">
+          <span>Customer submits form</span>
+          <span>Ticket created — Open, TK-####</span>
+          <span>Staff assign → Assigned</span>
+          <span>Staff work → In Progress</span>
+          <span>Waiting for Customer (if info needed)</span>
+          <span>Resolved</span>
+          <span>Closed</span>
+        </div>
+      </div><div class="wire-cap">Figure — the six ticket statuses. The customer only ever performs the first step; the status badge on this page updates as staff move the ticket forward.</div></div>
+
+      <p>When the form is submitted, the system:</p>
+      <ol>
+        <li>Generates the next ticket number in the form <span class="mono">TK-&lt;n&gt;</span> (the counter starts around <span class="mono">TK-2042</span> and steps forward, skipping any number already used).</li>
+        <li>Creates the ticket with status <b>Open</b> and default priority <b>Medium</b> (the customer form does not set priority).</li>
+        <li>Stamps a target response time behind the scenes based on priority — 4 h Urgent, 8 h High, 24 h Medium, 48 h Low. This SLA is staff-only and is not shown to the customer.</li>
+        <li>Attaches the customer's message as the first entry on the ticket thread, plus a system note recording that the ticket was created.</li>
+        <li>Fills the customer's name, email and phone from their signed-in account — these are trusted from the session, never from the form.</li>
+      </ol>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Coach customers (and support staff onboarding on this page) to pick the most specific <b>Category</b> and write a clear one-line <b>Subject</b>. Good categorisation drives the desk's routing and reporting; a vague "Other / help" ticket is slower to triage. For anything time-critical (missed delivery, payment failure), the <b>Start chat</b> WhatsApp card gets a faster human response than a ticket.</p></div></div>
+
+      <!-- ---------- Troubleshooting ---------- -->
+      <h4>Troubleshooting</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>"Submit ticket" does nothing / shows "Please add a subject and describe your issue."</td><td>Subject is under 3 characters or the Message box is empty.</td><td>Enter a real subject (3+ characters) and a description, then submit again.</td></tr>
+          <tr><td>Ticket list shows "Couldn't load your tickets".</td><td>The device is offline or the backend session isn't authenticated.</td><td>Check the connection and confirm the customer is signed in; reload the page.</td></tr>
+          <tr><td>New ticket doesn't appear after submitting.</td><td>The submit failed (a toast error shows the reason), so no ticket was written.</td><td>Read the toast message, correct the input (e.g. shorten an over-long subject to ≤200 chars), and resubmit.</td></tr>
+          <tr><td>Customer says a ticket "disappeared".</td><td>Staff merged, closed, or soft-deleted it on the desk side.</td><td>Look it up by number in <span class="navpath">Admin → System → Support Tickets</span>; deleted tickets can be restored there.</td></tr>
+          <tr><td>Old sample tickets briefly flash on screen.</td><td>The account script hasn't finished swapping the demo table for the live panel yet.</td><td>This clears on its own once the live list loads; if it persists, hard-refresh to reload the account script.</td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- ---------- FAQ ---------- -->
+      <h4>Q&nbsp;·&nbsp;Can a customer edit or reply to a ticket from this page?</h4>
+      <p>A. Not from here. This screen is for <i>raising</i> a ticket and <i>tracking</i> its status. All replies, status changes and resolution notes are handled by staff in the Support Tickets desk; the customer sees the outcome as an updated status badge.</p>
+
+      <h4>Q&nbsp;·&nbsp;Where does the ticket number come from, and is it unique?</h4>
+      <p>A. The system assigns a sequential <span class="mono">TK-####</span> number at creation and checks for collisions before saving, so each ticket has its own unique number that both the customer and staff use to refer to it.</p>
+
+      <h4>Q&nbsp;·&nbsp;Does raising a ticket set a priority?</h4>
+      <p>A. Every customer ticket starts at <b>Medium</b> priority. Support staff can raise or lower priority (Low / Medium / High / Urgent) on the desk side; the customer sees the current priority label but cannot set it.</p>
+
+      <h4>Q&nbsp;·&nbsp;What's the difference between "Live chat" here and the on-screen assistant?</h4>
+      <p>A. The <b>Live chat</b> card opens WhatsApp to reach a human on the DOODLY support line. That is separate from any in-app assistant widget; use the card when the customer wants a real person quickly, and a ticket when they want a written, tracked record of the issue.</p>
+
+    </div>
+  </div>
+</section>

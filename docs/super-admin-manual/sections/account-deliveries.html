@@ -1,0 +1,234 @@
+<section class="sheet" id="account-deliveries">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Customer Module · Deliveries &amp; Live Tracking</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Customer Module</span></div>
+  <h2 class="section-title">Deliveries &amp; Live Tracking</h2>
+  <p class="lead">The customer's own record of every milk delivery — upcoming, delivered and skipped — plus a live, minute-by-minute tracking screen that follows the bottle from the farm to the doorstep.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Who sees this</div>
+    <p>These are two <b>customer-facing</b> account screens (<span class="navpath">/account/deliveries.html</span> and <span class="navpath">/account/tracking.html</span>). Every request is scoped strictly to the signed-in customer — the backend filters on <b>subscription.userId</b> OR <b>order.userId</b>, so one customer can never see another customer's deliveries. A Super Admin does not open these pages for a customer directly; the same delivery records are managed operationally under <span class="navpath">Admin → Operations → Delivery Mgmt</span>. This section documents exactly what the customer experiences so support staff can guide them accurately.</p></div></div>
+
+  <!-- ============================================================ SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Deliveries</p><p class="sm">A searchable, filterable ledger of the customer's upcoming and past deliveries.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the customer a complete, self-service history of every delivery tied to their subscriptions and one-off orders, with a quality summary and one tap to live tracking.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (own account only) · <span class="pill role">Super Admin</span> reviews the same data via Delivery Mgmt</span>
+      <span class="m"><b>Path</b> <span class="navpath">My Account → Deliveries → Deliveries</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Deliveries</b> · "Upcoming and past deliveries." · <b>Track live</b> button</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Page head</b><span>Title, sub-line and a primary "Track live" button (pin icon) that opens the Delivery Tracking screen</span></div>
+          <div class="wf-cell"><b>Your delivery quality</b><span>Small stat strip — Deliveries · On-time · Late · Avg time · Apologies — for the last 30 days</span></div>
+          <div class="wf-cell"><b>Deliveries table</b><span>Order · Date · Slot · Products · Executive · Status — with search, filters, sort, export and pagination</span></div>
+          <div class="wf-cell"><b>Toolbar</b><span>Search box, Filters panel (auto-detected on Status), Export ▾ (CSV / Excel / PDF)</span></div>
+          <div class="wf-cell"><b>Empty state</b><span>Truck icon, "No deliveries yet", with "Browse products" and "Subscribe now" buttons</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 1 — Labelled layout of the Deliveries screen (page head, quality strip, data table).</div></div>
+
+      <h4>The "Your delivery quality" strip</h4>
+      <p>Directly under the page head, the <b>lateCustomerStats</b> block mounts a compact card titled <b>"Your delivery quality — last 30 days"</b>. For a real signed-in customer it is computed live from their own hydrated deliveries (<b>_rawDeliveries</b>) measured against DOODLY's <b>7:00 AM delivery promise</b>; it never shows the demo sample once a real customer is logged in.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Stat</th><th>What it means</th><th>How it is calculated</th></tr></thead>
+        <tbody>
+          <tr><td><b>Deliveries</b></td><td>Total deliveries on record for the customer</td><td>Count of all rows in <b>_rawDeliveries</b></td></tr>
+          <tr><td><b>On-time</b></td><td>Delivered at or before 7:00 AM</td><td>Delivered rows whose <b>deliveredAt</b> time is ≤ 07:00 (green tone)</td></tr>
+          <tr><td><b>Late</b></td><td>Delivered after the 7:00 AM promise</td><td>Delivered rows with <b>deliveredAt</b> after 07:00 (red tone when &gt; 0)</td></tr>
+          <tr><td><b>Avg time</b></td><td>Average clock time deliveries actually arrived</td><td>Mean of all delivered <b>deliveredAt</b> times, shown as HH:MM</td></tr>
+          <tr><td><b>Apologies</b></td><td>Apology messages auto-sent for late arrivals</td><td>Equal to the Late count — DOODLY sends one apology per late delivery</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Friendly note under the strip</div>
+        <p>The card ends with a sentence that adapts to the numbers: if there are no deliveries yet it reads "Your delivery quality will appear here once your deliveries begin."; if there were late deliveries it names how many apology messages were sent; if everything was on time it reads "Every delivery arrived before our 7:00 AM promise. 🥛".</p></div></div>
+
+      <h4>The Deliveries table</h4>
+      <p>The main block is the unified DataTable engine bound to the <b>deliveries</b> dataset. Each row is one delivery. The data is fetched from <b>GET /api/deliveries</b> (newest-first, up to 180 rows) and hydrated into the table by <b>hydrateAccount()</b>.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>What it shows</th><th>Source field / mapping</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Order</b></td><td>The order or plan the delivery belongs to</td><td><b>orderRef</b> (e.g. DOO-3F9A21) → else plan name → else "#" + last 6 of the delivery id</td><td>DOO-3F9A21</td></tr>
+          <tr><td><b>Date</b></td><td>The delivery date, in plain words</td><td>Relative label from <b>date</b>: Today / Tomorrow / Yesterday, otherwise "DD Mon"</td><td>Tomorrow</td></tr>
+          <tr><td><b>Slot</b></td><td>When it was (or will be) delivered</td><td>Delivered time from <b>deliveredAt</b>; else the <b>slot</b>; else "—"</td><td>6:40 AM</td></tr>
+          <tr><td><b>Products</b></td><td>What was delivered</td><td><b>itemsSummary</b> (order items or subscription items) → else plan name → else "—"</td><td>A2 Buffalo Milk 1000 ml</td></tr>
+          <tr><td><b>Executive</b></td><td>The delivery executive who handled it</td><td><b>driver.name</b> → else "—" when unassigned</td><td>Ramesh K.</td></tr>
+          <tr><td><b>Status</b></td><td>Colour-coded delivery state</td><td>Badge derived from the delivery <b>status</b> (see status table below)</td><td>Scheduled</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Status badges</h4>
+      <p>The raw backend <b>DeliveryStatus</b> is translated into a friendly, colour-coded badge (the <b>DEL_STATUS</b> map). Support staff should know every mapping:</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Badge (colour)</th><th>Meaning to the customer</th><th>Backend status(es)</th></tr></thead>
+        <tbody>
+          <tr><td><b>Scheduled</b> (amber)</td><td>Booked, not yet started</td><td><b>SCHEDULED</b> (and any unmapped state)</td></tr>
+          <tr><td><b>Assigned</b> (blue)</td><td>A delivery executive has been allocated</td><td><b>ASSIGNED</b></td></tr>
+          <tr><td><b>Preparing</b> (blue)</td><td>Accepted and packed at the hub</td><td><b>ACCEPTED</b>, <b>PACKED</b></td></tr>
+          <tr><td><b>Out for delivery</b> (amber)</td><td>On the way to the doorstep</td><td><b>OUT_FOR_DELIVERY</b>, <b>ON_THE_WAY</b>, <b>REACHED</b></td></tr>
+          <tr><td><b>Delivered</b> (green)</td><td>Completed successfully</td><td><b>DELIVERED</b></td></tr>
+          <tr><td><b>Skipped</b> (grey)</td><td>Skipped for that day (e.g. a pause)</td><td><b>SKIPPED</b></td></tr>
+          <tr><td><b>Failed</b> (red)</td><td>Could not be completed</td><td><b>FAILED</b></td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Table controls (the DataTable engine)</h4>
+      <p>The Deliveries table is powered by the shared DataTable engine, so it carries the same rich controls as every other DOODLY list.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Control</th><th>Behaviour</th></tr></thead>
+        <tbody>
+          <tr><td><b>Search</b></td><td>Instant free-text search across every visible column (placeholder "Search deliveries…").</td></tr>
+          <tr><td><b>Filters</b></td><td>Facet filters are auto-detected from enum-like columns — in practice the <b>Status</b> column, so the customer can tick Scheduled / Delivered / Skipped / Out for delivery, etc. (The screen's configured filter hint is All · Scheduled · Delivered · Skipped.) Active filters show as removable chips.</td></tr>
+          <tr><td><b>Sort</b></td><td>Click any column header to sort; multi-column sort is supported.</td></tr>
+          <tr><td><b>Date range</b></td><td>A date-range preset picker plus a custom From/To range (auto-enabled because the Date column is a date field).</td></tr>
+          <tr><td><b>Saved filters &amp; favorites</b></td><td>The customer's search/filter/sort/page-size view is remembered per user in local storage; saved filters and favorites are available.</td></tr>
+          <tr><td><b>Export</b></td><td>Export ▾ menu offers CSV (.csv), Excel (.xls) and PDF. (Export is permission-gated for admin tables; on the customer's own deliveries it is available.)</td></tr>
+          <tr><td><b>Pagination</b></td><td>Paged list, default 25 rows per page, with a pager below the table.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Buttons on this screen</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Track live</b> (page head)</td><td>Opens the Delivery Tracking screen for the customer's active delivery</td><td>Navigates to <span class="navpath">/account/tracking.html</span> (no write)</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Export ▾</b> (CSV / Excel / PDF)</td><td>Downloads the current (filtered) delivery list</td><td>Client-side export of the loaded rows</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Browse products</b> (empty state)</td><td>Sends a customer with no deliveries to the catalogue</td><td>Navigates to <span class="navpath">/products.html</span></td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td><b>Subscribe now</b> (empty state)</td><td>Starts a recurring milk subscription</td><td>Navigates to <span class="navpath">/subscriptions.html</span></td><td><span class="pill role">Customer</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where the data comes from</div>
+        <p><b>GET /api/deliveries</b> joins each Delivery to its subscription/order, and returns: id, date, status, slot, sequence, deliveredAt, bottlesOut, bottlesIn, bottleCount, customerRemark, driver name, order reference, plan name, an items summary and the formatted delivery address. The Deliveries table only surfaces six of these; the rest feed the Tracking and Calendar screens.</p></div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div>
+        <p>When a customer disputes a delivery, ask them to open <b>Deliveries</b>, filter Status to the state in question (e.g. Skipped or Failed) and read out the <b>Order</b> reference (DOO-…). That reference maps one-to-one to the row a Super Admin opens under Delivery Mgmt, so both sides are looking at the exact same delivery.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Delivery Tracking</p><p class="sm">A live, stage-by-stage view of today's delivery with the executive, an ETA and a moving map.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Let the customer watch a single delivery progress in real time — from "Scheduled" through "Out for delivery" to "Delivered" — and, while it is en route, see the executive's live position on a map.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (own active delivery only)</span>
+      <span class="m"><b>Path</b> <span class="navpath">My Account → Deliveries → Delivery Tracking</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Delivery Tracking</b> · headline updates live with the delivery state</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Live headline</b><span>Sentence that changes with status — "on the way", "arrived", "Delivered … ✓", or a miss notice</span></div>
+          <div class="wf-cell"><b>Progress timeline</b><span>Four stages: Scheduled → Packed at the farm → Out for delivery → Delivered (or "Not delivered")</span></div>
+          <div class="wf-cell"><b>Driver &amp; proof panel</b><span>Executive avatar + name, Delivery ID, Status, ETA / Delivered-at time, and bottle counts</span></div>
+          <div class="wf-cell"><b>Live map</b><span>Destination pin plus the executive's moving GPS marker while the delivery is en route</span></div>
+          <div class="wf-cell"><b>Empty state</b><span>"Nothing to track yet" until the customer's first delivery begins</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 2 — Labelled layout of the Delivery Tracking screen (two columns: timeline + driver/map panel).</div></div>
+
+      <h4>Which delivery is shown</h4>
+      <p>The tracking screen (<b>wireTracking()</b>) picks <b>today's</b> delivery from the customer's real rows; if there is none for today it falls back to the newest delivery on record. It then computes a stage index from the delivery status:</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Stage index</th><th>Timeline node reached</th><th>Backend status(es)</th></tr></thead>
+        <tbody>
+          <tr><td><b>0</b></td><td>Scheduled</td><td>SCHEDULED / ASSIGNED (anything not below)</td></tr>
+          <tr><td><b>1</b></td><td>Packed at the farm</td><td><b>PACKED</b>, <b>ACCEPTED</b></td></tr>
+          <tr><td><b>2</b></td><td>Out for delivery</td><td><b>OUT_FOR_DELIVERY</b>, <b>ON_THE_WAY</b>, <b>REACHED</b></td></tr>
+          <tr><td><b>3</b></td><td>Delivered</td><td><b>DELIVERED</b></td></tr>
+        </tbody>
+      </table></div>
+      <p>If the status is <b>FAILED</b> or <b>SKIPPED</b>, the final node flips to <b>"Not delivered"</b> (a warning state) — "Skipped for this day" for a skip, or "We missed you — we'll make it right" for a failure.</p>
+
+      <h4>The live headline</h4>
+      <p>The sentence under the page title reflects the exact state:</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Situation</th><th>Headline shown</th></tr></thead>
+        <tbody>
+          <tr><td>Missed / skipped</td><td>"We couldn't complete your delivery <i>&lt;day&gt;</i> — our team has been notified."</td></tr>
+          <tr><td>Delivered</td><td>"Delivered <i>&lt;day&gt;</i> at <i>&lt;time&gt;</i> ✓"</td></tr>
+          <tr><td>Executive has arrived (REACHED)</td><td>"Your delivery executive has arrived 🏠"</td></tr>
+          <tr><td>On the way</td><td>"Your bottle is on the way — arriving before 7 AM."</td></tr>
+          <tr><td>Scheduled</td><td>"Your next delivery is scheduled <i>&lt;for today / day&gt;</i>, before 7 AM."</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The Driver &amp; proof panel</h4>
+      <p>The right-hand panel is rebuilt from the real delivery record:</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>What it shows</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td><b>Executive</b></td><td>Avatar (initials) + name, labelled "Your delivery executive"</td><td><b>driver.name</b> → "Assigning…" if none yet</td></tr>
+          <tr><td><b>Delivery ID</b></td><td>Short reference for the delivery</td><td>"D-" + last 6 of the delivery id (upper-case)</td></tr>
+          <tr><td><b>Status</b></td><td>Skipped / Missed / Delivered / On the way / Scheduled</td><td>Derived from the delivery status + stage</td></tr>
+          <tr><td><b>ETA / Delivered at</b></td><td>"Delivered at &lt;time&gt;" once done, otherwise "Before 7 AM"</td><td><b>deliveredAt</b> time, or the 7 AM promise</td></tr>
+          <tr><td><b>Bottles</b></td><td>"&lt;n&gt; out · &lt;n&gt; collected" (only when bottle data exists)</td><td><b>bottlesOut</b> / <b>bottlesIn</b></td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The live map</h4>
+      <p>The map card upgrades from a placeholder to a real map whenever a location is available. It calls <b>GET /api/account/tracking</b> immediately and then <b>re-polls every 20 seconds</b> until the delivery is finished or the customer leaves the page. The endpoint returns:</p>
+      <ul>
+        <li><b>dest</b> — the delivery address coordinates. If the saved address has no pin, the backend geocodes it once (keyless) and caches the result on the Address, so a destination marker appears even without a Google Maps key.</li>
+        <li><b>driver</b> — the executive's live GPS (lat/lng/lastSeenAt), but <b>only while the delivery is en route</b> (status OUT_FOR_DELIVERY, ON_THE_WAY or REACHED). Otherwise the driver position is never exposed.</li>
+        <li><b>active</b>, <b>deliveryId</b>, <b>status</b>, <b>enRoute</b> flags that drive the map state.</li>
+      </ul>
+      <p>The map shows a "…is on the way" label with an "updated Ns/Nm ago" freshness stamp derived from <b>lastSeenAt</b>. Polling stops automatically once the delivery is delivered or no longer active (the drawn map stays on screen).</p>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — a delivery's journey on the Tracking screen</div>
+        <div class="wf-flow"><span>Scheduled</span><span>Packed at the farm</span><span>Out for delivery (map goes live)</span><span>Reached / Arrived</span><span>Delivered ✓ (polling stops)</span></div>
+      </div><div class="wire-cap">Figure 3 — The stage flow the timeline and headline walk through; the executive's GPS marker only appears from "Out for delivery" onward.</div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Privacy — driver location is gated</div>
+        <p>The executive's live GPS is returned <b>only</b> for a delivery that is actively out for delivery to that specific customer. It is never shown for scheduled, packed, delivered, skipped or failed deliveries. Do not promise a customer "live driver tracking" before their bottle is on the way.</p></div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Related: the Live Order banner</div>
+        <p>DOODLY also has a rich live-order banner (order-confirmed → preparing → quality check → packed → out for delivery → delivered, with a moving van animation). That banner is mounted on the <b>account dashboard</b> home, not on the Deliveries page. From the Deliveries page the customer reaches live tracking via the <b>Track live</b> button.</p></div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div>
+        <p>If a customer says the map is blank, first confirm their delivery status is actually <b>Out for delivery / On the way / Reached</b>. Before that stage there is intentionally no driver marker — only the destination pin (once the address has coordinates) will show.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOTING -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common questions support staff field about Deliveries and Live Tracking.</p></div>
+    <div class="spec-body">
+
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>Deliveries table is empty with "No deliveries yet"</td><td>Customer has never placed an order or started a subscription (no Delivery rows)</td><td>Guide them to Browse products / Subscribe now; deliveries appear once the first one is scheduled.</td></tr>
+          <tr><td>Deliveries page shows nothing and a "backend unreachable" banner</td><td>Account data failed to hydrate (offline / cold-start timeout) — the app shows empty, never demo data</td><td>Refresh; if it persists check the backend is reachable. The list repopulates once <b>/api/deliveries</b> succeeds.</td></tr>
+          <tr><td>Executive column shows "—"</td><td>No delivery executive has been assigned yet</td><td>Normal before assignment; the name fills in once Auto Assignment / Delivery Mgmt allocates a driver.</td></tr>
+          <tr><td>Tracking map stays a placeholder</td><td>Delivery is not en route yet, or the address has no coordinates and geocoding hasn't cached a pin</td><td>Wait until status is Out for delivery; the destination pin appears once the address is geocoded (automatic, keyless).</td></tr>
+          <tr><td>Tracking shows "Nothing to track yet"</td><td>Customer has no delivery rows at all</td><td>Same as the empty Deliveries table — deliveries begin after the first order/subscription.</td></tr>
+          <tr><td>"Your delivery quality" shows the wrong figures</td><td>Viewing while not fully signed in (sample) vs. signed-in (real)</td><td>Ensure the customer is logged in; the strip then uses their own records against the 7:00 AM promise.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Why does a delivery show a time in the Slot column but others show "—"?</h4>
+      <p>The Slot column prefers the actual <b>deliveredAt</b> time once a delivery is completed. Before delivery it shows the scheduled slot; if neither exists it shows "—".</p>
+
+      <h4>What is the difference between "Skipped" and "Failed"?</h4>
+      <p><b>Skipped</b> (grey) means the delivery was intentionally not made for that day — for example during a subscription pause. <b>Failed</b> (red) means an attempted delivery could not be completed; the tracking screen tells the customer the team has been notified.</p>
+
+      <h4>Can a customer track someone else's delivery with a delivery ID?</h4>
+      <p>No. Every delivery and tracking request is filtered to the authenticated user's own subscriptions and orders on the server, so a shared or guessed ID returns nothing for another account.</p>
+
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — these are read-only customer views</div>
+        <p>The Deliveries and Tracking screens do not let the customer edit, cancel or reassign a delivery. Any operational change (reassigning an executive, marking delivered, resolving a failed delivery) must be done by staff under <span class="navpath">Admin → Operations → Delivery Mgmt</span>. Never tell a customer they can change a delivery from these pages.</p></div></div>
+
+    </div>
+  </div>
+
+</section>

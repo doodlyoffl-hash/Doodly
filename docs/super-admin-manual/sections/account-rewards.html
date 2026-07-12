@@ -1,0 +1,367 @@
+<section class="sheet" id="account-rewards">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Customer Module · Rewards (Pure Rewards)</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Customer Module</span></div>
+  <h2 class="section-title">Rewards (Pure Rewards)</h2>
+  <p class="lead">The customer's DOODLY Pure Rewards page — their loyalty tier, points balance, live tier progress, expiring-points warnings, a one-tap "redeem points to wallet" tool, the full list of ways to earn, every tier's benefits, and a complete points history — all driven by the server-authoritative loyalty ledger.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Where this screen lives — and where staff configure it</div>
+      <p>This is a <b>customer-facing</b> page. A signed-in customer opens it from the account sidebar under <span class="navpath">Rewards → Rewards</span> (URL <code>/account/rewards.html</code>). Everything on it is <b>display + the redeem action</b> — the points ledger, tiers, earning rates and expiry are all decided on the server. A Super Admin never edits reward rates from here; staff use the separate <b>Admin loyalty module</b> (the <code>#loyaltyAdminMount</code> screen backed by <code>/api/admin/loyalty/config</code>, <code>/members</code> and <code>/adjust</code>) to change earning rates, tiers, redemption ratio, expiry and to grant or deduct a member's points. This manual page documents what the customer sees so support staff can walk a caller through it and read exactly the same numbers.</p>
+    </div>
+  </div>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">How the page is assembled (from the route manifest)</div>
+      <p>The <code>account/rewards</code> route stacks three blocks in order: a <b>heading</b> ("DOODLY Pure Rewards — The more you stay fresh, the more you're rewarded."), the <b>loyaltyProgram</b> block (mount <code>#loyaltyMount</code>, built by <code>loyalty.js</code>), and a <b>puzzleCard</b> block (the Monthly Puzzle Challenge card, mount <code>#puzzleCardMount</code>). This section documents the loyaltyProgram — the main rewards experience — plus the compact rewards card that appears on the account dashboard.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">DOODLY Pure Rewards (full programme page)</p>
+      <p class="sm">Tier hero, points KPIs, redeem-to-wallet tool, "earn more" grid, tier ladder, points history and the FAQ / terms — all on one page.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Show the customer their tier, points and rewards, and let them turn points into DOODLY Wallet credit.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (own rewards only) · viewable by <span class="pill role">Super Admin</span> for support</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → Rewards → Rewards</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">DOODLY Pure Rewards — <b>tier hero</b> · redeem to wallet · earn more · history</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Tier hero</b><span>Animated farm scene (🐃🥛🍃), tier badge + name (e.g. "Fresh Member"), big available-points number, progress bar, and "X / Y points · N points to &lt;next tier&gt;" (or "Top tier unlocked 🎉")</span></div>
+          <div class="wf-cell"><b>Campaign banner</b><span>Only when a bonus campaign is live: "✨ Bonus campaign live — earn X% extra points until &lt;date&gt;"</span></div>
+          <div class="wf-cell"><b>KPI row</b><span>4 tiles: Available points · Redeemable value (₹) · Lifetime earned · Lifetime redeemed</span></div>
+          <div class="wf-cell"><b>Expiring notice</b><span>Only when points expire within 30 days: "⏳ N points expiring within 30 days — next M on &lt;date&gt; (D days)"</span></div>
+          <div class="wf-cell"><b>Redeem panel</b><span>Preset chips (100 / 500 / 1000 / 2000 / all), a points input with live "= ₹X", and a "Redeem to wallet" button — or a "Keep earning!" state below the minimum</span></div>
+          <div class="wf-cell"><b>Earn more grid</b><span>13 ways to earn, each with its emoji and current points value from config</span></div>
+          <div class="wf-cell"><b>Tiers &amp; benefits</b><span>The tier ladder (Fresh / Silver / Gold / Platinum) with each tier's minimum points and benefit list; current tier shows a "You" chip</span></div>
+          <div class="wf-cell"><b>Rewards history</b><span>Table of the last 40 points events (Activity · Points ± · When)</span></div>
+          <div class="wf-cell"><b>FAQ &amp; terms</b><span>Two collapsible panels: Frequently asked questions and Rewards terms &amp; conditions</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the customer Rewards page (top to bottom).</div></div>
+
+      <h4>What the page loads</h4>
+      <p>On open, a signed-in customer first sees a skeleton, then the page calls <code>GET /api/account/rewards</code> and renders from the returned <code>rewards</code> summary. The summary is cached for 20 seconds client-side and force-refreshed after any redeem. Guests and demo visitors never see another customer's data — the page self-gates (see states below).</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Backend field (<code>/api/account/rewards</code>)</th><th>Shown as</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>enabled</code></td><td>Whole page on/off</td><td>Master switch (<code>LoyaltyConfig.enabled</code>). When off, the page shows a friendly "taking a short break" panel instead.</td></tr>
+          <tr><td><code>points.available</code></td><td>Hero "available points" + Available-points KPI</td><td>Spendable points balance (cached on <code>User.loyaltyPoints</code>).</td></tr>
+          <tr><td><code>points.lifetimeEarned</code></td><td>Lifetime-earned KPI + progress numerator</td><td>All points ever earned — this is what drives the tier (redeeming never lowers it).</td></tr>
+          <tr><td><code>points.lifetimeRedeemed</code></td><td>Lifetime-redeemed KPI</td><td>All points ever converted to wallet credit.</td></tr>
+          <tr><td><code>tier</code> {key, name, min, benefits}</td><td>Hero tier badge + name</td><td>The member's current tier, derived from lifetime earned.</td></tr>
+          <tr><td><code>nextTier</code> {name, min, pointsAway, progressPct}</td><td>Progress bar + "N points to &lt;tier&gt;"</td><td>The next tier up and how far away it is; <code>null</code> at the top tier.</td></tr>
+          <tr><td><code>allTiers[]</code></td><td>Tiers &amp; benefits ladder</td><td>Every configured tier with its threshold and benefit list.</td></tr>
+          <tr><td><code>redemption.pointsPerRupee</code></td><td>"X points = ₹1" + input step</td><td>Conversion ratio (default 10 points = ₹1).</td></tr>
+          <tr><td><code>redemption.minRedeemPoints</code></td><td>"min N points"</td><td>Smallest redemption allowed (default 100).</td></tr>
+          <tr><td><code>redemption.redeemablePaise</code></td><td>Redeemable-value KPI (₹)</td><td>What the available points are worth right now, rounded down to whole rupees.</td></tr>
+          <tr><td><code>expiring.within30Days / nextExpiryAt / nextExpiryPoints</code></td><td>Expiring notice</td><td>Points due to expire within 30 days, and the date/size of the very next expiry.</td></tr>
+          <tr><td><code>earnRules</code></td><td>"Earn more points" grid</td><td>The 13 current earning values (see the Earn table).</td></tr>
+          <tr><td><code>campaign</code> {multiplier, endsAt}</td><td>Campaign banner</td><td>Present only when a bonus multiplier &gt; 1 is live and not past its end date.</td></tr>
+          <tr><td><code>history[]</code></td><td>Rewards history table</td><td>The last 40 ledger rows, newest first (type, kind, points, description, dates).</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Page states (what the customer sees when)</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>State</th><th>What shows</th><th>Trigger</th></tr></thead>
+        <tbody>
+          <tr><td>Guest / not signed in</td><td>"Join DOODLY Pure Rewards" panel with a 🥇 badge and a <b>Sign in</b> button → <span class="navpath">/login/customer.html</span></td><td>No real signed-in customer id (guest or demo <code>static-</code> user).</td></tr>
+          <tr><td>Loading</td><td>Skeleton lines in a panel</td><td>While the summary is being fetched.</td></tr>
+          <tr><td>Programme off</td><td>"Rewards are taking a short break" panel — "Your points are safe and will be here when it returns."</td><td><code>enabled = false</code> in config.</td></tr>
+          <tr><td>Fetch failed</td><td>Amber notice: "Couldn't load your rewards right now — please try again shortly."</td><td>The API call errored or returned nothing.</td></tr>
+          <tr><td>Normal</td><td>The full programme (hero → history → FAQ)</td><td>Signed-in customer, programme on, summary loaded.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Tier hero &amp; progress</h4>
+      <p>The hero shows the tier badge and name, the big <b>available-points</b> number, and a progress bar filled to <code>nextTier.progressPct</code>. Below it: "<code>lifetimeEarned</code> / <code>nextTier.min</code> points" and "<b>pointsAway</b> points to &lt;next tier&gt;". At the top tier the bar is full and it reads "You've reached &lt;tier&gt; — Top tier unlocked 🎉". The tier icon set is 🥉 Fresh · 🥈 Silver · 🥇 Gold · 💎 Platinum. Tier follows <b>lifetime earned</b>, so spending points never demotes a member.</p>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Bonus campaign banner</div>
+          <p>When an admin sets a <code>campaignMultiplier</code> above 1 with a future <code>campaignEndsAt</code>, a banner appears: "✨ Bonus campaign live — earn X% extra points until &lt;date&gt;", where X = (multiplier − 1) × 100 (a 1.05 multiplier shows "5% extra"). The multiplier only boosts <b>spend/activity</b> earns that opt in (order points, subscribe and renewal), not fixed one-off bonuses.</p>
+        </div>
+      </div>
+
+      <h4>KPI row</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Tile</th><th>Shows</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td>Available points</td><td>Points the customer can redeem now</td><td><code>points.available</code></td></tr>
+          <tr><td>Redeemable value</td><td>Those points in ₹ (whole rupees)</td><td><code>redemption.redeemablePaise</code> = ⌊available ÷ ratio⌋ × ₹1</td></tr>
+          <tr><td>Lifetime earned</td><td>All points ever earned</td><td><code>points.lifetimeEarned</code></td></tr>
+          <tr><td>Lifetime redeemed</td><td>All points ever spent</td><td><code>points.lifetimeRedeemed</code></td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Expiring-points notice</h4>
+      <p>Shown only when <code>expiring.within30Days &gt; 0</code>: "⏳ <b>N</b> points expiring within 30 days — next <b>M</b> on &lt;date&gt; (D days). Redeem them for wallet credit below." Points are lots that each expire 12 months after they were earned; the server's expiry cron zeroes past-due lots and sends 30-day and 7-day reminders (in-app + email, and WhatsApp where opted in).</p>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 : REDEEM -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Redeem points (points → wallet credit)</p>
+      <p class="sm">The one action on the page: turn points into DOODLY Wallet credit at the configured ratio, subject to a minimum and whole-rupee rule.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Let the customer convert points into spendable wallet credit, validated end-to-end on the server.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (own points only)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → Rewards → Rewards → Redeem points</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Redeem points — <b>"10 points = ₹1 · min 100 points"</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Preset chips</b><span>Quick amounts 100 / 500 / 1000 / 2000 pts (only those ≥ minimum and ≤ your balance), plus an "all" chip for your whole redeemable balance — each shows "= ₹X"</span></div>
+          <div class="wf-cell"><b>Amount field</b><span>Number input (min = minimum, max = available, step = ratio) with a live "= ₹X" value beside it</span></div>
+          <div class="wf-cell"><b>Redeem button</b><span>"Redeem to wallet" — posts the redemption; inline message shows success or the exact error</span></div>
+          <div class="wf-cell"><b>Below-minimum state</b><span>If the balance is under the minimum: a "Keep earning!" card — "You need at least N points to redeem. You have M."</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the redeem panel and its below-minimum fallback.</div></div>
+
+      <h4>Fields</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Preset chip</td><td>One-tap points amount</td><td>100, 500, 1000, 2000, or "all" — only chips that are ≥ minimum and ≤ your balance appear</td><td class="t-opt">Opt.</td><td>Fills the amount field; still re-checked against the rules below</td><td>500 pts = ₹50</td></tr>
+          <tr><td>Points to redeem</td><td>How many points to convert</td><td>Whole number from <code>minRedeemPoints</code> (100) up to your available balance, in steps of the ratio (10)</td><td class="t-req">Yes</td><td>Client checks: ≥ minimum, ≤ available, and a multiple of the ratio. Server (<code>redeemPoints</code>) re-enforces all three plus the programme on/off switch.</td><td>750</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">The maths (default config)</div>
+          <p>The ratio is <b>10 points = ₹1</b> and the minimum is <b>100 points</b> (both admin-tunable). Credit = (points ÷ ratio) × ₹1, so 750 points → ₹75. Points must convert to a <b>whole rupee</b> — the input steps by the ratio and the server rejects any amount that isn't an exact multiple. The credit lands in the customer's <b>DOODLY Wallet</b> (a <code>WalletTxn</code> of kind "loyalty"), so it can then be spent on any order, renewal or top-up.</p>
+        </div>
+      </div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Preset chip (e.g. "500 pts = ₹50")</td><td>Fills the amount field with that value and highlights the chip</td><td>Client only</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>Redeem to wallet</td><td>Submits the redemption; button shows "Redeeming…" while it works</td><td><code>POST /api/account/rewards/redeem</code> with <code>{ points }</code> → server validates, consumes points-lots oldest-expiry-first (FIFO), and credits the wallet — all in one serializable transaction</td><td><span class="pill role">Customer</span></td></tr>
+          <tr><td>(on success)</td><td>Toast "₹X added to your wallet 🎉", refreshes the wallet, and re-renders the card + this page with the new balances</td><td>Cache invalidated; wallet panel refreshed</td><td><span class="pill role">Customer</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — redeem points to wallet</div>
+        <div class="wf-flow">
+          <span>Pick a preset or type points</span>
+          <span>Live "= ₹X" preview</span>
+          <span>Redeem to wallet</span>
+          <span>Server checks on/off · min · whole-rupee · balance</span>
+          <span>FIFO consume oldest-expiry lots</span>
+          <span>Wallet credited (WalletTxn "loyalty")</span>
+          <span>Points + wallet balances update instantly</span>
+        </div>
+      </div><div class="wire-cap">Figure — redemption is entirely server-authoritative; the client only sends the points amount.</div></div>
+
+      <h4>Redemption errors (server messages)</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Reason code</th><th>Message the customer sees</th><th>Cause</th></tr></thead>
+        <tbody>
+          <tr><td><code>disabled</code></td><td>"The rewards programme is currently unavailable."</td><td>Programme switched off between page load and redeem.</td></tr>
+          <tr><td><code>invalid_amount</code></td><td>"Enter a valid number of points to redeem."</td><td>Zero or non-positive amount.</td></tr>
+          <tr><td><code>below_min</code></td><td>"That's below the minimum redemption."</td><td>Fewer than <code>minRedeemPoints</code>.</td></tr>
+          <tr><td><code>not_whole_rupee</code></td><td>"Points must convert to a whole rupee amount."</td><td>Amount isn't a multiple of the ratio.</td></tr>
+          <tr><td><code>insufficient</code></td><td>"You don't have enough points for that."</td><td>More than the available balance.</td></tr>
+          <tr><td><code>error</code></td><td>"Couldn't process the redemption. Please try again."</td><td>Unexpected server error.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">Best Practice — idempotent, so a retry never double-spends</div>
+          <p>Every redemption is recorded as a unique ledger row and mirrored to a single wallet credit. If a caller taps "Redeem" twice or their connection drops after the credit posted, the server returns the <b>original</b> credit instead of spending points again. When helping a customer who is unsure whether a redemption went through, check their Wallet history for a "Loyalty redemption" credit before re-attempting — don't advise a second redeem.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3 : EARN / TIERS / HISTORY -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Earn more · Tiers &amp; benefits · Rewards history</p>
+      <p class="sm">The reference sections below the redeem tool — how to earn, what each tier gives, and every points event.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Explain how points are earned and spent, and give the customer a full, auditable record of their points.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (own data) · viewable by <span class="pill role">Super Admin</span> for support</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → Rewards → Rewards</span></span>
+    </div>
+    <div class="spec-body">
+
+      <h4>Earn more points (13 ways)</h4>
+      <p>Each row reads its live value from config; the values below are the defaults. All earns are awarded <b>automatically on the server</b> after the qualifying action succeeds — the customer never claims them manually — and each is idempotent (fires at most once per event).</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Way to earn</th><th>Default points</th><th>Config field</th><th>When it fires</th></tr></thead>
+        <tbody>
+          <tr><td>🥛 Every ₹100 spent</td><td>10 pts / ₹100</td><td><code>pointsPerHundred</code></td><td>On a paid order, computed on product spend (order total minus refundable deposit and coupon discount). Campaign multiplier applies.</td></tr>
+          <tr><td>📅 Subscribe (30-day)</td><td>+300</td><td><code>earnSubscribe30</code></td><td>Subscribing to a 30-day (or longer, under 90) plan.</td></tr>
+          <tr><td>🗓️ Subscribe (90-day)</td><td>+1,000</td><td><code>earnSubscribe90</code></td><td>Subscribing to a 90-day (or longer) plan.</td></tr>
+          <tr><td>🔁 Every renewal</td><td>+150</td><td><code>earnRenewal</code></td><td>Each subscription renewal cycle. Campaign multiplier applies.</td></tr>
+          <tr><td>♻️ Bottle returned</td><td>+15 / bottle</td><td><code>earnBottleReturn</code></td><td>Per glass bottle returned in good condition.</td></tr>
+          <tr><td>🔥 12 deliveries in a row</td><td>+200</td><td><code>earnStreak12</code></td><td>12 consecutive deliveries without a pause.</td></tr>
+          <tr><td>🤝 Refer a friend</td><td>+500</td><td><code>earnReferral</code></td><td>Credited to the referrer after the referred friend completes a qualifying 30-day+ subscription payment.</td></tr>
+          <tr><td>🎂 Birthday</td><td>+250</td><td><code>earnBirthday</code></td><td>Annual birthday reward (needs a date of birth on file).</td></tr>
+          <tr><td>🥳 DOODLY anniversary</td><td>+1,000</td><td><code>earnAnniversary</code></td><td>Each anniversary of joining DOODLY.</td></tr>
+          <tr><td>🧩 Play the monthly puzzle</td><td>+50</td><td><code>earnPuzzlePlay</code></td><td>Participating in the monthly puzzle.</td></tr>
+          <tr><td>🏆 Win the monthly puzzle</td><td>+2,500</td><td><code>earnPuzzleWin</code></td><td>Winning the monthly puzzle (the free 7-day plan prize is handled separately by the puzzle engine).</td></tr>
+          <tr><td>⭐ Verified review</td><td>+30</td><td><code>earnReview</code></td><td>Once per delivered order, for a verified review left on the My Orders "Rate your deliveries" panel.</td></tr>
+          <tr><td>✅ Complete your profile</td><td>+25</td><td><code>earnProfile</code></td><td>One-time, when name + email + phone are all filled in.</td></tr>
+        </tbody>
+      </table></div>
+      <p class="muted-sm">There is also a one-time <b>Welcome bonus</b> of +50 (<code>earnRegistration</code>) granted at account creation; it appears in history as "Welcome bonus" though it isn't listed in the earn grid.</p>
+
+      <h4>Tiers &amp; benefits (default ladder)</h4>
+      <p>Tier is derived from <b>lifetime points earned</b>; redeeming points never demotes a member. The current tier shows a "You" chip. Thresholds and benefit copy are all admin-tunable JSON.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Tier</th><th>From (lifetime points)</th><th>Benefits</th></tr></thead>
+        <tbody>
+          <tr><td>🥉 Fresh Member</td><td>0+</td><td>Access to Rewards · Birthday Bonus · Referral Program</td></tr>
+          <tr><td>🥈 Silver Member</td><td>1,000+</td><td>2% Additional Wallet Cashback (selected campaigns) · Early Access to Offers · Priority Customer Support</td></tr>
+          <tr><td>🥇 Gold Member</td><td>3,000+</td><td>5% Extra Reward Points during campaigns · Free Surprise Dairy Gift (selected campaigns) · Faster Support</td></tr>
+          <tr><td>💎 Platinum Member</td><td>6,000+</td><td>Exclusive Products · Priority Delivery · Special Festival Gifts · VIP Customer Support · Exclusive Events &amp; Promotions</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Tip — tier upgrades notify automatically</div>
+          <p>The instant an earn pushes a member's lifetime total across a tier threshold, the server sends a congratulations notification ("You're now a &lt;tier&gt;! 🎉") in-app and by email, plus a WhatsApp <code>tier_upgrade</code> template where the customer has opted in. Staff don't need to do anything to celebrate an upgrade.</p>
+        </div>
+      </div>
+
+      <h4>Rewards history table</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Behaviour (from the real panel)</th></tr></thead>
+        <tbody>
+          <tr><td>Columns</td><td>Activity (friendly label + optional description) · Points (with sign) · When (date)</td></tr>
+          <tr><td>Sign &amp; colour</td><td>EARN shows "+N" in green; REDEEM / EXPIRE / ADJUST show "−N" (redeem/adjust amber, expiry muted grey)</td></tr>
+          <tr><td>Activity labels</td><td>Welcome bonus · Profile completed · Order points · Subscription bonus · Referral bonus · Bottle return · Renewal bonus · Delivery streak bonus · Birthday reward · Anniversary bonus · Puzzle played · Puzzle winner · Review reward · Redeemed to wallet · Points expired · Adjustment</td></tr>
+          <tr><td>Rows</td><td>The last 40 ledger events, newest first (server orders by created date descending)</td></tr>
+          <tr><td>Sorting / filters / search</td><td>None — the history is a fixed newest-first read-only list</td></tr>
+          <tr><td>Pagination / export</td><td>Not available to the customer (capped at 40 rows)</td></tr>
+          <tr><td>Empty state</td><td>"No points activity yet — your rewards build up with every delivery, referral and bottle return."</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>FAQ &amp; terms (collapsible)</h4>
+      <p>Two expandable panels sit at the foot of the page. The <b>FAQ</b> answers: how to join (every registered customer is auto-enrolled), how to redeem (ratio + minimum → wallet credit), when points expire (12 months, with 30- and 7-day reminders), what earns points, and whether points can be transferred or cashed out (no — wallet credit only). The <b>Terms &amp; conditions</b> panel lists seven rules, including that points are earned only after an eligible action completes successfully, bottle-return points need bottles in good condition, referral rewards credit after the friend's qualifying subscription payment, points can't be cashed out or transferred, rates may change (never affecting points already earned), and that fraud/duplicate/self-referral accounts can have points reversed and be suspended.</p>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 4 : DASHBOARD CARD -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Rewards card (account dashboard)</p>
+      <p class="sm">A compact tier card on the account dashboard that summarises rewards and links to the full page.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Give the customer an at-a-glance tier + points view on their dashboard and a one-tap route into the full Rewards page.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (own rewards only)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → Overview → Dashboard</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">DOODLY Pure Rewards card — <b>tier + points</b> · View rewards →</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Top row</b><span>"🥉 DOODLY Pure Rewards" eyebrow + tier name on the left; available points number on the right</span></div>
+          <div class="wf-cell"><b>Progress bar</b><span>Filled to the same next-tier progress percentage as the hero</span></div>
+          <div class="wf-cell"><b>Foot</b><span>"lifetimeEarned / nextTier.min · N to &lt;next tier&gt;" (or "Top tier unlocked — enjoy the perks! 🎉") and a "View rewards →" link</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the compact rewards card on the dashboard (mount <code>#loyaltyCardMount</code>).</div></div>
+
+      <p>The card reads the same <code>/api/account/rewards</code> summary. It renders nothing for guests or when the programme is off, so the dashboard stays clean. The whole card is a link to <span class="navpath">/account/rewards.html</span>. After a redeem on the full page, this card is re-rendered so its numbers stay in sync.</p>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Also on this route — the Monthly Puzzle card</div>
+          <p>Below the loyalty programme, the Rewards page also mounts the <b>Monthly Puzzle Challenge</b> card (<code>#puzzleCardMount</code>, built by <code>puzzle.js</code>). It is a separate feature — playing earns +50 and winning earns +2,500 points into this same rewards ledger — and is documented in its own Puzzle Challenge section.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ NOTIFICATIONS / RELATED -->
+  <div class="call tip">
+    <span class="ci">💡</span>
+    <div class="cbody">
+      <div class="ctitle">Tip — what the customer gets notified about</div>
+      <p>Members are messaged (in-app, and email/WhatsApp where they've opted in) when they earn a welcome, profile, subscription, referral, streak, birthday, anniversary or puzzle-win bonus, when they cross a tier threshold, and 30 and 7 days before points expire. Because every earn is idempotent, a webhook retry or page refresh never sends a duplicate.</p>
+    </div>
+  </div>
+
+  <div class="call warn">
+    <span class="ci">⚠️</span>
+    <div class="cbody">
+      <div class="ctitle">Warning — points are not cash</div>
+      <p>Points can't be exchanged for cash, sold, or transferred between accounts — they are redeemable only as DOODLY Wallet credit. If an account is permanently deleted, all unused points expire. DOODLY may reverse points and suspend accounts involved in fraud, duplicate accounts, self-referrals or automated abuse. Never promise a customer a cash payout of points.</p>
+    </div>
+  </div>
+
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>"Join DOODLY Pure Rewards" shows instead of the programme</td><td>Not truly signed in (guest or demo user)</td><td>Have the customer sign in via <span class="navpath">/login/customer.html</span>; a real signed-in customer is auto-enrolled and sees their tier.</td></tr>
+      <tr><td>"Rewards are taking a short break"</td><td>Programme switched off (<code>enabled = false</code>)</td><td>Re-enable it in the Admin loyalty module → Programme settings toggle. Points are preserved while off.</td></tr>
+      <tr><td>"Couldn't load your rewards right now"</td><td><code>/api/account/rewards</code> failed</td><td>Reload; if it persists, check the backend/API is up. The summary is a live server read.</td></tr>
+      <tr><td>"Keep earning!" — can't redeem</td><td>Balance below the minimum (default 100)</td><td>The customer needs at least the minimum points; every delivery, referral and bottle return gets them closer.</td></tr>
+      <tr><td>"Points must convert to a whole rupee amount"</td><td>Amount isn't a multiple of the ratio (10)</td><td>Enter points in steps of the ratio (e.g. 100, 110, 120…). The input's step already enforces this.</td></tr>
+      <tr><td>"You don't have enough points for that"</td><td>Amount exceeds the available balance</td><td>Redeem up to the available balance shown in the KPI, or use the "all" preset chip.</td></tr>
+      <tr><td>Redeemed points but wallet unchanged</td><td>Confusion between points and wallet, or a display cache</td><td>Check Wallet history for a "Loyalty redemption" credit; the credit is created in the same transaction, so if points dropped the wallet was credited. Reload the wallet page.</td></tr>
+      <tr><td>Points expected but not earned</td><td>Underlying action didn't complete (cancelled order, failed payment, refunded Trial Pack, damaged bottle)</td><td>Confirm the qualifying action succeeded; earns fire only after the eligible action completes. If it did complete, an admin can grant points via the Adjust tool with an audited reason.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>FAQ</h4>
+  <h4>Q. How does a customer join Pure Rewards?</h4>
+  <p>There is nothing to sign up for — every registered DOODLY customer is automatically enrolled and starts at Fresh Member. Signing in is all that's needed to see the page.</p>
+
+  <h4>Q. Do points expire?</h4>
+  <p>Yes — each batch of points is valid for 12 months from the date it was earned (config <code>expiryDays</code>, default 365). The server reminds the customer 30 and 7 days before any points expire, and a cron job zeroes past-due points. Redeeming always consumes the points closest to expiry first, so nothing is wasted.</p>
+
+  <h4>Q. Can support add or remove a customer's points?</h4>
+  <p>Yes, but not from this customer page. Staff with loyalty-edit permission use the Admin loyalty module's <b>Adjust</b> tool (<code>POST /api/admin/loyalty/adjust</code>): a positive number grants points, a negative number deducts them (oldest-expiry-first), and a <b>reason is required</b> and recorded for the audit. The change appears in the customer's history as "Adjustment".</p>
+
+  <h4>Q. Why doesn't the tier drop when a customer redeems points?</h4>
+  <p>Tier is based on <b>lifetime earned</b>, not the current balance, so spending points never demotes a member — only the available-points number goes down.</p>
+
+  <h4>Q. Where does the redeemed money go?</h4>
+  <p>Into the customer's DOODLY Wallet as a "loyalty" credit. From there it can be spent on any order, renewal or top-up. Money stays in one place — the redemption never creates a separate cash-out.</p>
+
+</section>

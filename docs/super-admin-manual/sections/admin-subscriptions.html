@@ -1,0 +1,325 @@
+<section class="sheet" id="admin-subscriptions">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Commerce · Subscriptions</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Commerce</span></div>
+  <h2 class="section-title">Subscriptions</h2>
+  <p class="lead">The back-office register of every recurring milk plan on DOODLY — a live, searchable, exportable list of active and lapsed subscriptions, backed by a full management engine that lets an Admin create a plan for a customer and pause, resume, skip, edit, cancel, refund or re-mandate it.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">What this module is</div>
+      <p>A <b>subscription</b> is a customer's standing order for milk — a chosen bottle (variant), a quantity, a delivery slot and a plan length (for example a 30-day or 90-day plan). The engine delivers automatically each morning, honours a strict <b>8 PM cut-off</b> for changes, and respects skip and pause rules. This screen is where the office watches and manages all of them. It is a <b>separate</b> module from <span class="navpath">Subscription Billing</span> (which handles the AutoPay charges) and from the customer's own <span class="navpath">My Subscription</span> self-service page.</p>
+    </div>
+  </div>
+
+  <div class="call warn">
+    <span class="ci">⚠️</span>
+    <div class="cbody">
+      <div class="ctitle">Strictly Admin &amp; Super Admin</div>
+      <p>Every subscription endpoint is guarded by <code>requireSubsAdmin</code>. Only the <span class="pill role">Admin</span> and <span class="pill role">Super Admin</span> roles may view or manage subscriptions — <b>never</b> a customer, Delivery Executive, Accountant, Manager, or even Support. Any other role receives a hard <code>403 Forbidden</code> from the server; the on-screen filtering is only for convenience, the real security boundary is in the backend guard.</p>
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Subscriptions register — list &amp; KPIs</p><p class="sm">The live table of every subscription with four headline numbers.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the office a single, always-current view of the subscriber base — how many are active, paused, new and churning — and a filterable, exportable table to find any one plan.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> only</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → Subscriptions</span> (<span class="navpath">/admin/subscriptions.html</span>)</span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Subscriptions</b> · "Active and lapsed subscriptions."</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>KPI strip</b><span>Four cards: Active · Paused · New (wk) · Churn. Static demo numbers on first paint, overwritten live from the stats endpoint.</span></div>
+          <div class="wf-cell"><b>Live banner</b><span>Green "● Live — N subscription(s) from the DOODLY database" once the backend responds; red warning if offline or 403.</span></div>
+          <div class="wf-cell"><b>Toolbar</b><span>Search box · Filters button (facets + date range) · Export ▾ (CSV / Excel / PDF) — from the unified DataTable engine.</span></div>
+          <div class="wf-cell"><b>Subscriptions table</b><span>Columns: Order · Customer · Items · Amount · Payment · Status. One row per subscription, mapped from the live record.</span></div>
+          <div class="wf-cell"><b>Filter chips + pager</b><span>Removable active-filter chips above the table; page-size selector and page controls below.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Subscriptions register</div></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">How the page comes alive</div>
+          <p>On load the page paints the recipe (header, four demo KPI cards, a table shell). Then <code>wireSubscriptionsBackend()</code> calls <span class="navpath">GET /api/admin/subscriptions?pageSize=200</span>, maps each record into a table row, re-mounts the table and shows the green live banner. A second call to <span class="navpath">GET /api/admin/subscriptions/stats</span> overwrites the four KPI numbers. If the backend is unreachable you get an amber/red banner and the demo numbers stay — so the layout is never blank.</p>
+        </div>
+      </div>
+
+      <h4>The four KPI cards</h4>
+      <p>Each card shows a big number and a label. The label text is fixed by the page; the number is replaced live by the stats endpoint (matched by the label text).</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Card</th><th>What it counts</th><th>Live source</th><th>How it is computed</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Active</td><td>Currently running subscriptions</td><td><code>stats.active</code></td><td>Count of subscriptions whose status is <code>ACTIVE</code></td><td>1,284</td></tr>
+          <tr><td>Paused</td><td>Temporarily halted plans</td><td><code>stats.paused</code></td><td>Count of <code>PAUSED</code> <b>plus</b> <code>VACATION</code> status</td><td>96</td></tr>
+          <tr><td>New (wk)</td><td>Recently started plans</td><td><code>stats.newThisMonth</code></td><td>Count of subscriptions created since the 1st of the current month (label says "wk", value is month-to-date)</td><td>38</td></tr>
+          <tr><td>Churn</td><td>Share of subscribers who cancelled</td><td>derived</td><td><code>cancelled ÷ total × 100</code>, one decimal, e.g. <code>2.1%</code>; shows <code>0%</code> when there are no subscriptions</td><td>2.1%</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Tip — the stats endpoint returns more than four numbers</div>
+          <p>Behind the four visible cards, <span class="navpath">/stats</span> also returns <b>total</b>, <b>cancelled</b>, <b>expired</b> (completed + lapsed active/paused past their end date), <b>autopayOn</b> (active plans on AutoPay), <b>renewalsDue7d</b> (active plans ending in the next 7 days), <b>mrrPaise</b> (monthly recurring revenue = Σ daily price × 30 across active plans), <b>trialCashback</b> (credited count and amount) and <b>newThisMonth</b>. These power reporting and can be surfaced without new backend work.</p>
+        </div>
+      </div>
+
+      <h4>The subscriptions table — columns</h4>
+      <p>The table reuses the shared "Orders" layout (dataset <code>adminOrders</code>), so its six columns are labelled for orders but each row is a <b>subscription</b>. The mapping below is exactly what <code>mapApiSub()</code> puts in each cell.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>Shows</th><th>Source field</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Order</td><td>Short subscription ID</td><td><code>shortId</code></td><td>Last 8 characters of the record id, upper-cased (falls back to last 6 if no shortId)</td></tr>
+          <tr><td>Customer</td><td>Subscriber name</td><td><code>customer.name</code></td><td>"—" if the linked customer has no name</td></tr>
+          <tr><td>Items</td><td>What is delivered each drop</td><td><code>items[]</code></td><td>Joined as "<code>qty× product variant</code>", e.g. "2× A2 Buffalo Milk 500 ml"; falls back to the plan name</td></tr>
+          <tr><td>Amount</td><td>Plan total (₹)</td><td><code>planTotalPaise</code></td><td>Per-delivery price × plan days, less the plan discount; shown in rupees</td></tr>
+          <tr><td>Payment</td><td>Renewal method badge</td><td><code>autoRenew</code></td><td>Green <b>AutoPay</b> when auto-renew is on, grey <b>Manual</b> when off</td></tr>
+          <tr><td>Status</td><td>Lifecycle badge</td><td><code>status</code> / <code>expired</code></td><td>Active · Paused · Vacation · Cancelled · Completed; a red <b>Expired</b> badge overrides when the plan is past its end date but not cancelled</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Status badge colours</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Badge</th><th>Colour</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>Active</td><td>Green</td><td>Running normally, delivering on schedule</td></tr>
+          <tr><td>Paused</td><td>Amber</td><td>Temporarily halted (customer or office paused it)</td></tr>
+          <tr><td>Vacation</td><td>Amber</td><td>A dated pause window (holiday hold)</td></tr>
+          <tr><td>Expired</td><td>Red</td><td>Past the end date but never cancelled — needs a renewal decision</td></tr>
+          <tr><td>Cancelled</td><td>Grey</td><td>Closed by cancellation; will not renew</td></tr>
+          <tr><td>Completed</td><td>Blue</td><td>Ran its full term and finished cleanly</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Table controls (search · filter · sort · export · pagination)</h4>
+      <p>The list is driven by the unified DataTable engine, so it carries the same tools as every other admin table.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Control</th><th>Behaviour</th></tr></thead>
+        <tbody>
+          <tr><td>Search</td><td>Free-text box ("Search orders…") filters the loaded rows across all columns as you type.</td></tr>
+          <tr><td>Filters</td><td>A slide-out panel with facet checkboxes (built from the loaded data), a date-range preset/custom picker, and a "Clear all filters" button. The recipe seeds status chips <b>All · Active · Paused · On hold</b>.</td></tr>
+          <tr><td>Sorting</td><td>Click a column header to sort; multiple sort keys are supported and shown as removable chips.</td></tr>
+          <tr><td>Filter chips</td><td>Each active search / facet / sort appears as a removable chip above the table; click the × to drop just that one.</td></tr>
+          <tr><td>Export</td><td>Export ▾ menu offers <b>CSV (.csv)</b>, <b>Excel (.xls)</b> and <b>PDF</b> of the current view. The button is disabled for roles without export permission.</td></tr>
+          <tr><td>Pagination</td><td>Page-size selector and page controls at the foot. The page pulls up to 200 subscriptions in one call, then paginates them client-side.</td></tr>
+          <tr><td>Saved views &amp; favourites</td><td>Your search/filter/sort/date/page-size state is remembered per user and table, so the view you leave is the view you return to.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Server-side filters also exist</div>
+          <p>The <span class="navpath">GET /api/admin/subscriptions</span> endpoint itself accepts rich query parameters — <code>status</code> (with <code>PAUSED</code> folding in VACATION and a special <code>EXPIRED</code> bucket), <code>autopay</code> (on/off), <code>plan</code>, <code>product</code>, <code>zone</code>, a <code>from</code>/<code>to</code> start-date range, a text query <code>q</code> (id, name, email, phone), plus <code>sort</code>, <code>dir</code>, <code>page</code> and <code>pageSize</code> — and returns filter <b>facets</b> (plans, products, zones) for building a filter UI. The current storefront page loads the first 200 unfiltered and lets the client DataTable do the filtering; the same endpoint powers server-side filtering when needed.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 2 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Create a subscription (on a customer's behalf)</p><p class="sm">Start a standing milk order for a customer from the office.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Let an Admin set up a recurring plan for a customer — for example when signing up a walk-in or phone order — choosing the customer, plan, delivery address, bottles, start date and renewal mode.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> only</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → Subscriptions → Create</span> · <span class="navpath">POST /api/admin/subscriptions</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Backed by the options endpoint</div>
+          <p>The create form is fed by <span class="navpath">GET /api/admin/subscriptions/options</span>, which returns three data shapes depending on the query: with no query it returns <b>active plans</b> (id, name, days, discount) and <b>subscribable products</b> with their subscription variants (label, ml, daily price); with <code>?q=</code> it searches customers by name / email / phone (max 10); with <code>?userId=</code> it returns that customer's saved <b>addresses</b> (default first). This drives the customer picker → address picker → plan → bottle flow.</p>
+        </div>
+      </div>
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Form — <b>New subscription</b> · Customer → Address → Plan → Bottles → Schedule</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Customer</b><span>Type-ahead search (name / email / phone) → pick a customer. Sets <code>userId</code>.</span></div>
+          <div class="wf-cell"><b>Delivery address</b><span>Dropdown of that customer's saved addresses (default first). Sets <code>addressId</code>.</span></div>
+          <div class="wf-cell"><b>Plan</b><span>Active plans with length + discount. Sets <code>planId</code>; drives the plan total.</span></div>
+          <div class="wf-cell"><b>Bottles (items)</b><span>One or more subscription variants each with a quantity (1–20). Sets <code>items[]</code>.</span></div>
+          <div class="wf-cell"><b>Schedule</b><span>Optional start date + delivery slot; AutoPay toggle (on by default).</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the create-subscription form and the fields it submits</div></div>
+
+      <h4>Create — field reference</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Customer (<code>userId</code>)</td><td>Who the plan belongs to</td><td>A customer id from the search</td><td class="t-req">Yes</td><td>Must exist — <code>404 "Customer not found."</code> otherwise</td><td>cus_9f2a…</td></tr>
+          <tr><td>Plan (<code>planId</code>)</td><td>Plan length &amp; discount</td><td>An active plan id</td><td class="t-req">Yes</td><td>Must exist — <code>404 "Plan not found."</code>; sets the end date = start + <code>plan.days</code></td><td>30-day</td></tr>
+          <tr><td>Address (<code>addressId</code>)</td><td>Where milk is delivered</td><td>One of the customer's saved addresses</td><td class="t-req">Yes</td><td>Must belong to the same customer — else <code>400 "Address does not belong to the customer."</code></td><td>addr_home</td></tr>
+          <tr><td>Bottles (<code>items[]</code>)</td><td>What is delivered each drop</td><td>Array of <code>{ variantId, qty }</code></td><td class="t-req">Yes</td><td>At least one; each variant must exist; <code>qty</code> is an integer 1–20 — else <code>400 "Invalid subscription items."</code></td><td>2× 500 ml</td></tr>
+          <tr><td>Start date (<code>startDate</code>)</td><td>First delivery day</td><td>ISO date-time</td><td class="t-opt">Opt.</td><td>Defaults to the earliest date honouring the 8 PM cut-off (tomorrow, or the day after if placed after 8 PM); the real first delivery skips non-deliverable days</td><td>2026-07-14</td></tr>
+          <tr><td>Delivery slot (<code>deliverySlot</code>)</td><td>Morning time window</td><td>Slot text</td><td class="t-opt">Opt.</td><td>Defaults to <code>06:00-08:00</code></td><td>06:00-08:00</td></tr>
+          <tr><td>Auto-renew (<code>autoRenew</code>)</td><td>Renew automatically at term end</td><td>On / Off (boolean)</td><td class="t-opt">Opt.</td><td>Defaults to <b>on</b> (true)</td><td>On</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — create a subscription</div>
+        <div class="wf-flow"><span>Search customer</span><span>Pick address</span><span>Choose plan</span><span>Add bottles + qty</span><span>Set start / slot / AutoPay</span><span>Submit</span><span>ACTIVE + timeline event</span></div>
+      </div><div class="wire-cap">Figure — from search to a live plan; a "CREATED" event is written to the timeline and a 201 is returned</div></div>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">Best practice — respect the 8 PM cut-off</div>
+          <p>Any change that lands after 8 PM takes effect a day later than you might expect. When a customer wants milk "from tomorrow", place the order before 8 PM; after the cut-off the earliest first delivery is the day after tomorrow. The system enforces this automatically, so trust the computed start date rather than back-dating.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 3 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Subscription detail &amp; lifecycle actions</p><p class="sm">Open one plan to see its full history and run every management action.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the office the complete picture of one subscription — customer, address, bottles, price, 14-day schedule preview, recent deliveries, wallet, AutoPay mandate, trial cashback and an audit timeline — plus the buttons to pause, resume, skip, edit, cancel, refund, toggle AutoPay and add notes.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> only</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → Subscriptions → (row)</span> · <span class="navpath">GET / PATCH /api/admin/subscriptions/[id]</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Detail — <b>Subscription #ID</b> · status chip · action buttons</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Customer &amp; address</b><span>Name, email, phone, wallet balance; delivery address with zone, executive, pin location and delivery note.</span></div>
+          <div class="wf-cell"><b>Plan &amp; bottles</b><span>Plan name/length/discount, each item (product, variant, ml, daily price), per-delivery price, plan total and amount saved.</span></div>
+          <div class="wf-cell"><b>Schedule preview</b><span>Next 14 days, each marked deliver / not with a reason (scheduled · skipped · paused · before start · ended).</span></div>
+          <div class="wf-cell"><b>Deliveries</b><span>Last 12 deliveries (date, status, bottles out/in) + counts: total, delivered, skipped, failed.</span></div>
+          <div class="wf-cell"><b>Money</b><span>Wallet balance + last 8 wallet transactions; AutoPay mandate (status, amount, next renewal, attempts); trial cashback status.</span></div>
+          <div class="wf-cell"><b>Timeline</b><span>Up to 50 audit events (created, edited, paused, resumed, skipped, cancelled, refund, AutoPay on/off, notes) with who and when.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the subscription detail record returned by GET /api/admin/subscriptions/[id]</div></div>
+
+      <h4>The 14-day schedule preview — reason codes</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Reason</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>scheduled</td><td>A milk delivery is due that day</td></tr>
+          <tr><td>skipped</td><td>The customer / office skipped that specific date</td></tr>
+          <tr><td>paused</td><td>The plan is paused, or the day falls inside a dated pause window</td></tr>
+          <tr><td>before start</td><td>The day is before the plan's start date</td></tr>
+          <tr><td>ended</td><td>The day is after the plan's end date</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Lifecycle action buttons</h4>
+      <p>All actions post to <span class="navpath">PATCH /api/admin/subscriptions/[id]</span> with an <code>action</code>. Each one writes a timeline event and an audit-log entry, and every change respects the same delivery rules as the customer's own controls.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Edit</td><td>Change plan, address, delivery slot, start date, bottles, auto-renew or notes</td><td><code>action:"update"</code> → only changed fields are applied; a plan change re-computes the end date; item changes replace the item rows in a transaction; logs an "UPDATED" event with a field-by-field diff. Blocked on cancelled/completed plans.</td><td><span class="pill role">Admin</span>+ <span class="pill role">Super Admin</span></td></tr>
+          <tr><td>Pause</td><td>Temporarily stop deliveries</td><td><code>action:"pause"</code> with optional <code>until</code> date and <code>reason</code> → status → <code>PAUSED</code>, stamps <code>pausedFrom</code>/<code>pausedUntil</code>; logs "PAUSED". Blocked on closed plans.</td><td><span class="pill role">Admin</span>+ <span class="pill role">Super Admin</span></td></tr>
+          <tr><td>Resume</td><td>Restart a paused plan</td><td><code>action:"resume"</code> → status → <code>ACTIVE</code>, clears the pause window and recomputes the next deliverable date (skip-aware, honouring the cut-off); logs "RESUMED".</td><td><span class="pill role">Admin</span>+ <span class="pill role">Super Admin</span></td></tr>
+          <tr><td>Skip</td><td>Skip one upcoming delivery</td><td><code>action:"skip"</code> with optional <code>date</code> (defaults to the next delivery) → adds the date to <code>skipDates</code> and moves <code>nextDeliveryAt</code> forward; logs "SKIPPED". Blocked on closed plans.</td><td><span class="pill role">Admin</span>+ <span class="pill role">Super Admin</span></td></tr>
+          <tr><td>AutoPay on/off</td><td>Switch automatic renewal</td><td><code>action:"autopay"</code> with <code>on</code> → sets <code>autoRenew</code>; if a Razorpay mandate exists it is set <code>ACTIVE</code> (on) or <code>SUSPENDED</code> (off); logs "AUTOPAY_ON" / "AUTOPAY_OFF".</td><td><span class="pill role">Admin</span>+ <span class="pill role">Super Admin</span></td></tr>
+          <tr><td>Cancel</td><td>Close the subscription for good</td><td><code>action:"cancel"</code> with optional <code>reason</code> and <code>refundPaise</code> → status → <code>CANCELLED</code>, end date = now, auto-renew off; an optional refund credits the customer's wallet (up to ₹10,000) and logs a "REFUND" event. Errors if already cancelled.</td><td><span class="pill role">Admin</span>+ <span class="pill role">Super Admin</span></td></tr>
+          <tr><td>Add note</td><td>Attach an internal comment</td><td><code>action:"note"</code> with <code>text</code> (1–500 chars) → appends a date-stamped line to the plan's notes and logs a "NOTE" event.</td><td><span class="pill role">Admin</span>+ <span class="pill role">Super Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — subscription lifecycle</div>
+        <div class="wf-flow"><span>ACTIVE</span><span>Pause → PAUSED</span><span>Resume → ACTIVE</span><span>Skip a day</span><span>Term ends → COMPLETED / Expired</span><span>Cancel → CANCELLED (+ optional wallet refund)</span></div>
+      </div><div class="wire-cap">Figure — the states a subscription moves through and the actions that drive them</div></div>
+
+      <div class="call danger">
+        <span class="ci">⛔</span>
+        <div class="cbody">
+          <div class="ctitle">Caution — cancellation and refunds</div>
+          <p>Cancelling sets the end date to <b>now</b>, turns off auto-renew and cannot be undone from this screen — a cancelled plan cannot be edited or re-paused; you would create a new subscription instead. If you enter a refund amount it is <b>credited to the customer's wallet immediately</b> (capped at ₹10,000) and appears in their wallet ledger. Double-check the amount before you confirm — a wallet credit is real money out of the business.</p>
+        </div>
+      </div>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">Best practice — always give a reason</div>
+          <p>Pause, skip and cancel all accept a reason, and edits record a diff. Because every action lands in the timeline <b>and</b> the audit log with your role and the time, always type a short reason ("customer travelling 10–20 Jul", "wrong bottle size", "duplicate plan"). Six months later that one line is the difference between a clear history and a mystery.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 4 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Subscription reports &amp; export</p><p class="sm">Break the subscriber base down by status, plan and zone for a chosen window.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Produce the numbers behind the KPIs — counts by status, plan and zone, AutoPay split, trial-cashback totals, monthly recurring revenue and renewals due — plus a flat row-per-subscription export for spreadsheets.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> only</span>
+      <span class="m"><b>Path</b> <span class="navpath">GET /api/admin/subscriptions/reports</span> (optional <code>?from=</code> &amp; <code>?to=</code>)</span>
+    </div>
+    <div class="spec-body">
+
+      <div class="twrap"><table>
+        <thead><tr><th>Report block</th><th>What it contains</th></tr></thead>
+        <tbody>
+          <tr><td>By status</td><td>Count of subscriptions in each status (Active, Paused, Vacation, Cancelled, Completed)</td></tr>
+          <tr><td>By plan</td><td>Per plan: how many subscriptions and the active monthly recurring revenue they contribute</td></tr>
+          <tr><td>By zone</td><td>Count of subscriptions per delivery zone ("Unzoned" when no zone is set)</td></tr>
+          <tr><td>AutoPay split</td><td>How many plans are on AutoPay (on) vs manual (off)</td></tr>
+          <tr><td>Trial cashback</td><td>Credited trial-cashback count, the eligible active count (30/90-day plans) and total amount</td></tr>
+          <tr><td>Revenue</td><td>Active MRR, active count and the average per-delivery value across active plans</td></tr>
+          <tr><td>Renewals due</td><td>Active plans ending within the next 7 days, with customer and plan total</td></tr>
+          <tr><td>Rows (export)</td><td>One line per subscription: short id, customer, phone, plan, status, start/end date, slot, AutoPay yes/no and per-delivery rupees — ready for CSV</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Tip — window the report by start date</div>
+          <p>Pass <code>from</code> and <code>to</code> (ISO dates) to limit the report to subscriptions that <b>started</b> in that window — useful for "how many new plans did the July campaign bring in, and to which zones?" Leave them off for the all-time picture. For a quick export of what is currently on screen, the table's own Export ▾ (CSV / Excel / PDF) is faster.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= REFERENCE -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common questions when managing subscriptions.</p></div>
+    <div class="spec-body">
+
+      <h4>Troubleshooting</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>Red banner "No permission to view subscriptions (403)"</td><td>You are signed in as a role other than Admin / Super Admin (e.g. Support, Manager, Accountant)</td><td>Subscriptions are Admin-only by design. Sign in with an Admin or Super Admin account.</td></tr>
+          <tr><td>Banner "Backend offline — couldn't load live data"; KPIs show demo numbers</td><td>The backend API is unreachable, or the API base URL is wrong</td><td>Check the backend is running and reachable at the shown base; the demo numbers are placeholders, not real counts.</td></tr>
+          <tr><td>A plan shows a red "Expired" badge but is not Cancelled</td><td>The plan is past its end date and was never cancelled or renewed</td><td>Open it and decide: renew (edit the plan / start date) or cancel it. Expired is a prompt, not a final state.</td></tr>
+          <tr><td>"Cannot edit / pause a closed subscription"</td><td>The plan is CANCELLED or COMPLETED — closed states are locked</td><td>Create a fresh subscription for the customer instead of reopening the closed one.</td></tr>
+          <tr><td>"Address does not belong to the customer."</td><td>The chosen address is saved under a different customer</td><td>Pick an address from that customer's own saved list (the options endpoint returns only theirs).</td></tr>
+          <tr><td>A change didn't take effect today</td><td>It was made after the 8 PM cut-off</td><td>Changes after 8 PM land a day later by design — expected behaviour, not a bug.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Is "Subscriptions" the same as "Subscription Billing"?</h4>
+      <p>No. This module manages the <b>plans</b> — who subscribes, to what, and the pause/skip/cancel lifecycle. <span class="navpath">Admin → Commerce → Subscription Billing</span> is a separate module that handles the <b>money</b> — the Razorpay AutoPay mandates and recurring charges. The AutoPay toggle here flips renewal on/off and suspends the mandate; the billing module is where charge attempts and failures are worked.</p>
+
+      <h4>Why does the table say "Order" when these are subscriptions?</h4>
+      <p>The screen reuses the shared Orders table layout to save code, so the header labels read "Order / Customer / Items / Amount / Payment / Status". Every row is a real subscription — the "Order" cell is the short subscription id and the "Payment" cell shows AutoPay or Manual, not a payment record.</p>
+
+      <h4>What does the "New (wk)" card actually measure?</h4>
+      <p>The label reads "New (wk)", but the live number is <b>new this month</b> — the count of subscriptions created since the 1st of the current month. Read it as a month-to-date "new subscribers" figure.</p>
+
+      <h4>Can I refund a customer when I cancel?</h4>
+      <p>Yes. The cancel action accepts an optional refund amount (up to ₹10,000). It is credited straight to the customer's DOODLY <b>wallet</b> (not their card), recorded in their wallet ledger and logged as a "REFUND" event on the subscription timeline. Leave it blank to cancel without any refund.</p>
+
+    </div>
+  </div>
+
+</section>

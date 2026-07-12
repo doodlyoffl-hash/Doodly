@@ -1,0 +1,300 @@
+<section class="sheet" id="admin-inventory">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Catalogue · Inventory</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Catalogue</span></div>
+  <h2 class="section-title">Inventory</h2>
+  <p class="lead">The single stock ledger for everything DOODLY holds on hand — filled milk bottles ready to sell and the raw materials and supplies that keep the dairy running — showing live on-hand counts, what is reserved for open orders, a colour-coded health status, and a one-click way to correct any count with an audited reason.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">One screen, two stock sources</div>
+      <p>The Inventory view combines <b>two</b> kinds of stock into one table so staff never have to look in two places. (1) <b>Filled-bottle products</b> come from each product <code>Variant</code> — its <code>stock</code> (on hand) and <code>reservedStock</code> (held for open orders). (2) <b>Raw materials and supplies</b> — empty bottles, foil caps, sanitiser and so on — come from <code>InventoryItem</code> rows and their <code>quantity</code>. Each row is tagged internally as a <code>variant</code> or a <code>material</code> so the same "Adjust stock" tool works on both. The overview reads <code>GET /api/admin/inventory/overview</code>; a green banner ("● Live — N inventory item(s) from the DOODLY database") confirms the numbers are live, not the demo seed.</p>
+    </div>
+  </div>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">How the status colour is decided</div>
+      <p>Every row gets a single traffic-light <b>Status</b> computed from its numbers, so you can scan the whole page and instantly see what needs attention. The rule (in <code>statusOf</code>) is applied in order: <b>Available</b> (stock − reserved) is <b>0 or less</b> → <span class="pill">Out of stock</span> (red); else stock is at or below its <b>Reorder at</b> level → <span class="pill">Reorder</span> (red); else stock is at or below <b>twice</b> the reorder level → <span class="pill">Low</span> (amber); otherwise → <span class="pill">Healthy</span> (green). For raw materials, reserved is always 0, so their status is judged on quantity versus reorder level alone.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 1 : OVERVIEW -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Inventory Overview</p>
+      <p class="sm">Four live KPIs over a searchable, filterable table of every stock item — filled bottles and supplies together — with each item's SKU, on-hand count, reorder level and health status.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Give whoever runs stock a one-glance answer to "what do we have, what is running low, and what must be reordered right now?" — across finished product and raw supplies at once.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Inventory Manager</span> <span class="pill role">Operations</span> — anyone with <code>inventory:view</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Catalogue → Inventory</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Inventory</b> · "Stock levels and reorder alerts" · <b>Adjust stock</b> button</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>KPI row</b><span>1000 ml ready · 500 ml ready · Low SKUs · Reorder now — refilled from the live overview on load</span></div>
+          <div class="wf-cell"><b>Filter chips</b><span>All · Low · Reorder — narrow the table to items needing attention</span></div>
+          <div class="wf-cell"><b>DataTable toolbar</b><span>Search box · column sort · facet filters · saved views · favourite · export · pagination</span></div>
+          <div class="wf-cell"><b>Stock table</b><span>SKU · Item · Stock · Reorder at · Status — one row per variant and per supply item</span></div>
+          <div class="wf-cell"><b>Live banner</b><span>Green "● Live — N inventory item(s) from the DOODLY database" (or an error strip)</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Inventory overview: KPI row, filter chips, and the unified stock table.</div></div>
+
+      <h4>The four KPIs and where each number comes from</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>KPI</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>1000 ml ready</td><td>Sellable 1-litre bottles on hand</td><td>Count</td><td class="t-opt">Read-only</td><td><b>Available</b> (stock − reserved) of the variant whose name contains "1000 ml"; shows 0 if none.</td><td>640</td></tr>
+          <tr><td>500 ml ready</td><td>Sellable half-litre bottles on hand</td><td>Count</td><td class="t-opt">Read-only</td><td>Available of the variant whose name contains "500 ml".</td><td>410</td></tr>
+          <tr><td>Low SKUs</td><td>How many items are running low or need reorder</td><td>Count</td><td class="t-opt">Read-only</td><td><code>stats.lowStock</code> — count of items with status <b>Low</b> or <b>Reorder</b>.</td><td>2</td></tr>
+          <tr><td>Reorder now</td><td>Items that must be reordered immediately</td><td>Count</td><td class="t-opt">Read-only</td><td>Count of items whose status is <b>Reorder</b> or <b>Out of stock</b>.</td><td>1</td></tr>
+        </tbody>
+      </table></div>
+
+      <p>The tiles ship with placeholder numbers (640 / 410 / 2 / 1) so the page is never blank, but they are overwritten from the live overview the instant it loads.</p>
+
+      <h4>Stock table columns</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>Shows</th><th>Backend field</th></tr></thead>
+        <tbody>
+          <tr><td>SKU</td><td>The item's stock-keeping code (a variant's <code>sku</code>, or a supply item's <code>sku</code>); shows "—" if a variant has none</td><td><code>sku</code></td></tr>
+          <tr><td>Item</td><td>Product name + variant label (e.g. "A2 Buffalo Milk 1000 ml") for bottles, or the supply item's name</td><td><code>name</code> (variant: <code>product.name</code> + <code>label</code>; material: <code>name</code>)</td></tr>
+          <tr><td>Stock</td><td>Units physically on hand</td><td><code>stock</code> (variant <code>stock</code> / material <code>quantity</code>, rounded)</td></tr>
+          <tr><td>Reorder at</td><td>The level at which the item is flagged for reorder</td><td><code>reorderAt</code> (variant <code>lowStockThreshold</code> / material <code>reorderAt</code>)</td></tr>
+          <tr><td>Status</td><td>Coloured pill: Healthy / Low / Reorder / Out of stock</td><td><code>status</code> — computed by <code>statusOf(stock, reserved, reorderAt)</code></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">More is tracked than the five visible columns</div>
+          <p>Behind each row the overview also carries <b>Available</b> (stock − reserved), <b>Reserved</b> (held for open orders, always 0 for supplies), the item <b>Unit</b> (e.g. "1000 ml", "pcs"), a stock <b>value in paise</b> (variant stock × its daily/fixed price; supplies are valued at 0), and the last <b>updated</b> time. The whole-inventory <code>stats</code> block also totals <b>items</b>, <b>units</b>, <b>available</b>, <b>reserved</b>, <b>low-stock</b>, <b>out-of-stock</b> and <b>inventory value</b> — the KPI row surfaces the four that matter most day to day.</p>
+        </div>
+      </div>
+
+      <h4>Filters, search &amp; table behaviour</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Behaviour</th></tr></thead>
+        <tbody>
+          <tr><td>Filter chips</td><td><b>All</b> (default), <b>Low</b> and <b>Reorder</b> — one click narrows the table to items in that state so you can act on just what needs attention.</td></tr>
+          <tr><td>Search</td><td>Free-text box in the shared DataTable toolbar; matches across the visible cells (SKU, item name, status).</td></tr>
+          <tr><td>Sorting</td><td>Click any column header to sort — e.g. by Stock to find the lowest counts, or by Status to group the reds together.</td></tr>
+          <tr><td>Facet filters / saved views / favourite</td><td>The unified DataTable engine adds facet filters, saveable views and a favourite toggle on top of the three chips.</td></tr>
+          <tr><td>Pagination</td><td>The table pages when the item list is long; a static render is shown first so data is never invisible while the engine loads.</td></tr>
+          <tr><td>Export</td><td>The toolbar's export downloads the current table (SKU, Item, Stock, Reorder at, Status) as a spreadsheet for offline stock-taking.</td></tr>
+          <tr><td>Row actions</td><td>None inline — all changes go through the <b>Adjust stock</b> button in the header (Screen 2).</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">If the live data can't load</div>
+          <p>Instead of the green live banner you may see a red strip: <b>"Backend offline … — couldn't load live stock"</b> if the API is unreachable, <b>"Your role can't view inventory (403)"</b> if you're signed in as a role without <code>inventory:view</code>, or a plain error message otherwise. The table then falls back to the built-in demo seed so the layout still renders.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 : ADJUST STOCK -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Adjust Stock</p>
+      <p class="sm">A small pop-up form to correct any item's on-hand count — receive new stock, issue it out, record returns or damage, or set an exact figure — always with a written reason that is saved to the audit trail.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Keep the on-hand count honest. Whenever the physical shelf and the system disagree — a delivery arrived, bottles broke, a cycle count found a difference — you record the change here so the number is corrected and the reason is logged.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Inventory Manager</span> — needs the <code>inventory:adjust</code> special (a "full"-level grant). Operations sees the page but is view-only.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Catalogue → Inventory → Adjust stock</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Adjust stock — <b>modal dialog</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Item</b><span>Dropdown of every inventory item — shows name, SKU and current count, e.g. "Foil caps (CAP-FOIL) · 80 in"</span></div>
+          <div class="wf-cell"><b>Action</b><span>Increase / receive · Decrease / issue · Returned stock · Damaged / write-off · Set exact count · Stock correction</span></div>
+          <div class="wf-cell"><b>Quantity</b><span>Numeric amount to apply (for "Set exact count" it is the new total)</span></div>
+          <div class="wf-cell"><b>Reason</b><span>Free-text note — required, e.g. "stock received", "breakage", "cycle count"</span></div>
+          <div class="wf-cell"><b>Footer</b><span>Cancel · Apply adjustment; a toast confirms "Item: from → to"</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Adjust stock dialog: item, action, quantity and required reason.</div></div>
+
+      <h4>Form fields</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Item</td><td>Which stock item to adjust</td><td>Select from the live item list</td><td class="t-req">Yes</td><td>Options are built from the loaded inventory; each carries its <code>kind</code> (variant/material) and id. If nothing is picked, "Pick an item." is shown. If the list is still loading, the button toasts to try again in a moment.</td><td>Foil caps (CAP-FOIL) · 80 in</td></tr>
+          <tr><td>Action</td><td>How to change the count</td><td>Increase / receive · Decrease / issue · Returned stock · Damaged / write-off · Set exact count · Stock correction</td><td class="t-req">Yes</td><td>Maps to modes <code>increase</code>, <code>decrease</code>, <code>returned</code>, <code>damaged</code>, <code>set</code>, <code>correction</code> — see the action table below.</td><td>Increase / receive</td></tr>
+          <tr><td>Quantity</td><td>The amount to apply</td><td>Whole number, 0 and up (max 1,000,000)</td><td class="t-req">Yes</td><td>Rounded to a whole number. Must be positive; a 0 is only allowed with <b>Set exact count</b> (to zero the item). Server rejects anything that would drive the count below zero.</td><td>500</td></tr>
+          <tr><td>Reason</td><td>Why the count is being changed</td><td>Free text, 1–300 characters</td><td class="t-req">Yes</td><td>Cannot be blank ("A reason is required."). Saved to the audit log and, for bottle variants, to the product event history.</td><td>Cycle count — 12 caps damaged in store</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The six actions and what each does to the count</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Action (label)</th><th>Mode</th><th>Effect on on-hand count</th><th>When to use it</th></tr></thead>
+        <tbody>
+          <tr><td>Increase / receive</td><td><code>increase</code></td><td>Current <b>+</b> quantity</td><td>New stock arrived / was produced.</td></tr>
+          <tr><td>Decrease / issue</td><td><code>decrease</code></td><td>Current <b>−</b> quantity</td><td>Stock issued out or consumed.</td></tr>
+          <tr><td>Returned stock</td><td><code>returned</code></td><td>Current <b>+</b> quantity</td><td>Previously-issued stock came back in.</td></tr>
+          <tr><td>Damaged / write-off</td><td><code>damaged</code></td><td>Current <b>−</b> quantity</td><td>Breakage, spoilage or loss to write off.</td></tr>
+          <tr><td>Set exact count</td><td><code>set</code></td><td>Count becomes <b>exactly</b> the quantity</td><td>A physical count found the true figure.</td></tr>
+          <tr><td>Stock correction</td><td><code>correction</code></td><td>Count becomes <b>exactly</b> the quantity</td><td>Fixing a data-entry mistake to a known number.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Button actions</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Adjust stock (header)</td><td>Opens the Adjust stock dialog</td><td>Opens the modal in the browser; loads nothing new (uses the already-loaded item list)</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Inventory Manager</span></td></tr>
+          <tr><td>Apply adjustment</td><td>Validates the form, applies the change and refreshes the table &amp; KPIs</td><td><code>POST /api/admin/inventory/adjust</code> with <code>{ kind, id, mode, quantity, reason }</code>. The server re-checks the item exists, applies the mode, refuses a negative result, saves the new count, writes an <code>inventory.adjust.&lt;mode&gt;</code> audit entry (and, for a bottle variant, a <code>STOCK</code> product event), and returns the before/after. A toast shows "Item: from → to".</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Inventory Manager</span> (<code>adjust</code> special)</td></tr>
+          <tr><td>Cancel / × / Esc</td><td>Closes the dialog without changing anything</td><td>None</td><td>Any viewer</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Stock can never go negative</div>
+          <p>If a Decrease, Issue or Damage would take the count below zero, the server rejects it with the exact current figure, e.g. <b>"Adjustment would make stock negative (current 80)."</b> — the count is left untouched. To zero an item deliberately, use <b>Set exact count</b> with a quantity of 0. Every applied adjustment is permanent in the audit trail; there is no "undo" other than a compensating adjustment.</p>
+        </div>
+      </div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — correct an item's on-hand count</div>
+        <div class="wf-flow"><span>Click "Adjust stock"</span><span>Pick the item</span><span>Choose an action</span><span>Enter the quantity</span><span>Type a reason</span><span>Apply adjustment</span><span>Count updates · audit logged · KPIs &amp; table refresh</span></div>
+      </div><div class="wire-cap">Figure — the end-to-end stock-correction path.</div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3 : SUPPLY ITEM API -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Managing supply items (API)</p>
+      <p class="sm">The raw-material / supplies catalogue behind the table — create, edit and remove <code>InventoryItem</code> rows. These endpoints exist in the backend for setting up new supply lines.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Add a brand-new supply line (e.g. a new cap type or cleaning agent), rename a unit, adjust a reorder level, or retire an item that is no longer stocked.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Inventory Manager</span> — create needs <code>inventory:create</code>, edit needs <code>inventory:edit</code>, delete needs <code>inventory:delete</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Catalogue → Inventory</span> (backed by <code>/api/admin/inventory</code>)</span>
+    </div>
+    <div class="spec-body">
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Filled-bottle stock is created with the product, not here</div>
+          <p>These create/edit/delete endpoints govern only the <b>raw-material / supply</b> side (<code>InventoryItem</code>). The <b>filled-bottle</b> rows in the table come from product <code>Variant</code> records and are created on the <b>Products</b> screen, not here — on the Inventory screen you correct their counts with <b>Adjust stock</b>.</p>
+        </div>
+      </div>
+
+      <h4>Add a supply item — <code>POST /api/admin/inventory</code></h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>SKU</td><td>Unique stock code for the item</td><td>Uppercase letters, numbers, underscores; 2–40 chars</td><td class="t-req">Yes</td><td>Auto-uppercased; must match <code>^[A-Z0-9_]+$</code>. A duplicate SKU is rejected "An item with that SKU already exists."</td><td>CAP-FOIL</td></tr>
+          <tr><td>Name</td><td>Human-readable item name</td><td>2–80 characters</td><td class="t-req">Yes</td><td>Trimmed; required.</td><td>Foil caps</td></tr>
+          <tr><td>Unit</td><td>The counting unit</td><td>1–20 characters</td><td class="t-req">Yes</td><td>Trimmed; free text (e.g. "pcs", "litre").</td><td>pcs</td></tr>
+          <tr><td>Quantity</td><td>Opening on-hand count</td><td>0 or more</td><td class="t-opt">Opt.</td><td>Defaults to 0 if omitted.</td><td>500</td></tr>
+          <tr><td>Reorder at</td><td>Level that flags the item for reorder</td><td>0 or more</td><td class="t-opt">Opt.</td><td>Defaults to 0 if omitted; drives the status colour.</td><td>500</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Edit / remove a supply item</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Operation</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Edit fields — <code>PATCH /api/admin/inventory/{id}</code></td><td>Change name, unit, quantity or reorder level</td><td>Any subset of <b>name</b> (2–80), <b>unit</b> (1–20), <b>quantity</b> (≥0), <b>reorderAt</b> (≥0). Changing the <b>quantity</b> also requires the <code>inventory:adjust</code> special (it is a stock change). Audited as <code>inventory.update</code>.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Inventory Manager</span></td></tr>
+          <tr><td>Delete — <code>DELETE /api/admin/inventory/{id}</code></td><td>Removes the supply item entirely</td><td>Deletes the <code>InventoryItem</code> if it exists (else "Item not found."). Audited as <code>inventory.delete</code>.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Inventory Manager</span> (<code>delete</code>)</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">Prefer "Adjust stock" over editing the quantity directly</div>
+          <p>You <em>can</em> change an item's <b>quantity</b> with a PATCH, but the <b>Adjust stock</b> tool is the better path: it forces a reason, records the exact before → after, refuses negatives, and writes a typed <code>inventory.adjust.&lt;mode&gt;</code> event — so the <em>why</em> is never lost. Use the edit path for the item's descriptive fields (name, unit) and its reorder level; use Adjust stock for the count.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ ROLE ACCESS -->
+  <h4>Who can do what</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Capability</th><th>Permission</th><th>Super Admin</th><th>Admin</th><th>Inventory Manager</th><th>Operations</th><th>Other roles</th></tr></thead>
+    <tbody>
+      <tr><td>View the inventory overview &amp; KPIs</td><td><code>inventory:view</code></td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+      <tr><td>Adjust an item's stock count</td><td><code>inventory:adjust</code> (a "full"-level special)</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td></tr>
+      <tr><td>Add a supply item</td><td><code>inventory:create</code></td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td></tr>
+      <tr><td>Edit a supply item</td><td><code>inventory:edit</code></td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td></tr>
+      <tr><td>Delete a supply item</td><td><code>inventory:delete</code></td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td></tr>
+    </tbody>
+  </table></div>
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Inventory is a supply-side module</div>
+      <p>In the permission matrix the <b>Inventory Manager</b> role holds this module at "full" (so it can view, adjust, create, edit and delete), <b>Super Admin</b> and <b>Admin</b> have full access to everything, and <b>Operations</b> gets it at "view" only — it can watch stock levels but not change them. Support, procurement, quality, marketing, accountant and delivery roles have no inventory access and never see this screen. Every API call runs <code>requirePermission(inventory, …)</code> on the server, so hiding the menu item is convenience only — the server is the real boundary. Even if a view-only user reaches the <b>Adjust stock</b> button, applying the change is rejected with a 403.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ BEST PRACTICE -->
+  <div class="call best">
+    <span class="ci">✅</span>
+    <div class="cbody">
+      <div class="ctitle">Best Practice — count, then reconcile with a reason every time</div>
+      <p>Run a physical cycle count on a rota, then reconcile the system to it through <b>Adjust stock</b> — use <b>Set exact count</b> when you know the true figure, or <b>Damaged / write-off</b> for known breakage — and always write a specific reason ("morning cycle count", "3 crates broken in transit"). Set each item's <b>Reorder at</b> to about half of your safe minimum so the amber <b>Low</b> band gives you lead time before it turns red. Watch the <b>Reorder now</b> KPI daily; when it is above zero, use the <b>Reorder</b> filter chip to see exactly which items to purchase.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOTING -->
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>"Your role can't view inventory (403)"</td><td>Signed in as a role without <code>inventory:view</code> (e.g. Support, Accountant)</td><td>Use a Super Admin, Admin, Inventory Manager or Operations account.</td></tr>
+      <tr><td>Table shows "Backend offline" and only demo rows</td><td>The Next.js backend isn't running / unreachable</td><td>Start the backend (next-app) so the overview API can be reached.</td></tr>
+      <tr><td>"Adjustment would make stock negative (current N)"</td><td>A Decrease / Issue / Damage is larger than what's on hand</td><td>Enter a quantity no larger than the current count, or use <b>Set exact count</b> to correct to the real figure.</td></tr>
+      <tr><td>"A reason is required."</td><td>The Reason box was left blank</td><td>Type a short, specific reason before applying — it's stored in the audit trail.</td></tr>
+      <tr><td>"Enter a positive quantity."</td><td>Quantity is 0 (or negative) on an action other than Set exact count</td><td>Enter a positive number, or switch the action to <b>Set exact count</b> if you really mean to zero the item.</td></tr>
+      <tr><td>"Inventory is still loading — try again in a moment."</td><td>Clicked <b>Adjust stock</b> before the live item list finished loading</td><td>Wait a moment for the green live banner, then reopen the dialog.</td></tr>
+      <tr><td>Apply adjustment fails with a permission error</td><td>Role has <code>inventory:view</code> but not the <code>inventory:adjust</code> special (e.g. Operations)</td><td>Ask a Super Admin, Admin or Inventory Manager to make the change, or have your role upgraded.</td></tr>
+      <tr><td>"An item with that SKU already exists."</td><td>Creating a supply item with a SKU already in use</td><td>SKUs are unique — pick a different code.</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- ============================================================ FAQ -->
+  <h4>Frequently asked questions</h4>
+  <h4>Q. What's the difference between "Stock" and "1000 ml ready"?</h4>
+  <p><b>Stock</b> in the table is everything physically on hand. The <b>1000 ml ready</b> and <b>500 ml ready</b> KPIs show the <b>available</b> figure — stock minus whatever is already reserved for open orders — so they tell you how many bottles you can still sell right now.</p>
+
+  <h4>Q. Why did an item turn red even though it still has stock?</h4>
+  <p>Because its <b>Stock</b> has fallen to or below its <b>Reorder at</b> level (that's the <span class="pill">Reorder</span> state), or its <b>available</b> count hit zero because everything is reserved (that's <span class="pill">Out of stock</span>). Red means "act now", not necessarily "empty".</p>
+
+  <h4>Q. I received a delivery of caps. How do I add them?</h4>
+  <p>Click <b>Adjust stock</b>, pick the caps item, choose <b>Increase / receive</b>, enter how many arrived, type a reason like "delivery received", and press <b>Apply adjustment</b>. The count goes up and the change is logged.</p>
+
+  <h4>Q. Can I undo an adjustment I made by mistake?</h4>
+  <p>There is no delete or undo — the ledger is append-only for integrity. Post a compensating adjustment instead (e.g. if you added 500 too many, do a <b>Decrease / issue</b> of 500, or use <b>Set exact count</b> to fix it to the true number) and note the correction in the reason.</p>
+
+  <h4>Q. Does adjusting a bottle's stock affect what customers can order?</h4>
+  <p>Yes — filled-bottle rows are the product <b>Variant</b> stock, so lowering a variant's count reduces what's sellable, and its status will flip to Low / Reorder / Out of stock accordingly. A bottle adjustment also writes a <code>STOCK</code> entry to that product's event history, unlike a supply-only item.</p>
+
+</section>

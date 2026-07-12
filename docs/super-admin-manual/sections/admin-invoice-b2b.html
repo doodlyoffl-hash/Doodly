@@ -1,0 +1,297 @@
+<section class="sheet" id="admin-invoice-b2b">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Commerce · Business Invoices</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Commerce</span></div>
+  <h2 class="section-title">Business Invoices</h2>
+  <p class="lead">A premium, print-ready statement of account for every B2B partner — supply analytics, financial summary, an outstanding-and-credit tracker and payment history — backed by an automated engine that issues numbered GST invoices per B2B order and emails a branded PDF to the buyer.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Two things live under one name</div><p>"Business Invoices" is made of two real pieces of code that work together:</p><p><b>1 — The screen you open</b> at <span class="navpath">Admin → Commerce → Business Invoices</span> (<code>/admin/invoice-b2b.html</code>). The page's <code>invoiceB2B</code> block (registered in <code>blocks.js</code>) mounts a <b>Business Partner Statement</b> built by <code>invoice.js</code> → <code>DOODLY_INVOICE.mountB2B</code>. On load, <code>layout.js</code> → <code>wireB2BInvoiceBackend()</code> pulls the real businesses and orders from the DOODLY database and re-renders the statement from them.</p><p><b>2 — The invoice engine</b> in the Next.js backend (<code>next-app/lib/b2b/invoices.ts</code>, <code>invoice-email.ts</code>, <code>invoice-pdf.ts</code> behind <code>/api/b2b/invoices</code>). This issues the actual numbered <code>BusinessInvoice</code> records, auto-emails the branded PDF, tracks delivery, and records an append-only audit trail. Invoices are <b>generated from the B2B Orders module</b> ("Generate invoice"); this section documents both the statement you read and the engine that powers it.</p></div></div>
+
+  <!-- ============================================================= -->
+  <!-- SCREEN 1 — Business Partner Statement -->
+  <!-- ============================================================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Business Partner Statement</p><p class="sm">The full statement of account for one B2B partner — the screen this page opens on.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the office one printable, shareable document per business that summarises what was supplied, what was billed, what is outstanding, how much credit is left, and the recent payment history — so a partner's account can be reviewed or sent in seconds.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> — the underlying B2B data endpoints are Admin/Super-Admin only (<code>canUseB2B</code> in <code>lib/b2b/guard.ts</code>). No other staff role can load it.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → Business Invoices</span></span>
+    </div>
+    <div class="spec-body">
+      <p>The page header reads <b>"Business Partner Statement — Premium B2B statement: supply analytics, financial summary, outstanding tracker, payment history and credit insights. Print, PDF, Excel, email or WhatsApp."</b> Below it, a single business is shown as a full statement document. A <b>Business</b> picker at the top switches between partners; choosing another business rewrites the page's <code>?id=</code> and re-draws the whole statement for that partner. Money is animated with a count-up on open (animations are switched off for print and under "reduce motion").</p>
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Business Partner Statement — <b>action bar</b> · Print · Download PDF · Excel · Email · WhatsApp · ⚙ (Super Admin)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Business picker</b><span>Dropdown of every registered business (Name + code); switching regenerates the statement</span></div>
+          <div class="wf-cell"><b>Statement header</b><span>Brand + "STATEMENT OF ACCOUNT" · Statement no · Date · Billing period · Due date · Status badge</span></div>
+          <div class="wf-cell"><b>Alerts strip</b><span>Conditional banners: overdue, payment-due-soon, credit-limit-near, pending invoices</span></div>
+          <div class="wf-cell"><b>Business + Billing</b><span>Partner identity (GSTIN, contact, address) and billing terms (credit period, due, terms, sales rep)</span></div>
+          <div class="wf-cell"><b>Supply summary</b><span>Chips: total litres · total bottles · products · delivery days · avg daily (L)</span></div>
+          <div class="wf-cell"><b>Financial summary</b><span>Eight stat tiles: previous outstanding, current invoice, payments received, credit notes, discounts, GST, total outstanding, net payable</span></div>
+          <div class="wf-cell"><b>Outstanding tracker</b><span>Outstanding · due date · days overdue · credit limit · available credit · settled-% bar · amount due today</span></div>
+          <div class="wf-cell"><b>Payment history</b><span>Table: Date · Invoice · Amount · Paid · Pending · Status</span></div>
+          <div class="wf-cell"><b>Business analytics</b><span>Avg daily / monthly / quarterly / lifetime purchase · highest &amp; lowest month · avg payment time · most ordered</span></div>
+          <div class="wf-cell"><b>Footer</b><span>Thank-you message · accounts phone · website · terms · authorised signatory</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Business Partner Statement</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Live wiring &amp; the "● Live" banner</div><p>When the backend is reachable, <code>wireB2BInvoiceBackend()</code> fetches <code>/api/b2b/businesses</code> and <code>/api/b2b/orders</code>, mirrors them into the store the statement reads, re-mounts the statement, and shows a green banner: <b>"● Live — B2B statement from the DOODLY database (N business(es), M order(s))."</b> If the backend is offline the banner reads "⚠ Backend offline…"; if your role is blocked it reads "⚠ Your role can't access B2B (403)." The statement's identity, the selected business's profile (order count, revenue, average daily, outstanding, preferred products) and the payment-history rows are drawn from that business's <b>real registered profile and recorded B2B orders</b>.</p></div></div>
+
+      <h4>Header &amp; meta fields</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Statement no</b></td><td>The statement's reference number.</td><td>Format <code>DOODLY/B2B/{year}/{#####}</code>.</td><td class="t-req">Yes</td><td>Same number scheme the engine mints for real invoices via <code>formatInvoiceNumber()</code>.</td><td>DOODLY/B2B/2026/00042</td></tr>
+          <tr><td><b>Date</b></td><td>The date the statement was produced.</td><td>Day-Month-Year.</td><td class="t-req">Yes</td><td>Display field on the statement head.</td><td>30 Jun 2026</td></tr>
+          <tr><td><b>Billing period</b></td><td>The window the statement covers.</td><td>Date range.</td><td class="t-req">Yes</td><td>Display field.</td><td>1–30 Jun 2026</td></tr>
+          <tr><td><b>Due date</b></td><td>When payment is expected.</td><td>A date.</td><td class="t-req">Yes</td><td>Also shown in the Billing block and the outstanding tracker.</td><td>10 Jul 2026</td></tr>
+          <tr><td><b>Status</b></td><td>The account's standing.</td><td>Paid · Pending · Overdue (badge).</td><td class="t-req">Yes</td><td>Derived from outstanding balance and days overdue.</td><td>Pending</td></tr>
+          <tr><td><b>Sales rep</b></td><td>The DOODLY person who owns this relationship.</td><td>A name.</td><td class="t-opt">Opt.</td><td>Shown in the Billing block.</td><td>Vikram Rao</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Business &amp; Billing panels</h4>
+      <p>The <b>Business</b> panel is the partner's identity, drawn straight from the registered business record: <b>name</b>, <b>type · code</b>, <b>GSTIN</b>, <b>contact person · mobile</b>, <b>email</b> and <b>address</b>. The <b>Billing</b> panel lists <b>Credit period</b>, <b>Payment due</b>, <b>Terms</b> (the business's payment term — Cash / Credit / Weekly / Monthly billing) and <b>Sales rep</b>.</p>
+
+      <h4>Alerts strip (shown only when relevant)</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Alert</th><th>When it appears</th><th>Colour</th></tr></thead>
+        <tbody>
+          <tr><td><b>Overdue payment</b></td><td>The account is past its due date — shows days past due and the outstanding amount.</td><td>Red</td></tr>
+          <tr><td><b>Payment due soon</b></td><td>There is an outstanding balance that is not yet overdue — shows the amount due and due date.</td><td>Amber</td></tr>
+          <tr><td><b>Credit limit nearly reached</b></td><td>Available credit has fallen to 15% or less of the limit — shows how little is left.</td><td>Red</td></tr>
+          <tr><td><b>Pending invoices</b></td><td>At least one row in payment history is still unpaid.</td><td>Amber</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Supply summary (chips)</h4>
+      <p>Five count-up chips summarise what was delivered: <b>Total litres</b>, <b>Total bottles</b>, <b>Products</b>, <b>Delivery days</b> and <b>Avg daily (L)</b>. These are derived from the selected business's supply profile (average daily volume × the period and its preferred-product list).</p>
+
+      <h4>Financial summary (stat tiles)</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Tile</th><th>What it means</th><th>Tone</th></tr></thead>
+        <tbody>
+          <tr><td><b>Previous outstanding</b></td><td>Balance carried forward from the last cycle.</td><td>Neutral</td></tr>
+          <tr><td><b>Current invoice</b></td><td>New charges billed this cycle.</td><td>Neutral</td></tr>
+          <tr><td><b>Payments received</b></td><td>Money collected during the cycle.</td><td>Green</td></tr>
+          <tr><td><b>Credit notes</b></td><td>Value of any credit notes applied.</td><td>Neutral</td></tr>
+          <tr><td><b>Discounts</b></td><td>Discounts given on the cycle.</td><td>Neutral</td></tr>
+          <tr><td><b>GST</b></td><td>Tax charged on the cycle.</td><td>Neutral</td></tr>
+          <tr><td><b>Total outstanding</b></td><td>Previous + current − received − credit notes − adjustments.</td><td>Amber</td></tr>
+          <tr><td><b>Net payable</b></td><td>The amount the partner ultimately owes.</td><td>Forest</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">How the totals relate</div><p>The statement enforces the accounting identity <b>Total outstanding = previous outstanding + current invoice − payments received − credit notes − adjustments</b>, and <b>Available credit = credit limit − outstanding</b> (never below zero). These same relationships are unit-tested inside <code>invoice.js</code> (<code>runTests()</code>).</p></div></div>
+
+      <h4>Outstanding &amp; credit tracker</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><b>Outstanding</b></td><td>The live balance owed on this account.</td><td>Rupees.</td></tr>
+          <tr><td><b>Due date</b></td><td>When that balance is due.</td><td>Date.</td></tr>
+          <tr><td><b>Days overdue</b></td><td>How many days past due (0 if on time).</td><td>Turns red when non-zero.</td></tr>
+          <tr><td><b>Credit limit</b></td><td>The maximum credit granted to this partner.</td><td>Set when the business is registered (credit limit field).</td></tr>
+          <tr><td><b>Available credit</b></td><td>Credit limit − outstanding.</td><td>Shown in green.</td></tr>
+          <tr><td><b>Settled % bar</b></td><td>Share of this cycle already paid.</td><td>An animated progress bar with a "% of this cycle settled" label.</td></tr>
+          <tr><td><b>Amount due today</b></td><td>The headline figure the partner should pay now.</td><td>Large count-up number.</td></tr>
+          <tr><td><b>Balance after payment</b></td><td>What remains once the amount due is paid.</td><td>Rupees.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Payment history — table spec</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Property</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td>Date · Invoice · Amount · Paid · Pending · Status.</td></tr>
+          <tr><td><b>Rows</b></td><td>Built from the selected business's recent B2B orders (up to 6). Each row's Amount = order total, Paid = amount collected, Pending = the difference; Status is a badge (Paid / Partial / Pending).</td></tr>
+          <tr><td><b>Status badge</b></td><td>Green "Paid" when paid ≥ amount; blue "Partial Payment" when part-paid; amber "Pending" when nothing collected.</td></tr>
+          <tr><td><b>Mobile</b></td><td>On small screens each row collapses to a compact card (invoice + badge, then date · amount · paid · pending).</td></tr>
+          <tr><td><b>Sorting / search / pagination</b></td><td>None — this is a fixed statement table, not the interactive DataTable. To search or filter across many invoices use the invoice engine's list endpoint (Screen 3).</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Business analytics</h4>
+      <p>Eight read-only insight tiles round off the statement: <b>Avg daily purchase</b>, <b>Monthly purchase</b>, <b>Quarterly purchase</b>, <b>Lifetime value</b>, <b>Highest month</b>, <b>Lowest month</b>, <b>Avg payment time</b> and <b>Most ordered</b> (the partner's top product from its profile).</p>
+
+      <h4>Action bar — buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Print</b></td><td>Opens the browser print dialog with the statement laid out for paper (animations off).</td><td>Calls <code>window.print()</code>; print CSS hides the toolbar and freezes counters.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+          <tr><td><b>Download PDF</b></td><td>Produces a PDF of the statement.</td><td>Uses the same print pipeline (<code>window.print()</code> → "Save as PDF"). For a server-rendered vector PDF of a numbered invoice, use the engine's PDF endpoint (Screen 3).</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+          <tr><td><b>Excel</b></td><td>Downloads the statement as a spreadsheet.</td><td>Builds an <code>.xls</code> file (business, GSTIN, period, the financial summary rows and the full payment-history table) and triggers a download; a toast confirms "Excel exported".</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+          <tr><td><b>Email</b></td><td>Opens a pre-filled email to send the statement.</td><td>Opens a <code>mailto:</code> with subject "Your DOODLY statement …", the statement number, the amount due and a link. Sending happens in your own mail client. <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> only; requires your confirmation before you send.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+          <tr><td><b>WhatsApp</b></td><td>Shares the statement over WhatsApp.</td><td>Opens a <code>wa.me</code> link with the statement title, number, amount and a link, in a new tab. You choose the recipient and press send.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+          <tr><td><b>⚙ Settings (gear)</b></td><td>Opens Invoice Settings (Screen 2).</td><td>Renders the config modal. The gear is only drawn for a Super Admin.</td><td><span class="pill role">Super Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Empty state</div><p>If no business is registered (and demo data is off, as on the live site), the page shows a clean empty card: 🧾 <b>"No business statement yet — Register a business and record B2B orders to generate a partner statement here."</b> Register the partner in <span class="navpath">B2B Orders</span> first; the statement fills in automatically once orders exist.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- SCREEN 2 — Invoice Settings -->
+  <!-- ============================================================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Invoice Settings</p><p class="sm">The Super-Admin control panel for how every DOODLY invoice and statement looks.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Set the branding and legal text that appears on every invoice and statement — brand name, tagline, number format, footer, terms, signature, watermark, and whether GST and the pay-QR are shown.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> only — the gear button and the modal are guarded by <code>isSuper()</code>.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → Business Invoices → ⚙ (action bar)</span></span>
+    </div>
+    <div class="spec-body">
+      <p>Clicking the gear opens the <b>Invoice settings</b> dialog. Saving writes the settings, records a <code>invoice.config</code> entry in the audit trail, closes the dialog, shows an "Invoice settings saved" toast and re-draws the statement with the new branding. These settings apply to <b>both</b> the B2B statement and the B2C customer invoice.</p>
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Invoice settings — <b>modal dialog</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Branding</b><span>Brand name · Tagline</span></div>
+          <div class="wf-cell"><b>Numbering</b><span>Invoice prefix · Number format</span></div>
+          <div class="wf-cell"><b>Legal text</b><span>Footer message · Terms &amp; conditions</span></div>
+          <div class="wf-cell"><b>Marks</b><span>Signature line · Watermark text</span></div>
+          <div class="wf-cell"><b>Toggles</b><span>Show GST · Show QR code</span></div>
+          <div class="wf-cell"><b>Save</b><span>"Save settings" button + ✕ close</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — Invoice Settings dialog</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Brand name</b></td><td>The name printed at the top of every document.</td><td>Text.</td><td class="t-req">Yes</td><td>Defaults to the DOODLY brand name.</td><td>DOODLY</td></tr>
+          <tr><td><b>Tagline</b></td><td>The line under the brand name on the B2C invoice head.</td><td>Text.</td><td class="t-opt">Opt.</td><td>Statement head uses "Business Partner Statement" regardless.</td><td>Fresh A2 buffalo milk, delivered daily</td></tr>
+          <tr><td><b>Invoice prefix</b></td><td>Prefix used when building document numbers.</td><td>Text.</td><td class="t-opt">Opt.</td><td>Stored in config.</td><td>DOODLY</td></tr>
+          <tr><td><b>Number format</b></td><td>The pattern for invoice numbers.</td><td>A template with <code>{YYYY}</code> and a <code>{#####}</code> counter.</td><td class="t-opt">Opt.</td><td>Must contain a <code>{#…}</code> counter (checked by <code>runTests()</code>).</td><td>DOODLY/INV/{YYYY}/{#####}</td></tr>
+          <tr><td><b>Footer message</b></td><td>The thank-you line at the foot of the document.</td><td>Multi-line text.</td><td class="t-opt">Opt.</td><td>Shown on both statement and invoice.</td><td>Thank you for choosing DOODLY…</td></tr>
+          <tr><td><b>Terms &amp; conditions</b></td><td>The legal terms printed in the footer.</td><td>Multi-line text.</td><td class="t-opt">Opt.</td><td>Shown on both documents.</td><td>Payment due within the agreed credit period…</td></tr>
+          <tr><td><b>Signature line</b></td><td>The "For &lt;company&gt;" authorised-signatory line.</td><td>Text (blank hides it).</td><td class="t-opt">Opt.</td><td>Rendered above "Authorised signatory".</td><td>For DOODLY Foods Pvt Ltd</td></tr>
+          <tr><td><b>Watermark text</b></td><td>A diagonal watermark across the page.</td><td>Text (blank = none).</td><td class="t-opt">Opt.</td><td>e.g. PAID / DRAFT.</td><td>DRAFT</td></tr>
+          <tr><td><b>Show GST</b></td><td>Whether the GST line is printed.</td><td>On / Off checkbox.</td><td class="t-opt">Opt.</td><td>Toggles the GST row on both documents.</td><td>On</td></tr>
+          <tr><td><b>Show QR code</b></td><td>Whether the scan-to-pay/verify QR is printed.</td><td>On / Off checkbox.</td><td class="t-opt">Opt.</td><td>Uses <code>DOODLY_QR</code> to draw the code.</td><td>On</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Set the branding, terms and signature <b>once</b>, before the first real invoice goes out. Because these settings also drive the customer invoice and are baked into every emailed PDF, changing them mid-cycle means older documents and newer ones won't match. Use the <b>Watermark</b> ("DRAFT") while you are still testing, and clear it before real billing.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- SCREEN 3 — Invoice engine & automated email -->
+  <!-- ============================================================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Business Invoice engine &amp; automated email</p><p class="sm">The backend that issues numbered GST invoices per B2B order and emails the branded PDF.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Turn a delivered B2B order into a permanent, numbered <code>BusinessInvoice</code> record; auto-email the buyer a premium branded email with the PDF attached; track delivery, payments and status; and keep an append-only audit trail — all money-safe and idempotent.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> for every endpoint (<code>canUseB2B</code>); <b>resend email</b> is <span class="pill role">Super Admin</span> only. The emailed PDF/View links carry a signed token so the buyer can open their own invoice without logging in.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → B2B Orders → Generate invoice</span> · API <span class="navpath">/api/b2b/invoices</span></span>
+    </div>
+    <div class="spec-body">
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where invoices are created</div><p>An invoice is <b>issued from a B2B order</b> — either automatically as part of the order flow, or by <code>POST /api/b2b/invoices</code> with an <code>orderId</code>. Each order can have exactly one invoice (a second attempt is rejected: "This order already has an invoice."). Amounts and line items always derive from the order; payments come from the order's <code>BusinessPayment</code> records.</p></div></div>
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Invoice records &amp; API surface — <b>list · detail · email tracker</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Filters</b><span>status · business · product · text (q) · date from/to · amount from/to · overdue · sort</span></div>
+          <div class="wf-cell"><b>Invoice list</b><span>Number · Business · GSTIN · Order · Issued · Due · Status · Payment status · Total · Paid · GST · Items · Email status</span></div>
+          <div class="wf-cell"><b>Invoice detail</b><span>Order + business + line items + payments + audit events + email delivery block</span></div>
+          <div class="wf-cell"><b>Email tracker</b><span>status (PENDING/SENT/FAILED/SKIPPED) · to · sent-at · message id · retry count · error</span></div>
+          <div class="wf-cell"><b>Uninvoiced picker</b><span>B2B orders with no invoice yet — the "which order to invoice" list</span></div>
+          <div class="wf-cell"><b>Reports</b><span>Totals: invoiced revenue · collected · outstanding · GST · overdue · by-business top 10</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the invoice engine's data &amp; API surface</div></div>
+
+      <h4>Create-invoice form fields (<code>POST /api/b2b/invoices</code>)</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>orderId</b></td><td>The B2B order to bill.</td><td>An uninvoiced order id.</td><td class="t-req">Yes</td><td>Missing → 400 "Select an order to invoice". Cancelled order → "Cannot invoice a cancelled order". Already invoiced → 409.</td><td>o_ck9…</td></tr>
+          <tr><td><b>dueDate</b></td><td>When payment is due.</td><td>A date.</td><td class="t-opt">Opt.</td><td>If blank, computed from the business's payment term: Weekly +7, Monthly +30, Credit +15, otherwise same day.</td><td>2026-07-30</td></tr>
+          <tr><td><b>notes</b></td><td>A note printed on the invoice.</td><td>Text.</td><td class="t-opt">Opt.</td><td>Trimmed; blank saved as none.</td><td>Delivered to loading dock B.</td></tr>
+          <tr><td><b>terms</b></td><td>Invoice-specific terms.</td><td>Text.</td><td class="t-opt">Opt.</td><td>Trimmed; blank saved as none.</td><td>Net 30, no returns on perishables.</td></tr>
+        </tbody>
+      </table></div>
+      <p>On success the invoice is minted with number <code>DOODLY/B2B/{year}/{#####}</code> (a per-year serial counter), a "created" audit event is written, and the automated email fires (see below).</p>
+
+      <h4>Invoice list — table spec (<code>GET /api/b2b/invoices</code>)</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Property</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td>Number · Business (code + name) · GSTIN · Order code · Issued at · Due date · Status · Payment status · Total · Paid · GST · Items summary (first 3 items) · Email status · Email sent-at.</td></tr>
+          <tr><td><b>Filters</b></td><td><code>status</code>, <code>businessId</code>, <code>productSlug</code>, date <code>from</code>/<code>to</code>, amount <code>amountFrom</code>/<code>amountTo</code>, and <code>overdue=1</code> (issued/partial invoices past due).</td></tr>
+          <tr><td><b>Search</b></td><td><code>q</code> matches invoice number, order code, and the business code / name / GSTIN (case-insensitive).</td></tr>
+          <tr><td><b>Sorting</b></td><td><code>sort</code> = latest (default) · oldest · amount_desc · amount_asc · business · due.</td></tr>
+          <tr><td><b>Pagination</b></td><td><code>limit</code> (1–100, default 20) and <code>offset</code>; the response returns <code>total</code> for paging.</td></tr>
+          <tr><td><b>Exports</b></td><td>Per-invoice: server-rendered <b>PDF</b> and the exact <b>email HTML</b> (see button table). The statement screen also exports Excel.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Invoice actions (<code>PATCH /api/b2b/invoices/[id]</code> &amp; sub-routes) — buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button / action</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Record payment</b> (<code>pay</code>)</td><td>Books a payment against the invoice's order and re-syncs the invoice status.</td><td>Calls <code>recordPayment</code> on the order, then sets the invoice to PAID (paid ≥ total) or PARTIAL; logs a "payment" event. Rejected on a void invoice.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+          <tr><td><b>Edit</b> (<code>update</code>)</td><td>Change the due date, notes or terms.</td><td>Updates the record and logs an "updated" event. A voided invoice cannot be edited.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+          <tr><td><b>Void</b> (<code>void</code>)</td><td>Cancels the invoice.</td><td>Sets status VOID, stamps <code>voidedAt</code>, logs a "void" event. A void invoice can't be edited or paid. Already-void → 409.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+          <tr><td><b>Download PDF</b> (<code>pdf</code>)</td><td>Streams the branded, server-rendered vector PDF.</td><td><code>GET …/[id]/pdf?dl=1</code> generates it on demand (<code>invoice-pdf.ts</code>); logs a "pdf" event. Access via an authorised admin session <b>or</b> a valid signed token.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> · buyer via signed link</td></tr>
+          <tr><td><b>Preview email HTML</b></td><td>Opens/downloads the exact branded email that was (or would be) sent.</td><td><code>GET …/[id]/email-html</code> renders the template via <code>renderInvoiceEmailById</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+          <tr><td><b>Export</b> (<code>export</code>)</td><td>Marks/records an export of the invoice.</td><td>Logs an "export" audit event.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+          <tr><td><b>Resend email</b> (<code>resend-email</code>)</td><td>Force-resends the branded invoice email + PDF.</td><td>Calls <code>sendBusinessInvoiceEmail(force:true)</code>. <b>Blocked for Admin</b> — "Only a Super Admin can resend invoice emails." Sends on the partner's behalf, so treat as a deliberate action.</td><td><span class="pill role">Super Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — issue &amp; deliver a Business Invoice</div>
+        <div class="wf-flow"><span>B2B order delivered</span><span>Generate invoice (orderId)</span><span>Number minted DOODLY/B2B/YYYY/#####</span><span>PDF rendered</span><span>Branded email + PDF sent (Resend)</span><span>Email status tracked</span><span>Payments recorded → PAID/PARTIAL</span></div>
+      </div><div class="wire-cap">Figure — from delivered order to a settled, emailed invoice</div></div>
+
+      <h4>Automated email — status &amp; safeguards</h4>
+      <p>When an invoice is created the engine automatically builds the PDF and sends a premium branded email to the business's address, then records the outcome on the invoice's <b>Email status</b>:</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Email status</th><th>Meaning</th><th>What happens</th></tr></thead>
+        <tbody>
+          <tr><td><b>SENT</b></td><td>The email was delivered to the provider.</td><td>Records message id + sent-at; increments retry count; logs an "email" event. Won't re-send unless a Super Admin forces a resend (idempotent).</td></tr>
+          <tr><td><b>PENDING</b></td><td>The email provider isn't configured (e.g. local dev without a Resend key).</td><td>Queued quietly, no failure noise; sends once the provider is set.</td></tr>
+          <tr><td><b>SKIPPED</b></td><td>The business has no email on file.</td><td>Marks skipped and alerts Super Admins in-app to add an address and resend.</td></tr>
+          <tr><td><b>FAILED</b></td><td>Sending failed after retries.</td><td>Records the error, alerts Super Admins, and can be retried from the invoice.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Graceful degradation</div><p>If the PDF fails to generate, the email is still sent with a <b>secure download link</b> instead of an attachment, and Super Admins are alerted. The View/Download links in the email are signed and valid for <b>60 days</b>, so the buyer can open the invoice without an account. The whole send flow never throws into the order/invoice code — a failed email never blocks issuing the invoice.</p></div></div>
+
+      <h4>Invoice reports (<code>GET /api/b2b/invoices/reports</code>)</h4>
+      <p>A date-ranged roll-up across all live (non-void) invoices: <b>total invoices</b>, count <b>by status</b>, <b>invoiced revenue</b>, <b>collected</b>, <b>outstanding</b>, <b>GST</b>, <b>overdue count</b> and <b>overdue value</b>, plus a <b>by-business</b> breakdown (top 10 by revenue, each with count, revenue and outstanding).</p>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- Troubleshooting + FAQ -->
+  <!-- ============================================================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common issues and quick answers.</p></div>
+    <div class="spec-body">
+      <h4>Troubleshooting</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>Page shows "No business statement yet"</td><td>No business is registered, or demo data is off with none in the database.</td><td>Register the partner and record at least one B2B order in <span class="navpath">B2B Orders</span>; the statement then appears.</td></tr>
+          <tr><td>Banner reads "⚠ Backend offline…"</td><td>The Next.js API isn't reachable from the storefront.</td><td>Confirm the backend is running and the storefront points at the right API base; reload once it's up.</td></tr>
+          <tr><td>Banner reads "Your role can't access B2B (403)"</td><td>You're signed in as a role other than Admin / Super Admin.</td><td>B2B invoices are Admin/Super-Admin only — switch to an authorised account.</td></tr>
+          <tr><td>Invoice email shows <b>SKIPPED</b></td><td>The business has no email address on file.</td><td>Add the business email in <span class="navpath">B2B Orders → business</span>, then resend (Super Admin).</td></tr>
+          <tr><td>Invoice email shows <b>PENDING</b> forever</td><td>The email provider (Resend) key isn't set in the environment.</td><td>Add the provider key in the deployment env; queued invoices then send.</td></tr>
+          <tr><td>"This order already has an invoice."</td><td>An invoice was already issued for that order (one-to-one).</td><td>Open the existing invoice instead of creating a new one; void it first if you must reissue.</td></tr>
+          <tr><td>"Resend" is greyed out / rejected for you</td><td>Resend is Super-Admin only.</td><td>Ask a Super Admin to resend, or the customer can use the secure link in the original email.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Is the money on the statement live?</h4>
+      <p>The partner's identity, profile (order count, revenue, average daily volume, outstanding, preferred products) and the payment-history rows come from the selected business's <b>real registered record and recorded B2B orders</b>. The statement enforces the standard accounting identities (total outstanding, available credit) shown above. For a strictly per-invoice, database-authoritative figure, open the numbered invoice via the engine (Screen 3).</p>
+
+      <h4>What's the difference between the statement's "Download PDF" and the engine's PDF?</h4>
+      <p>The statement's <b>Download PDF</b> prints the on-screen statement through the browser. The engine's PDF (<code>/api/b2b/invoices/[id]/pdf</code>) is a <b>server-rendered vector PDF</b> of a single numbered invoice, built with <code>pdf-lib</code> and used as the email attachment — that's the document you send to a partner for their accounts.</p>
+
+      <h4>Who receives the automated invoice email?</h4>
+      <p>The business's email on file. The email carries the branded invoice, a totals summary, and signed View/Download links valid for 60 days. Delivery is tracked on the invoice; if it fails or is skipped, Super Admins get an in-app alert to fix and resend.</p>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Before month-end billing, open each partner's statement, confirm the <b>credit limit</b> and <b>due date</b> are right, and clear any red alerts. Then issue invoices from B2B Orders so every partner gets the automated branded email + PDF. Reconcile the <span class="navpath">/api/b2b/invoices/reports</span> outstanding and overdue totals against your ledger at the close of each cycle.</p></div></div>
+    </div>
+  </div>
+
+</section>

@@ -1,0 +1,186 @@
+<section class="sheet" id="admin-orders">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Commerce · Orders</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Commerce</span></div>
+  <h2 class="section-title">Orders</h2>
+  <p class="lead">A single, searchable list of <b>every order placed across the whole DOODLY platform</b> — who ordered, what they ordered, how much they paid, whether the money cleared and where the order is in fulfilment.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where this screen lives and what it is</div><p>This is the <b>staff-facing</b> Orders list at route <span class="navpath">/admin/orders.html</span> (manifest key <b>admin/orders</b>). It is assembled from just two blocks: a <b>page head</b> (title "Orders", sub-line "Every order across the platform.", with <b>no action buttons</b>) and a single <b>table</b> bound to the <code>adminOrders</code> dataset. Unlike the customer's <span class="navpath">My Account → Orders</span> page — which shows only that one customer's orders — this screen shows <b>all customers' orders</b> in one place, pulled live from the DOODLY database via <code>GET /api/admin/orders</code>.</p></div></div>
+
+  <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">This screen is read-only by design</div><p>The Orders list is a <b>monitoring and lookup</b> screen. There is no header button, no per-row "Manage" button and no inline edit on this page — you cannot create, edit, cancel, refund or delete an order from here. Those lifecycle actions happen elsewhere: a customer cancels/repeats from their own <span class="navpath">My Account → Orders</span>; refunds are handled under <span class="navpath">Admin → Commerce → Payments</span>; fulfilment moves under <span class="navpath">Admin → Operations → Delivery Mgmt</span>; recurring plans under <span class="navpath">Admin → Commerce → Subscriptions</span>. Use this screen to <i>find</i> and <i>read</i> orders, then jump to the right screen to act.</p></div></div>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Live vs. demo data — read the banner</div><p>When the page loads it calls the backend and shows a status banner just above the table. A green <b>"● Live — N order(s) from the DOODLY database (…)"</b> banner means you are looking at real orders. If the backend can't be reached you'll see <b>"⚠ Backend offline — couldn't load live data."</b>; if your role lacks permission you'll see <b>"⚠ No permission to view orders (403)."</b> Any other error is shown verbatim as <b>"⚠ &lt;message&gt;"</b>. Before you trust a count on this screen, confirm the green Live banner is showing.</p></div></div>
+
+  <!-- ============================================================ SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Orders — platform-wide order list</p><p class="sm">The full table of all orders with instant search, facet filters, sort, export and pagination.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give staff one authoritative view of every order on the platform — its number, the customer, what type of order it is, the amount, the payment result and the current fulfilment status — so they can look up an order during a support call, spot failed payments or on-hold orders, and export a filtered slice for reporting.</span></div>
+
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> (full) · <span class="pill role">Admin</span> (full) · <span class="pill role">Support</span> (manage). The backend requires the <code>orders : view</code> permission; roles without it get a 403 and an empty table. No other role can open this screen.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Commerce → Orders</span></span>
+    </div>
+
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Orders</b> · "Every order across the platform." (no action buttons)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Page head</b><span>Title "Orders" and the sub-line "Every order across the platform." There are no buttons in the header — this is a view-only screen.</span></div>
+          <div class="wf-cell"><b>Live banner</b><span>A one-line status strip above the table: green "● Live — N order(s)…", or an amber/red warning if the backend is offline or the role lacks permission.</span></div>
+          <div class="wf-cell"><b>Table toolbar</b><span>Instant search box, a <b>Filters</b> button (Payment and Status facets), a <b>Saved views</b> dropdown, a favourite (★) toggle, an <b>Export ▾</b> menu and a <b>Refresh</b> button.</span></div>
+          <div class="wf-cell"><b>Filter chips</b><span>Removable chips for every active search term / facet / sort, plus "Clear all" and "Reset".</span></div>
+          <div class="wf-cell"><b>Orders table</b><span>Six columns — Order, Customer, Items, Amount, Payment, Status — one row per order, newest first. Rows are read-only (no row buttons).</span></div>
+          <div class="wf-cell"><b>Payment &amp; Status pills</b><span>Two colour-coded badge columns: the payment result (Paid / Pending / Failed / Refunded) and the fulfilment status.</span></div>
+          <div class="wf-cell"><b>Pagination bar</b><span>Rows-per-page selector (10 / 25 / 50 / 100, default 25), page numbers, a "1–25 of N" count and a Go-to-page box.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Admin Orders screen.</div></div>
+
+      <h3 class="sub">Table columns</h3>
+      <p>The <code>adminOrders</code> table has a fixed six-column layout. Each cell is formatted on the client from the raw order record returned by the backend.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Column</th><th>What it shows</th><th>Backend source</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Order</b></td><td>The short, human-readable order number — the letters "DOO-" followed by the last six characters of the order id, upper-cased.</td><td><code>"DOO-" + id.slice(-6).toUpperCase()</code></td><td><code>DOO-4F9A2C</code></td></tr>
+        <tr><td><b>Customer</b></td><td>The name of the customer who placed the order; a dash when no name is on file.</td><td><code>user.name</code> (else "—")</td><td>Priya Nair</td></tr>
+        <tr><td><b>Items</b></td><td>The order <b>type</b>, title-cased — this column labels what kind of order it is, not the individual products.</td><td><code>type</code> → Subscription / One time / Extra / Sample</td><td>Subscription</td></tr>
+        <tr><td><b>Amount</b></td><td>The order total in rupees (bold), formatted with Indian digit grouping.</td><td><code>totalPaise</code> ÷ 100, via <code>₹ toLocaleString("en-IN")</code></td><td>₹1,200</td></tr>
+        <tr><td><b>Payment</b></td><td>A colour-coded pill showing whether the money cleared (see the Payment badges table).</td><td>derived from <code>status</code> (PaymentStatus)</td><td>Paid (green)</td></tr>
+        <tr><td><b>Status</b></td><td>A colour-coded pill showing the fulfilment stage — the live <b>delivery</b> status when the order has a delivery, otherwise a fallback derived from the payment status (see the Status badges table).</td><td><code>delivery.status</code> (else fallback)</td><td>Out for delivery (amber)</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">"Items" is the order type, not the product list</div><p>Despite the column header, the <b>Items</b> cell on this admin screen shows the order <i>type</i> (Subscription, One time, Extra, Sample), not the line-item products. The backend does return richer detail (customer email &amp; phone, the discount, the delivery date, the invoice number) that this table does not render — see "What the backend returns but the table hides" below. To read the actual products and money breakdown of a specific order, open it from the customer's My Orders view or the invoice.</p></div></div>
+
+      <h3 class="sub">Payment badges (Payment column)</h3>
+      <p>The Payment pill maps the order's payment status one-to-one:</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Pill</th><th>Colour</th><th>Payment status</th><th>Meaning</th>
+      </tr></thead><tbody>
+        <tr><td><b>Paid</b></td><td>Green</td><td><code>PAID</code></td><td>Payment captured successfully — the money has cleared.</td></tr>
+        <tr><td><b>Pending</b></td><td>Amber</td><td><code>PENDING</code></td><td>Order created but payment not yet confirmed (awaiting the gateway/webhook, or a manual/COD flow).</td></tr>
+        <tr><td><b>Failed</b></td><td>Red</td><td><code>FAILED</code></td><td>The payment attempt failed — no money captured.</td></tr>
+        <tr><td><b>Refunded</b></td><td>Grey</td><td><code>REFUNDED</code></td><td>A previously paid order was refunded (e.g. after a cancellation, credited to the customer's wallet).</td></tr>
+      </tbody></table></div>
+
+      <h3 class="sub">Status badges (Status column)</h3>
+      <p>The Status pill is computed in two layers. <b>If the order has a linked delivery</b>, the pill shows that live delivery status (title-cased, amber). <b>If it does not</b>, the pill falls back to a fulfilment label derived from the payment status.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>When</th><th>Pill shown</th><th>Colour</th><th>Meaning</th>
+      </tr></thead><tbody>
+        <tr><td>Order has a delivery</td><td><b>Delivery status</b> — one of: Scheduled, Assigned, Accepted, Packed, Out for delivery, On the way, Reached, Delivered, Failed, Skipped</td><td>Amber</td><td>The real position of the delivery in the operations pipeline; this always wins over the payment-derived fallback.</td></tr>
+        <tr><td>No delivery · payment PAID</td><td><b>Active</b></td><td>Green</td><td>Paid and moving, but no delivery record is linked yet.</td></tr>
+        <tr><td>No delivery · payment PENDING</td><td><b>Processing</b></td><td>Amber</td><td>Order placed, payment not yet confirmed and no delivery scheduled.</td></tr>
+        <tr><td>No delivery · payment FAILED</td><td><b>On hold</b></td><td>Red</td><td>Payment failed and nothing is scheduled — the order is stuck.</td></tr>
+        <tr><td>No delivery · payment REFUNDED</td><td><b>Refunded</b></td><td>Grey</td><td>Money was returned; the order is closed out.</td></tr>
+      </tbody></table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — the two pill columns answer different questions</div><p>Read <b>Payment</b> to answer "did we get the money?" and <b>Status</b> to answer "where is the order?". A healthy fresh order is often <b>Paid</b> + <b>Out for delivery</b>; a problem order to chase is <b>Failed</b> + <b>On hold</b>. Filter on those two facets together to build a work queue.</p></div></div>
+
+      <h3 class="sub">Order types (the "Items" column values)</h3>
+      <div class="twrap"><table><thead><tr>
+        <th>Type</th><th>Shown as</th><th>What it is</th>
+      </tr></thead><tbody>
+        <tr><td><code>SUBSCRIPTION</code></td><td>Subscription</td><td>A delivery generated from a recurring milk plan (the default order type).</td></tr>
+        <tr><td><code>ONE_TIME</code></td><td>One time</td><td>A single, non-recurring purchase.</td></tr>
+        <tr><td><code>EXTRA</code></td><td>Extra</td><td>An add-on / extra order on top of a subscription (e.g. a top-up).</td></tr>
+        <tr><td><code>SAMPLE</code></td><td>Sample</td><td>A trial / sample-pack order.</td></tr>
+      </tbody></table></div>
+
+      <h3 class="sub">Table specification — the unified DataTable engine</h3>
+      <p>Like every DOODLY list, the Orders table is upgraded by the shared DataTable engine (<code>DOODLY_TABLE</code>). It works over the order rows already loaded in the browser, so search / filter / sort are instant and need no extra server round-trips.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Capability</th><th>Behaviour on this screen</th>
+      </tr></thead><tbody>
+        <tr><td><b>Columns</b></td><td>Order, Customer, Items, Amount, Payment, Status (six, fixed).</td></tr>
+        <tr><td><b>Search</b></td><td>One instant search box ("Search orders…"). Matches across every visible cell — so you can find by order number, customer name, type, amount or status text. Debounced (~180 ms).</td></tr>
+        <tr><td><b>Filters (facets)</b></td><td>Auto-detected from the data: a <b>Payment</b> facet and a <b>Status</b> facet, each listing only the values that actually occur, with a count. Tick one or more values to narrow; a badge on the Filters button shows how many facet values are active. (Sub-titles list All / Active / Processing / On hold as the expected states.)</td></tr>
+        <tr><td><b>Date range</b></td><td><b>Not available on this screen.</b> The rows carry no date column, so the DataTable shows no date-range picker here. To filter orders by date, use the backend's <code>from</code>/<code>to</code> parameters or export and filter in a spreadsheet.</td></tr>
+        <tr><td><b>Sorting</b></td><td>Click any column header to sort (▲/▼). Hold <b>Shift</b> and click more headers for multi-column sort. Amount sorts numerically; text columns sort alphabetically.</td></tr>
+        <tr><td><b>Pagination</b></td><td>Rows-per-page 10 / 25 / 50 / 100 (default 25), first/prev/next/last controls, numbered pages, a "from–to of total" count and a Go-to-page box.</td></tr>
+        <tr><td><b>Saved views &amp; favourites</b></td><td>Save a search+filter+sort combination as a named view, and star this screen as a favourite. Both are stored per-user in the browser (localStorage). The active view (search / filters / sort / page-size) also persists across reloads.</td></tr>
+        <tr><td><b>Filter chips</b></td><td>Every active search term, facet value and sort shows as a removable chip; "Clear all" and "Reset" wipe them in one click.</td></tr>
+        <tr><td><b>Exports</b></td><td>Export the current (filtered, sorted) view as <b>CSV</b>, <b>Excel (.xls)</b> or <b>PDF</b>. The button is disabled for roles without the <code>orders : export</code> permission. Every export is written to the audit trail.</td></tr>
+        <tr><td><b>Refresh</b></td><td>The ↻ button re-applies the current view. (It re-renders from data already in memory; to re-pull from the backend, reload the page.)</td></tr>
+        <tr><td><b>Row actions</b></td><td><b>None.</b> Rows are not clickable and carry no buttons — this is a read-only list.</td></tr>
+      </tbody></table></div>
+
+      <h3 class="sub">How the list loads</h3>
+      <p>When the Orders route mounts, the front end calls <code>GET /api/admin/orders?pageSize=200</code>, maps each order into a table row, replaces the <code>adminOrders</code> dataset and re-mounts the DataTable, then shows the Live banner with the row count and the API base URL.</p>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Only the 100 most recent orders load</div><p>The front end asks for <code>pageSize=200</code>, but the backend <b>caps the result at the 100 most recent orders</b> (ordered newest-first) and ignores the <code>pageSize</code> value. So the table shows at most 100 rows and the on-screen search/filter only ever look within that window. If an order isn't in the list, it is most likely older than the newest 100 — narrow the query at the source (see the next note) rather than assuming it doesn't exist.</p></div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">The backend supports server-side filters this screen doesn't use</div><p><code>GET /api/admin/orders</code> accepts <code>status</code> (PENDING / PAID / FAILED / REFUNDED), <code>type</code> (SUBSCRIPTION / ONE_TIME / EXTRA / SAMPLE) and <code>q</code> (matches customer <b>name</b>, <b>email</b> or <b>phone</b>). The Orders page does not send these — it fetches the recent 100 and filters in the browser. For power lookups (e.g. every FAILED order, or all orders for one phone number) an admin can hit the endpoint with those query parameters directly.</p></div></div>
+
+      <h3 class="sub">What the backend returns but the table hides</h3>
+      <p>The API selects more per order than the six visible columns. These fields are fetched and available (for tooling, exports or a future detail view) even though they are not shown as columns here:</p>
+      <div class="twrap"><table><thead><tr>
+        <th>Returned field</th><th>Meaning</th><th>Shown in table?</th>
+      </tr></thead><tbody>
+        <tr><td><code>createdAt</code></td><td>When the order was placed (used for the newest-first sort).</td><td>No</td></tr>
+        <tr><td><code>discountPaise</code></td><td>The plan discount applied to the order.</td><td>No</td></tr>
+        <tr><td><code>user.email</code>, <code>user.phone</code></td><td>Customer contact details (searchable via the backend <code>q</code> param).</td><td>No</td></tr>
+        <tr><td><code>delivery.date</code></td><td>The scheduled delivery date (only <code>delivery.status</code> is shown).</td><td>No</td></tr>
+        <tr><td><code>invoice.number</code></td><td>The generated invoice number for the order.</td><td>No</td></tr>
+      </tbody></table></div>
+
+      <h3 class="sub">Roles &amp; access</h3>
+      <p>Access to Orders is governed by the DOODLY permission matrix. The screen loads only for roles granted the <code>orders</code> module, and the backend independently enforces <code>orders : view</code> on every request.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Role</th><th>Level on Orders</th><th>Can do here</th>
+      </tr></thead><tbody>
+        <tr><td><span class="pill role">Super Admin</span></td><td>Full (all actions)</td><td>View the list and export.</td></tr>
+        <tr><td><span class="pill role">Admin</span></td><td>Full</td><td>View the list and export.</td></tr>
+        <tr><td><span class="pill role">Support</span></td><td>Manage (view / create / edit / export)</td><td>View the list and export.</td></tr>
+        <tr><td><span class="pill role">Manager</span>, <span class="pill role">Accountant</span>, <span class="pill role">Delivery Executive</span>, <span class="pill role">Customer</span> &amp; other operational roles</td><td>None</td><td>No access — the screen 403s and shows an empty table with the "No permission" banner.</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Permission vocabulary vs. what this screen exposes</div><p>The <code>orders</code> module defines a rich set of actions in the permission matrix — <b>view, create, edit, delete, export, approve, print, cancel, restore, download</b>. That vocabulary controls order-related actions <i>across the platform</i> (for example a customer cancelling their own order, or export gating here). This particular Orders <b>screen</b> only ever exercises <b>view</b> (to load the list) and <b>export</b> (the Export button). It never creates, edits, cancels or deletes an order, regardless of how much access your role has.</p></div></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — using the Orders screen to triage</div>
+        <div class="wf-flow"><span>Open Admin → Commerce → Orders</span><span>Confirm green "Live" banner</span><span>Search by number / customer, or filter Payment + Status</span><span>Read the row (type, amount, payment, fulfilment)</span><span>Export the filtered view if needed</span><span>Jump to Payments / Deliveries / Subscriptions to act</span></div>
+      </div><div class="wire-cap">Figure — the read-then-act pattern this screen is built for.</div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Build a reusable <b>Saved view</b> for the two problem states you care about — e.g. filter <b>Payment = Failed</b> for a payments follow-up queue, or <b>Status = On hold</b> for stuck orders — and star the screen as a favourite. Because the active view also persists across reloads, your triage filter is one click away every shift. When you need everything (not just the recent 100) or a date range, export or query the API with <code>status</code>/<code>type</code>/<code>q</code> parameters rather than scrolling.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOTING + FAQ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common Orders-screen questions a Super Admin will field.</p></div>
+    <div class="spec-body">
+
+      <div class="twrap"><table><thead><tr>
+        <th>Symptom</th><th>Likely cause</th><th>Fix</th>
+      </tr></thead><tbody>
+        <tr><td>Table is empty with "⚠ No permission to view orders (403)."</td><td>The signed-in role lacks the <code>orders : view</code> permission.</td><td>Grant the role the Orders module (view or higher) under <span class="navpath">Admin → System → Roles &amp; Permissions</span>, or sign in as Super Admin / Admin / Support.</td></tr>
+        <tr><td>Table is empty with "⚠ Backend offline — couldn't load live data."</td><td>The backend API was unreachable when the page loaded.</td><td>Check backend availability and reload. The page shows an honest empty state rather than stale demo rows.</td></tr>
+        <tr><td>A recent order isn't in the list.</td><td>Only the newest 100 orders are loaded; older orders fall outside that window.</td><td>Query the API with <code>?q=</code> (name/email/phone) or <code>?status=</code>/<code>?type=</code> to fetch it directly, or find it via the customer's own Orders page or the invoice.</td></tr>
+        <tr><td>No date filter appears in the toolbar.</td><td>By design — the order rows carry no date column, so the DataTable hides the date-range control on this screen.</td><td>Use the backend <code>from</code>/<code>to</code> parameters, or export to CSV/Excel and filter by date there.</td></tr>
+        <tr><td>The Export button is greyed out.</td><td>The role does not have the <code>orders : export</code> permission.</td><td>Grant export on the Orders module, or ask a Super Admin/Admin to run the export.</td></tr>
+        <tr><td>Clicking a row does nothing.</td><td>Expected — this is a read-only list with no row detail or actions.</td><td>To act on an order, open the relevant screen (Payments for refunds, Deliveries for fulfilment, the customer's My Orders for cancel/repeat).</td></tr>
+        <tr><td>The "Items" column just says "Subscription" / "One time".</td><td>That column shows the order <b>type</b>, not the product list.</td><td>Open the order's invoice or the customer's My Orders detail to see the actual products.</td></tr>
+      </tbody></table></div>
+
+      <h4>Can I cancel, refund or delete an order from this screen?</h4>
+      <p>No. Orders is view-only. There are no create/edit/cancel/delete controls here. Cancellations happen from the customer's own My Orders page (within the allowed window); refunds are handled under <span class="navpath">Admin → Commerce → Payments</span>. There is no hard-delete of orders anywhere in the product.</p>
+
+      <h4>Why does the Status column sometimes show a delivery stage and sometimes "Active"/"Processing"?</h4>
+      <p>When an order has a linked delivery, the Status pill shows that live delivery stage (e.g. Packed, Out for delivery, Delivered). When it has no delivery yet, the pill falls back to a label derived from the payment status: Paid → Active, Pending → Processing, Failed → On hold, Refunded → Refunded.</p>
+
+      <h4>Does this screen include B2B orders and subscriptions?</h4>
+      <p>This is the <b>orders</b> feed (subscription-generated, one-time, extra and sample orders). Recurring plans have their own screen at <span class="navpath">Admin → Commerce → Subscriptions</span>, and business orders live under <span class="navpath">Admin → Commerce → B2B Orders</span>. All three reuse the same DataTable engine, so search/filter/export behave identically.</p>
+
+      <h4>How current is the data — do I need to refresh?</h4>
+      <p>The list is fetched once when the page opens (the newest 100 orders). The ↻ Refresh button re-applies your current search/filter over the data already in memory; to pull fresh orders from the database, reload the page.</p>
+
+    </div>
+  </div>
+
+</section>

@@ -1,0 +1,224 @@
+<section class="sheet" id="account-dashboard">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Customer Module · Customer Dashboard</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Customer Module</span></div>
+  <h2 class="section-title">Customer Dashboard</h2>
+  <p class="lead">The signed-in customer's home screen — a single, live "everything about your milk today" view that summarises the subscription, next delivery, wallet, reward points, referrals, orders, invoices, bottles, the loyalty tier card, the Monthly Puzzle Challenge and a preview of recent orders, every tile deep-linking to its full page.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Who this screen belongs to</div><p>This is a <b>customer-facing</b> page inside the "My Account" surface (URL <span class="navpath">/account/dashboard.html</span>), not an admin console. It appears in this manual so Super Admins, Managers and Support staff understand exactly what a customer sees, how it is fed with data, and how to explain it or reproduce a complaint. Every number is computed live from the signed-in customer's own records — a staff member cannot edit anything here; they observe it (for example while helping over the phone or via impersonation).</p></div></div>
+
+  <!-- ============================================================ SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Dashboard — overview page</p><p class="sm">The full "My milk today" landing screen after a customer signs in.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give a customer a one-glance status of their subscription, next delivery, money, rewards and bottles, with a fast route to every detail page.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> (own account only) · viewable by <span class="pill role">Super Admin</span>+ through impersonation for support</span>
+      <span class="m"><b>Path</b> <span class="navpath">My Account → Overview → Dashboard</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">My Account — <b>Dashboard</b> · greeting · sidebar · top bar (notifications, profile menu)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Page head (greeting)</b><span>"Good morning/afternoon/evening, &lt;First name&gt; 👋" + subtitle "Here's everything about your milk today." Greeting word is chosen by the time of day and personalised once real data loads.</span></div>
+          <div class="wf-cell"><b>Live KPI grid</b><span>11 clickable stat cards (Active Subscription, Upcoming Delivery, Wallet, Reward Points, Referral Earnings, Referral Code, Total Orders, Total Deliveries, Pending Payments, Latest Invoice, Bottles Pending).</span></div>
+          <div class="wf-cell"><b>Quick actions row</b><span>4 shortcut tiles: Pause plan, Extra milk, Return bottles, Track delivery.</span></div>
+          <div class="wf-cell"><b>Pure Rewards card</b><span>Loyalty tier card — tier name, available points, progress bar to next tier. Hidden if the customer is signed out or the programme is off.</span></div>
+          <div class="wf-cell"><b>Puzzle Challenge card</b><span>Monthly slide-puzzle promo — month, title, phase, prize, player stats and the customer's own attempt/rank. Hidden when no challenge is live.</span></div>
+          <div class="wf-cell"><b>Current subscription card</b><span>Plan, status, bottle, per-delivery price and renewal date, with Pause / Resume and Add extra milk buttons — or an honest "No active subscription" empty state.</span></div>
+          <div class="wf-cell"><b>Recent orders table</b><span>Compact order history (Order, Date, Items, Amount, Status). No toolbar, no pager — a preview that links to My Orders.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 1 — Labelled layout of the Customer Dashboard (top to bottom render order from the page recipe).</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Block recipe (for reference)</div><p>The page is assembled from these blocks, in this order: <b>page head</b> → <b>customerKpis</b> (page "dashboard") → <b>quickActions</b> → <b>loyaltyCard</b> → <b>puzzleCard</b> → <b>customerSub</b> → <b>table</b> (dataset "orders", toolbar off, pager off). Each block renders an empty mount that is then filled with live data by its module (Customer, Loyalty, Puzzle) after the account data is fetched.</p></div></div>
+
+      <h4>Region A — Greeting (page head)</h4>
+      <p>The recipe seeds the heading as "Good morning 👋" with the subtitle "Here's everything about your milk today." As soon as the signed-in customer's data is loaded, the greeting is rewritten to the correct time of day and personalised with the customer's first name.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Time of day (device clock)</th><th>Greeting shown</th></tr></thead>
+        <tbody>
+          <tr><td>Before 12:00 (noon)</td><td>Good morning, &lt;First name&gt; 👋</td></tr>
+          <tr><td>12:00 to 16:59</td><td>Good afternoon, &lt;First name&gt; 👋</td></tr>
+          <tr><td>17:00 onwards</td><td>Good evening, &lt;First name&gt; 👋</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note</div><p>The first name comes from the customer profile returned by the backend. If the data fetch fails, the customer's real name is still used (never the demo "Ananya" account), so the greeting stays correct even offline.</p></div></div>
+
+      <!-- ---------- KPI grid ---------- -->
+      <h4>Region B — Live KPI grid (11 cards)</h4>
+      <p>Every card is computed live from the customer's own records. Each card shows a big value, a small caption underneath, an icon, and a chevron indicating it is clickable; tapping the card opens the matching detail page. There are no editable controls here.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>#</th><th>Card (label)</th><th>Value shown</th><th>Caption underneath</th><th>Opens</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Active Subscription</td><td>Plan name (e.g. "Daily Fresh")</td><td>Status · bottle variant (e.g. "Active · 500 ml")</td><td><span class="navpath">/account/subscription.html</span></td></tr>
+          <tr><td>2</td><td>Upcoming Delivery</td><td>Next delivery date + "before 7 AM", or "No delivery scheduled"</td><td>Track it live</td><td><span class="navpath">/account/tracking.html</span></td></tr>
+          <tr><td>3</td><td>Wallet Balance</td><td>Rupee balance (₹)</td><td>Cashback &amp; credits</td><td><span class="navpath">/account/wallet.html</span></td></tr>
+          <tr><td>4</td><td>Reward Points</td><td>Points total</td><td>&lt;Tier&gt; tier (Silver / Gold / Platinum)</td><td><span class="navpath">/account/rewards.html</span></td></tr>
+          <tr><td>5</td><td>Referral Earnings</td><td>Total ₹ earned from referrals</td><td>N friends joined</td><td><span class="navpath">/account/referrals.html</span></td></tr>
+          <tr><td>6</td><td>Referral Code</td><td>The customer's own code</td><td>Tap to share &amp; earn</td><td><span class="navpath">/account/referrals.html</span></td></tr>
+          <tr><td>7</td><td>Total Orders</td><td>Count of all orders</td><td>N active</td><td><span class="navpath">/account/orders.html</span></td></tr>
+          <tr><td>8</td><td>Total Deliveries</td><td>Count of delivered</td><td>N skipped</td><td><span class="navpath">/account/deliveries.html</span></td></tr>
+          <tr><td>9</td><td>Pending Payments</td><td>Sum ₹ of unpaid invoices</td><td>N unpaid invoice(s)</td><td><span class="navpath">/account/invoices.html</span></td></tr>
+          <tr><td>10</td><td>Latest Invoice</td><td>Newest invoice number, or "—"</td><td>₹ amount · status (or "No invoices")</td><td><span class="navpath">/account/invoices.html</span></td></tr>
+          <tr><td>11</td><td>Bottles Pending</td><td>Bottles awaiting collection</td><td>₹ deposit held</td><td><span class="navpath">/account/bottles.html</span></td></tr>
+        </tbody>
+      </table></div>
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — how the numbers are derived</div><p>The core figures (name, wallet balance, loyalty points, bottles pending, next delivery, active subscription and the order/delivery/invoice counts) come from one backend call, <span class="navpath">GET /api/account/summary</span>. Referral earnings, active-order counts, skipped-delivery counts and the "latest invoice" line are computed on the device from the customer's own hydrated order, delivery, invoice and referral records. Tier is derived from points (Silver below 500, Gold 500–1499, Platinum 1500+).</p></div></div>
+
+      <!-- ---------- Quick actions ---------- -->
+      <h4>Region C — Quick actions</h4>
+      <p>Four large shortcut tiles for the most common self-service tasks. Each is a plain link — no confirmation, no data change on this screen; they simply navigate.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Tile</th><th>Sub-text</th><th>What it does</th><th>Opens</th></tr></thead>
+        <tbody>
+          <tr><td>Pause plan</td><td>Going away?</td><td>Start a vacation / pause request</td><td><span class="navpath">/account/vacation.html</span></td></tr>
+          <tr><td>Extra milk</td><td>Guests over?</td><td>Add a one-off extra quantity to an upcoming delivery</td><td><span class="navpath">/account/extra-milk.html</span></td></tr>
+          <tr><td>Return bottles</td><td>Manage empties</td><td>View and request collection of empty bottles</td><td><span class="navpath">/account/bottles.html</span></td></tr>
+          <tr><td>Track delivery</td><td>Live now</td><td>Open live delivery tracking</td><td><span class="navpath">/account/tracking.html</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- ---------- Loyalty card ---------- -->
+      <h4>Region D — DOODLY Pure Rewards card</h4>
+      <p>A compact loyalty tier card. It is fetched from <span class="navpath">GET /api/account/rewards</span> and rendered only when the customer is signed in and the rewards programme is enabled; otherwise it renders nothing (the region simply collapses).</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Element</th><th>Shows</th></tr></thead>
+        <tbody>
+          <tr><td>Eyebrow + tier icon</td><td>Tier medal (🥉 Fresh / 🥈 Silver / 🥇 Gold / 💎 Platinum) and "DOODLY Pure Rewards"</td></tr>
+          <tr><td>Tier name</td><td>Current tier (e.g. "Gold"), or "Fresh Member" if none</td></tr>
+          <tr><td>Points</td><td>Available points</td></tr>
+          <tr><td>Progress bar</td><td>Fill toward the next tier (full when top tier reached)</td></tr>
+          <tr><td>Footer line</td><td>"&lt;lifetime earned&gt; / &lt;next-tier minimum&gt; · &lt;points away&gt; to &lt;Next tier&gt;", or "Top tier unlocked — enjoy the perks! 🎉"</td></tr>
+          <tr><td>Call to action</td><td>"View rewards →" — the whole card links to <span class="navpath">/account/rewards.html</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- ---------- Puzzle card ---------- -->
+      <h4>Region E — Monthly Puzzle Challenge card</h4>
+      <p>Promotes the running slide-puzzle competition. Fetched from <span class="navpath">GET /api/puzzles</span>; the card is hidden unless the feature is enabled and a challenge exists for the current month.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Element</th><th>Shows</th></tr></thead>
+        <tbody>
+          <tr><td>Band eyebrow</td><td>"🏆 Monthly Puzzle Challenge — Month X of N"</td></tr>
+          <tr><td>Title &amp; sub</td><td>The month's puzzle title + status line + "Prize: FREE 7-Day Fresh Start Subscription"</td></tr>
+          <tr><td>Status line (phase)</td><td>Upcoming ("Unlocks &lt;date&gt;") · Live ("Live now — closes &lt;date&gt;") · Judging ("Closed — winner announced &lt;date&gt;") · Announced ("Winner announced")</td></tr>
+          <tr><td>Stat tiles</td><td>Players, Completed, (Your moves &amp; Your rank if you completed), Winner announced date</td></tr>
+          <tr><td>Your line</td><td>Your attempt status — completed with moves/time/rank, in progress, or "You haven't played this month yet."</td></tr>
+          <tr><td>Win banner</td><td>If you placed 1st after announcement: "🏆 You won this month! Your FREE 7-Day Fresh Start subscription has been added to your account."</td></tr>
+          <tr><td>Past winners</td><td>Up to the 3 most recent winners (name, month, moves)</td></tr>
+          <tr><td>Button</td><td>"Play now" / "Continue puzzle" / "View leaderboard" (when live) or "View challenge" — opens <span class="navpath">/puzzle.html</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- ---------- Current subscription ---------- -->
+      <h4>Region F — Current subscription card</h4>
+      <p>A summary of the active plan with quick management buttons. If there is no active subscription it shows an honest empty state instead of a fabricated plan.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>State</th><th>What appears</th></tr></thead>
+        <tbody>
+          <tr><td>Active subscription</td><td>Definition list: <b>Plan</b>, <b>Status</b>, <b>Bottle</b> (variant), <b>Per delivery</b> (₹ per delivery, shown only when known from the live subscription), <b>Renews</b> (renewal date, shown only when known). Buttons: "Pause / vacation" (or "Resume plan" when paused) and "Add extra milk". A "Manage →" link opens the full Subscription page.</td></tr>
+          <tr><td>No active subscription</td><td>Empty state: "No active subscription — Subscribe today to enjoy fresh farm-to-home dairy deliveries." with a "Browse subscription plans" button to <span class="navpath">/subscriptions.html</span>.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — the "Per delivery" and "Renews" rows are conservative</div><p>Those two rows are only drawn when the live subscription supplies a real per-delivery price and end date. If a figure isn't available, the row is omitted rather than guessed — so a customer is never shown an invented price or renewal date. The exact figures always live on the Subscription page.</p></div></div>
+
+      <!-- ---------- Orders table ---------- -->
+      <h4>Region G — Recent orders (preview table)</h4>
+      <p>A compact, read-only order-history preview. It uses the shared "orders" table definition but with the toolbar and pager switched off, so it is a short list rather than the full searchable table found on the My Orders page.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Attribute</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td>Columns</td><td>Order (order number) · Date · Items · Amount (₹) · Status (coloured badge — Active / Completed / Refunded / Cancelled)</td></tr>
+          <tr><td>Toolbar / search</td><td>Off on this screen (no search, filter, saved views or export here)</td></tr>
+          <tr><td>Pagination</td><td>Off on this screen (preview list)</td></tr>
+          <tr><td>Sorting</td><td>Newest first (as returned by the backend)</td></tr>
+          <tr><td>Row actions</td><td>None on the dashboard preview — for full order detail, filters and export the customer uses My Orders</td></tr>
+          <tr><td>Empty state</td><td>"No orders yet — When you place your first DOODLY order it'll appear here with its status and invoice." with "Browse products" and "Start a subscription" buttons</td></tr>
+          <tr><td>Data source</td><td><span class="navpath">GET /api/orders?limit=100</span> (mapped to Order / Date / Items / Amount / Status rows)</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Related pages (reachable from this screen)</div><p>Subscription, Delivery Tracking, Wallet, Rewards, Referrals, My Orders, Deliveries, Invoices, Bottle Tracking, Vacation/Pause, Extra Milk and the Puzzle game are all opened from the tiles and cards above. Each of those has its own section in this manual.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ Data & auth workflow -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">How the dashboard loads its data</p><p class="sm">Session check, data fetch, and what happens when the backend is slow or unreachable.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Explain the load sequence so support staff can tell a real outage from an empty account.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Customer</span> session required</span>
+      <span class="m"><b>Path</b> <span class="navpath">My Account → Overview → Dashboard</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — dashboard data hydration</div>
+        <div class="wf-flow">
+          <span>Customer opens Dashboard</span>
+          <span>Session identity read</span>
+          <span>Reset to real user + empty data (clears any demo seed)</span>
+          <span>Fetch account summary + orders/deliveries/invoices/bottles/referrals/notifications concurrently</span>
+          <span>Fill KPI cards, subscription card &amp; orders table</span>
+          <span>Loyalty &amp; Puzzle cards fetch their own data and fill in</span>
+          <span>Greeting personalised</span>
+        </div>
+      </div><div class="wire-cap">Figure 2 — Load sequence. All the account requests fire together, so total wait is roughly the slowest one, not the sum.</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Situation</th><th>What the customer sees</th></tr></thead>
+        <tbody>
+          <tr><td>Signed-in customer, backend healthy</td><td>All cards populate with live figures; greeting shows real name + time of day.</td></tr>
+          <tr><td>Section fetch fails (e.g. referrals) but profile loads</td><td>That one section stays empty/zero; the rest of the dashboard is normal — no error is forced.</td></tr>
+          <tr><td>Session expired / revoked (401)</td><td>The dashboard drops the stale session and redirects to <span class="navpath">/login/customer.html?expired=1</span> so the customer signs in again. Demo data is never shown.</td></tr>
+          <tr><td>Backend unreachable / timeout while signed in</td><td>Honest empty states everywhere plus a connectivity banner; the page never falls back to the sample "Ananya" account.</td></tr>
+          <tr><td>Not signed in (public/demo)</td><td>Access is guarded — the customer is prompted to log in or create an account before the account pages open.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>When a customer says "my dashboard is empty," first confirm whether it is a <b>new account with no orders yet</b> (genuine empty states, no banner) or a <b>connectivity banner</b> (backend unreachable). The two look different: empty states carry friendly "get started" buttons, while the connectivity banner is a fixed pill telling the customer we're offline. Only the second one is an incident.</p></div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — this screen is read-only for staff</div><p>Nothing on the dashboard can be edited from here. Changes to a subscription, wallet, rewards or bottles happen on their own pages (and, for staff, in the Admin modules). If a KPI looks wrong, correct the underlying record in the right module — the dashboard will recompute the next time it loads.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ Troubleshooting + FAQ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common questions Support hears about the customer dashboard.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Fast answers for the help desk.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Manager</span> <span class="pill role">Accountant</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">My Account → Overview → Dashboard</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>All KPI cards show "—", zero or "No active plan"</td><td>New account with no orders yet, OR backend was unreachable at load</td><td>Check for the connectivity banner. If none, it's simply an empty account — ask the customer to place a first order/subscription. If the banner is present, treat as an outage and retry.</td></tr>
+          <tr><td>Greeting still says the seeded name / wrong name</td><td>Profile name not returned yet, or profile not updated</td><td>Have the customer refresh; if the name is wrong, correct it on the Profile page — the greeting reads the profile name.</td></tr>
+          <tr><td>Pure Rewards card is missing entirely</td><td>Customer signed out, or the rewards programme is disabled</td><td>Confirm the customer is signed in; check the loyalty programme is enabled in the admin Loyalty configuration.</td></tr>
+          <tr><td>Puzzle card is missing</td><td>No challenge configured for the current month, or the feature is off</td><td>Confirm a challenge is scheduled/active in the admin Puzzle module — the card only shows when one is live.</td></tr>
+          <tr><td>"Per delivery" / "Renews" rows are absent from the subscription card</td><td>Those figures weren't supplied by the live subscription</td><td>Expected behaviour — the rows are hidden rather than guessed. The exact price and renewal date are always on the Subscription page.</td></tr>
+          <tr><td>Kicked to the login page with "?expired=1"</td><td>Session expired or was revoked (e.g. after a password reset)</td><td>Ask the customer to sign in again; the dashboard will reload with fresh data.</td></tr>
+          <tr><td>Wallet / points on the dashboard differ from the Wallet / Rewards page</td><td>Dashboard uses the cached summary from the last load</td><td>Refresh the dashboard; both pages read the same backend, so a reload reconciles them.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Is the customer dashboard the same as the admin dashboard?</h4>
+      <p>No. This is the customer's own "My Account" home. The admin operations dashboard is a separate screen in the Admin surface with business-wide KPIs and charts.</p>
+
+      <h4>Can a staff member change anything from this screen?</h4>
+      <p>No. The dashboard is a read-only summary. All edits happen on the dedicated pages or in the Admin modules; the dashboard recomputes from those records on the next load.</p>
+
+      <h4>Why does "Upcoming Delivery" always say "before 7 AM"?</h4>
+      <p>DOODLY runs a single early-morning delivery run, so the promise is a cut-off ("before 7 AM"), not a time slot. The card shows the next scheduled delivery's date with that promise, or "No delivery scheduled" when there is none.</p>
+
+      <h4>Why can the same customer see different tiles than another customer?</h4>
+      <p>Cards are data-driven. The Pure Rewards and Puzzle cards only appear when their programmes are enabled and relevant; the subscription card switches to an empty state without an active plan; and captions like "N unpaid invoices" reflect that customer's real records.</p>
+
+    </div>
+  </div>
+
+</section>

@@ -1,0 +1,215 @@
+<section class="sheet" id="admin-procurement">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Supply · Procurement</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Supply</span></div>
+  <h2 class="section-title">Procurement</h2>
+  <p class="lead">Record every day's raw A2 buffalo-milk collection from partner farmers — quantity, quality readings, batch price and payment — with each accepted batch flowing straight into raw-milk inventory.</p>
+
+  <p>The Procurement screen is the daily operations desk for the Supply team. Each time a farmer's milk is collected it becomes one <b>batch</b> record here: how many litres came in, the fat and SNF readings taken at the collection centre, the amount payable to that farmer (calculated from their agreed rate), whether the batch was accepted, whether it has passed a quality test, and whether the farmer has been paid. The page reads live from the DOODLY database and reuses the same <code>Procurement</code>, <code>Farmer</code> and <code>QualityTest</code> records that power the Farmers and Quality Testing screens — so a batch you record here immediately shows up in that farmer's supply history and on the Quality queue.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — one shared record, three screens</div><p>A procurement batch is not a separate copy of data. The same batch appears under <span class="navpath">Admin → Supply → Farmers</span> (as that farmer's collection and payment history) and under <span class="navpath">Admin → Supply → Quality Testing</span> (as a test waiting to be recorded). Pricing always comes from the farmer's <b>Procurement rate (₹/litre)</b> set on the Farmers screen; there is no separate price to type here.</p></div></div>
+
+  <!-- ============================ SCREEN 1 ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Milk Procurement — daily register</p><p class="sm">Live KPI dashboard plus the day's collection batches.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> View, record and settle every raw-milk collection batch; watch daily volume, cost, fat quality and payments due at a glance.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b>
+        <span class="pill role">Super Admin</span>
+        <span class="pill role">Admin</span>
+        <span class="pill role">Procurement Manager</span>
+        <span class="pill role">Quality</span> <span class="muted-sm">(view only)</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Supply → Procurement</span></span>
+    </div>
+    <div class="spec-meta"><span class="m"><b>URL</b> <code>/admin/procurement.html</code></span><span class="m"><b>Data source</b> <code>GET /api/admin/procurement</code> · <code>/api/admin/procurement/stats</code> (RBAC <code>procurement:view</code>)</span></div>
+
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Milk Procurement</b> · "Daily collection, testing and payments." · [New procurement]</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Live status banner</b><span>Green "● Live — N procurement record(s) from the DOODLY database"; red if the backend is offline or your role is denied (403).</span></div>
+          <div class="wf-cell"><b>Headline KPI row (4)</b><span>Collected today · Payable · Avg fat · QC passed — overwritten with live figures on load.</span></div>
+          <div class="wf-cell"><b>30-day stat strip (6)</b><span>Total Milk (30d) · Active Farmers · Procurement Cost · Avg Price · Batches · Pending Quality.</span></div>
+          <div class="wf-cell"><b>Batch table</b><span>Date · Farm · Litres · Fat · SNF · Rate · Amount · QC · Manage — newest first, no toolbar, no pager.</span></div>
+          <div class="wf-cell"><b>Row "Manage" link</b><span>Opens the batch drawer: accept/reject, record a quality test, mark paid.</span></div>
+          <div class="wf-cell"><b>New procurement modal</b><span>Farmer, litres, fat/SNF, optional readings — launched from the header button.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Milk Procurement screen</div></div>
+
+      <h4>The two KPI bands</h4>
+      <p>Two rows of live numbers sit above the table. The top row (four large tiles) is the at-a-glance daily view; the second strip (six smaller tiles) is the 30-day trend. All values are pulled from <code>/api/admin/procurement/stats</code> — the placeholder numbers baked into the page are replaced the moment live data arrives.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Tile</th><th>Band</th><th>What it shows</th><th>How it is calculated (backend)</th></tr></thead>
+        <tbody>
+          <tr><td><b>Collected today</b></td><td>Top row</td><td>Litres collected since midnight today.</td><td><code>todayLitres</code> — sum of <code>litres</code> for batches with today's <code>collectedAt</code>.</td></tr>
+          <tr><td><b>Payable</b></td><td>Top row</td><td>Total rupees still owed to farmers across all unpaid batches.</td><td><code>pendingPaymentsPaise</code> — sum of <code>amountPaise</code> where <code>paidAt</code> is empty.</td></tr>
+          <tr><td><b>Avg fat</b></td><td>Top row</td><td>Average fat % over the last 30 days.</td><td><code>avgFatPct</code> — average of <code>fatPct</code> for the last 30 days.</td></tr>
+          <tr><td><b>QC passed</b></td><td>Top row</td><td>Share of quality tests (last 30 days) that passed.</td><td><code>qualityPassRate</code> — passed tests ÷ total tests × 100 (100% if no tests yet).</td></tr>
+          <tr><td><b>Total Milk (30d)</b></td><td>Strip</td><td>Litres collected in the last 30 days.</td><td><code>totalLitres30</code>.</td></tr>
+          <tr><td><b>Active Farmers</b></td><td>Strip</td><td>Distinct farmers who supplied in the last 30 days.</td><td><code>activeFarmers</code> — distinct <code>farmerId</code> over 30 days.</td></tr>
+          <tr><td><b>Procurement Cost</b></td><td>Strip</td><td>Total rupees of milk purchased in the last 30 days.</td><td><code>procurementCostPaise</code> — sum of <code>amountPaise</code> over 30 days.</td></tr>
+          <tr><td><b>Avg Price</b></td><td>Strip</td><td>Blended cost per litre (₹/L) over 30 days.</td><td><code>avgPricePaise</code> — cost ÷ litres.</td></tr>
+          <tr><td><b>Batches</b></td><td>Strip</td><td>All-time count of procurement batches.</td><td><code>batches</code> — total <code>Procurement</code> rows.</td></tr>
+          <tr><td><b>Pending Quality</b></td><td>Strip</td><td>Accepted batches that still have no quality test.</td><td><code>pendingQualityTests</code> — accepted batches with no linked <code>QualityTest</code>.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The batch table</h4>
+      <p>Below the KPIs is the register of batches, newest first. The backend returns up to the 300 most recent batches ordered by collection time. This table is deliberately compact — the manifest sets <code>toolbar:false</code> and <code>pager:false</code>, so there is no in-page search box, filter chips, export button or pagination bar here; you read the batches and act on each through its <b>Manage</b> link.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td>Date · Farm · Litres · Fat · SNF · Rate · Amount · QC · Manage</td></tr>
+          <tr><td><b>Date</b></td><td>Collection date (from <code>collectedAt</code>).</td></tr>
+          <tr><td><b>Farm</b></td><td>Supplying farmer's name.</td></tr>
+          <tr><td><b>Litres</b></td><td>Quantity collected, e.g. "45 L".</td></tr>
+          <tr><td><b>Fat / SNF</b></td><td>Fat % and Solids-Not-Fat % readings taken at collection.</td></tr>
+          <tr><td><b>Rate</b></td><td>Effective ₹ per litre (amount ÷ litres, from the farmer's agreed rate).</td></tr>
+          <tr><td><b>Amount</b></td><td>Rupees payable for the batch (shown bold).</td></tr>
+          <tr><td><b>QC</b></td><td>Colour badge — <b>Passed</b> (green), <b>Failed</b> (red), <b>Pending</b> (amber, accepted but untested), <b>Rejected</b> (red, not accepted).</td></tr>
+          <tr><td><b>Manage</b></td><td>Row link opening the batch drawer (accept/reject, record test, mark paid).</td></tr>
+          <tr><td><b>Sort / order</b></td><td>Fixed — newest collection first.</td></tr>
+          <tr><td><b>Search / Filters / Pager</b></td><td>Not shown on this screen (compact daily register). The API itself does support search, farmer, quality, payment, centre, route and date-range filters for programmatic use.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Reading the QC badge</div><p><b>Pending</b> means the batch was accepted but no quality test has been recorded yet — it is counted in "Pending Quality". <b>Rejected</b> means the batch is not accepted (rejected on arrival). Once you record a test the badge flips to <b>Passed</b> or <b>Failed</b>.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================ SCREEN 2 ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">New procurement entry</p><p class="sm">Record a fresh milk collection from a farmer.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Log one collection batch — quantity, quality readings and acceptance — and (when accepted) add its litres to raw-milk inventory.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Procurement Manager</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Supply → Procurement → New procurement</span></span>
+    </div>
+    <div class="spec-meta"><span class="m"><b>Endpoint</b> <code>POST /api/admin/procurement</code> (RBAC <code>procurement:create</code>)</span></div>
+
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Modal — <b>New procurement entry</b> · [✕ close]</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Farmer</b><span>Dropdown of farmers, each showing "Name · ₹rate/L".</span></div>
+          <div class="wf-cell"><b>Quantity + Batch no.</b><span>Litres (required) beside an optional batch number.</span></div>
+          <div class="wf-cell"><b>Fat % + SNF %</b><span>Two required quality readings.</span></div>
+          <div class="wf-cell"><b>Lactometer + Temperature</b><span>Two optional readings.</span></div>
+          <div class="wf-cell"><b>Accept collection</b><span>Checkbox (ticked) — adds litres to raw-milk inventory.</span></div>
+          <div class="wf-cell"><b>Payable preview + actions</b><span>Live "Payable: ₹…" line, then Cancel / Save procurement.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the New procurement entry modal</div></div>
+
+      <p>Open this modal from the <b>New procurement</b> button in the page header. The Farmer dropdown is populated from the live Farmers list, so a farmer must exist before you can record a collection against them. As you pick a farmer and type litres, the <b>Payable</b> line updates instantly (rate × litres) so you can confirm the amount before saving.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Farmer</td><td>Which partner farm supplied the milk.</td><td>Pick from the live farmer list.</td><td class="t-req">Yes</td><td>Must be a real farmer (<code>farmerId</code>); "That farmer does not exist" if not. Sets the rate used for pricing.</td><td>Lakshmi Dairy · ₹62/L</td></tr>
+          <tr><td>Quantity (litres)</td><td>How much milk was collected.</td><td>Positive number (decimals allowed).</td><td class="t-req">Yes</td><td>Must be &gt; 0 (<code>litres.positive()</code>); rejected with "Quantity (litres) must be positive."</td><td>45</td></tr>
+          <tr><td>Batch no.</td><td>Optional human label for the batch.</td><td>Text, 2–40 characters.</td><td class="t-opt">Opt.</td><td>Left blank → auto-generated as <code>PB-YYYYMMDD-NNNN</code>. If you type one that already exists you get a "That batch number already exists" conflict.</td><td>PB-20260712-4821</td></tr>
+          <tr><td>Fat %</td><td>Butter-fat reading at collection.</td><td>Number 0–100.</td><td class="t-req">Yes</td><td><code>fatPct</code> 0–100; stored on the batch and copied into the quality test.</td><td>7.2</td></tr>
+          <tr><td>SNF %</td><td>Solids-Not-Fat reading.</td><td>Number 0–100.</td><td class="t-req">Yes</td><td><code>snfPct</code> 0–100.</td><td>9.1</td></tr>
+          <tr><td>Lactometer</td><td>Lactometer reading (density check).</td><td>Number.</td><td class="t-opt">Opt.</td><td>Stored as-is; omitted if left blank.</td><td>27</td></tr>
+          <tr><td>Temperature (°C)</td><td>Milk temperature at collection (cold-chain).</td><td>Number.</td><td class="t-opt">Opt.</td><td>Stored as-is; omitted if left blank.</td><td>4</td></tr>
+          <tr><td>Accept collection</td><td>Whether the milk is accepted into stock.</td><td>Checkbox (ticked by default).</td><td class="t-opt">Opt.</td><td>When ticked, the batch's litres are added to the raw-milk inventory item (<code>MILK_RAW</code>) in the same database transaction. Unticked → batch is stored as rejected.</td><td>Ticked</td></tr>
+          <tr><td>Payable (preview)</td><td>Read-only running total.</td><td>—</td><td class="t-opt">—</td><td>Display only. Server recomputes <code>amountPaise = farmer rate × litres</code> on save — the field cannot be edited.</td><td>Payable: ₹2,790.00 (₹62/L × 45 L)</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Price is never typed here</div><p>The batch amount is always the farmer's agreed <b>Procurement rate</b> multiplied by the litres — it is calculated on the server, not entered by hand. To change what a farmer is paid per litre, update their rate on <span class="navpath">Admin → Supply → Farmers</span> first.</p></div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — accepting adds stock immediately</div><p>Saving with <b>Accept collection</b> ticked increments raw-milk inventory (<code>MILK_RAW</code>) by the litres you entered, inside one atomic transaction. If you later reject the batch from the Manage drawer, that inventory increment is <b>not</b> automatically reversed — adjust raw-milk stock manually on the Inventory screen if you accept a batch in error.</p></div></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — recording a collection</div>
+        <div class="wf-flow"><span>Pick farmer</span><span>Enter litres + fat/SNF</span><span>Confirm payable preview</span><span>Save procurement</span><span>Batch created (amount = rate × litres)</span><span>If accepted → raw-milk stock ↑</span><span>Batch shows as "Pending" QC</span></div>
+      </div><div class="wire-cap">Figure — from collection to a live batch record</div></div>
+    </div>
+  </div>
+
+  <!-- ============================ SCREEN 3 ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Manage batch (drawer)</p><p class="sm">Accept or reject, record a quality test, and settle payment.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Act on a single batch after it is recorded — confirm acceptance, add its quality result, and mark the farmer paid.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Procurement Manager</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Supply → Procurement → (row) Manage</span></span>
+    </div>
+    <div class="spec-meta"><span class="m"><b>Endpoints</b> <code>PATCH /api/admin/procurement/[id]</code> · <code>POST /api/admin/procurement/bulk</code> · <code>POST /api/admin/quality</code></span></div>
+
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Drawer — <b>Batch PB-…</b> · [✕ close]</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Batch header</b><span>Batch number, then Farmer · Centre · Route · "A2 Buffalo".</span></div>
+          <div class="wf-cell"><b>Summary line</b><span>Litres · fat % · SNF % · ₹/L · total amount · Quality · Payment.</span></div>
+          <div class="wf-cell"><b>Accepted batch</b><span>Checkbox to accept or reject the batch.</span></div>
+          <div class="wf-cell"><b>Record quality test</b><span>Shown only if untested — Fat, SNF, Lactometer, Temp, Result.</span></div>
+          <div class="wf-cell"><b>Mark paid</b><span>Settles the farmer payment for this batch.</span></div>
+          <div class="wf-cell"><b>Footer</b><span>Mark paid · Close · Save.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Manage batch drawer</div></div>
+
+      <p>The drawer opens from a row's <b>Manage</b> link. Its top shows the batch number and the supply context (farmer, collection centre, route, and the fixed milk type "A2 Buffalo"), followed by a one-line summary of litres, quality readings, rate, total amount, and the current Quality and Payment status. Below that are the three actions.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Button / control</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Accepted batch</b> (checkbox) + <b>Save</b></td><td>Marks the batch accepted or rejected.</td><td><code>PATCH /api/admin/procurement/[id]</code> with <code>{accepted}</code>; audited as <code>procurement.accept</code> / <code>procurement.reject</code>. Does not re-adjust inventory.</td><td><span class="pill role">Super Admin</span>+ <span class="muted-sm">(<code>procurement:edit</code>)</span></td></tr>
+          <tr><td><b>Record test</b></td><td>Adds the quality result (Fat, SNF, Lactometer, Temp, Passed/Failed) for an untested batch. Section only appears when the batch has no test yet.</td><td><code>POST /api/admin/quality</code> with <code>{procurementId, fatPct, snfPct, lactometer, temperatureC, passed}</code>. Flips the QC badge to Passed/Failed and clears it from "Pending Quality".</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Quality</span> <span class="muted-sm">(<code>quality:create</code>)</span></td></tr>
+          <tr><td><b>Mark paid</b></td><td>Settles the farmer's payment for this batch.</td><td><code>POST /api/admin/procurement/bulk</code> with <code>{action:"markPaid", ids:[id]}</code>; stamps <code>paidAt</code>, flips Payment to "Paid" and removes the amount from "Payable".</td><td><span class="pill role">Super Admin</span>+ <span class="muted-sm">(<code>procurement:edit</code>)</span></td></tr>
+          <tr><td><b>Close</b> / ✕</td><td>Dismisses the drawer without saving.</td><td>Client only.</td><td>Any viewer</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — Quality Managers cannot record procurement, Procurement Managers cannot record tests</div><p>The <b>Record test</b> button posts to the Quality module, so it needs <code>quality:create</code>. A <b>Procurement Manager</b> can create and settle batches but only has <em>view</em> rights on Quality — they will get a 403 when trying to record a test. A <b>Quality</b> user is the opposite: they can record tests but only view procurement. <b>Super Admin</b> and <b>Admin</b> can do both.</p></div></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — batch lifecycle</div>
+        <div class="wf-flow"><span>Recorded (Pending)</span><span>Accept / Reject</span><span>Record quality test</span><span>Passed / Failed</span><span>Mark paid</span><span>Settled (Paid)</span></div>
+      </div><div class="wire-cap">Figure — a batch from collection to settlement</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Bulk operations available on the API</div><p>The procurement bulk endpoint accepts four actions — <b>accept</b>, <b>reject</b>, <b>markPaid</b> and <b>markDue</b> — over up to 2,000 batches at once (each audited). The Manage drawer surfaces <b>markPaid</b> for a single batch today; the other three are available for scripted or future bulk-settlement use with <code>procurement:edit</code> rights.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================ GUIDANCE ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Working practices &amp; support</p><p class="sm">Best practice, troubleshooting and common questions.</p></div>
+    <div class="spec-body">
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — close each day's batches</div><p>Aim to leave "Pending Quality" at zero before the end of each shift: record a test for every accepted batch, then settle payments. This keeps the <b>Payable</b> tile honest, gives farmers timely payment, and ensures raw-milk inventory reflects only quality-checked stock.</p></div></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — let batch numbers auto-generate</div><p>Leave the Batch no. field blank unless you have a physical label to match. The system generates a guaranteed-unique <code>PB-YYYYMMDD-NNNN</code> number, which avoids "batch already exists" conflicts from hand-typed values.</p></div></div>
+
+      <h4>Troubleshooting</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>Red banner "⚠ Your role can't view procurement (403)"</td><td>Signed-in role lacks <code>procurement:view</code>.</td><td>Use a Super Admin, Admin, Procurement or Quality account; ask a Super Admin to grant the permission on Roles &amp; Permissions.</td></tr>
+          <tr><td>"Farmers still loading — try again in a moment" when opening New procurement</td><td>The farmer list (<code>/api/admin/farmers</code>) hasn't finished loading.</td><td>Wait a second and reopen; if it persists, refresh the page so the farmer list re-fetches.</td></tr>
+          <tr><td>"That batch number already exists" on save</td><td>A typed batch number collides with an existing one.</td><td>Clear the Batch no. field to auto-generate, or enter a different unique label.</td></tr>
+          <tr><td>"That farmer does not exist" on save</td><td>Farmer was removed after the modal opened.</td><td>Reopen the modal to refresh the farmer list, then reselect.</td></tr>
+          <tr><td>"Your role can't record quality (403)" from Record test</td><td>Role has procurement but not <code>quality:create</code> (e.g. Procurement Manager).</td><td>Have an Admin, Super Admin or Quality user record the test, or record it on the Quality Testing screen.</td></tr>
+          <tr><td>Raw-milk stock looks too high after a rejection</td><td>Accepting the batch already added stock; toggling to rejected does not subtract it.</td><td>Manually correct raw-milk quantity on <span class="navpath">Admin → Catalogue → Inventory</span>.</td></tr>
+          <tr><td>Payable tile doesn't drop after paying</td><td>Live figures refresh on the next reload of the list.</td><td>The page re-fetches after Mark paid; if a number looks stale, reload the screen.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Frequently asked questions</h4>
+      <h4>Q. Where do the ₹/litre rates come from?</h4>
+      <p>A. From each farmer's <b>Procurement rate</b> on the Farmers screen. When you save a batch, the server sets the amount to that rate × litres — you never type a price on the Procurement screen.</p>
+
+      <h4>Q. Does recording a collection change stock?</h4>
+      <p>A. Yes, if <b>Accept collection</b> is ticked. The batch's litres are added to the raw-milk inventory item (<code>MILK_RAW</code>) in the same transaction. Rejected batches do not touch inventory.</p>
+
+      <h4>Q. Can I see a farmer's full supply and payment history?</h4>
+      <p>A. Yes — open that farmer on <span class="navpath">Admin → Supply → Farmers</span>. Their collection, quality and payment history is built from these same procurement batches, so nothing is duplicated.</p>
+
+      <h4>Q. What is the difference between "Pending" and "Rejected" in the QC column?</h4>
+      <p>A. <b>Pending</b> = accepted but no quality test recorded yet. <b>Rejected</b> = the batch was not accepted at collection. After you record a test, the badge becomes <b>Passed</b> or <b>Failed</b>.</p>
+    </div>
+  </div>
+</section>
