@@ -380,13 +380,17 @@ window.DOODLY_CHECKOUT = (function () {
     const h = mount.querySelector("#coDateHost"); if (h) h.scrollIntoView({ behavior: reduced() ? "auto" : "smooth", block: "center" });
   }
   function pay() {
+    if (state.paying) return;                                            // in-flight guard: a double-click / -tap never creates two orders
     if (!serviceableOk()) { goto(1); showPinReq(); return; }             // must be a serviceable pincode
     if (!startOk()) { goto(2); showDateReq(); return; }                 // must have a start date
-    if (!validateMethod()) { failure("We couldn't verify your payment details. Please check and try again."); return; }
+    // NOTE: card/UPI details are collected by the payment gateway's own secure
+    // popup (Razorpay) — NOT by DOODLY's form. We must NOT gate on the on-page
+    // demo fields here, or a customer who (correctly) leaves them blank is
+    // blocked before the gateway can open. The backend re-validates everything.
     const me = coSignedIn();
     if (me && window.DOODLY_API) {
       if (!realAddrChosen()) { goto(1); showAddrReq(true); return; }   // a SAVED delivery address is mandatory before payment
-      processing(); placeRealOrder(me); return;                       // REAL order into the backend
+      state.paying = true; processing(); placeRealOrder(me); return;   // REAL order into the backend
     }
     // No guest / localhost bypass — an order can ONLY be placed by a signed-in customer.
     // Send guests to login (selections are preserved) and return them to checkout.
@@ -416,7 +420,7 @@ window.DOODLY_CHECKOUT = (function () {
   function placeRealOrder(me) {
     const sub = subContext() || {};
     if (!sub.variantId) {
-      hideProcessing(); failure("Please pick your bottle and plan first — taking you to the builder.");
+      state.paying = false; hideProcessing(); failure("Please pick your bottle and plan first — taking you to the builder.");
       setTimeout(() => { window.location.href = "/subscriptions.html#builder"; }, 2200); return;
     }
     const selA = mount.querySelector(".co-addr.sel[data-addr], .co-addr.sel[data-addr-id]");
@@ -444,10 +448,11 @@ window.DOODLY_CHECKOUT = (function () {
     };
     DOODLY_API.post("/api/checkout", payload)
       .then((res) => {
-        if (res.rzp) { hideProcessing(); openRzpCheckout(res, me); return; }
-        state.realOrder = res; hideProcessing(); success();
+        if (res.rzp) { hideProcessing(); openRzpCheckout(res, me); return; }   // gateway handles paying flag (dismiss/verify)
+        state.paying = false; state.realOrder = res; hideProcessing(); success();
       })
       .catch((err) => {
+        state.paying = false;
         // session expired mid-checkout → re-login and resume (cart + selection are preserved in localStorage)
         if (err && (err.status === 401 || err.code === "unauthorized")) {
           hideProcessing(); failure("Your session expired — please log in again. Your cart and selection are saved.");
@@ -462,6 +467,13 @@ window.DOODLY_CHECKOUT = (function () {
         hideProcessing(); failure((err && err.message) || "Couldn't place the order. Please try again.");
       });
   }
+  // Release any coupon + wallet held against a still-unpaid order when the customer
+  // cancels or a verify fails — keeps the wallet/coupon/order state consistent
+  // (the backend reverseTxn's the wallet + frees the coupon; the webhook is the backstop).
+  function releaseHolds(orderId) {
+    if (!orderId || !window.DOODLY_API) return;
+    try { DOODLY_API.post("/api/checkout/cancel", { orderId: orderId }).catch(function () {}); } catch (e) {}
+  }
   function openRzpCheckout(res, me) {
     coLoadRazorpay().then((Razorpay) => {
       const rzp = new Razorpay({
@@ -469,16 +481,16 @@ window.DOODLY_CHECKOUT = (function () {
         name: "DOODLY", description: "Order " + res.number,
         prefill: { name: me.name || "", email: me.email || "" },
         theme: { color: "#1FAE66" },
-        modal: { ondismiss: function () { failure("Payment cancelled — nothing was charged and your order isn't confirmed yet."); } },
+        modal: { ondismiss: function () { state.paying = false; releaseHolds(res.orderId); failure("Payment cancelled — nothing was charged and your order isn't confirmed yet."); } },
         handler: function (resp) {
           processing();
           DOODLY_API.post("/api/payments/verify", resp)
-            .then(() => { res.paid = true; state.realOrder = res; hideProcessing(); success(); })
-            .catch(() => { hideProcessing(); failure("Payment verification failed. If you were charged, the gateway auto-refunds — contact support with your payment id."); });
+            .then(() => { state.paying = false; res.paid = true; state.realOrder = res; hideProcessing(); success(); })
+            .catch(() => { state.paying = false; hideProcessing(); failure("Your payment is being verified — we'll confirm your order shortly. If money was debited, it is safe; contact support with your payment id if you don't get a confirmation."); });
         },
       });
       rzp.open();
-    }).catch((e) => { failure((e && e.message) || "Couldn't reach the payment gateway."); });
+    }).catch((e) => { state.paying = false; hideProcessing(); releaseHolds(res.orderId); failure("We couldn't connect to the payment gateway. Please try again in a few moments."); });
   }
 
   function processing() {
