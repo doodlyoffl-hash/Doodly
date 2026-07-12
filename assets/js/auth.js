@@ -398,10 +398,13 @@ window.DOODLY_AUTH = (function () {
       succeed(form);
     });
 
-    // google — no OAuth client is configured yet: the live site must not grant
-    // access from this button (the localhost demo keeps working for development)
-    const g = form.querySelector(".btn-google");
+    // "Continue with Google" — real sign-in when a Google client id is configured
+    // (wireGoogle sets it up and only reveals the button when it's ready). The
+    // localhost demo keeps working with no gateway; the live-but-unconfigured
+    // message is a safety net (the button is hidden in that case anyway).
+    const g = form.querySelector(".btn-google:not(.auth-otp-link)");
     if (g) g.addEventListener("click", () => {
+      if (startGoogle(g)) return;
       if (!isLocalhost()) { showCustomerAuthError(form, "Google sign-in is coming soon — please continue with your email and password."); return; }
       succeed(form);
     });
@@ -469,6 +472,85 @@ window.DOODLY_AUTH = (function () {
       if (params.has("order")) return "/checkout.html";              // mid-purchase marker → checkout
     } catch (e) {}
     return "/";                                                       // Home
+  }
+
+  /* ============================================================
+     Continue with Google (Google Identity Services)
+     The storefront is cross-origin from the backend, so Google sign-in mirrors
+     password sign-in: get a Google access token in the browser, exchange it at
+     POST /api/google for a DOODLY bearer token, then sign in and land Home.
+     The button only appears when a client id is configured (served by
+     /api/config) — never a dead button.
+     ============================================================ */
+  let gTokenClient = null, gBusy = false;
+
+  function loadGis() {
+    if (window.google && window.google.accounts && window.google.accounts.oauth2) return Promise.resolve(window.google);
+    return new Promise(function (resolve, reject) {
+      var s = document.getElementById("doodly-gis");
+      if (!s) { s = document.createElement("script"); s.id = "doodly-gis"; s.src = "https://accounts.google.com/gsi/client"; s.async = true; s.defer = true; document.head.appendChild(s); }
+      s.addEventListener("load", function () { resolve(window.google); });
+      s.addEventListener("error", function () { reject(new Error("gis")); });
+      if (window.google && window.google.accounts) resolve(window.google);
+    });
+  }
+
+  function clearGoogleLoading() { gBusy = false; document.querySelectorAll(".btn-google.is-loading").forEach(function (b) { b.classList.remove("is-loading"); }); }
+
+  // Exchange the Google access token for a DOODLY session, then sign in.
+  function googleExchange(accessToken) {
+    var form = document.querySelector(".auth-card");
+    if (form) form.dataset.dest = customerAuthDest();               // land Home (or checkout mid-purchase)
+    if (!window.DOODLY_API) { clearGoogleLoading(); if (form) showCustomerAuthError(form, "Sign-in is temporarily unavailable. Please try again shortly."); return; }
+    window.DOODLY_API.post("/api/google", { accessToken: accessToken }).then(function (res) {
+      clearGoogleLoading();
+      if (res && res.token && res.user) {
+        try { localStorage.setItem("doodly-token", res.token); localStorage.setItem("doodly-currentuser", JSON.stringify(res.user)); } catch (e) {}
+        var RB = window.DOODLY_RBAC; if (RB) { if (RB.setRealRole) RB.setRealRole(res.user.role || "customer"); if (RB.returnToSelf) RB.returnToSelf(); if (RB.recordLogin) RB.recordLogin(true); }
+        if (form) succeed(form); else window.location.href = customerAuthDest();
+        return;
+      }
+      if (form) showCustomerAuthError(form, "Couldn't sign you in with Google. Please try again.");
+    }).catch(function (err) {
+      clearGoogleLoading();
+      if (err && err.status === 429) { if (form) showCustomerAuthError(form, "Too many attempts — please try again in a minute."); return; }
+      if (form) showCustomerAuthError(form, (err && err.message) || "Couldn't sign you in with Google. Please try again.");
+    });
+  }
+
+  // Reveal + wire the Google button(s) when a client id is configured; otherwise
+  // keep the demo on localhost and hide the button on the live site.
+  function wireGoogle(scope) {
+    var btns = [].slice.call(scope.querySelectorAll(".btn-google:not(.auth-otp-link)"));
+    if (!btns.length) return;
+    var dropDivider = function () { var d = scope.querySelector(".auth-divider"); if (d && !scope.querySelector(".btn-google:not(.auth-otp-link)")) d.remove(); };
+    btns.forEach(function (b) { b.hidden = true; });                // hide until confirmed (no dead button flash)
+    var cfgP = (window.DOODLY_API && DOODLY_API.get) ? DOODLY_API.get("/api/config").then(function (c) { return c && c.googleClientId; }).catch(function () { return null; }) : Promise.resolve(null);
+    cfgP.then(function (clientId) {
+      if (!clientId) {
+        if (isLocalhost()) { btns.forEach(function (b) { b.hidden = false; }); }   // demo
+        else { btns.forEach(function (b) { b.remove(); }); dropDivider(); }         // not offered live
+        return;
+      }
+      loadGis().then(function (google) {
+        gTokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: "openid email profile",
+          callback: function (resp) { clearGoogleLoading(); if (resp && resp.access_token) googleExchange(resp.access_token); },
+          error_callback: function () { clearGoogleLoading(); },
+        });
+        btns.forEach(function (b) { b.hidden = false; });           // real, working button
+      }).catch(function () {
+        if (isLocalhost()) { btns.forEach(function (b) { b.hidden = false; }); }
+        else { btns.forEach(function (b) { b.remove(); }); dropDivider(); }
+      });
+    });
+  }
+
+  // Launch the Google popup. Returns true if the real flow started.
+  function startGoogle(btn) {
+    if (gTokenClient && !gBusy) { gBusy = true; if (btn) btn.classList.add("is-loading"); try { gTokenClient.requestAccessToken(); } catch (e) { clearGoogleLoading(); return false; } return true; }
+    return false;
   }
 
   /** Exchange email+password for the signed sign-in token; persist the identity.
@@ -795,16 +877,13 @@ window.DOODLY_AUTH = (function () {
     const waveEl = scope.querySelector(".auth-wave");
     if (waveEl && !waveEl.dataset.built) { waveEl.innerHTML = waveSVG(); waveEl.dataset.built = "1"; }
     ensureLoader();
-    // Live site: Google OAuth + OTP delivery aren't connected yet, so those
-    // entry points are removed until real providers exist (defence-in-depth:
-    // their handlers are also blocked). The localhost demo keeps them.
+    // OTP delivery isn't connected yet → remove that entry point on the live site
+    // (the localhost demo keeps it). Google is handled by wireGoogle, which
+    // reveals + wires the button only when a client id is configured.
     if (!isLocalhost()) {
-      scope.querySelectorAll(".btn-google, .auth-otp-link").forEach((el) => {
-        el.remove();
-      });
-      const div = scope.querySelector(".auth-divider");
-      if (div && !scope.querySelector(".btn-google")) div.remove();
+      scope.querySelectorAll(".auth-otp-link").forEach((el) => el.remove());
     }
+    wireGoogle(scope);
     wireForm(scope);
     wireCursor(scope);
   }

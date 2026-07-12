@@ -13,5 +13,8 @@ export const GET = route("config.public", async (_req: NextRequest) => {
   return ok({
     mapsKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || null,
     razorpayKeyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || null,
+    // Public OAuth Web client id for "Continue with Google". Safe in the browser;
+    // when unset the storefront hides the Google button (graceful, no dead button).
+    googleClientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || null,
   });
 });

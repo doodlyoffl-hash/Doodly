@@ -315,6 +315,9 @@
   .auth-loader .al-logo img { opacity:1; transform:none; }
 }
 
+/* "Continue with Google" — brief loading state while the popup/exchange runs */
+.btn-google.is-loading{opacity:.65;pointer-events:none}
+
 /* ============================================================
    Password requirements checklist (sign-up / reset)
    Mirrors the server policy in next-app/lib/auth/password.ts and
