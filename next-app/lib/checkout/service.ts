@@ -193,7 +193,7 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     try {
       const { enableAutopay } = await import("@/lib/autopay/service");
       const cyclesFor = variant.type === "SUBSCRIPTION" ? Math.min(120, Math.max(1, plan.days <= 7 ? 52 : plan.days <= 30 ? 24 : 12)) : 12;
-      const mandate = await enableAutopay({ userId, subscriptionId, planSlug: plan.slug, totalCount: cyclesFor, amountPaise: q.totalPaise, ctx });
+      const mandate = await enableAutopay({ userId, subscriptionId, planSlug: plan.slug, variantId: input.variantId, totalCount: cyclesFor, amountPaise: q.totalPaise, ctx });
       await db.orderEvent.create({ data: { orderId: order.id, type: "NOTE", title: "AutoPay set up", note: `Recurring mandate ${mandate.gatewaySubId} — awaiting authorisation` } }).catch(() => {});
       await audit({ userId, actorRole: "customer", action: "order.placed", target: `${base.number} autopay`, ctx });
       return { ...base, paid: false, method: "autopay", autopay: { subscriptionId: mandate.gatewaySubId, keyId: mandate.keyId } };

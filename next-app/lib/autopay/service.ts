@@ -39,11 +39,11 @@ export async function ownedMandate(userId: string, opts: { subscriptionId?: stri
  * mandate + the AutopaySubscription row (PENDING auth). Returns the gateway
  * subscription id + key so Checkout can open the mandate-authorisation popup.
  */
-export async function enableAutopay(args: { userId: string; subscriptionId: string; planSlug: string; totalCount: number; amountPaise: number; ctx?: ReqContext }) {
+export async function enableAutopay(args: { userId: string; subscriptionId: string; planSlug: string; variantId?: string; totalCount: number; amountPaise: number; ctx?: ReqContext }) {
   const owned = await db.subscription.findFirst({ where: { id: args.subscriptionId, userId: args.userId }, select: { id: true, plan: { select: { name: true } } } });
   if (!owned) throw Errors.notFound("Subscription not found on your account.");
 
-  const rzpSub = await createSubscription(args.planSlug, { totalCount: args.totalCount, customerNotify: true, notes: { subscriptionId: args.subscriptionId, userId: args.userId } });
+  const rzpSub = await createSubscription(args.planSlug, { totalCount: args.totalCount, variantId: args.variantId, customerNotify: true, notes: { subscriptionId: args.subscriptionId, userId: args.userId } });
   await db.autopaySubscription.upsert({
     where: { subscriptionId: args.subscriptionId },
     create: { gatewaySubId: rzpSub.id, subscriptionId: args.subscriptionId, status: "INACTIVE", nextRenewalAt: new Date(), amountPaise: args.amountPaise },

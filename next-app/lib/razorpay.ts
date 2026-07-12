@@ -21,10 +21,15 @@ function getRazorpay(): Razorpay {
   return _client;
 }
 
-/** slug -> Razorpay plan_id map (created once in the Razorpay dashboard). */
-export function planIdFor(planSlug: string): string | null {
+/** slug -> Razorpay plan_id map (created once in the Razorpay dashboard).
+    Subscription price depends on BOTH the bottle (variant) and the duration,
+    so we look up a variant-specific key first (e.g. "v1000:p30") and fall
+    back to the bare plan slug ("p30") when only one price per duration is
+    mapped. Keys are set via the RAZORPAY_PLAN_IDS env (JSON object). */
+export function planIdFor(planSlug: string, variantId?: string): string | null {
   try {
     const map = JSON.parse(process.env.RAZORPAY_PLAN_IDS ?? "{}");
+    if (variantId && map[`${variantId}:${planSlug}`]) return map[`${variantId}:${planSlug}`];
     return map[planSlug] ?? null;
   } catch {
     return null;
@@ -53,9 +58,9 @@ export function razorpayConfigured(): boolean {
 }
 
 /** Recurring auto-pay mandate. `totalCount` = number of billing cycles. */
-export async function createSubscription(planSlug: string, opts: { totalCount: number; customerNotify?: boolean; notes?: Record<string, string> }) {
-  const planId = planIdFor(planSlug);
-  if (!planId) throw new Error(`No Razorpay plan_id mapped for "${planSlug}" (set RAZORPAY_PLAN_IDS).`);
+export async function createSubscription(planSlug: string, opts: { totalCount: number; variantId?: string; customerNotify?: boolean; notes?: Record<string, string> }) {
+  const planId = planIdFor(planSlug, opts.variantId);
+  if (!planId) throw new Error(`No Razorpay plan_id mapped for "${opts.variantId ? `${opts.variantId}:${planSlug}` : planSlug}" (set RAZORPAY_PLAN_IDS).`);
   return getRazorpay().subscriptions.create({
     plan_id: planId,
     total_count: opts.totalCount,
