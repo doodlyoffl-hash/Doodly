@@ -16,13 +16,6 @@ window.DOODLY_CHECKOUT = (function () {
   const icon = (n, s) => (window.DOODLY_BLOCKS ? window.DOODLY_BLOCKS.icon(n, s) : "");
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const meUser = () => { try { const u = window.DOODLY_RBAC && DOODLY_RBAC.currentUser ? DOODLY_RBAC.currentUser() : null; return (u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")) ? u : null; } catch (e) { return null; } };
-  const ic = {
-    upi: '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="m8 12 3 3 5-6"/>',
-    card: '<rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20M6 15h4"/>',
-    bank: '<path d="M3 10 12 4l9 6"/><path d="M5 10v8M19 10v8M9 10v8M15 10v8M3 20h18"/>',
-    wallet: '<rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18M16 14h2"/>',
-    cod: '<rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10h3l2 3v4h-5"/><circle cx="7" cy="18" r="1.6"/><circle cx="18" cy="18" r="1.6"/>',
-  };
   const STEPS = [["cart", "Cart"], ["address", "Address"], ["slot", "Slot"], ["payment", "Payment"], ["confirm", "Done"]];
 
   // one delivery run every morning — a single window, no slot choosing
@@ -33,15 +26,10 @@ window.DOODLY_CHECKOUT = (function () {
     ["Home", "Ananya R", "12-3, Krishnalanka, Vijayawada 520013", "+91 90000 00000", "520013"],
     ["Work", "Ananya R", "Benz Circle, Labbipet, Vijayawada 520010", "+91 90000 00000", "520010"],
   ];
-  // prepaid only — DOODLY doesn't take cash on delivery
-  const METHODS = [
-    ["upi", "UPI", "Google Pay, PhonePe, Paytm & more"],
-    ["card", "Credit / Debit Card", "Visa, Mastercard, RuPay"],
-    ["netbanking", "Net Banking", "All major banks"],
-    ["wallet", "Wallet", "Paytm, PhonePe, Amazon Pay"],
-  ];
+  // The payment instrument (UPI / Card / Net Banking / Wallet) is chosen on
+  // Razorpay's hosted popup — NOT on this page — so there is no on-page method list.
 
-  let mount, coPicker, state = { step: 0, slot: 0, addr: 0, method: "upi", reached: 0, coupon: null, useWallet: false, walletPaise: 0 };
+  let mount, coPicker, state = { step: 0, slot: 0, addr: 0, reached: 0, coupon: null, useWallet: false, walletPaise: 0, autopay: false };
 
   /* ---------------- markup ---------------- */
   function stepperHTML() {
@@ -114,6 +102,13 @@ window.DOODLY_CHECKOUT = (function () {
   }
   /* stored subscription context (set by the builder) gives plan days */
   function subContext() { try { return JSON.parse(localStorage.getItem("doodly-subscription") || "null"); } catch (e) { return null; } }
+  /* A recurring subscription plan (AutoPay only makes sense here) — a p7/p30/p90
+     plan slug, or a multi-day plan. One-time / trial packs (single, days<=1) are not. */
+  function isSubscriptionPlan() {
+    const s = subContext(); if (!s) return false;
+    if (["p7", "p30", "p90"].indexOf(s.planId) !== -1) return true;
+    return (s.days || 0) > 1;
+  }
 
   /* Build the checkout review line + totals from the subscription context when
      the one-off cart is empty (the builder/quick-buy flow sets doodly-subscription,
@@ -163,7 +158,7 @@ window.DOODLY_CHECKOUT = (function () {
   function paymentPaneHTML() {
     return `<h2 class="co-h">Payment</h2>
       <div class="co-secure">${icon("lock", 14)} 256-bit encrypted &amp; secure payment</div>
-      <div class="co-promo">
+      <div class="co-promo" id="coPromo">
         <div class="co-coupon" id="coCouponHost">
           <label class="co-fl co-coupon-fl"><input type="text" class="co-input" id="coCouponInput" placeholder=" " autocomplete="off" maxlength="40"><span>Have a coupon code?</span></label>
           <button type="button" class="btn btn-ghost co-coupon-apply">Apply</button>
@@ -172,40 +167,11 @@ window.DOODLY_CHECKOUT = (function () {
         <label class="co-walletuse" id="coWalletUse" hidden>
           <input type="checkbox" id="coUseWallet"><span class="co-walletuse-txt">Use DOODLY Wallet balance <b id="coWalletBal"></b></span>
         </label>
+        <div class="co-promo-note" id="coPromoNote" hidden>Coupon &amp; wallet apply to one-time orders.</div>
       </div>
-      <div class="co-methods">${METHODS.map((m) => `
-        <div class="co-method ${m[0] === state.method ? "sel" : ""}" data-method="${m[0]}">
-          <button type="button" class="co-method-head">
-            <span class="co-method-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ic[m[0] === "netbanking" ? "bank" : m[0]]}</svg></span>
-            <span class="co-method-txt"><b>${m[1]}</b><small>${m[2]}</small></span>
-            <span class="co-radio">${icon("check", 13)}</span>
-          </button>
-          <div class="co-method-body">${methodBody(m[0])}</div>
-        </div>`).join("")}</div>
       <div class="co-autopay" id="coAutopayHost"></div>
-      ${navHTML(true, `${icon("lock", 16)} Pay securely`, "co-pay")}`;
-  }
-  function methodBody(m) {
-    if (m === "upi") return `<div class="co-upi">
-        <div class="co-qr" aria-hidden="true"><div class="co-qr-grid"></div><span class="co-qr-logo">${icon("bottle", 20)}</span></div>
-        <div class="co-upi-side"><label class="co-fl"><input type="text" class="co-input" placeholder=" " inputmode="email"><span>Enter UPI ID (name@bank)</span></label>
-          <div class="co-upi-apps">${["GPay", "PhonePe", "Paytm", "BHIM"].map((a) => `<span class="co-upi-app">${a}</span>`).join("")}</div>
-          <p class="co-hint">Scan the QR with any UPI app, or enter your UPI ID.</p></div></div>`;
-    if (m === "card") return `<div class="co-card-pay">
-        <div class="co-cardprev"><div class="co-cardprev-in">
-          <div class="co-cardface co-front"><span class="cc-chip"></span><span class="cc-brand">DOODLY</span><span class="cc-num">•••• •••• •••• ••••</span><div class="cc-row"><span class="cc-name">YOUR NAME</span><span class="cc-exp">MM/YY</span></div></div>
-          <div class="co-cardface co-back"><span class="cc-strip"></span><span class="cc-cvv">•••</span></div>
-        </div></div>
-        <div class="co-cardform">
-          <label class="co-fl"><input type="text" class="co-input cc-i-num" placeholder=" " inputmode="numeric" maxlength="19" autocomplete="cc-number"><span>Card number</span></label>
-          <label class="co-fl"><input type="text" class="co-input cc-i-name" placeholder=" " autocomplete="cc-name"><span>Name on card</span></label>
-          <div class="co-card-row">
-            <label class="co-fl"><input type="text" class="co-input cc-i-exp" placeholder=" " inputmode="numeric" maxlength="5" autocomplete="cc-exp"><span>MM/YY</span></label>
-            <label class="co-fl"><input type="text" class="co-input cc-i-cvv" placeholder=" " inputmode="numeric" maxlength="4" autocomplete="cc-csc"><span>CVV</span></label>
-          </div></div></div>`;
-    if (m === "netbanking") return `<div class="co-banks">${["HDFC Bank", "ICICI Bank", "SBI", "Axis Bank", "Kotak", "Other"].map((b, i) => `<button type="button" class="co-bank ${i === 0 ? "sel" : ""}">${b}</button>`).join("")}</div>`;
-    if (m === "wallet") return `<div class="co-banks">${["Paytm", "PhonePe", "Amazon Pay", "Mobikwik"].map((b, i) => `<button type="button" class="co-bank ${i === 0 ? "sel" : ""}">${b}</button>`).join("")}</div>`;
-    return `<p class="co-hint">${icon("truck", 15)} Pay in cash to the delivery partner when your fresh milk arrives. A small convenience may apply.</p>`;
+      <div class="co-secure co-pay-reassure">${icon("lock", 14)} You'll choose UPI / Card / Net Banking / Wallet securely on the next screen.</div>
+      ${navHTML(true, "Proceed to Secure Payment", "co-pay")}`;
   }
   function navHTML(back, nextLabel, nextCls) {
     return `<div class="co-nav">${back ? `<button type="button" class="btn btn-ghost co-back">${icon("arrow", 16)} Back</button>` : "<span></span>"}
@@ -289,10 +255,30 @@ window.DOODLY_CHECKOUT = (function () {
     const el = mount.querySelector("#coCouponMsg"); if (!el) return;
     el.hidden = !text; el.className = "co-coupon-msg" + (ok ? " ok" : " err"); el.textContent = text || "";
   }
+  // AutoPay = a recurring subscription mandate; the backend ignores coupon + wallet
+  // for it. Hide the coupon input + wallet toggle (and their summary rows) while
+  // AutoPay is ON and show a small note; restore everything when it's OFF.
+  function togglePromoInputs() {
+    const on = state.autopay === true;
+    const coupon = mount.querySelector("#coCouponHost");
+    const walletUse = mount.querySelector("#coWalletUse");
+    const note = mount.querySelector("#coPromoNote");
+    if (coupon) coupon.hidden = on;
+    if (note) note.hidden = !on;
+    if (walletUse) {
+      // only ever un-hide the wallet row when there's a real balance to spend
+      if (on) walletUse.hidden = true;
+      else walletUse.hidden = state.walletPaise <= 0;
+    }
+    if (on) { const msg = mount.querySelector("#coCouponMsg"); if (msg) msg.hidden = true; }
+  }
   function recalcPromo() {
+    togglePromoInputs();
     const sum = mount.querySelector(".co-sum"); if (!sum) return;
     sum.querySelectorAll(".row.co-r-coupon, .row.co-r-wallet, .row.co-r-payable").forEach((r) => r.remove());
     const totalRow = sum.querySelector(".row.total"); if (!totalRow) return;
+    // AutoPay ignores coupon + wallet → never discount the recurring total
+    if (state.autopay === true) { totalRow.classList.remove("co-total-struck"); return; }
     const totalP = orderTotalPaise();
     const cDisc = state.coupon ? Math.min(state.coupon.discountPaise, totalP) : 0;
     const afterCoupon = totalP - cDisc;
@@ -344,16 +330,9 @@ window.DOODLY_CHECKOUT = (function () {
   }
 
   /* ---------------- payment ---------------- */
-  function validateMethod() {
-    const m = state.method;
-    const body = mount.querySelector(`.co-method[data-method="${m}"] .co-method-body`);
-    if (m === "upi") { const v = body.querySelector(".co-input").value.trim(); return v.length >= 4 && v.includes("@") || false; }
-    if (m === "card") {
-      const num = body.querySelector(".cc-i-num").value.replace(/\s/g, ""), exp = body.querySelector(".cc-i-exp").value, cvv = body.querySelector(".cc-i-cvv").value;
-      return num.length >= 12 && /^\d\d\/\d\d$/.test(exp) && cvv.length >= 3;
-    }
-    return true; // netbanking / wallet: bank pre-selected
-  }
+  // NOTE: the payment instrument (UPI/Card/Net Banking/Wallet) is entered inside
+  // Razorpay's own secure popup — DOODLY collects no card/UPI details on-page, so
+  // there is nothing to validate here before opening the gateway.
   function serviceableOk() { const PC = window.DOODLY_PINCODE; return !PC || PC.isServiceable(); }
   // A delivery address must be chosen before leaving the address step; a REAL saved
   // address (state.addrId) is required to actually place the order. The backend
@@ -434,13 +413,17 @@ window.DOODLY_CHECKOUT = (function () {
     const addressPayload = (selA && selA.dataset.addrId)
       ? { id: selA.dataset.addrId, pincode: pin }     // pincode still needed for the serviceability check
       : { label: atxt(".co-addr-tag") || "Home", line1: line, city: cityM ? cityM[1] : "", pincode: pin, contactName: atxt(".co-addr-name"), phone: (atxt(".co-addr-phone") || "").replace(/[^\d+ ]/g, "").trim() };
+    // AutoPay only applies to a real recurring subscription plan; the payment
+    // instrument is chosen on Razorpay (no `method` field is sent anymore).
+    const autopay = state.autopay === true && isSubscriptionPlan();
     // coupon + wallet are INTENT only — the backend re-validates the coupon and
-    // caps the wallet amount against the real balance (never trusts these numbers)
-    const walletIntent = state.useWallet ? Math.min(state.walletPaise, Math.max(0, orderTotalPaise() - (state.coupon ? state.coupon.discountPaise : 0))) : 0;
+    // caps the wallet amount against the real balance (never trusts these numbers).
+    // AutoPay is a recurring mandate → coupon/wallet don't apply, so they're omitted.
+    const walletIntent = (!autopay && state.useWallet) ? Math.min(state.walletPaise, Math.max(0, orderTotalPaise() - (state.coupon ? state.coupon.discountPaise : 0))) : 0;
     const payload = {
       variantId: sub.variantId, planId: sub.planId || undefined,
-      method: state.method === "card" ? "card" : state.method === "netbanking" ? "netbanking" : "upi",
-      couponCode: state.coupon ? state.coupon.code : undefined,
+      autopay: autopay,
+      couponCode: (!autopay && state.coupon) ? state.coupon.code : undefined,
       walletAmountPaise: walletIntent > 0 ? walletIntent : undefined,
       startDate: sub.startIso || undefined,
       slot: SC && SC.slotLabel ? SC.slotLabel() : undefined,
@@ -448,6 +431,7 @@ window.DOODLY_CHECKOUT = (function () {
     };
     DOODLY_API.post("/api/checkout", payload)
       .then((res) => {
+        if (res.autopay) { hideProcessing(); openRzpSubscription(res, me); return; }   // recurring mandate (subscription mode)
         if (res.rzp) { hideProcessing(); openRzpCheckout(res, me); return; }   // gateway handles paying flag (dismiss/verify)
         state.paying = false; state.realOrder = res; hideProcessing(); success();
       })
@@ -487,6 +471,27 @@ window.DOODLY_CHECKOUT = (function () {
           DOODLY_API.post("/api/payments/verify", resp)
             .then(() => { state.paying = false; res.paid = true; state.realOrder = res; hideProcessing(); success(); })
             .catch(() => { state.paying = false; hideProcessing(); failure("Your payment is being verified — we'll confirm your order shortly. If money was debited, it is safe; contact support with your payment id if you don't get a confirmation."); });
+        },
+      });
+      rzp.open();
+    }).catch((e) => { state.paying = false; hideProcessing(); releaseHolds(res.orderId); failure("We couldn't connect to the payment gateway. Please try again in a few moments."); });
+  }
+  // AutoPay path: the backend created a Razorpay SUBSCRIPTION (recurring mandate),
+  // so Razorpay opens in subscription mode with `subscription_id` instead of a
+  // one-time order. Mirrors openRzpCheckout's structure; on success we confirm.
+  function openRzpSubscription(res, me) {
+    coLoadRazorpay().then((Razorpay) => {
+      const rzp = new Razorpay({
+        key: res.autopay.keyId, subscription_id: res.autopay.subscriptionId,
+        name: "DOODLY", description: "AutoPay subscription " + (res.number || ""),
+        prefill: { name: me.name || "", email: me.email || "" },
+        theme: { color: "#1FAE66" },
+        modal: { ondismiss: function () { state.paying = false; releaseHolds(res.orderId); failure("AutoPay setup cancelled — nothing was charged."); } },
+        handler: function (resp) {
+          processing();
+          DOODLY_API.post("/api/payments/verify", resp)
+            .then(() => { state.paying = false; res.paid = true; state.realOrder = res; hideProcessing(); success(); })
+            .catch(() => { state.paying = false; hideProcessing(); failure("Your AutoPay setup is being verified — we'll confirm your subscription shortly. If money was debited, it is safe; contact support with your payment id if you don't get a confirmation."); });
         },
       });
       rzp.open();
@@ -600,36 +605,15 @@ window.DOODLY_CHECKOUT = (function () {
     setTimeout(() => { host.innerHTML = ""; }, 3200);
   }
 
-  /* ---------------- card formatting + flip ---------------- */
-  function wireCard() {
-    const num = mount.querySelector(".cc-i-num"), name = mount.querySelector(".cc-i-name"), exp = mount.querySelector(".cc-i-exp"), cvv = mount.querySelector(".cc-i-cvv");
-    const prev = mount.querySelector(".co-cardprev-in");
-    if (num) num.addEventListener("input", () => {
-      let v = num.value.replace(/\D/g, "").slice(0, 16); num.value = v.replace(/(.{4})/g, "$1 ").trim();
-      const el = mount.querySelector(".cc-num"); if (el) el.textContent = (num.value || "•••• •••• •••• ••••").padEnd(19, "•");
-    });
-    if (name) name.addEventListener("input", () => { const el = mount.querySelector(".cc-name"); if (el) el.textContent = name.value.toUpperCase() || "YOUR NAME"; });
-    if (exp) exp.addEventListener("input", () => {
-      let v = exp.value.replace(/\D/g, "").slice(0, 4); if (v.length > 2) v = v.slice(0, 2) + "/" + v.slice(2); exp.value = v;
-      const el = mount.querySelector(".cc-exp"); if (el) el.textContent = v || "MM/YY";
-    });
-    if (cvv) {
-      cvv.addEventListener("input", () => { cvv.value = cvv.value.replace(/\D/g, "").slice(0, 4); const el = mount.querySelector(".cc-cvv"); if (el) el.textContent = cvv.value.replace(/./g, "•") || "•••"; });
-      cvv.addEventListener("focus", () => { if (prev) prev.classList.add("flip"); });
-      cvv.addEventListener("blur", () => { if (prev) prev.classList.remove("flip"); });
-    }
-  }
-
   /* ---------------- wire ---------------- */
   function wire() {
     mount.addEventListener("click", (e) => {
       const t = e.target;
       if (t.closest(".js-editcart") && CART()) { CART().open(); return; }
       const dot = t.closest(".co-stepdot"); if (dot && !dot.disabled) { goto(Number(dot.dataset.goto)); return; }
+      if (t.closest(".co-coupon-apply")) { applyCoupon(); return; }
       if (t.closest(".co-next")) {
         if (t.closest(".co-pay")) { pay(); return; }
-        if (t.closest(".co-coupon-apply")) { applyCoupon(); return; }
-        if (t.id === "coUseWallet") { state.useWallet = t.checked; recalcPromo(); return; }
         if (state.step === 1 && !addrChosen()) { showAddrReq(true); return; }   // an address MUST be selected first
         if (state.step === 1 && !serviceableOk()) { showPinReq(); return; }   // pincode must be serviceable
         if (state.step === 2 && !startOk()) { showDateReq(); return; }        // need a valid start date
@@ -647,13 +631,18 @@ window.DOODLY_CHECKOUT = (function () {
       }
       if (t.closest(".js-addaddr")) { addAddressModal(); return; }
       const slot = t.closest(".co-slot:not(.off)"); if (slot) { state.slot = Number(slot.dataset.slot); mount.querySelectorAll(".co-slot").forEach((s) => s.classList.toggle("sel", s === slot)); return; }
-      const mhead = t.closest(".co-method-head"); if (mhead) { const m = mhead.closest(".co-method"); state.method = m.dataset.method; mount.querySelectorAll(".co-method").forEach((x) => x.classList.toggle("sel", x === m)); return; }
-      const bank = t.closest(".co-bank"); if (bank) { bank.parentElement.querySelectorAll(".co-bank").forEach((b) => b.classList.toggle("sel", b === bank)); return; }
       // ripple
-      const btn = t.closest(".btn, .co-method-head, .co-slot, .co-addr, .co-bank, .mm-tile");
+      const btn = t.closest(".btn, .co-slot, .co-addr, .mm-tile");
       if (btn) ripple(btn, e);
     });
-    wireCard();
+    // Checkbox toggles fire `change` (not the delegated click path): the DOODLY
+    // Wallet opt-in and the AutoPay toggle (#apEnable, rendered by DOODLY_AUTOPAY
+    // .mountToggle inside #coAutopayHost) both drive summary + promo visibility.
+    mount.addEventListener("change", (e) => {
+      const t = e.target;
+      if (t.id === "coUseWallet") { state.useWallet = t.checked; recalcPromo(); return; }
+      if (t.id === "apEnable") { state.autopay = t.checked; recalcPromo(); return; }
+    });
   }
   function ripple(el, e) {
     if (reduced()) return;
@@ -821,7 +810,7 @@ window.DOODLY_CHECKOUT = (function () {
       }
     } catch (e) {}
     mount.dataset.built = "1";
-    state = { step: 0, slot: 0, addr: 0, addrId: null, method: "upi", reached: 0, realOrder: null };
+    state = { step: 0, slot: 0, addr: 0, addrId: null, reached: 0, realOrder: null, coupon: null, useWallet: false, walletPaise: 0, autopay: false };
     build(); wire();
     try { hydrateAddresses(); } catch (e) {}   // signed-in customer → real saved addresses + map pin
     // mount the delivery start-date picker into the schedule step
@@ -840,8 +829,18 @@ window.DOODLY_CHECKOUT = (function () {
       const pinHost = mount.querySelector("#coPincodeHost");
       if (pinHost) window.DOODLY_PINCODE.mountChecker(pinHost, { compact: true, onResult: () => { const r = mount.querySelector("#coPinReq"); if (r && window.DOODLY_PINCODE.isServiceable()) r.hidden = true; } });
     }
-    // auto-pay toggle in the payment step
-    if (window.DOODLY_AUTOPAY) { const apHost = mount.querySelector("#coAutopayHost"); if (apHost) window.DOODLY_AUTOPAY.mountToggle(apHost); }
+    // auto-pay toggle in the payment step — only meaningful for a recurring
+    // subscription plan; for one-time / trial the host stays empty.
+    if (window.DOODLY_AUTOPAY && isSubscriptionPlan()) {
+      const apHost = mount.querySelector("#coAutopayHost");
+      if (apHost) {
+        // AutoPay is opt-in — the toggle renders OFF; the customer must actively enable it.
+        window.DOODLY_AUTOPAY.mountToggle(apHost, { checked: false });
+        // keep state in sync with the checkbox we just rendered (starts OFF).
+        const cb = apHost.querySelector("#apEnable");
+        state.autopay = !!(cb && cb.checked);
+      }
+    }
   }
 
   return { init };

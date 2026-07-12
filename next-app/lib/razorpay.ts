@@ -68,6 +68,22 @@ export async function cancelSubscription(subscriptionId: string, cancelAtCycleEn
   return getRazorpay().subscriptions.cancel(subscriptionId, cancelAtCycleEnd);
 }
 
+/** Pause a recurring mandate (holiday/vacation) without cancelling it. */
+export async function pauseSubscription(subscriptionId: string) {
+  return getRazorpay().subscriptions.pause(subscriptionId, { pause_at: "now" } as never);
+}
+
+/** Resume a paused/halted mandate → recurring charges continue (a HALTED mandate's
+    resume re-attempts the failed cycle, so this doubles as customer/admin "retry"). */
+export async function resumeSubscription(subscriptionId: string) {
+  return getRazorpay().subscriptions.resume(subscriptionId, { resume_at: "now" } as never);
+}
+
+/** Fetch a mandate's live gateway state (status, current_end, paid_count, etc.). */
+export async function fetchSubscription(subscriptionId: string) {
+  return getRazorpay().subscriptions.fetch(subscriptionId);
+}
+
 /** Verify the signature returned by Checkout on success (order flow). */
 export function verifyPaymentSignature(p: { orderId: string; paymentId: string; signature: string }): boolean {
   if (!KEY_SECRET) return false;

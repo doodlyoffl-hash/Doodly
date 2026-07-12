@@ -58,7 +58,9 @@ async function handle(req: NextRequest) {
   const limit = Math.min(1000, Math.max(1, Number(new URL(req.url).searchParams.get("limit")) || 200));
   const result = await drainPending(limit);
   const whatsapp = await pollWhatsAppStatuses().catch(() => ({ polled: 0, updated: 0 }));
-  return NextResponse.json({ ok: true, ...result, whatsapp });
+  const { autopayRenewalReminders } = await import("@/lib/autopay/service");
+  const autopay = await autopayRenewalReminders().catch(() => ({ candidates: 0, reminded: 0 }));
+  return NextResponse.json({ ok: true, ...result, whatsapp, autopay });
 }
 
 export const GET = handle;

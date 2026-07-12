@@ -114,17 +114,46 @@ export async function POST(req: NextRequest) {
               });
             }
           }
+          // AutoPay audit trail — record this renewal charge (amount from the invoice/plan)
+          const { recordRenewal } = await import("@/lib/autopay/service");
+          await recordRenewal(sub.id, Math.round(Number(event.payload.payment?.entity?.amount ?? 0)) || 0, true, event.payload.payment?.entity?.id);
         } catch { /* non-blocking */ }
         await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: sub.id, processed: true }).catch(() => {});
         break;
       }
-      case "subscription.halted":
+      case "subscription.authenticated":
+      case "subscription.activated": {
+        // The customer authorised the mandate → AutoPay is now live.
+        const sub = event.payload.subscription.entity;
+        try {
+          const { activateMandate } = await import("@/lib/autopay/service");
+          await activateMandate(sub.id, sub.current_end ? new Date(Number(sub.current_end) * 1000) : undefined);
+        } catch { /* non-blocking */ }
+        await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: sub.id, processed: true }).catch(() => {});
+        break;
+      }
+      case "subscription.paused": {
+        const sub = event.payload.subscription.entity;
+        await db.autopaySubscription.updateMany({ where: { gatewaySubId: sub.id }, data: { status: "INACTIVE" } }).catch(() => {});
+        await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: sub.id, processed: true }).catch(() => {});
+        break;
+      }
+      case "subscription.halted": {
+        // Razorpay exhausted its retries → SUSPEND (never silent-cancel) + notify/escalate.
+        const sub = event.payload.subscription.entity;
+        try {
+          const { recordRenewal, onMandateHalted } = await import("@/lib/autopay/service");
+          await recordRenewal(sub.id, 0, false, sub.id, "Automatic renewal failed after gateway retries");
+          await onMandateHalted(sub.id);
+        } catch { /* non-blocking */ }
+        await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: sub.id, processed: true }).catch(() => {});
+        break;
+      }
       case "subscription.cancelled": {
         const sub = event.payload.subscription.entity;
-        await db.autopaySubscription.updateMany({
-          where: { gatewaySubId: sub.id },
-          data: { status: event.event === "subscription.halted" ? "SUSPENDED" : "CANCELLED" },
-        }).catch(() => {});
+        await db.autopaySubscription.updateMany({ where: { gatewaySubId: sub.id }, data: { status: "CANCELLED" } }).catch(() => {});
+        await db.autopaySubscription.findFirst({ where: { gatewaySubId: sub.id }, select: { subscriptionId: true } })
+          .then((ap) => ap && db.subscription.update({ where: { id: ap.subscriptionId }, data: { autoRenew: false } })).catch(() => {});
         await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: sub.id, processed: true }).catch(() => {});
         break;
       }

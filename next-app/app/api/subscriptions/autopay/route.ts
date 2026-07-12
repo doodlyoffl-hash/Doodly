@@ -1,65 +1,59 @@
-/* /api/subscriptions/autopay — enable (POST) or cancel (DELETE) auto-pay for a
-   subscription via a Razorpay recurring mandate. The customer authorises the
-   mandate through Checkout (subscription_id); renewals then fire automatically
-   and arrive on the webhook as `subscription.charged`.
-   SECURITY: the caller must own the subscription (session user id) — verified
-   before any mandate is created or cancelled. */
-import { NextRequest, NextResponse } from "next/server";
+/* /api/subscriptions/autopay — customer AutoPay (Razorpay recurring mandate).
+   GET    ?subscriptionId= — this subscription's mandate status + history (own only)
+   POST   { subscriptionId, planSlug, totalCount, amountPaise? } — enable → mandate
+   PATCH  { subscriptionId | gatewaySubId, action: "pause"|"resume"|"retry" }
+   DELETE ?id=<gatewaySubId>  — cancel the mandate
+   Every route verifies the caller OWNS the subscription. */
+import { NextRequest } from "next/server";
 import { z } from "zod";
-import { createSubscription, cancelSubscription } from "@/lib/razorpay";
-import { db } from "@/lib/db";
-import { readUserId } from "@/lib/auth/identity";
+import { ok, parseBody, route, Errors } from "@/lib/http";
+import { requireUserId } from "@/lib/auth/authorize";
+import { reqContext } from "@/lib/auth/request";
+import { enableAutopay, cancelAutopay, pauseAutopay, resumeAutopay, ownedMandate, customerAutopay } from "@/lib/autopay/service";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-const uid = (req: NextRequest) => readUserId(req);
+export const GET = route("autopay.status", async (req: NextRequest) => {
+  const userId = requireUserId(req);
+  const subscriptionId = req.nextUrl.searchParams.get("subscriptionId");
+  const all = await customerAutopay(userId);
+  return ok({ autopay: subscriptionId ? all.find((a) => a.subscriptionId === subscriptionId) ?? null : all });
+});
 
-const Enable = z.object({ subscriptionId: z.string(), planSlug: z.string(), totalCount: z.number().int().positive().max(120) });
+const Enable = z.object({ subscriptionId: z.string().min(1), planSlug: z.string().min(1), totalCount: z.number().int().positive().max(120), amountPaise: z.number().int().nonnegative().optional() });
 
-export async function POST(req: NextRequest) {
-  const userId = uid(req);
-  if (!userId) return NextResponse.json({ error: "Sign in to enable auto-pay" }, { status: 401 });
-
-  const parsed = Enable.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Validation failed" }, { status: 422 });
-  const { subscriptionId, planSlug, totalCount } = parsed.data;
-
-  // authorization: the subscription must belong to the signed-in customer
-  const owned = await db.subscription.findFirst({ where: { id: subscriptionId, userId }, select: { id: true } });
-  if (!owned) return NextResponse.json({ error: "Subscription not found" }, { status: 404 });
-
+export const POST = route("autopay.enable", async (req: NextRequest) => {
+  const userId = requireUserId(req);
+  const b = await parseBody(req, Enable);
   try {
-    const rzpSub = await createSubscription(planSlug, { totalCount, customerNotify: true, notes: { subscriptionId } });
-    await db.autopaySubscription.upsert({
-      where: { subscriptionId },
-      create: { gatewaySubId: rzpSub.id, subscriptionId, status: "ACTIVE", nextRenewalAt: new Date(), amountPaise: 0 } as any,
-      update: { gatewaySubId: rzpSub.id, status: "ACTIVE" } as any,
-    }).catch((e) => console.error("autopay.upsert", e?.message));
-    // Return the subscription_id + key so the client can open Checkout to authorise the mandate.
-    return NextResponse.json({ subscriptionId: rzpSub.id, shortUrl: (rzpSub as any).short_url, keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID });
-  } catch (e: any) {
-    console.error("autopay.enable", e?.message);
-    return NextResponse.json({ error: "Could not enable auto-pay. Please try again." }, { status: 502 });
+    const res = await enableAutopay({ userId, subscriptionId: b.subscriptionId, planSlug: b.planSlug, totalCount: b.totalCount, amountPaise: b.amountPaise ?? 0, ctx: reqContext(req) });
+    return ok(res);
+  } catch (e) {
+    if ((e as { status?: number })?.status) throw e;   // ApiError (e.g. 404 not owned)
+    const msg = (e as Error)?.message || "";
+    if (/plan_id mapped/i.test(msg)) throw Errors.badRequest("AutoPay isn't available for this plan yet — please pay normally for now.");
+    throw Errors.badRequest("Could not enable AutoPay. Please try again.");
   }
-}
+});
 
-export async function DELETE(req: NextRequest) {
-  const userId = uid(req);
-  if (!userId) return NextResponse.json({ error: "Sign in to manage auto-pay" }, { status: 401 });
+const Patch = z.object({ subscriptionId: z.string().optional(), gatewaySubId: z.string().optional(), action: z.enum(["pause", "resume", "retry"]) });
 
-  const id = new URL(req.url).searchParams.get("id");
-  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+export const PATCH = route("autopay.control", async (req: NextRequest) => {
+  const userId = requireUserId(req);
+  const b = await parseBody(req, Patch);
+  if (!b.subscriptionId && !b.gatewaySubId) throw Errors.badRequest("subscriptionId or gatewaySubId required.");
+  const ap = await ownedMandate(userId, { subscriptionId: b.subscriptionId, gatewaySubId: b.gatewaySubId });
+  if (!ap) throw Errors.notFound("AutoPay mandate not found on your account.");
+  const res = b.action === "pause" ? await pauseAutopay(ap, userId) : await resumeAutopay(ap, userId);
+  return ok(res);
+});
 
-  // authorization: the mandate must belong to a subscription the caller owns
-  const ap = await db.autopaySubscription.findFirst({ where: { gatewaySubId: id }, select: { subscription: { select: { userId: true } } } });
-  if (!ap || ap.subscription?.userId !== userId) return NextResponse.json({ error: "Auto-pay mandate not found" }, { status: 404 });
-
-  try {
-    await cancelSubscription(id, true);   // id = Razorpay subscription id (sub_xxx)
-    await db.autopaySubscription.updateMany({ where: { gatewaySubId: id }, data: { status: "CANCELLED" } }).catch(() => {});
-    return NextResponse.json({ cancelled: true });
-  } catch (e: any) {
-    console.error("autopay.cancel", e?.message);
-    return NextResponse.json({ error: "Could not cancel auto-pay." }, { status: 502 });
-  }
-}
+export const DELETE = route("autopay.cancel", async (req: NextRequest) => {
+  const userId = requireUserId(req);
+  const gatewaySubId = req.nextUrl.searchParams.get("id");
+  const subscriptionId = req.nextUrl.searchParams.get("subscriptionId") || undefined;
+  const ap = await ownedMandate(userId, { gatewaySubId: gatewaySubId || undefined, subscriptionId });
+  if (!ap) throw Errors.notFound("AutoPay mandate not found on your account.");
+  return ok(await cancelAutopay(ap, userId));
+});

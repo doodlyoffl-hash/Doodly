@@ -5145,7 +5145,7 @@
     }
     if (window.DOODLY_AUTOPAY) {
       const ab = $("#autopayBillingMount"); if (ab) window.DOODLY_AUTOPAY.mountBilling(ab);
-      const as = $("#autopaySettingsMount"); if (as && !realCust) window.DOODLY_AUTOPAY.mountSettings(as);
+      const as = $("#autopaySettingsMount"); if (as) window.DOODLY_AUTOPAY.mountSettings(as);
     }
     // daily expense management (Finance → Daily Expenses)
     if (window.DOODLY_EXPENSES) { const ex = $("#expensesMount"); if (ex) window.DOODLY_EXPENSES.mount(ex); }

@@ -34,7 +34,8 @@ export interface CheckoutInput {
   variantId: string;
   planId?: string;
   bottles?: number;
-  method: "upi" | "card" | "netbanking" | "wallet" | "cod";
+  method?: "upi" | "card" | "netbanking" | "wallet" | "cod";  // instrument chosen in the Razorpay popup
+  autopay?: boolean;                        // opt-in recurring mandate (subscription plans only)
   couponCode?: string;                      // optional coupon (validated + applied server-side)
   walletAmountPaise?: number;               // optional wallet amount to apply (capped server-side)
   startDate?: string;                       // ISO date for the first delivery
@@ -70,6 +71,9 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
   } catch { throw Errors.badRequest("Could not price this selection."); }
   const depositPaise = variant.type === "SUBSCRIPTION" ? pricing.depositPaise * bottles : 0;
   const totalPaise = q.totalPaise + depositPaise;
+  // AutoPay is a recurring mandate — only for real subscription plans, strictly opt-in.
+  // When on, coupon/wallet (one-time discounts) don't apply; the plan bills automatically.
+  const wantsAutopay = !!input.autopay && !!plan && plan.days > 1 && variant.type === "SUBSCRIPTION";
   const subtotalPaise = q.totalPaise + q.discountPaise;
   if (totalPaise <= 0) throw Errors.badRequest("Invalid order amount.");
   const days = variant.type === "TRIAL" ? (variant.fixedDays ?? 1) : (plan?.days ?? 1);
@@ -98,7 +102,7 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
   /* ---- 3. coupon (server-validated) + wallet (server-capped) — NEVER trust the
        client's amounts. Coupon discounts the product only, not the refundable
        deposit; wallet then applies to the remaining amount. ---- */
-  const couponCode = (input.couponCode ?? "").trim().toUpperCase();
+  const couponCode = wantsAutopay ? "" : (input.couponCode ?? "").trim().toUpperCase();
   let couponDiscountPaise = 0;
   if (couponCode) {
     const res = await validateCouponForCart(couponCode, {
@@ -111,7 +115,7 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
   const afterCouponPaise = totalPaise - couponDiscountPaise;
 
   const walletBalancePaise = (await db.user.findUnique({ where: { id: userId }, select: { walletPaise: true } }))?.walletPaise ?? 0;
-  let requestedWalletPaise = Math.max(0, Math.floor(input.walletAmountPaise ?? 0));
+  let requestedWalletPaise = wantsAutopay ? 0 : Math.max(0, Math.floor(input.walletAmountPaise ?? 0));
   if (input.method === "wallet") requestedWalletPaise = afterCouponPaise; // "pay by wallet" = use as much as it covers
   const walletAppliedPaise = computeWalletApply(walletBalancePaise, afterCouponPaise, requestedWalletPaise).appliedPaise;
   const payablePaise = afterCouponPaise - walletAppliedPaise;
@@ -180,6 +184,25 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
   }, TX);
 
   const base = { orderId: order.id, number: num(order.id), totalPaise, depositPaise, subscriptionId, type: orderType, couponDiscountPaise, walletAppliedPaise, payablePaise };
+
+  /* ---- 4b. AUTOPAY — create the Razorpay recurring mandate for the plan and hand
+       the client the subscription id to authorise in Checkout. Falls back cleanly
+       to the normal one-time gateway when no Razorpay plan is mapped for this plan
+       (RAZORPAY_PLAN_IDS unset) so checkout is never blocked. ---- */
+  if (wantsAutopay && subscriptionId && plan) {
+    try {
+      const { enableAutopay } = await import("@/lib/autopay/service");
+      const cyclesFor = variant.type === "SUBSCRIPTION" ? Math.min(120, Math.max(1, plan.days <= 7 ? 52 : plan.days <= 30 ? 24 : 12)) : 12;
+      const mandate = await enableAutopay({ userId, subscriptionId, planSlug: plan.slug, totalCount: cyclesFor, amountPaise: q.totalPaise, ctx });
+      await db.orderEvent.create({ data: { orderId: order.id, type: "NOTE", title: "AutoPay set up", note: `Recurring mandate ${mandate.gatewaySubId} — awaiting authorisation` } }).catch(() => {});
+      await audit({ userId, actorRole: "customer", action: "order.placed", target: `${base.number} autopay`, ctx });
+      return { ...base, paid: false, method: "autopay", autopay: { subscriptionId: mandate.gatewaySubId, keyId: mandate.keyId } };
+    } catch (e) {
+      // no plan mapped / gateway error → don't block the sale; fall through to one-time payment.
+      console.error("checkout.autopay", (e as Error)?.message);
+    }
+  }
+
   const noteBits = [
     couponDiscountPaise > 0 ? `coupon −₹${(couponDiscountPaise / 100).toLocaleString("en-IN")}` : "",
     walletAppliedPaise > 0 ? `wallet −₹${(walletAppliedPaise / 100).toLocaleString("en-IN")}` : "",
@@ -245,7 +268,7 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
   try {
     const rzp = await createRzpOrder(payablePaise, { receipt: base.number, notes: { purpose: "checkout", orderId: order.id, userId } });
     await db.payment.create({
-      data: { userId, orderId: order.id, method: GATEWAY_METHODS[input.method] ?? "UPI", amountPaise: payablePaise, status: "PENDING", razorpayOrderId: rzp.id },
+      data: { userId, orderId: order.id, method: GATEWAY_METHODS[input.method ?? "upi"] ?? "UPI", amountPaise: payablePaise, status: "PENDING", razorpayOrderId: rzp.id },
     });
     await audit({ userId, actorRole: "customer", action: "order.placed", target: `${base.number} ${input.method} ₹${payablePaise / 100}${noteBits ? ` (${noteBits})` : ""}`, ctx });
     return { ...base, paid: false, method: input.method, rzp: { orderId: rzp.id, amount: rzp.amount, currency: rzp.currency, keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID } };
