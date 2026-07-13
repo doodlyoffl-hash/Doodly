@@ -9,6 +9,7 @@ import { ok, parseBody, route, Errors } from "@/lib/http";
 import { requireUserId } from "@/lib/auth/authorize";
 import { reqContext } from "@/lib/auth/request";
 import { audit } from "@/lib/auth/audit";
+import { applyDueForSubscription, cancelScheduledForSubscription } from "@/lib/addresses/scheduled-change";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +38,10 @@ function shape(s: NonNullable<SubWith>[number]) {
 
 export const GET = route("account.subscription.list", async (req: NextRequest) => {
   const userId = requireUserId(req);
+  // Lazy safety-net: apply any address change whose effective date has arrived
+  // (so the address is never stale even if the daily cron didn't run).
+  const own = await db.subscription.findMany({ where: { userId }, select: { id: true } });
+  for (const s of own) { try { await applyDueForSubscription(s.id); } catch { /* non-blocking */ } }
   const subs = await loadSub(userId);
   return ok({ subscriptions: subs.map(shape) });
 });
@@ -81,6 +86,10 @@ export const POST = route("account.subscription.action", async (req: NextRequest
   }
 
   await db.subscription.update({ where: { id: sub.id }, data });
+  // Cancelling the subscription voids any not-yet-applied address change on it.
+  if (body.action === "cancel") {
+    try { await cancelScheduledForSubscription(sub.id, { actorId: userId, actorRole: "customer", ip: reqContext(req).ip ?? undefined }); } catch { /* non-blocking */ }
+  }
   await audit({ userId, actorRole: "customer", action: `subscription.${body.action}`, target: sub.id, ctx: reqContext(req) });
 
   const subs = await loadSub(userId);

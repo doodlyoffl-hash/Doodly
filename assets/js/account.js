@@ -148,6 +148,7 @@ window.DOODLY_ACCOUNT = (function () {
       '<div class="row"><span class="k">Plan</span><span class="v">' + esc(s.plan.name) + "</span></div>" +
       '<div class="row"><span class="k">Bottle</span><span class="v">' + esc(item) + "</span></div>" +
       '<div class="row"><span class="k">Next delivery</span><span class="v">' + (s.nextDeliveryAt ? fmtD(s.nextDeliveryAt) : "—") + " · " + esc(s.deliverySlot || "") + "</span></div>" +
+      '<div class="row"><span class="k">Delivery address</span><span class="v">' + (s.address ? esc([s.address.label, s.address.line1, s.address.city, s.address.pincode].filter(Boolean).join(", ")) : "—") + "</span></div>" +
       '<div class="row"><span class="k">Per delivery</span><span class="v">' + inr(s.perDeliveryPaise) + "</span></div>" +
       '<div class="row"><span class="k">Ends</span><span class="v">' + (s.endDate ? fmtD(s.endDate) : "—") + "</span></div>" +
       '<div class="row"><span class="k">Auto-renew</span><span class="v">' + (s.autoRenew ? "On" : "Off") + "</span></div>" +
@@ -158,6 +159,7 @@ window.DOODLY_ACCOUNT = (function () {
         ? '<button class="btn btn-ghost sm" id="sm-pause">' + icon("pause", 14) + ' Pause</button><button class="btn btn-ghost sm" id="sm-skip">Skip next delivery</button>'
         : s.status === "VACATION" ? '<button class="btn btn-primary sm" id="sm-resume">' + icon("play", 14) + " Resume deliveries</button>" : "") +
       '<button class="btn btn-ghost sm" id="sm-autopay">' + (s.autoRenew ? "Turn auto-renew off" : "Turn auto-renew on") + "</button>" +
+      (s.status !== "CANCELLED" ? '<button class="btn btn-ghost sm" id="sm-address">' + icon("pin", 14) + " Change delivery address</button>" : "") +
       (s.status !== "CANCELLED" ? '<button class="btn btn-ghost sm" id="sm-cancel" style="color:#b3261e">Cancel plan</button>' : "") +
       "</div></div></div>";
     var q = function (sel) { return host.querySelector(sel); };
@@ -173,6 +175,9 @@ window.DOODLY_ACCOUNT = (function () {
     });
     if (q("#sm-autopay")) q("#sm-autopay").addEventListener("click", function () {
       var s2 = primarySub(); subAction(s2.autoRenew ? "autopay_off" : "autopay_on", null, s2.autoRenew ? "Auto-renew off" : "Auto-renew on ✓");
+    });
+    if (q("#sm-address")) q("#sm-address").addEventListener("click", function () {
+      startAddressChange({ subscription: primarySub(), onDone: function () { wireSubscription(); } });
     });
     if (q("#sm-cancel")) q("#sm-cancel").addEventListener("click", function () {
       if (confirm("Cancel your subscription? You can start a new plan anytime.")) subAction("cancel", null, "Subscription cancelled.");
@@ -257,8 +262,10 @@ window.DOODLY_ACCOUNT = (function () {
     if ((document.body.dataset.route || "") !== "account/addresses" || !me()) return;
     var anchor = document.querySelector(".page-head");
     var host = document.createElement("div"); host.id = "accAddrLive";
-    if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(host, anchor.nextSibling); else return;
+    var host2 = document.createElement("div"); host2.id = "accAddrChanges";
+    if (anchor && anchor.parentNode) { anchor.parentNode.insertBefore(host, anchor.nextSibling); host.parentNode.insertBefore(host2, host.nextSibling); } else return;
     loadAddresses(host);
+    loadScheduledChanges(host2);
   }
   /* Structured one-line summary of an address for the saved-list card. */
   function addrSummary(a) {
@@ -291,11 +298,14 @@ window.DOODLY_ACCOUNT = (function () {
     addrFormStyles();
     API().get("/api/addresses").then(function (r) {
       var list = r.addresses || [];
-      host.innerHTML = '<div class="panel" style="margin:14px 0"><div class="panel-head"><h3>Your saved addresses</h3><button class="btn btn-primary sm" id="ad-add">' + icon("plus", 14) + " Add address</button></div><div class=\"panel-pad\">" +
+      host.innerHTML = '<div class="panel" style="margin:14px 0"><div class="panel-head"><h3>Your saved addresses</h3><div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        '<button class="btn btn-ghost sm" id="ad-change">' + icon("refresh", 14) + " Change delivery address</button>" +
+        '<button class="btn btn-primary sm" id="ad-add">' + icon("plus", 14) + " Add address</button></div></div><div class=\"panel-pad\">" +
         (list.length ? '<div class="acc-addr-grid">' + list.map(addrCard).join("") + "</div>"
           : '<div class="state"><div class="ic">' + icon("pin", 22) + '</div><h3>No addresses yet</h3><p>Add your delivery address so we know exactly where to bring your fresh milk.</p></div>') +
         "</div></div>";
       host.querySelector("#ad-add").addEventListener("click", function () { openAddAddress(host, null, list); });
+      host.querySelector("#ad-change").addEventListener("click", function () { startAddressChange({ onDone: function () { loadAddresses(host); reloadAddressChanges(); } }); });
       host.querySelectorAll(".ad-edit").forEach(function (b) { b.addEventListener("click", function () { openAddAddress(host, list.filter(function (x) { return x.id === b.dataset.id; })[0], list); }); });
       host.querySelectorAll(".ad-del").forEach(function (b) {
         b.addEventListener("click", function () {
@@ -511,6 +521,144 @@ window.DOODLY_ACCOUNT = (function () {
           .catch(function (er) { btn.disabled = false; showErr(er.message || "Please check the address fields."); });
       });
     });
+  }
+
+  /* ==================================================== ADDRESS CHANGE (scheduled) */
+  var CHG_STATUS = { SCHEDULED: ["#fff6e0", "#8a6100", "Scheduled"], ACTIVE: ["#e8f6ec", "#1c6b3a", "Active"], COMPLETED: ["#eef1f0", "#55645d", "Completed"], CANCELLED: ["#fdece9", "#b3261e", "Cancelled"] };
+  function chgPill(st) { var c = CHG_STATUS[st] || CHG_STATUS.SCHEDULED; return '<span class="tp-yn" style="background:' + c[0] + ";color:" + c[1] + '">' + c[2] + "</span>"; }
+  function addrLineShort(a) { if (!a) return "—"; return [a.line1 || a.area, a.city, a.pincode].filter(Boolean).join(", "); }
+  function chgStyles() {
+    if (document.getElementById("chgFormStyles")) return;
+    var s = document.createElement("style"); s.id = "chgFormStyles";
+    s.textContent = ".chg-pick{display:flex;gap:10px;align-items:flex-start;border:1px solid #e2e7e3;border-radius:12px;padding:11px 13px;margin:8px 0;cursor:pointer;font-size:.9rem;line-height:1.4}.chg-pick input{margin-top:3px;flex:none}.chg-pick:hover{border-color:var(--leaf-600,#2f7d4f)}.chg-summary{margin:12px 0 0;font-size:.9rem;color:#2c3a33}.chg-summary:empty{display:none}";
+    document.head.appendChild(s);
+  }
+
+  /* Open the "Change delivery address" flow. opts.subscription / opts.preselectSubId
+     pre-selects a subscription; opts.onDone runs after a successful schedule. */
+  function startAddressChange(opts) {
+    opts = opts || {};
+    if (!me() || !API()) { toast("Please sign in to change your address."); return; }
+    addrFormStyles(); chgStyles();
+    Promise.all([
+      API().get("/api/account/subscription").then(function (r) { return r.subscriptions || []; }).catch(function () { return _subs || []; }),
+      API().get("/api/addresses").then(function (r) { return r.addresses || []; }).catch(function () { return []; })
+    ]).then(function (res) {
+      var subs = (res[0] || []).filter(function (s) { return s.status === "ACTIVE" || s.status === "VACATION"; });
+      if (!subs.length) { toast("You don't have an active subscription to move."); return; }
+      openChangeModal(subs, res[1] || [], opts);
+    }).catch(function (e) { toast((e && e.message) || "Couldn't load your subscriptions."); });
+  }
+
+  function openChangeModal(subs, addrs, opts) {
+    var preId = opts.preselectSubId || (opts.subscription && opts.subscription.id) || null;
+    var state = { subs: {}, timing: "immediate", date: "", newAddressId: (addrs[0] && addrs[0].id) || null };
+    subs.forEach(function (s) { if (preId ? s.id === preId : subs.length === 1) state.subs[s.id] = true; });
+    var minDate = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+    var subRow = function (s) {
+      var item = (s.items && s.items[0]) ? (s.items[0].qty + "× " + s.items[0].label) : ((s.plan && s.plan.name) || "Subscription");
+      var addr = s.address ? addrLineShort(s.address) : "";
+      return '<label class="chg-pick"><input type="checkbox" class="chg-sub" value="' + s.id + '"' + (state.subs[s.id] ? " checked" : "") +
+        '><span><b>' + esc((s.plan && s.plan.name) || "Subscription") + "</b> · " + esc(item) + (addr ? '<br><span class="muted-sm">Now: ' + esc(addr) + "</span>" : "") + "</span></label>";
+    };
+    var addrRadio = function (a) {
+      return '<label class="chg-pick"><input type="radio" name="chg-addr" class="chg-addr" value="' + a.id + '"' + (state.newAddressId === a.id ? " checked" : "") +
+        '><span><b>' + esc(a.label) + "</b>" + (a.isDefault ? ' <span class="tp-yn yes">Default</span>' : "") + '<br><span class="muted-sm">' + esc(addrSummary(a)) + "</span></span></label>";
+    };
+
+    var body = '<div class="chg-form">' +
+      '<div class="na-sec" style="margin-top:0">Which subscription(s) to move?</div>' +
+      '<div id="chg-subs">' + subs.map(subRow).join("") + "</div>" +
+      '<div class="na-sec">When should it change?</div>' +
+      '<label class="chg-pick"><input type="radio" name="chg-when" value="immediate"' + (state.timing === "immediate" ? " checked" : "") + '><span><b>Change immediately</b><br><span class="muted-sm">Applied from your next eligible delivery.</span></span></label>' +
+      '<label class="chg-pick"><input type="radio" name="chg-when" value="future"' + (state.timing === "future" ? " checked" : "") + '><span><b>Change from a future date</b><br><span class="muted-sm">Deliver to the current address until then.</span></span></label>' +
+      '<div id="chg-date-wrap" style="display:none;margin:2px 0 0 28px"><input class="input" type="date" id="chg-date" min="' + minDate + '" value="' + (state.date || "") + '" style="max-width:220px"></div>' +
+      '<div class="na-sec">New delivery address</div>' +
+      '<div id="chg-addrs">' + (addrs.length ? addrs.map(addrRadio).join("") : '<p class="muted-sm">No saved addresses yet — add one below.</p>') + "</div>" +
+      '<button class="btn btn-ghost sm" id="chg-addnew" style="margin-top:6px">' + icon("plus", 13) + " Add a new address</button>" +
+      '<div id="chg-summary" class="chg-summary"></div>' +
+      '<div id="chg-err" style="display:none;color:#b3261e;font-size:.85rem;font-weight:600;margin:8px 0"></div>' +
+      '<div class="na-actions"><button class="btn btn-ghost sm" id="chg-cancel">Cancel</button><button class="btn btn-primary sm" id="chg-confirm">Confirm change</button></div>' +
+      "</div>";
+
+    modal(opts.editing ? "Reschedule address change" : "Change delivery address", body, function (ov, close) {
+      var q = function (sel) { return ov.querySelector(sel); };
+      var err = q("#chg-err"); var showErr = function (t) { err.style.display = "block"; err.textContent = t; };
+      var dateWrap = q("#chg-date-wrap");
+      var selectedSubs = function () { return [].slice.call(ov.querySelectorAll(".chg-sub:checked")).map(function (x) { return x.value; }); };
+      function summarize() {
+        var n = selectedSubs().length, a = addrs.filter(function (x) { return x.id === state.newAddressId; })[0];
+        var when = state.timing === "immediate" ? "immediately (next delivery)" : (state.date ? "from " + fmtD(state.date + "T00:00:00") : "from the selected date");
+        q("#chg-summary").innerHTML = (n && a) ? ("Move <b>" + n + "</b> subscription" + (n > 1 ? "s" : "") + " to <b>" + esc(a.label) + "</b> " + when + ".") : "";
+      }
+      ov.querySelectorAll(".chg-sub").forEach(function (c) { c.addEventListener("change", summarize); });
+      ov.querySelectorAll('input[name="chg-when"]').forEach(function (r) { r.addEventListener("change", function () { state.timing = r.value; dateWrap.style.display = state.timing === "future" ? "block" : "none"; summarize(); }); });
+      dateWrap.style.display = state.timing === "future" ? "block" : "none";
+      if (q("#chg-date")) q("#chg-date").addEventListener("change", function () { state.date = this.value; summarize(); });
+      function wireAddrRadios() { ov.querySelectorAll(".chg-addr").forEach(function (r) { r.addEventListener("change", function () { state.newAddressId = r.value; summarize(); }); }); }
+      wireAddrRadios(); summarize();
+
+      q("#chg-addnew").addEventListener("click", function () {
+        openAddressForm({ existing: addrs, onSaved: function (a) {
+          if (a && a.id) {
+            addrs.push(a); state.newAddressId = a.id;
+            q("#chg-addrs").innerHTML = addrs.map(addrRadio).join(""); wireAddrRadios(); summarize();
+            toast("Address added ✓ — selected as the new address");
+          }
+        } });
+      });
+      q("#chg-cancel").addEventListener("click", close);
+      q("#chg-confirm").addEventListener("click", function () {
+        err.style.display = "none";
+        var subIds = selectedSubs();
+        if (!subIds.length) { showErr("Pick at least one subscription to move."); return; }
+        if (!state.newAddressId) { showErr("Choose the new delivery address."); return; }
+        var payload = { subscriptionIds: subIds, newAddressId: state.newAddressId };
+        if (state.timing === "immediate") payload.immediate = true;
+        else { if (!state.date) { showErr("Pick the date your new address starts."); return; } payload.effectiveDate = state.date; }
+        var btn = this; btn.disabled = true;
+        API().post("/api/account/address-changes", payload).then(function () {
+          close();
+          toast(payload.immediate ? "Delivery address updated ✓" : "Address change scheduled ✓");
+          reloadAddressChanges();
+          if (typeof opts.onDone === "function") { try { opts.onDone(); } catch (e) {} }
+        }).catch(function (e) { btn.disabled = false; showErr((e && e.message) || "Couldn't schedule the change."); });
+      });
+    });
+  }
+
+  function reloadAddressChanges() { var h = document.getElementById("accAddrChanges"); if (h) loadScheduledChanges(h); }
+
+  function loadScheduledChanges(host) {
+    if (!API()) { host.innerHTML = ""; return; }
+    API().get("/api/account/address-changes").then(function (r) {
+      var list = r.changes || [];
+      if (!list.length) { host.innerHTML = ""; return; }
+      host.innerHTML = '<div class="panel" style="margin:14px 0"><div class="panel-head"><h3>Scheduled address changes</h3></div><div class="panel-pad"><div class="acc-addr-grid">' +
+        list.map(changeCard).join("") + "</div></div></div>";
+      host.querySelectorAll(".sac-cancel").forEach(function (b) { b.addEventListener("click", function () {
+        if (!confirm("Cancel this scheduled address change?")) return;
+        API().del("/api/account/address-changes/" + b.dataset.id).then(function () { toast("Scheduled change cancelled"); loadScheduledChanges(host); })
+          .catch(function (e) { toast((e && e.message) || "Couldn't cancel."); });
+      }); });
+      host.querySelectorAll(".sac-edit").forEach(function (b) { b.addEventListener("click", function () {
+        startAddressChange({ preselectSubId: b.dataset.sub, editing: true, onDone: function () { loadScheduledChanges(host); } });
+      }); });
+    }).catch(function () { host.innerHTML = ""; });
+  }
+
+  function changeCard(c) {
+    var when = c.immediate ? "Immediately" : fmtD(c.effectiveDate);
+    var acts = c.status === "SCHEDULED"
+      ? '<button class="btn btn-ghost sm sac-edit" data-id="' + c.id + '" data-sub="' + c.subscriptionId + '">Reschedule</button><button class="btn btn-ghost sm sac-cancel" data-id="' + c.id + '" style="color:#b3261e">Cancel</button>'
+      : "";
+    return '<div class="acc-addr2">' +
+      '<div class="acc-addr2-h"><b>' + esc((c.subscription && c.subscription.plan && c.subscription.plan.name) || "Subscription") + "</b> " + chgPill(c.status) + "</div>" +
+      '<div class="acc-addr2-body"><span class="muted-sm">From:</span> ' + esc(addrLineShort(c.oldAddress)) + '<br><span class="muted-sm">To:</span> <b>' + esc(addrLineShort(c.newAddress)) + "</b></div>" +
+      '<div class="muted-sm" style="margin-top:4px">Effective: <b>' + esc(when) + "</b></div>" +
+      (acts ? '<div class="acc-addr2-acts">' + acts + "</div>" : "") +
+      "</div>";
   }
 
   /* ============================================================ CALENDAR

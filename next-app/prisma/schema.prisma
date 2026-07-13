@@ -196,6 +196,7 @@ model User {
   puzzleAttempts  PuzzleAttempt[]                      // Monthly Puzzle Challenge participations
   puzzleWins      PuzzleWinner[]                       // Monthly Puzzle Challenge wins
   employeeProfile EmployeeProfile? @relation("EmployeeUser")   // HR: staff employment profile (1:1)
+  scheduledAddressChanges ScheduledAddressChange[]     // future-dated delivery address changes requested by this customer
 }
 
 enum UserStatus {
@@ -307,6 +308,9 @@ model Address {
   zoneId       String?
   zone         DeliveryZone? @relation(fields: [zoneId], references: [id])
   subscriptions Subscription[]
+  deliveries    Delivery[]               @relation("DeliveryAddress")  // deliveries pinned to this address (history snapshot)
+  scheduledAsOld ScheduledAddressChange[] @relation("SACOld")          // scheduled changes moving AWAY from this address
+  scheduledAsNew ScheduledAddressChange[] @relation("SACNew")          // scheduled changes moving TO this address
 }
 
 // ----------------------------------------------------------------
@@ -531,6 +535,7 @@ model Subscription {
   autopay         AutopaySubscription?
   events          SubscriptionEvent[]
   billings        SubscriptionBilling[]
+  addressChanges  ScheduledAddressChange[]             // immediate / future-dated delivery address changes
   @@index([userId, status])
 }
 
@@ -548,6 +553,47 @@ model SubscriptionEvent {
   ip             String?
   createdAt      DateTime     @default(now())
   @@index([subscriptionId, createdAt])
+}
+
+// Tenant-friendly delivery address changes — a customer can move a subscription's
+// delivery address IMMEDIATELY or from a FUTURE effective date without recreating the
+// subscription. On the effective date a cron (or lazy on-read) flips Subscription.addressId
+// and repoints future deliveries; completed deliveries keep their pinned Delivery.address.
+enum AddressChangeStatus {
+  SCHEDULED    // future-dated, not yet applied
+  ACTIVE       // applied — this is the subscription's current delivery address
+  COMPLETED    // superseded by a later change, or its subscription ended
+  CANCELLED    // cancelled before the effective date
+}
+
+model ScheduledAddressChange {
+  id                     String              @id @default(cuid())
+  userId                 String
+  user                   User                @relation(fields: [userId], references: [id])
+  subscriptionId         String
+  subscription           Subscription        @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  oldAddressId           String
+  oldAddress             Address             @relation("SACOld", fields: [oldAddressId], references: [id])
+  newAddressId           String
+  newAddress             Address             @relation("SACNew", fields: [newAddressId], references: [id])
+  effectiveDate          DateTime                              // IST midnight on which the switch applies (immediate = today)
+  immediate              Boolean             @default(false)
+  status                 AddressChangeStatus @default(SCHEDULED)
+  requestedAt            DateTime            @default(now())
+  requestedById          String?                               // actor user id (customer self or admin; null = system)
+  requestedByRole        String?
+  appliedAt              DateTime?
+  cancelledAt            DateTime?
+  cancelledById          String?
+  reminderSentAt         DateTime?                             // 1-day-before reminder dedupe
+  scheduledNotifiedAt    DateTime?                             // "change scheduled" confirmation sent
+  serviceabilityFailedAt DateTime?                             // apply-time re-check failed → held + alerted
+  note                   String?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @default(now()) @updatedAt
+  @@index([status, effectiveDate])
+  @@index([subscriptionId, status])
+  @@index([userId, status])
 }
 
 // ===== Delivery coverage (serviceable pincodes / zones / waitlist) =====
@@ -779,6 +825,8 @@ model Delivery {
   subscription   Subscription?  @relation(fields: [subscriptionId], references: [id])
   orderId        String?        @unique
   order          Order?         @relation(fields: [orderId], references: [id])
+  addressId      String?                           // delivery address snapshot — pins history so a later address change never rewrites past deliveries
+  address        Address?       @relation("DeliveryAddress", fields: [addressId], references: [id])
   date           DateTime                          // the delivery date
   status         DeliveryStatus @default(SCHEDULED)
   routeId        String?
@@ -803,6 +851,7 @@ model Delivery {
   @@index([date, status])
   @@index([subscriptionId, date])
   @@index([driverId, date])
+  @@index([addressId])
 }
 
 // ----------------------------------------------------------------

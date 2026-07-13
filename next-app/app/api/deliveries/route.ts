@@ -25,6 +25,9 @@ export const GET = route("deliveries.list", async (req: NextRequest) => {
     select: {
       id: true, date: true, status: true, slot: true, sequence: true,
       deliveredAt: true, bottlesOut: true, bottlesIn: true, bottleCount: true, customerRemark: true,
+      // Delivery-level address snapshot (pinned at completion / on an address change);
+      // preferred over the live subscription address so history stays accurate.
+      address: { select: { houseNo: true, buildingName: true, area: true, line1: true, city: true, pincode: true } },
       driver: { select: { user: { select: { name: true } } } },
       order: { select: { id: true, items: { select: { productName: true, variantLabel: true, quantity: true } } } },
       subscription: {
@@ -53,7 +56,7 @@ export const GET = route("deliveries.list", async (req: NextRequest) => {
       orderRef: order ? num(order.id) : null,
       planName: subscription?.plan?.name || null,
       itemsSummary: items.join(", ") || null,
-      address: fmtAddr(subscription?.address),
+      address: fmtAddr(d.address ?? subscription?.address),
     };
   });
   return ok({ deliveries });

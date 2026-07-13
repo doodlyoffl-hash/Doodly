@@ -105,7 +105,7 @@ export async function getCustomerOrderDetail(userId: string, id: string): Promis
     include: {
       items: true,
       events: { orderBy: { createdAt: "asc" } },
-      delivery: { include: { driver: { include: { user: { select: { name: true, phone: true } } } }, subscription: { include: { address: true } } } },
+      delivery: { include: { driver: { include: { user: { select: { name: true, phone: true } } } }, address: true, subscription: { include: { address: true } } } },
       payment: true,
       invoice: true,
     },
@@ -116,7 +116,8 @@ export async function getCustomerOrderDetail(userId: string, id: string): Promis
     o.delivery ? db.bottleLedger.findMany({ where: { userId, deliveryId: o.delivery.id }, orderBy: { createdAt: "desc" }, select: { id: true, event: true, qty: true, createdAt: true } }) : Promise.resolve([]),
   ]);
 
-  const addr = o.delivery?.subscription?.address ?? null;
+  // Prefer the delivery's own address snapshot (pinned history) over the live sub address.
+  const addr = o.delivery?.address ?? o.delivery?.subscription?.address ?? null;
   return {
     id: o.id, number: num(o.id), type: o.type, paymentStatus: o.status,
     fulfilment: fulfilmentFrom(o.cancelledAt, [...o.events].reverse(), o.delivery?.status),

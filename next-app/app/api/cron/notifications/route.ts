@@ -60,7 +60,12 @@ async function handle(req: NextRequest) {
   const whatsapp = await pollWhatsAppStatuses().catch(() => ({ polled: 0, updated: 0 }));
   const { autopayRenewalReminders } = await import("@/lib/autopay/service");
   const autopay = await autopayRenewalReminders().catch(() => ({ candidates: 0, reminded: 0 }));
-  return NextResponse.json({ ok: true, ...result, whatsapp, autopay });
+  // Scheduled delivery-address changes: apply any whose effective date has arrived,
+  // then remind customers whose change takes effect tomorrow.
+  const { applyDueChanges, sendChangeReminders } = await import("@/lib/addresses/scheduled-change");
+  const addressChanges = await applyDueChanges().catch(() => ({ due: 0, applied: 0, held: 0 }));
+  const addressChangeReminders = await sendChangeReminders().catch(() => ({ sent: 0 }));
+  return NextResponse.json({ ok: true, ...result, whatsapp, autopay, addressChanges, addressChangeReminders });
 }
 
 export const GET = handle;

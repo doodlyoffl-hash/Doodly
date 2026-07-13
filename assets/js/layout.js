@@ -1962,6 +1962,66 @@
   }
   window.DOODLY_ADMIN.wireLateDeliveriesBackend = wireLateDeliveriesBackend;
 
+  // ---- Scheduled Address Changes (admin/scheduled-address-changes → live list from
+  //      /api/admin/address-changes; Cancel + super-admin-only Force Apply) ----
+  function sacAddrText(a) { return a ? [a.label, a.line1 || a.area, a.city, a.pincode].filter(Boolean).join(", ") : "—"; }
+  function sacPill(st) {
+    var m = { SCHEDULED: ["#fff7e6", "#9a6a00"], ACTIVE: ["#eaf7ef", "#1e7e44"], COMPLETED: ["#eef1f0", "#55645d"], CANCELLED: ["#fdecec", "#c0392b"] };
+    var c = m[st] || m.SCHEDULED; return '<span class="tp-yn" style="background:' + c[0] + ";color:" + c[1] + '">' + esc(st) + "</span>";
+  }
+  function sacRow(c, canForce) {
+    var cust = (c.user && (c.user.name || c.user.phone)) || "—";
+    var plan = (c.subscription && c.subscription.plan && c.subscription.plan.name) || "—";
+    var when = c.immediate ? "Immediate" : (c.effectiveDate ? new Date(c.effectiveDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—");
+    var acts = "";
+    if (c.status === "SCHEDULED") {
+      acts += '<button class="btn btn-ghost sm sac-cancel" data-id="' + c.id + '">Cancel</button>';
+      if (canForce) acts += ' <button class="btn btn-primary sm sac-apply" data-id="' + c.id + '">Force apply</button>';
+    }
+    return "<tr><td>" + esc(cust) + "</td><td>" + esc(plan) + "</td><td>" + esc(sacAddrText(c.oldAddress)) + "</td><td><b>" + esc(sacAddrText(c.newAddress)) + "</b></td><td>" + esc(when) + "</td><td>" + sacPill(c.status) + "</td><td>" + (acts || "—") + "</td></tr>";
+  }
+  function wireScheduledAddressChangesBackend() {
+    if (!window.DOODLY_API) return;
+    var host = document.getElementById("sacMount");
+    if (!host) return;
+    var canForce = false; try { canForce = window.DOODLY_RBAC && DOODLY_RBAC.activeRole() === "super_admin"; } catch (e) {}
+    host.innerHTML =
+      '<div class="panel"><div class="panel-head"><h3>Scheduled Address Changes</h3><div style="display:flex;gap:8px;flex-wrap:wrap">' +
+      '<input class="input" id="sac-q" placeholder="Search customer…" style="max-width:200px">' +
+      '<select class="input" id="sac-status" style="max-width:160px"><option value="ALL">All statuses</option><option value="SCHEDULED">Scheduled</option><option value="ACTIVE">Active</option><option value="COMPLETED">Completed</option><option value="CANCELLED">Cancelled</option></select>' +
+      '</div></div><div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Customer</th><th>Subscription</th><th>Old address</th><th>New address</th><th>Effective</th><th>Status</th><th>Actions</th></tr></thead><tbody id="sac-body"><tr><td colspan="7" class="muted-sm">Loading…</td></tr></tbody></table></div></div></div>';
+    var body = host.querySelector("#sac-body");
+    var load = function () {
+      var q = (host.querySelector("#sac-q").value || "").trim();
+      var status = host.querySelector("#sac-status").value || "ALL";
+      var qs = "?status=" + encodeURIComponent(status) + (q ? "&q=" + encodeURIComponent(q) : "");
+      DOODLY_API.get("/api/admin/address-changes" + qs).then(function (r) {
+        var list = r.changes || [];
+        body.innerHTML = list.length ? list.map(function (c) { return sacRow(c, canForce); }).join("")
+          : '<tr><td colspan="7" class="muted-sm" style="text-align:center;padding:18px">No scheduled address changes yet.</td></tr>';
+        bkBanner(host, "● Live — " + (r.total || 0) + " address change(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
+      }).catch(function (e) {
+        body.innerHTML = '<tr><td colspan="7" class="muted-sm" style="text-align:center;padding:18px">Couldn\'t load address changes.</td></tr>';
+        bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + "." : e.code === "forbidden" ? "⚠ Your role can't view address changes (403)." : "⚠ " + (e.message || "Couldn't load."), "err");
+      });
+    };
+    var deb;
+    host.querySelector("#sac-q").addEventListener("input", function () { clearTimeout(deb); deb = setTimeout(load, 300); });
+    host.querySelector("#sac-status").addEventListener("change", load);
+    body.addEventListener("click", function (e) {
+      var cx = e.target.closest && e.target.closest(".sac-cancel"), ax = e.target.closest && e.target.closest(".sac-apply");
+      if (cx) {
+        if (!confirm("Cancel this scheduled address change?")) return;
+        DOODLY_API.patch("/api/admin/address-changes/" + cx.dataset.id, { cancel: true }).then(function () { dacToast("Change cancelled"); load(); }).catch(function (er) { dacToast(er.message || "Couldn't cancel."); });
+      } else if (ax) {
+        if (!confirm("Force-apply this address change now? This switches the delivery address immediately.")) return;
+        DOODLY_API.post("/api/admin/address-changes/" + ax.dataset.id + "/apply", {}).then(function () { dacToast("Applied ✓"); load(); }).catch(function (er) { dacToast(er.message || "Couldn't apply."); });
+      }
+    });
+    load();
+  }
+  window.DOODLY_ADMIN.wireScheduledAddressChangesBackend = wireScheduledAddressChangesBackend;
+
   // ---- Drivers (admin/drivers → live list + dashboard + Add/Manage; reuses /api/admin/drivers*) ----
   var _drDrivers = [], _drZones = [];
   function drInitials(name) { return String(name || "").split(/\s+/).filter(Boolean).map(function (w) { return w[0]; }).slice(0, 2).join("").toUpperCase() || "?"; }
@@ -5091,6 +5151,7 @@
     if (route === "admin/routes") return wireRoutesBackend();
     if (route === "admin/drivers") return wireDriversBackend();
     if (route === "admin/late-deliveries") return wireLateDeliveriesBackend();
+    if (route === "admin/scheduled-address-changes") return wireScheduledAddressChangesBackend();
     if (route === "admin/assignment") return wireAssignmentBackend();
     if (route === "admin/deliveries") return wireDeliveriesBackend();
     if (route === "admin/delivery-settings") return wireDeliverySettingsBackend();
