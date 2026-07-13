@@ -2070,6 +2070,51 @@
   }
   window.DOODLY_ADMIN.wireInvoicesAdminBackend = wireInvoicesAdminBackend;
 
+  // ---- Packing Workflow (admin/packing → today's deliveries, advance the packing stage) ----
+  function wirePackingBackend() {
+    if (!window.DOODLY_API) return;
+    var host = document.getElementById("packingMount");
+    if (!host) return;
+    var SEQ = ["PENDING", "PACKING", "PACKED", "READY"];
+    var LBL = { PENDING: "Pending", PACKING: "Packing", PACKED: "Packed", READY: "Ready" };
+    var COL = { PENDING: "grey", PACKING: "amber", PACKED: "green", READY: "green" };
+    var STAGES = [["PENDING", "Pending"], ["PACKING", "Packing started"], ["PACKED", "Packed"], ["READY", "Ready for dispatch"]];
+    var pill = function (s) { return '<span class="badge ' + (COL[s] || "grey") + '">' + (LBL[s] || s) + "</span>"; };
+    var nextOf = function (s) { var i = SEQ.indexOf(s); return i >= 0 && i < 3 ? SEQ[i + 1] : null; };
+    host.innerHTML =
+      '<div id="pk-stats" class="dl-an-kpis" style="margin-bottom:14px"></div>' +
+      '<div class="panel"><div class="panel-head"><h3>Today\'s deliveries to pack</h3><div><button class="btn btn-ghost sm" id="pk-packed">Mark selected Packed</button> <button class="btn btn-ghost sm" id="pk-ready">Mark selected Ready</button></div></div>' +
+      '<div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th><input type="checkbox" id="pk-all" aria-label="Select all"></th><th>Customer</th><th>Area</th><th>Slot</th><th>Bottles</th><th>Stage</th><th>Advance</th></tr></thead><tbody id="pk-body"><tr><td colspan="7" class="muted-sm">Loading…</td></tr></tbody></table></div></div></div>';
+    var body = host.querySelector("#pk-body");
+    var load = function () {
+      DOODLY_API.get("/api/admin/deliveries/packing").then(function (r) {
+        var items = r.items || [], counts = r.counts || {};
+        host.querySelector("#pk-stats").innerHTML = STAGES.map(function (s) { return '<div class="dl-an-kpi"><div class="n">' + (counts[s[0]] || 0) + '</div><div class="l">' + s[1] + "</div></div>"; }).join("");
+        body.innerHTML = items.length ? items.map(function (d) {
+          var nx = nextOf(d.packingStatus);
+          var adv = nx ? '<button class="btn btn-ghost sm pk-adv" data-id="' + d.id + '" data-status="' + nx + '">&rarr; ' + LBL[nx] + "</button>" : '<span class="muted-sm">Ready &check;</span>';
+          return "<tr><td><input type='checkbox' class='pk-chk' data-id='" + d.id + "'></td><td>" + esc(d.customer) + "</td><td>" + esc(d.area) + "</td><td>" + esc(d.slot) + "</td><td>" + d.bottles + "</td><td>" + pill(d.packingStatus) + "</td><td>" + adv + "</td></tr>";
+        }).join("") : '<tr><td colspan="7" class="muted-sm" style="text-align:center;padding:18px">No deliveries to pack today.</td></tr>';
+        bkBanner(host, "● Live — " + (r.total || 0) + " delivery(s) to pack today (" + DOODLY_API.base() + ").", "ok");
+      }).catch(function (e) {
+        body.innerHTML = '<tr><td colspan="7" class="muted-sm" style="text-align:center;padding:18px">Couldn\'t load the packing board.</td></tr>';
+        bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + "." : e.code === "forbidden" ? "⚠ Your role can't manage packing (403)." : "⚠ " + (e.message || "Couldn't load."), "err");
+      });
+    };
+    var advance = function (ids, status) {
+      DOODLY_API.post("/api/admin/deliveries/packing", ids.length === 1 ? { id: ids[0], status: status } : { ids: ids, status: status })
+        .then(function () { dacToast("Packing updated."); load(); })
+        .catch(function (e) { dacToast(e.message || "Couldn't update packing."); });
+    };
+    var selected = function () { return Array.prototype.slice.call(host.querySelectorAll(".pk-chk:checked")).map(function (c) { return c.dataset.id; }); };
+    body.addEventListener("click", function (e) { var b = e.target.closest && e.target.closest(".pk-adv"); if (b) advance([b.dataset.id], b.dataset.status); });
+    host.querySelector("#pk-all").addEventListener("change", function (e) { host.querySelectorAll(".pk-chk").forEach(function (c) { c.checked = e.target.checked; }); });
+    host.querySelector("#pk-packed").addEventListener("click", function () { var ids = selected(); ids.length ? advance(ids, "PACKED") : dacToast("Select deliveries first."); });
+    host.querySelector("#pk-ready").addEventListener("click", function () { var ids = selected(); ids.length ? advance(ids, "READY") : dacToast("Select deliveries first."); });
+    load();
+  }
+  window.DOODLY_ADMIN.wirePackingBackend = wirePackingBackend;
+
   // ---- Drivers (admin/drivers → live list + dashboard + Add/Manage; reuses /api/admin/drivers*) ----
   var _drDrivers = [], _drZones = [];
   function drInitials(name) { return String(name || "").split(/\s+/).filter(Boolean).map(function (w) { return w[0]; }).slice(0, 2).join("").toUpperCase() || "?"; }
@@ -5201,6 +5246,7 @@
     if (route === "admin/late-deliveries") return wireLateDeliveriesBackend();
     if (route === "admin/scheduled-address-changes") return wireScheduledAddressChangesBackend();
     if (route === "admin/invoices") return wireInvoicesAdminBackend();
+    if (route === "admin/packing") return wirePackingBackend();
     if (route === "admin/assignment") return wireAssignmentBackend();
     if (route === "admin/deliveries") return wireDeliveriesBackend();
     if (route === "admin/delivery-settings") return wireDeliverySettingsBackend();

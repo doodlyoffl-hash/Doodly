@@ -833,6 +833,14 @@ model OrderEvent {
   @@index([orderId, createdAt])
 }
 
+// Packing workflow stages for a delivery (warehouse → dispatch).
+enum PackingStatus {
+  PENDING     // not started
+  PACKING     // packing started
+  PACKED      // packed
+  READY       // ready for dispatch
+}
+
 model Delivery {
   id             String         @id @default(cuid())
   subscriptionId String?
@@ -843,6 +851,10 @@ model Delivery {
   address        Address?       @relation("DeliveryAddress", fields: [addressId], references: [id])
   date           DateTime                          // the delivery date
   status         DeliveryStatus @default(SCHEDULED)
+  // --- packing workflow (warehouse stage, ops-managed, independent of the exec status) ---
+  packingStatus  PackingStatus  @default(PENDING)
+  packedAt       DateTime?                          // when it reached PACKED / READY
+  packedById     String?                            // ops user who packed it
   routeId        String?
   route          Route?         @relation(fields: [routeId], references: [id])
   driverId       String?
