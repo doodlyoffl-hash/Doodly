@@ -65,7 +65,11 @@ async function handle(req: NextRequest) {
   const { applyDueChanges, sendChangeReminders } = await import("@/lib/addresses/scheduled-change");
   const addressChanges = await applyDueChanges().catch(() => ({ due: 0, applied: 0, held: 0 }));
   const addressChangeReminders = await sendChangeReminders().catch(() => ({ sent: 0 }));
-  return NextResponse.json({ ok: true, ...result, whatsapp, autopay, addressChanges, addressChangeReminders });
+  // Recurring subscription deliveries: roll the horizon forward (after any address change
+  // has been applied, so newly-generated deliveries use the current address).
+  const { generateUpcomingDeliveries } = await import("@/lib/subscriptions/deliveries");
+  const subDeliveries = await generateUpcomingDeliveries().catch(() => ({ subscriptions: 0, created: 0, subsTouched: 0 }));
+  return NextResponse.json({ ok: true, ...result, whatsapp, autopay, addressChanges, addressChangeReminders, subDeliveries });
 }
 
 export const GET = handle;
