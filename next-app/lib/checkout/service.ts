@@ -143,6 +143,7 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
         subtotalPaise, discountPaise: q.discountPaise, depositPaise, taxPaise: 0, deliveryPaise: 0, totalPaise,
         couponCode: couponCode || null, couponDiscountPaise, walletAppliedPaise,
         status: "PENDING",
+        addressId, deliveryDate: startDate, deliverySlot: slot,   // delivery details → become a Delivery on payment
         items: {
           create: [{
             productSlug: variant.productSlug, productName: variant.productName,
@@ -168,7 +169,7 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
         const end = new Date(startDate); end.setDate(end.getDate() + plan.days);
         const sub = await tx.subscription.create({
           data: {
-            userId, planId: dbPlanId, addressId, status: "ACTIVE",
+            userId, planId: dbPlanId, addressId, orderId: order.id, status: "ACTIVE",
             startDate, endDate: end, deliverySlot: slot, nextDeliveryAt: startDate,
             autoRenew: false,
             items: { create: [{ variantId: dbVariantId, qty: bottles }] },
@@ -251,6 +252,8 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     });
     // Auto-generate + email the B2C invoice now that the order is PAID (idempotent).
     try { const { ensureInvoiceForOrder } = await import("@/lib/orders/service"); await ensureInvoiceForOrder(order.id); } catch (e) { console.error("invoice.ensure", (e as Error)?.message); }
+    // Order → Delivery bridge: create the delivery so it enters the assignment flow (idempotent).
+    try { const { ensureDeliveryForOrder } = await import("@/lib/orders/delivery-bridge"); await ensureDeliveryForOrder(order.id); } catch (e) { console.error("delivery.ensure", (e as Error)?.message); }
     return { ...base, paid: true, method: "wallet", cashback };
   }
 
@@ -259,6 +262,8 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     await db.payment.create({ data: { userId, orderId: order.id, method: "CASH", amountPaise: payablePaise, status: "PENDING" } });
     await db.orderEvent.create({ data: { orderId: order.id, type: "NOTE", title: "Cash on delivery", note: `Pay the delivery executive on arrival${noteBits ? ` (${noteBits})` : ""}` } });
     await audit({ userId, actorRole: "customer", action: "order.placed", target: `${base.number} cod ₹${payablePaise / 100}`, ctx });
+    // COD is confirmed at placement (paid on arrival) → bridge it into the delivery flow now.
+    try { const { ensureDeliveryForOrder } = await import("@/lib/orders/delivery-bridge"); await ensureDeliveryForOrder(order.id); } catch (e) { console.error("delivery.ensure", (e as Error)?.message); }
     return { ...base, paid: false, method: "cod" };
   }
 

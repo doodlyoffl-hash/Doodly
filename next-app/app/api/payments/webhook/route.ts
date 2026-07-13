@@ -13,6 +13,7 @@ import { releaseCheckoutHolds } from "@/lib/checkout/service";
 import { notify, notifyOrderConfirmed } from "@/lib/notifications/dispatch";
 import { awardOrderPaid, earn } from "@/lib/loyalty/service";
 import { ensureInvoiceForOrder } from "@/lib/orders/service";
+import { ensureDeliveryForOrder } from "@/lib/orders/delivery-bridge";
 
 export const runtime = "nodejs";
 
@@ -59,6 +60,8 @@ export async function POST(req: NextRequest) {
           await awardOrderPaid(op.userId, op.orderId);
           // Auto-generate + email the B2C invoice now that the order is PAID (idempotent).
           try { await ensureInvoiceForOrder(op.orderId); } catch (e) { console.error("invoice.ensure", (e as Error)?.message); }
+          // Order → Delivery bridge: create the delivery so it enters the assignment flow (idempotent).
+          try { await ensureDeliveryForOrder(op.orderId); } catch (e) { console.error("delivery.ensure", (e as Error)?.message); }
         }
         const ledgerId = op ? await syncFromOrderPayment(op.id).catch(() => null) : null;
         await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: p.id, paymentId: ledgerId ?? undefined, processed: true }).catch(() => {});

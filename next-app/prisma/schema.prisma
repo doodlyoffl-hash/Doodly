@@ -308,6 +308,7 @@ model Address {
   zoneId       String?
   zone         DeliveryZone? @relation(fields: [zoneId], references: [id])
   subscriptions Subscription[]
+  orders        Order[]                  @relation("OrderAddress")     // one-time orders delivered to this address
   deliveries    Delivery[]               @relation("DeliveryAddress")  // deliveries pinned to this address (history snapshot)
   scheduledAsOld ScheduledAddressChange[] @relation("SACOld")          // scheduled changes moving AWAY from this address
   scheduledAsNew ScheduledAddressChange[] @relation("SACNew")          // scheduled changes moving TO this address
@@ -516,6 +517,8 @@ model Subscription {
   plan            Plan       @relation(fields: [planId], references: [id])
   addressId       String
   address         Address    @relation(fields: [addressId], references: [id])
+  orderId         String?    @unique                  // the checkout Order that created this subscription (traceability + delivery bridge)
+  order           Order?     @relation("SubscriptionOrder", fields: [orderId], references: [id])
   status          SubStatus  @default(ACTIVE)
   startDate       DateTime
   endDate         DateTime?
@@ -768,9 +771,16 @@ model Order {
   status        PaymentStatus @default(PENDING)
   cancelledAt  DateTime?                              // customer/admin cancellation
   createdAt    DateTime      @default(now())
+  // --- delivery details captured at checkout (so a one-time order can become a
+  //     Delivery on payment; Order previously had no address/date/slot of its own) ---
+  addressId     String?                               // the delivery address chosen at checkout
+  address       Address?      @relation("OrderAddress", fields: [addressId], references: [id])
+  deliveryDate  DateTime?                             // first/only delivery date
+  deliverySlot  String?                               // delivery slot key
   delivery     Delivery?
   payment      Payment?
   invoice      Invoice?
+  subscription Subscription? @relation("SubscriptionOrder")   // the subscription this order created (if any)
   items        OrderItem[]
   events       OrderEvent[]
   @@index([userId, createdAt])
