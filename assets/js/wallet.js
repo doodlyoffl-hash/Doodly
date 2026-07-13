@@ -57,6 +57,9 @@ window.DOODLY_WALLET = (function () {
   function genRef() { var s = "WTX-"; for (var i = 0; i < 6; i++) s += "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ"[Math.floor(Math.random() * 34)]; return s; }
 
   function seed() {
+    // Production: never fabricate customer wallets — the admin roster starts empty
+    // and is hydrated from the backend (professional empty state).
+    if (!(window.DOODLY_DEMO_ALLOWED && window.DOODLY_DEMO_ALLOWED())) { setWallets([]); return []; }
     var today = new Date(); var d = function (off) { var x = new Date(today); x.setDate(x.getDate() - off); return x.toISOString(); };
     var mk = function (id, name, mobile, txns, trialCredited, trialPurchased) {
       var bal = 0; var t = txns.map(function (x) { bal += x.kind === "credit" ? x.amount : -x.amount; return Object.assign({ id: genRef(), ref: genRef(), balanceAfter: bal }, x); });

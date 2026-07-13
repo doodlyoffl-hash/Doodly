@@ -148,7 +148,7 @@ window.DOODLY_DASHBOARD = (function () {
     /* Orders */
     K("Orders", "orders", "Orders", num(a.orders), a.orders, p.orders, "orders", "orders");
     K("Orders", "orders", "Completed Orders", num(a.completed), a.completed, p.completed, "completed", "orders-completed");
-    K("Orders", "orders", "Pending Orders", num(curDay().pending + 40), curDay().pending + 40, null, "pending", "orders-pending");
+    K("Orders", "orders", "Pending Orders", num(curDay().pending), curDay().pending, null, "pending", "orders-pending");
     K("Orders", "orders", "Cancelled Orders", num(a.cancelled), a.cancelled, p.cancelled, "cancelled", "orders-cancelled");
     K("Orders", "b2b", "B2B Orders", num(b2bOrdersCount()), b2bOrdersCount(), null, null, "b2b");
     /* Operations */

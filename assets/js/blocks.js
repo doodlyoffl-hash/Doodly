@@ -296,7 +296,13 @@ window.DOODLY_BLOCKS = (function () {
   };
 
   R.kpis = (s) => {
-    const items = s.items || (M()[s.dataset] || []);
+    let items = s.items || (M()[s.dataset] || []);
+    // Production: inline (hardcoded) KPI figures in the manifest are demo placeholders.
+    // Never show fabricated operational numbers on live — blank them to "—" (unknown)
+    // so only real, backend-supplied values ever appear. Live datasets are left as-is.
+    if (s.items && !(window.DOODLY_DEMO_ALLOWED && window.DOODLY_DEMO_ALLOWED())) {
+      items = s.items.map(k => ({ l: k.l, n: "—" }));
+    }
     return `<div class="kpi-row reveal">${items.map(k=>`
       <div class="kpi"><div class="n">${k.n}</div><div class="l">${k.l}</div>
       ${k.delta?`<div class="delta ${k.up===false?"down":"up"}">${k.up===false?"▼":"▲"} ${k.delta}</div>`:""}</div>`).join("")}</div>`;
@@ -1163,10 +1169,19 @@ window.DOODLY_BLOCKS = (function () {
   R.hrSelf = () => `<div class="reveal" id="hrSelfMount"></div>`;
   R.deliveryAnalytics = () => {
     const zones = (D().deliveryZones || []);
-    const k = [["Today's deliveries","248"],["Completed","204"],["Pending","38"],["Delayed","6"],["Avg delivery time","11 min"],["Bottle collection","94%"],["Customer rating","4.8★"],["Distance covered","612 km"]]
-      .map(x=>`<div class="dl-an-kpi"><div class="n">${x[1]}</div><div class="l">${x[0]}</div></div>`).join("");
-    const execRows = [["Ramesh K.","Z1",42,40,"10 min","4.9★"],["Suresh B.","Z2",46,38,"12 min","4.8★"],["Anil P.","Z3",28,24,"13 min","4.7★"]]
-      .map(r=>`<tr><td><span class="strong">${r[0]}</span></td><td>${(zones.find(z=>z.id===r[1])||{}).name||r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td></tr>`).join("");
+    // Production: never render fabricated KPIs or executive rows. Start at zero/empty;
+    // the live values are filled in by updateDeliveryAnalytics() from the backend on success.
+    const demo = window.DOODLY_DEMO_ALLOWED && window.DOODLY_DEMO_ALLOWED();
+    const kData = demo
+      ? [["Today's deliveries","248"],["Completed","204"],["Pending","38"],["Delayed","6"],["Avg delivery time","11 min"],["Bottle collection","94%"],["Customer rating","4.8★"],["Distance covered","612 km"]]
+      : [["Today's deliveries","0"],["Completed","0"],["Pending","0"],["Delayed","0"],["Avg delivery time","—"],["Bottle collection","0%"],["Customer rating","0★"],["Distance covered","—"]];
+    const k = kData.map(x=>`<div class="dl-an-kpi"><div class="n">${x[1]}</div><div class="l">${x[0]}</div></div>`).join("");
+    const execData = demo
+      ? [["Ramesh K.","Z1",42,40,"10 min","4.9★"],["Suresh B.","Z2",46,38,"12 min","4.8★"],["Anil P.","Z3",28,24,"13 min","4.7★"]]
+      : [];
+    const execRows = execData
+      .map(r=>`<tr><td><span class="strong">${r[0]}</span></td><td>${(zones.find(z=>z.id===r[1])||{}).name||r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td></tr>`).join("")
+      || `<tr><td colspan="6" class="muted-sm">No executive activity yet.</td></tr>`;
     return `<div class="reveal"><div class="dl-an-kpis">${k}</div>
       <div class="panel mt-3"><div class="panel-head"><h3>Deliveries per executive</h3></div>
         <div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Executive</th><th>Zone</th><th>Assigned</th><th>Completed</th><th>Avg time</th><th>Rating</th></tr></thead><tbody>${execRows}</tbody></table></div></div></div></div>`;

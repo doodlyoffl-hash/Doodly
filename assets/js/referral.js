@@ -65,6 +65,9 @@ window.DOODLY_REFERRAL = (function () {
   function seed() {
     if (_seeded) return; _seeded = true;
     if (get("doodly-ref-rels", null)) return;
+    // Production: never fabricate referral relationships or reward ledgers — start
+    // empty and let real referrals populate it (professional empty state).
+    if (!(window.DOODLY_DEMO_ALLOWED && window.DOODLY_DEMO_ALLOWED())) { saveRels([]); saveRewards([]); return; }
     codeFor(ME); ["Ananya Reddy", "Karthik Varma", "Sunita Devi"].forEach(codeFor);
     var d = function (off) { var x = new Date(); x.setDate(x.getDate() - off); return x.toISOString().slice(0, 10); };
     var rid = 1000;
