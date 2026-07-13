@@ -11,5 +11,6 @@ export const dynamic = "force-dynamic";
 
 export const GET = route("admin.deliveries.stats", async (req: NextRequest) => {
   requirePermission(req, "deliveries", "view");
-  return ok(await deliveryStats());
+  const date = new URL(req.url).searchParams.get("date");
+  return ok(await deliveryStats(date));
 });

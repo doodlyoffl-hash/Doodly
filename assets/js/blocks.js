@@ -157,8 +157,8 @@ window.DOODLY_BLOCKS = (function () {
       row:(r)=>[`<span class="cell-id">${r.sku}</span>`, r.item, `<span class="strong">${r.stock}</span>`, r.reorder, badge(r.status)] },
     bottleMoves: { title:"Bottle movements", cols:["Time","Capacity","Movement","Qty","Reason","By"],
       row:(r)=>[r.time, `<span class="strong">${r.cap}</span>`, `<span class="muted-sm">${r.from} →</span> ${badge(r.to)}`, `<span class="strong">${r.qty}</span>`, r.reason, r.by] },
-    adminDeliveries: { title:"Deliveries", cols:["Delivery","Customer","Zone / area","Driver","Slot","Bottles","Status","Manage"],
-      row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.customer, r.area, r.driver, r.slot, `<span class="strong">${r.bottles}</span>`, badge(r.status), `<button class="link js-delivery-manage" data-delivery="${r._id}">Manage</button>`] },
+    adminDeliveries: { title:"Deliveries", cols:["Delivery","Order","Customer","Zone / area","Driver","Slot","Bottles","Payment","Status","Manage"],
+      row:(r)=>[`<span class="cell-id">${r.id}</span>`, `<span class="muted-sm">${r.order||"—"}</span>`, r.customer, r.area, r.driver, r.slot, `<span class="strong">${r.bottles}</span>`, badge(r.pay||["grey","—"]), badge(r.status), `<button class="link js-delivery-manage" data-delivery="${r._id}">Manage</button>`] },
     payments: { title:"Payments", cols:["Payment ID","Customer","Method","Amount","Status","Date"],
       row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.cust, r.method, `<span class="strong">${inr(r.amount)}</span>`, badge(r.status), r.date] },
     coupons: { title:"Coupons", cols:["Code","Description","Usage","Status",""],
@@ -748,6 +748,7 @@ window.DOODLY_BLOCKS = (function () {
   R.scheduledAddressChanges = () => `<div class="reveal" id="sacMount"></div>`;
   R.invoicesAdmin = () => `<div class="reveal" id="invAdminMount"></div>`;
   R.packingBoard = () => `<div class="reveal" id="packingMount"></div>`;
+  R.deliveryDateBar = () => `<div class="reveal" id="delDateBar"></div>`;
   /* ---------- AI chat support management (built by assistant.js) ---------- */
   R.chatSupport = () => `<div class="reveal" id="chatSupportMount"></div>`;
   /* ---------- Customer & User live cards (built by customer.js) ---------- */

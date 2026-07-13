@@ -1701,9 +1701,8 @@
   function updateDeliveryAnalytics(k, execs) {
     var kwrap = document.querySelector(".dl-an-kpis");
     if (kwrap) {
-      var cards = [["Today's deliveries", k.total], ["Completed", k.delivered], ["Pending", k.pending], ["Delayed", k.delayed],
-        ["Avg delivery time", k.avgTimeMin != null ? k.avgTimeMin + " min" : "—"], ["Bottle collection", (k.bottleCollectionPct || 0) + "%"],
-        ["Customer rating", (k.avgRating || 0) + "★"], ["Distance covered", "—"]];
+      var cards = [["Total deliveries", k.total || 0], ["Pending", k.pending || 0], ["Assigned", k.assigned || 0], ["Out for delivery", k.outForDelivery || 0],
+        ["Delivered", k.delivered || 0], ["Failed", k.failed || 0], ["Unassigned", k.unassigned || 0], ["Total bottles", k.totalBottles || 0]];
       kwrap.innerHTML = cards.map(function (x) { return '<div class="dl-an-kpi"><div class="n">' + x[1] + '</div><div class="l">' + x[0] + "</div></div>"; }).join("");
     }
     var tb = null;
@@ -1714,11 +1713,36 @@
       }).join("") || '<tr><td colspan="6" class="muted-sm">No executive activity yet.</td></tr>';
     }
   }
-  async function wireDeliveriesBackend() {
+  // ---- date-based delivery operations ----
+  var _delDate = "";
+  var PAY_BADGE = { PAID: ["green", "Paid"], PENDING: ["amber", "Pending"], FAILED: ["red", "Failed"], REFUNDED: ["blue", "Refunded"], SUBSCRIPTION: ["blue", "Subscription"] };
+  function payBadge(s) { return PAY_BADGE[s] || ["grey", s || "—"]; }
+  function istTodayISO() { var n = new Date(Date.now() + 19800000); return n.getUTCFullYear() + "-" + String(n.getUTCMonth() + 1).padStart(2, "0") + "-" + String(n.getUTCDate()).padStart(2, "0"); }
+  function shiftISO(iso, days) { var d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + days); return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0"); }
+  function delDateLabel(iso) { try { return new Date(iso + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric" }); } catch (e) { return iso; } }
+  function buildDeliveryDateBar(iso) {
+    var bar = document.getElementById("delDateBar"); if (!bar) return;
+    var today = istTodayISO();
+    var q = function (k, label, active) { return '<button class="btn ' + (active ? "btn-primary" : "btn-ghost") + ' sm" data-quick="' + k + '">' + label + "</button>"; };
+    bar.innerHTML =
+      '<div class="panel panel-pad" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px">' +
+        '<button class="btn btn-ghost sm" data-nav="prev" aria-label="Previous day">&larr;</button>' +
+        q("yesterday", "Yesterday", iso === shiftISO(today, -1)) + q("today", "Today", iso === today) + q("tomorrow", "Tomorrow", iso === shiftISO(today, 1)) +
+        '<label style="display:inline-flex;align-items:center;gap:6px;margin:0"><span aria-hidden="true">📅</span><input type="date" class="input" id="del-date-input" value="' + iso + '" style="max-width:170px"></label>' +
+        '<button class="btn btn-ghost sm" data-nav="next" aria-label="Next day">&rarr;</button>' +
+        '<span class="strong" style="margin-left:auto">' + esc(delDateLabel(iso)) + "</span>" +
+      "</div>";
+    bar.querySelectorAll("[data-nav]").forEach(function (b) { b.addEventListener("click", function () { wireDeliveriesBackend(shiftISO(iso, b.dataset.nav === "next" ? 1 : -1)); }); });
+    bar.querySelectorAll("[data-quick]").forEach(function (b) { b.addEventListener("click", function () { var k = b.dataset.quick; wireDeliveriesBackend(k === "today" ? today : shiftISO(today, k === "tomorrow" ? 1 : -1)); }); });
+    var inp = bar.querySelector("#del-date-input"); if (inp) inp.addEventListener("change", function () { if (inp.value) wireDeliveriesBackend(inp.value); });
+  }
+  async function wireDeliveriesBackend(date) {
     if (!window.DOODLY_API) return;
+    var iso = date || _delDate || istTodayISO(); _delDate = iso;
+    buildDeliveryDateBar(iso);
     var host = document.querySelector('.dt-host[data-dataset="adminDeliveries"]');
     try {
-      var stats = await DOODLY_API.get("/api/admin/deliveries/stats");
+      var stats = await DOODLY_API.get("/api/admin/deliveries/stats?date=" + iso);
       var k = stats.kpis || {};
       bkKpis({ "scheduled": String(k.scheduled || 0), "zones": String(k.zones || 0), "milk required": (k.milkLitres || 0) + " L", "drivers": String(k.activeExecutives || 0) });
       updateDeliveryAnalytics(k, stats.executives);
@@ -1732,14 +1756,14 @@
         if (window.DOODLY_DATA) DOODLY_DATA.routes = routes;
         bkRemount("routes");
       } catch (e2) {}
-      var data = await DOODLY_API.get("/api/admin/deliveries");
+      var data = await DOODLY_API.get("/api/admin/deliveries?date=" + iso);
       _delItems = data.deliveries || [];
       var rows = _delItems.map(function (d) {
-        return { id: "#" + d.id.slice(-6), customer: d.customer, area: d.area, driver: d.driver ? d.driver.name : "—", slot: d.slot || "—", bottles: (d.bottlesIn || 0) + "/" + (d.bottleCount || 0), status: delStatusMeta(d.status), _id: d.id, _driverId: d.driver ? d.driver.id : "", _status: d.status };
+        return { id: "#" + d.id.slice(-6), order: d.orderRef || "—", customer: d.customer, area: d.area, driver: d.driver ? d.driver.name : "—", slot: d.slot || "—", bottles: (d.bottlesIn || 0) + "/" + (d.bottleCount || 0), pay: payBadge(d.paymentStatus), status: delStatusMeta(d.status), _id: d.id, _driverId: d.driver ? d.driver.id : "", _status: d.status };
       });
       if (window.DOODLY_DATA) DOODLY_DATA.adminDeliveries = rows;
       bkRemount("adminDeliveries");
-      bkBanner(host, "● Live — " + rows.length + " delivery record(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
+      bkBanner(host, "● Live — " + rows.length + " delivery record(s) for " + delDateLabel(iso) + " (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
       bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live deliveries." : e.code === "forbidden" ? "⚠ Your role can't view deliveries (403)." : "⚠ " + (e.message || "Couldn't load deliveries."), "err");
     }
@@ -1752,6 +1776,19 @@
     if (!d) { dacToast("Delivery not found — refresh the list."); return; }
     dacStyles();
     var meta = delStatusMeta(d.status);
+    var packMap = { PENDING: "Pending", PACKING: "Packing", PACKED: "Packed", READY: "Ready for dispatch" };
+    var payMap = { PAID: "Paid", PENDING: "Pending", FAILED: "Failed", REFUNDED: "Refunded", SUBSCRIPTION: "Subscription" };
+    var mapUrl = (d.lat && d.lng) ? ("https://www.google.com/maps?q=" + d.lat + "," + d.lng) : "";
+    var detail =
+      '<div class="dac-detail" style="background:rgba(0,0,0,.035);border-radius:10px;padding:12px 14px;margin:-2px 0 14px;font-size:.88rem;line-height:1.75">' +
+        '<div><b>Customer</b> — ' + esc(d.customer) + (d.mobile && d.mobile !== "—" ? ' · <a href="tel:' + esc(d.mobile) + '">' + esc(d.mobile) + "</a>" : "") + "</div>" +
+        '<div><b>Address</b> — ' + esc(d.address || "—") + (mapUrl ? ' · <a href="' + mapUrl + '" target="_blank" rel="noopener">Open in Maps &#8599;</a>' : "") + "</div>" +
+        (d.deliveryNote ? '<div><b>Note</b> — ' + esc(d.deliveryNote) + "</div>" : "") +
+        '<div><b>Order</b> — ' + esc(d.orderRef || "—") + " · " + esc(d.type || "") + (d.plan ? " (" + esc(d.plan) + ")" : "") + "</div>" +
+        '<div><b>Products</b> — ' + esc(d.products || "—") + "</div>" +
+        '<div><b>Payment</b> — ' + esc(payMap[d.paymentStatus] || d.paymentStatus || "—") + (d.paymentMethod ? " (" + esc(d.paymentMethod) + ")" : "") + ' · <b>Invoice</b> — ' + (d.invoiceNumber ? esc(d.invoiceNumber) : "—") + "</div>" +
+        '<div><b>Packing</b> — ' + esc(packMap[d.packingStatus] || d.packingStatus || "—") + ' · <b>Slot</b> — ' + esc(d.slot || "—") + ' · <b>Bottles</b> — ' + ((d.bottlesIn || 0) + "/" + (d.bottleCount || 0)) + "</div>" +
+      "</div>";
     var statusOpts = Object.keys(DEL_STATUS).map(function (s) { return '<option value="' + s + '"' + (s === d.status ? " selected" : "") + ">" + DEL_STATUS[s][1] + "</option>"; }).join("");
     var curDrv = d.driver ? d.driver.id : "";
     var drvOpts = '<option value="">— Unassigned —</option>' + _delDrivers.map(function (dv) { var nm = (dv.user && dv.user.name) || dv.name || dv.employeeId || "Driver"; return '<option value="' + dv.id + '"' + (dv.id === curDrv ? " selected" : "") + ">" + esc(nm) + "</option>"; }).join("");
@@ -1761,7 +1798,7 @@
       '<div class="dac-card" role="dialog" aria-modal="true" aria-label="Manage delivery">' +
         '<div class="dac-hd"><h3>Delivery ' + esc("#" + d.id.slice(-6)) + "</h3><button class=\"dac-x\" type=\"button\" aria-label=\"Close\">&times;</button></div>" +
         '<form class="dac-bd" autocomplete="off">' +
-          '<p class="muted-sm" style="margin:-4px 0 10px">' + esc(d.customer) + " · " + esc(d.area) + " · " + esc(d.slot || "—") + " · bottles " + ((d.bottlesIn || 0) + "/" + (d.bottleCount || 0)) + '</p>' +
+          detail +
           '<div class="dac-row"><label class="dac-f"><span>Delivery executive</span><select class="input" id="dm-driver">' + drvOpts + "</select></label>" +
             '<label class="dac-f"><span>Status</span><select class="input" id="dm-status">' + statusOpts + "</select></label></div>" +
           '<div class="dac-ft" style="padding:0;border:none;margin:2px 0 12px;justify-content:flex-start"><button class="btn btn-primary" type="button" id="dm-save">Save assignment &amp; status</button></div>' +

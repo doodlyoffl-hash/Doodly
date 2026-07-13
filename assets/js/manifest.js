@@ -479,7 +479,8 @@ window.DOODLY_MANIFEST = (function () {
     "admin/inventory": { surface:"admin", title:"Inventory", blocks:[ head("Inventory","Stock levels and reorder alerts.",[{label:"Adjust stock",kind:"btn-primary",icon:"plus"}]), { type:"kpis", items:[{n:"640",l:"1000 ml ready"},{n:"410",l:"500 ml ready"},{n:"2",l:"Low SKUs"},{n:"1",l:"Reorder now"}] }, tbl("inventory",{filters:["All","Low","Reorder"]}) ]},
     "admin/bottle-inventory": { surface:"admin", title:"Bottle Inventory", blocks:[ head("Bottle Inventory","The glass bottle fleet and deposits.",[{label:"Record movement",kind:"btn-primary",icon:"refresh"}]), { type:"kpis", dataset:"bottleInv" }, { type:"notice", text:"Track the glass-bottle fleet and deposits here. When pending returns run above target, send customers a collection reminder to recover empties." }, tbl("bottleMoves",{filters:["All"]}) ]},
     "admin/deliveries": { surface:"admin", title:"Delivery Management", blocks:[
-      head("Delivery Management","Tomorrow's deliveries, zones, dispatch and executive performance.",[{label:"Generate deliveries",kind:"btn-primary",icon:"refresh"}]),
+      head("Delivery Management","Pick a date to view that day's deliveries, zones, dispatch and executive performance.",[{label:"Generate deliveries",kind:"btn-primary",icon:"refresh"}]),
+      { type:"deliveryDateBar" },
       { type:"kpis", items:[{n:"312",l:"Scheduled"},{n:"4",l:"Zones"},{n:"236 L",l:"Milk required"},{n:"4",l:"Drivers"}] },
       { type:"deliveryAnalytics" },
       tbl("adminDeliveries",{filters:["All","Scheduled","Assigned","Out for delivery","Delivered","Failed"]}),

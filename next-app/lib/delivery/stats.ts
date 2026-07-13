@@ -15,16 +15,30 @@ const ASSIGNED_SET = ["ASSIGNED", "ACCEPTED", "PACKED"];
 const OUT_SET = ["OUT_FOR_DELIVERY", "ON_THE_WAY", "REACHED"];
 const CLOSED_SET = ["DELIVERED", "FAILED", "SKIPPED"];
 
-export async function deliveryStats() {
-  const startToday = new Date(); startToday.setHours(0, 0, 0, 0);
+const IST_MS = 5.5 * 60 * 60 * 1000;
+/** The [start,end) UTC bounds of a calendar day in IST (the business timezone).
+ *  `dateStr` = "YYYY-MM-DD" (that IST day); omitted → today in IST. */
+export function istDayWindow(dateStr?: string | null): { start: Date; end: Date; iso: string } {
+  const ref = dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? new Date(dateStr + "T00:00:00Z") : new Date(Date.now() + IST_MS);
+  const y = ref.getUTCFullYear(), m = ref.getUTCMonth(), d = ref.getUTCDate();
+  const startMs = Date.UTC(y, m, d) - IST_MS;
+  const start = new Date(startMs), end = new Date(startMs + 24 * 60 * 60 * 1000);
+  const iso = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  return { start, end, iso };
+}
+
+export async function deliveryStats(dateStr?: string | null) {
+  const { start, end, iso } = istDayWindow(dateStr);
+  const dayIsPast = end.getTime() <= Date.now();
   const [rows, drivers, zones] = await Promise.all([
     db.delivery.findMany({
+      where: { date: { gte: start, lt: end } },
       select: {
         id: true, status: true, date: true, deliveredAt: true, bottleCount: true, bottlesIn: true, driverId: true,
         driver: { select: { id: true, rating: true, user: { select: { name: true } } } },
         route: { select: { zone: { select: { name: true } } } },
       },
-      orderBy: { date: "desc" }, take: 500,
+      orderBy: { date: "desc" }, take: 2000,
     }),
     db.driver.findMany({ select: { id: true, active: true, rating: true, user: { select: { name: true } } } }),
     db.deliveryZone.count(),
@@ -38,7 +52,9 @@ export async function deliveryStats() {
   const delivered = cnt((r) => r.status === "DELIVERED");
   const failed = cnt((r) => r.status === "FAILED" || r.status === "SKIPPED");
   const pending = scheduled;
-  const delayed = cnt((r) => r.date < startToday && !CLOSED_SET.includes(r.status));
+  const unassigned = cnt((r) => r.status === "SCHEDULED" && !r.driverId);
+  // "delayed" = still-open deliveries on a day that's already fully past (in IST).
+  const delayed = dayIsPast ? cnt((r) => !CLOSED_SET.includes(r.status)) : 0;
 
   const deliveredRows = rows.filter((r) => r.status === "DELIVERED");
   const bottlesCollected = rows.reduce((a, r) => a + (r.bottlesIn || 0), 0);
@@ -71,8 +87,9 @@ export async function deliveryStats() {
   }));
 
   return {
+    date: iso,
     kpis: {
-      total, scheduled, assigned, outForDelivery, delivered, failed, pending, delayed,
+      total, scheduled, assigned, outForDelivery, delivered, failed, pending, unassigned, delayed,
       bottlesCollected, bottlesPending, bottleCollectionPct, activeExecutives, zones,
       totalBottles, milkLitres: totalBottles, avgRating, completionPct, avgTimeMin,
     },
