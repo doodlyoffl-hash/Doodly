@@ -103,9 +103,13 @@ window.DOODLY_CHECKOUT = (function () {
   /* stored subscription context (set by the builder) gives plan days */
   function subContext() { try { return JSON.parse(localStorage.getItem("doodly-subscription") || "null"); } catch (e) { return null; } }
   /* A recurring subscription plan (AutoPay only makes sense here) — a p7/p30/p90
-     plan slug, or a multi-day plan. One-time / trial packs (single, days<=1) are not. */
+     plan slug, or a multi-day plan. Trial / sample packs are NEVER a subscription
+     even though their fixedDays can be >1 (that was the AutoPay-on-trial bug). */
   function isSubscriptionPlan() {
     const s = subContext(); if (!s) return false;
+    const D = window.DOODLY || {};
+    const v = (D.variants || []).filter(function (x) { return x.id === s.variantId; })[0];
+    if (v && v.type === "trial") return false;                 // trial pack → one-time, no AutoPay
     if (["p7", "p30", "p90"].indexOf(s.planId) !== -1) return true;
     return (s.days || 0) > 1;
   }

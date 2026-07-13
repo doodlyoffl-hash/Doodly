@@ -69,7 +69,11 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
       plan ? { days: plan.days, discountBps: plan.discountBps } : undefined,
     );
   } catch { throw Errors.badRequest("Could not price this selection."); }
-  const depositPaise = variant.type === "SUBSCRIPTION" ? pricing.depositPaise * bottles : 0;
+  // Refundable bottle deposit applies to EVERY glass-bottle order — including the trial
+  // pack — matching the checkout summary + the FAQ ("a refundable deposit is added per
+  // bottle on your first order"). (Was SUBSCRIPTION-only, which undercharged the trial:
+  // the page showed the deposit but the gateway didn't collect it.)
+  const depositPaise = pricing.depositPaise * bottles;
   const totalPaise = q.totalPaise + depositPaise;
   // AutoPay is a recurring mandate — only for real subscription plans, strictly opt-in.
   // When on, coupon/wallet (one-time discounts) don't apply; the plan bills automatically.
