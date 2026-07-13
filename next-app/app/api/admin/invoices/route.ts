@@ -6,12 +6,16 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { ok, route } from "@/lib/http";
 import { requirePermission } from "@/lib/auth/authorize";
+import { backfillInvoices } from "@/lib/orders/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export const GET = route("admin.invoices.list", async (req: NextRequest) => {
   requirePermission(req, "orders", "view");
+  // Self-heal: generate invoices for any PAID orders that predate auto-generation
+  // (no email). Idempotent + bounded → slow only on the first load, then a no-op.
+  await backfillInvoices({}).catch(() => {});
   const q = (new URL(req.url).searchParams.get("q") || "").trim();
   const where: Prisma.InvoiceWhereInput = q
     ? {

@@ -113,6 +113,10 @@ export async function getCustomerOrderDetail(userId: string, id: string): Promis
     },
   });
   if (!o) return null;
+  // Self-heal: a paid order predating auto-generation gets its invoice on view (no email).
+  if (o.status === "PAID" && !o.invoice) {
+    try { await ensureInvoiceForOrder(o.id, { email: false }); o.invoice = await db.invoice.findUnique({ where: { orderId: o.id } }); } catch { /* non-blocking */ }
+  }
   const [walletTxns, bottles] = await Promise.all([
     db.walletTxn.findMany({ where: { userId, orderId: id }, orderBy: { createdAt: "desc" }, select: { id: true, type: true, kind: true, amountPaise: true, description: true, createdAt: true } }),
     o.delivery ? db.bottleLedger.findMany({ where: { userId, deliveryId: o.delivery.id }, orderBy: { createdAt: "desc" }, select: { id: true, event: true, qty: true, createdAt: true } }) : Promise.resolve([]),
@@ -223,7 +227,7 @@ export async function rateOrder(userId: string, id: string, rating: number, comm
  * customer their invoice (non-blocking, transactional). Safe to fire from
  * multiple paths (webhook + verify race).
  */
-export async function ensureInvoiceForOrder(orderId: string): Promise<{ number: string; created: boolean } | null> {
+export async function ensureInvoiceForOrder(orderId: string, opts?: { email?: boolean }): Promise<{ number: string; created: boolean } | null> {
   const order = await db.order.findUnique({
     where: { id: orderId },
     select: {
@@ -254,9 +258,10 @@ export async function ensureInvoiceForOrder(orderId: string): Promise<{ number: 
   }, TX);
 
   // Email the invoice (non-blocking). Transactional document → send it; the
-  // sender no-ops safely if email isn't configured.
+  // sender no-ops safely if email isn't configured. Backfill of historical orders
+  // passes { email: false } so old orders aren't re-emailed.
   try {
-    if (order.user?.email) {
+    if (opts?.email !== false && order.user?.email) {
       await sendInvoiceEmail(order.user.email, {
         name: order.user.name,
         invoiceNo: number,
@@ -268,6 +273,17 @@ export async function ensureInvoiceForOrder(orderId: string): Promise<{ number: 
   } catch (e) { console.error("invoice.email", (e as Error)?.message); }
 
   return { number, created: true };
+}
+
+/**
+ * Backfill invoices for already-PAID orders that don't have one yet (e.g. orders
+ * paid before auto-generation existed). No email (historical). Idempotent + bounded,
+ * so it self-heals on the first read and is a no-op thereafter.
+ */
+export async function backfillInvoices(where: Prisma.OrderWhereInput, limit = 200): Promise<number> {
+  const rows = await db.order.findMany({ where: { ...where, status: "PAID", invoice: null }, select: { id: true }, take: limit });
+  for (const r of rows) { try { await ensureInvoiceForOrder(r.id, { email: false }); } catch { /* non-blocking */ } }
+  return rows.length;
 }
 
 /** Customer-initiated (self-scoped) invoice generation — POST /api/orders/[id] {action:"invoice"}. */
