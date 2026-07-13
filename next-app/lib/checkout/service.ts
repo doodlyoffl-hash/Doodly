@@ -130,6 +130,27 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     if (!pin) throw Errors.conflict(`Sorry! DOODLY does not currently deliver to ${pincode}. Please choose a serviceable delivery address.`);
   }
 
+  /* ---- 3b. inventory — resolve the DB variant + block overselling filled-bottle
+       stock. The check reads the SERVER stock (never trusts the client); the
+       decrement itself happens once on payment (commitOrderStock). A variant that
+       can't be resolved is treated as untracked → never blocks a sale. ---- */
+  let stockVariantId: string | null = variant.dbVariantId ?? null;
+  if (!stockVariantId) {
+    const dbProduct = await db.product.findUnique({ where: { slug: variant.productSlug }, include: { variants: true } });
+    stockVariantId = (dbProduct?.variants.find((v) => v.ml === variant.ml) ?? dbProduct?.variants[0])?.id ?? null;
+  }
+  if (stockVariantId) {
+    const v = await db.variant.findUnique({ where: { id: stockVariantId }, select: { stock: true, reservedStock: true } });
+    if (v) {
+      const available = v.stock - v.reservedStock;
+      if (bottles > available) {
+        throw Errors.conflict(available > 0
+          ? `Only ${available} ${variant.label} ${variant.productName} left in stock — please reduce the quantity.`
+          : `${variant.label} ${variant.productName} is out of stock right now. Please check back soon.`);
+      }
+    }
+  }
+
   /* ---- 4. create the order (+ items, event, subscription for plans) ---- */
   const orderType = variant.type === "TRIAL" ? "SAMPLE" : (plan && plan.days > 1 ? "SUBSCRIPTION" : "ONE_TIME");
   const startDate = input.startDate ? new Date(input.startDate) : new Date(Date.now() + 86_400_000);
@@ -144,6 +165,7 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
         couponCode: couponCode || null, couponDiscountPaise, walletAppliedPaise,
         status: "PENDING",
         addressId, deliveryDate: startDate, deliverySlot: slot,   // delivery details → become a Delivery on payment
+        stockVariantId, stockUnits: stockVariantId ? bottles : 0,  // filled-bottle stock to decrement on payment
         items: {
           create: [{
             productSlug: variant.productSlug, productName: variant.productName,
@@ -254,6 +276,8 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     try { const { ensureInvoiceForOrder } = await import("@/lib/orders/service"); await ensureInvoiceForOrder(order.id); } catch (e) { console.error("invoice.ensure", (e as Error)?.message); }
     // Order → Delivery bridge: create the delivery so it enters the assignment flow (idempotent).
     try { const { ensureDeliveryForOrder } = await import("@/lib/orders/delivery-bridge"); await ensureDeliveryForOrder(order.id); } catch (e) { console.error("delivery.ensure", (e as Error)?.message); }
+    // Inventory: decrement the filled-bottle stock now that the order is PAID (idempotent).
+    try { const { commitOrderStock } = await import("@/lib/inventory/order-stock"); await commitOrderStock(order.id); } catch (e) { console.error("stock.commit", (e as Error)?.message); }
     return { ...base, paid: true, method: "wallet", cashback };
   }
 

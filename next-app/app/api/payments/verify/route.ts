@@ -12,6 +12,7 @@ import { notifyOrderConfirmed } from "@/lib/notifications/dispatch";
 import { awardOrderPaid } from "@/lib/loyalty/service";
 import { ensureInvoiceForOrder } from "@/lib/orders/service";
 import { ensureDeliveryForOrder } from "@/lib/orders/delivery-bridge";
+import { commitOrderStock } from "@/lib/inventory/order-stock";
 
 const num = (id: string) => `DOO-${id.slice(-6).toUpperCase()}`;
 
@@ -59,6 +60,8 @@ export async function POST(req: NextRequest) {
     try { await ensureInvoiceForOrder(payment.orderId); } catch (e) { console.error("invoice.ensure", (e as Error)?.message); }
     // Order → Delivery bridge: create the delivery so it enters the assignment flow (idempotent).
     try { await ensureDeliveryForOrder(payment.orderId); } catch (e) { console.error("delivery.ensure", (e as Error)?.message); }
+    // Inventory: decrement the filled-bottle stock (idempotent).
+    try { await commitOrderStock(payment.orderId); } catch (e) { console.error("stock.commit", (e as Error)?.message); }
   }
 
   return NextResponse.json({ verified: true, cashback });

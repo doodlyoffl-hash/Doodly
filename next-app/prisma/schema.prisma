@@ -777,6 +777,10 @@ model Order {
   address       Address?      @relation("OrderAddress", fields: [addressId], references: [id])
   deliveryDate  DateTime?                             // first/only delivery date
   deliverySlot  String?                               // delivery slot key
+  // --- inventory: which variant + how many bottles this order consumes, decremented once on payment ---
+  stockVariantId  String?                             // Variant whose filled-bottle stock this order draws down
+  stockUnits      Int          @default(0)            // bottles reserved against that variant (per delivery)
+  stockCommittedAt DateTime?                          // set when stock was decremented on payment (idempotency)
   delivery     Delivery?
   payment      Payment?
   invoice      Invoice?

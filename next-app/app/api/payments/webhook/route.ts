@@ -14,6 +14,7 @@ import { notify, notifyOrderConfirmed } from "@/lib/notifications/dispatch";
 import { awardOrderPaid, earn } from "@/lib/loyalty/service";
 import { ensureInvoiceForOrder } from "@/lib/orders/service";
 import { ensureDeliveryForOrder } from "@/lib/orders/delivery-bridge";
+import { commitOrderStock } from "@/lib/inventory/order-stock";
 
 export const runtime = "nodejs";
 
@@ -62,6 +63,8 @@ export async function POST(req: NextRequest) {
           try { await ensureInvoiceForOrder(op.orderId); } catch (e) { console.error("invoice.ensure", (e as Error)?.message); }
           // Order → Delivery bridge: create the delivery so it enters the assignment flow (idempotent).
           try { await ensureDeliveryForOrder(op.orderId); } catch (e) { console.error("delivery.ensure", (e as Error)?.message); }
+          // Inventory: decrement the filled-bottle stock (idempotent).
+          try { await commitOrderStock(op.orderId); } catch (e) { console.error("stock.commit", (e as Error)?.message); }
         }
         const ledgerId = op ? await syncFromOrderPayment(op.id).catch(() => null) : null;
         await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: p.id, paymentId: ledgerId ?? undefined, processed: true }).catch(() => {});
