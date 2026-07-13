@@ -397,6 +397,7 @@ window.DOODLY_CHECKOUT = (function () {
     });
   }
   function placeRealOrder(me) {
+    try { if (window.DOODLY_SOUND) DOODLY_SOUND.playCheckout(); } catch (e) {}   // elegant confirmation as payment begins
     const sub = subContext() || {};
     if (!sub.variantId) {
       state.paying = false; hideProcessing(); failure("Please pick your bottle and plan first — taking you to the builder.");
@@ -514,6 +515,7 @@ window.DOODLY_CHECKOUT = (function () {
   function hideProcessing() { const p = document.getElementById("coProcessing"); if (p) p.classList.remove("show"); }
 
   function success() {
+    try { if (window.DOODLY_SOUND) DOODLY_SOUND.playSuccess(); } catch (e) {}   // order confirmed
     const t = CART() ? CART().getTotals() : { total: 0 };
     const SC = window.DOODLY_SCHEDULE, sel = SC && SC.validSelection(), sub = subContext();
     const sch = (SC && sel && sub && sub.days) ? SC.schedule(sel, sub.days) : null;

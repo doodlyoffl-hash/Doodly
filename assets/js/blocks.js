@@ -1138,7 +1138,7 @@ window.DOODLY_BLOCKS = (function () {
   R.blogBoard = () => `<div class="reveal" id="blogMount"></div>`;
   R.cmsBoard = () => `<div class="reveal" id="cmsMount"></div>`;
   R.supportBoard = () => `<div class="reveal" id="supportMount"></div>`;
-  R.settingsBoard = () => `<div class="reveal" id="settingsMount"></div>`;
+  R.settingsBoard = () => `<div class="reveal" id="settingsMount"></div><div class="reveal" id="soundAdminMount" style="margin-top:18px"></div>`;
   R.notificationsBoard = () => `<div class="reveal" id="notificationsMount"></div>`;
   R.pincodeChecker = (s) => `<section class="${s&&s.bare?"":"reveal"}"><div class="${s&&s.bare?"":"wrap"}">
     <div class="pincard"><div class="pincard-h">${icon("pin",18)} Check delivery availability</div>

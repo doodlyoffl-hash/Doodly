@@ -5,6 +5,8 @@
    auth shell), renders the route's block recipe, wires interactions.
    ============================================================= */
 (function () {
+  // Load the DOODLY sound system once, on every page (subtle UI sound effects).
+  try { if (!window.DOODLY_SOUND && !document.getElementById("doodly-sound-js")) { var _snd = document.createElement("script"); _snd.id = "doodly-sound-js"; _snd.src = "/assets/js/sound.js"; _snd.async = true; document.head.appendChild(_snd); } } catch (e) {}
   const M = window.DOODLY_MANIFEST;
   const B = window.DOODLY_BLOCKS;
   const D = window.DOODLY;

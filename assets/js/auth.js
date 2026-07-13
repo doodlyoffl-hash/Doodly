@@ -752,6 +752,7 @@ window.DOODLY_AUTH = (function () {
   }
 
   function showCustomerAuthError(form, msg) {
+    try { if (window.DOODLY_SOUND) DOODLY_SOUND.playError(); } catch (e) {}   // subtle "check this" cue
     let box = form.querySelector("#authErr");
     if (!box) {
       box = document.createElement("div");
@@ -823,6 +824,7 @@ window.DOODLY_AUTH = (function () {
     el.classList.remove("shake"); void el.offsetWidth; el.classList.add("shake");
   }
   function succeed(form) {
+    try { if (window.DOODLY_SOUND) DOODLY_SOUND.playSuccess(); } catch (e) {}   // warm dairy chime on sign-in / sign-up
     const btn = form.querySelector(".btn-auth");
     const dest = form.dataset.dest || "/account/dashboard.html";
     if (btn) { btn.classList.add("is-loading"); }
