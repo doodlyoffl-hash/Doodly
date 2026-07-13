@@ -143,19 +143,59 @@ window.DOODLY_MAPS = (function () {
     setTimeout(nudge, 300); setTimeout(nudge, 700);
     try { if (window.ResizeObserver) { const ro = new ResizeObserver(nudge); ro.observe(mapEl); setTimeout(() => ro.disconnect(), 2500); } } catch (e) {}
 
-    function emit(lat, lng, formatted, comp) {
-      cur = { lat, lng };
-      const c = parseComponents(comp);
-      const pincode = c.pincode || (PC() && PC().nearest ? "" : "");
-      const serviceable = (PC() && pincode) ? PC().validate(pincode).serviceable : true;
-      host.dataset.serviceable = serviceable ? "1" : "0";
-      if (opts.onChange) opts.onChange({ lat: +lat, lng: +lng, area: c.area, city: c.city, state: c.state, pincode: pincode, serviceable: serviceable, formatted: formatted || `${c.area}, ${c.city} ${pincode}`.trim() });
+    const dbg = /^(localhost|127\.)/.test((location && location.hostname) || "");
+    const API = () => window.DOODLY_API;
+    let revSeq = 0, revTimer = null;
+
+    // Forward a resolved {address parts, serviceable, loading} object to the form.
+    function emit(res) {
+      host.dataset.serviceable = (res && res.serviceable) ? "1" : "0";
+      if (dbg) { try { console.debug("[maps] pin →", (res && res.pincode) || "(none)", "| serviceable:", res && res.serviceable, "| loading:", !!(res && res.loading), "|", res && res.area, res && res.city); } catch (e) {} }
+      if (opts.onChange) opts.onChange(res);
     }
-    function reverse(lat, lng) {
+    // Client-side Google reverse-geocode → backend serviceability. Used ONLY when the
+    // backend reverse endpoint is unreachable (offline / no API client).
+    function clientReverse(lat, lng, seq) {
       geocoder.geocode({ location: { lat: +lat, lng: +lng } }, (results, status) => {
-        if (status === "OK" && results && results[0]) emit(lat, lng, results[0].formatted_address, results[0].address_components);
-        else emit(lat, lng, "", []);
+        if (seq !== revSeq) return;
+        const r0 = (status === "OK" && results && results[0]) ? results[0] : null;
+        const c = parseComponents(r0 ? r0.address_components : []);
+        const pincode = String(c.pincode || "").replace(/\D/g, "").slice(0, 6);
+        const base = { lat: +lat, lng: +lng, area: c.area, city: c.city, state: c.state, pincode: pincode,
+          formatted: (r0 && r0.formatted_address) || `${c.area}, ${c.city} ${pincode}`.trim() };
+        if (!pincode) { emit(Object.assign({ serviceable: false, loading: false }, base)); return; }
+        const PCX = PC();
+        const p = (PCX && PCX.validateLive) ? PCX.validateLive(pincode) : Promise.resolve(PCX && PCX.validate ? PCX.validate(pincode) : { serviceable: false });
+        p.then((res) => { if (seq !== revSeq) return; emit(Object.assign({}, base, { serviceable: !!(res && res.serviceable), loading: false, area: (res && res.area) || c.area, city: (res && res.city) || c.city, state: (res && res.state) || c.state })); })
+          .catch(() => { if (seq === revSeq) emit(Object.assign({ serviceable: false, loading: false }, base)); });
       });
+    }
+    // Reverse-geocode + serviceability via the BACKEND /api/geo/reverse — keyless
+    // (OpenStreetMap/Google server-side) + the live ServiceablePincode table. Authoritative
+    // and IMMUNE to the client Maps key's billing state (the "for development purposes only"
+    // watermark that broke the client geocoder). Debounced + race-guarded; client geocoder
+    // is the offline fallback only.
+    function reverse(lat, lng) {
+      cur = { lat: +lat, lng: +lng };
+      const seq = ++revSeq;
+      emit({ lat: +lat, lng: +lng, loading: true });                                 // "📍 Checking delivery…"
+      if (!API() || !API().get) { clientReverse(lat, lng, seq); return; }
+      if (revTimer) clearTimeout(revTimer);
+      revTimer = setTimeout(function () {
+        API().get("/api/geo/reverse?lat=" + encodeURIComponent(lat) + "&lng=" + encodeURIComponent(lng)).then(function (r) {
+          if (seq !== revSeq) return;                                                 // a newer pin move superseded this
+          const a = (r && r.address) || {}, sv = (r && r.serviceable) || {};
+          if (r && r.ok === false && !a.pincode) { clientReverse(lat, lng, seq); return; }  // backend couldn't resolve → try client
+          emit({
+            lat: a.lat != null ? +a.lat : +lat, lng: a.lng != null ? +a.lng : +lng,
+            houseNo: a.houseNo || "", street: a.street || "", area: a.area || "", landmark: a.landmark || "",
+            city: a.city || "", district: a.district || "", state: a.state || "", country: a.country || "",
+            pincode: a.pincode || "", serviceable: !!sv.serviceable, loading: false,
+            svCharge: sv.charge, svSlot: sv.slot, svEta: sv.eta,
+            formatted: a.formatted || `${a.area || ""}, ${a.city || ""} ${a.pincode || ""}`.trim(),
+          });
+        }).catch(function () { if (seq === revSeq) clientReverse(lat, lng, seq); });   // offline / error → client geocoder
+      }, 400);
     }
     function setPos(lat, lng, pan) { const ll = { lat: +lat, lng: +lng }; marker.setPosition(ll); if (pan) map.panTo(ll); reverse(lat, lng); }
 
@@ -173,7 +213,7 @@ window.DOODLY_MAPS = (function () {
       ac.addListener("place_changed", () => {
         const pl = ac.getPlace(); if (!pl || !pl.geometry) return;
         const loc = pl.geometry.location; map.panTo(loc); map.setZoom(17); marker.setPosition(loc);
-        emit(loc.lat(), loc.lng(), pl.formatted_address, pl.address_components);
+        reverse(loc.lat(), loc.lng());   // resolve address + serviceability via the backend
       });
     } catch (e) {}
 
@@ -480,9 +520,18 @@ window.DOODLY_MAPS = (function () {
       let picked = editing ? { lat: editing.lat, lng: editing.lng, area: editing.area, city: editing.city, state: editing.state, pincode: editing.pincode, serviceable: true } : null;
       let label = editing ? editing.label : "Home";
       const sv = m.querySelector("#adSv"), areaEl = m.querySelector("#adArea");
+      const saveBtn = m.querySelector(".ad-save");
+      const syncSave = () => { if (saveBtn) { const on = !!(picked && picked.serviceable); saveBtn.disabled = !on; saveBtn.style.opacity = on ? "" : ".55"; saveBtn.style.cursor = on ? "" : "not-allowed"; } };
+      syncSave();
       mountPicker(m.querySelector("#adPick"), { value: editing ? { lat: editing.lat, lng: editing.lng } : undefined, height: "200px", onChange: (r) => {
-        picked = r; areaEl.textContent = r.formatted;
-        sv.innerHTML = r.serviceable ? `<div class="ad-ok">${svgChk(13)} We deliver to ${esc(r.area)}, ${esc(r.city)}</div>` : `<div class="ad-no">${svgX(13)} We currently don't deliver to this location.</div>`;
+        picked = r; if (r.formatted) areaEl.textContent = r.formatted;
+        // serviceability is backend-authoritative (resolved inside the picker); show a
+        // neutral "checking" beat while in flight so we never flash a wrong rejection.
+        if (r.loading) { sv.innerHTML = `<div class="ad-checking">${svgPin(13)} Checking delivery availability…</div>`; syncSave(); return; }
+        sv.innerHTML = r.serviceable
+          ? `<div class="ad-ok">${svgChk(13)} We deliver to ${esc(r.area)}, ${esc(r.city)}</div>`
+          : `<div class="ad-no">${svgX(13)} Sorry, we don't deliver here yet — choose another location.</div>`;
+        syncSave();
       } });
       m.querySelectorAll(".ad-lab").forEach((b) => b.addEventListener("click", () => { label = b.dataset.lab; m.querySelectorAll(".ad-lab").forEach((x) => x.classList.toggle("sel", x === b)); }));
       const close = () => { m.classList.remove("show"); setTimeout(() => m.remove(), 250); };

@@ -417,48 +417,46 @@ window.DOODLY_ACCOUNT = (function () {
         sv.innerHTML = "🔴 Sorry! DOODLY currently does not deliver to this location. <span style=\"display:block;font-weight:500;margin-top:2px\">Choose another location.</span>"; syncSaveBtn();
       }
 
-      // Sync-check from the typed pincode (client list) — used when the user edits the pincode field.
+      // Typed-pincode check — resolved against the LIVE ServiceablePincode table (backend),
+      // falling back to the client list only if the backend is unreachable.
       function checkPin() {
         var pin = g("#na-pin"), sv = q("#na-sv");
         if (pin.length !== 6) { sv.style.display = "none"; svOK = false; syncSaveBtn(); return; }
-        var res = window.DOODLY_PINCODE ? DOODLY_PINCODE.validate(pin) : { serviceable: true };
-        if (res.serviceable) {
-          svOk(res.area, res.city || "Vijayawada");
-          if (res.city) q("#na-city").value = res.city;
-          if (res.state) q("#na-state").value = res.state;
-          if (res.area && !areaTouched) q("#na-area").value = res.area;
-        } else { svNo(); }
+        svLoading("Checking delivery availability…");
+        var apply = function (res) {
+          if (g("#na-pin") !== pin) return;                         // field changed while the check was in flight
+          if (res && res.serviceable) {
+            svOk(res.area, res.city || "Vijayawada");
+            if (res.city) q("#na-city").value = res.city;
+            if (res.state) q("#na-state").value = res.state;
+            if (res.area && !areaTouched) q("#na-area").value = res.area;
+          } else { svNo(); }
+        };
+        if (window.DOODLY_PINCODE && DOODLY_PINCODE.validateLive) DOODLY_PINCODE.validateLive(pin).then(apply).catch(function () { apply(DOODLY_PINCODE.validate(pin)); });
+        else apply(window.DOODLY_PINCODE ? DOODLY_PINCODE.validate(pin) : { serviceable: true });
       }
 
       try {
         if (window.DOODLY_MAPS && DOODLY_MAPS.mountPicker) {
           DOODLY_MAPS.mountPicker(q("#na-map"), { value: geo.lat != null ? { lat: geo.lat, lng: geo.lng } : undefined, height: "200px", onChange: function (r) {
             geo.lat = r.lat; geo.lng = r.lng;   // GPS always follows the pin
-            // (a) in-flight → loading indicator, then a second "Checking delivery availability…" beat
-            if (r.loading) { svLoading("📍 Detecting address…"); setTimeout(function () { if (!svOK && q("#na-sv").className === "na-sv") svLoading("Checking delivery availability…"); }, 350); return; }
-            // (b) a NEW pin drag / search / locate came back with resolved parts — the user
-            //     explicitly moved the pin, so overwrite pincode + area + city + state.
-            var setPin = function (p) { q("#na-pin").value = String(p).replace(/\D/g, "").slice(0, 6); };
+            // Autofill the resolved address parts as soon as they arrive (fires on both the
+            // "checking" emit and the resolved emit) so the form fills instantly on a pin move.
             if (r.city) q("#na-city").value = r.city;
             if (r.state) q("#na-state").value = r.state;
             if (r.area) { q("#na-area").value = r.area; areaTouched = true; }
             if (r.houseNo && !g("#na-house")) q("#na-house").value = r.houseNo;
             if (r.street && !g("#na-street")) q("#na-street").value = r.street;
             if (r.landmark && !g("#na-landmark")) q("#na-landmark").value = r.landmark;
+            if (r.pincode) q("#na-pin").value = String(r.pincode).replace(/\D/g, "").slice(0, 6);
             pinTouched = true;   // the pin is now the source of truth for this address
-            // (c) serviceability — PINCODE is the primary key, checked against the LIVE
-            //     ServiceablePincode table. A serviceable reverse-geocoded pincode is
-            //     adopted; otherwise the field's own pincode is authoritative, so a jittery
-            //     drag or a geocoder returning a neighbouring/missing postcode never wrongly
-            //     rejects a customer who is genuinely inside a serviceable area.
-            if (r.pincode && r.serviceable) { setPin(r.pincode); svOk(r.area, r.city); }
-            else if (window.DOODLY_PINCODE && DOODLY_PINCODE.validateLive) {
-              svLoading("Checking delivery availability…");
-              DOODLY_PINCODE.validateLive(g("#na-pin")).then(function (res) {
-                if (res.serviceable) { svOk(res.area, res.city); }
-                else { if (r.pincode) setPin(r.pincode); svNo(); }   // genuinely out-of-area → show it + disable save
-              });
-            } else { if (r.pincode) setPin(r.pincode); checkPin(); }
+            // Serviceability — the reverse-geocoded PINCODE is the primary key, resolved by
+            // the picker against the LIVE ServiceablePincode table (backend). Trust it: while
+            // the check is in flight show a neutral "checking" state (Save stays disabled).
+            if (r.loading) { svLoading("📍 Checking delivery availability…"); return; }
+            if (r.serviceable) svOk(r.area, r.city);
+            else if (r.pincode) svNo();                          // a real pincode that isn't covered → out of area
+            else svLoading("Drag the pin onto your building to detect the pincode.");
           } });
         }
       } catch (er) {}
