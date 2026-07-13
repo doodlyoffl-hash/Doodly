@@ -124,7 +124,7 @@ window.DOODLY_LATE = (function () {
     // d: { id?, customer, customerId?, area?, route?, exec?, execId?, deliveredAt(ISO/Date) }
     var when = d.deliveredAt ? new Date(d.deliveredAt) : new Date();
     var actualMin = when.getHours() * 60 + when.getMinutes();
-    var ex = EXECS.find(function (e) { return e.name === d.exec || e.id === d.execId; }) || EXECS[0];
+    var ex = EXECS.find(function (e) { return e.name === d.exec || e.id === d.execId; }) || { id: d.execId || d.exec || "EX", name: d.exec || "Executive", route: d.route || "", area: d.area || "", zone: d.zone || "" };
     var rec = {
       id: d.id || ("LIVE-" + Date.now().toString(36)), dayIdx: Math.floor(when.getTime() / 86400000), date: ymd(when),
       execId: ex.id, exec: ex.name, route: d.route || ex.route, area: d.area || ex.area,
@@ -150,12 +150,21 @@ window.DOODLY_LATE = (function () {
   /* =============================================================
      Performance + scoring + escalation
      ============================================================= */
+  // Executive roster for the performance panels: the seeded trio ONLY in demo mode.
+  // In production it's derived from REAL delivery data (empty until real completions
+  // flow in) — so the live admin never shows demo executives at a fake 100%.
+  function execRoster() {
+    if (window.DOODLY_DEMO_ALLOWED && window.DOODLY_DEMO_ALLOWED()) return EXECS;
+    var seen = {}, out = [];
+    deliveries().forEach(function (r) { if (r.execId && !seen[r.execId]) { seen[r.execId] = 1; out.push({ id: r.execId, name: r.exec || r.execId, zone: r.zone || "", area: r.area || "", route: r.route || "" }); } });
+    return out;
+  }
   function performance(scope) {
     var c = config(); var all = deliveries();
     var scopeBy = {}, monthBy = {};
     inScope(all, scope || "month").forEach(function (r) { (scopeBy[r.execId] = scopeBy[r.execId] || []).push(r); });
     inScope(all, "month").forEach(function (r) { (monthBy[r.execId] = monthBy[r.execId] || []).push(r); });
-    return EXECS.map(function (ex) {
+    return execRoster().map(function (ex) {
       var rows = scopeBy[ex.id] || [];
       var total = rows.length, late = 0, completionSum = 0, complaintCt = 0, delaySum = 0, longest = 0;
       rows.forEach(function (r) { completionSum += r.actualMin; if (r.complaint) complaintCt++; if (!r.onTime) { late++; delaySum += r.delayMin; if (r.delayMin > longest) longest = r.delayMin; } });
@@ -252,7 +261,7 @@ window.DOODLY_LATE = (function () {
       var rec2 = onDeliveryCompleted({ id: "TEST-OK", customer: "Ok Cust", exec: "Priya S.", deliveredAt: (function () { var d = new Date(); d.setHours(6, 40, 0, 0); return d.toISOString(); })() });
       ok("on-time live not late", rec2.late === false);
       // performance + score band
-      var perf = performance("month"); ok("performance per exec", perf.length === EXECS.length && perf.every(function (p) { return p.score >= 0 && p.score <= 100; }));
+      var perf = performance("month"); ok("performance per exec", perf.length === execRoster().length && perf.every(function (p) { return p.score >= 0 && p.score <= 100; }));
       ok("score bands assigned", perf.every(function (p) { return /Excellent|Good|Needs Improvement|Critical/.test(p.band); }));
       ok("on-time% + late = consistent", perf.every(function (p) { return p.onTime + p.late === p.total; }));
       // reason + review mutations
@@ -319,7 +328,7 @@ window.DOODLY_LATE = (function () {
       var rArows = function (list) { return list.length ? list.map(function (x) { return '<div class="lt-rrow"><span>' + esc(x.key) + '</span><span class="badge ' + (x.latePct >= 15 ? "red" : x.latePct >= 8 ? "amber" : "grey") + '">' + x.late + ' late · ' + x.latePct + '%</span></div>'; }).join("") : '<p class="muted-sm">No delays.</p>'; };
       return '<div class="lt-stats">' + card("Today's Deliveries", d.todayTotal) + card("On-Time", d.todayOnTime, "ok") + card("Late", d.todayLate, d.todayLate ? "bad" : "") + card("Avg Delay", d.avgDelay + " min", d.avgDelay ? "warn" : "") + card("On-Time Rate", d.todayOnTimePct + "%", d.todayOnTimePct >= 95 ? "ok" : "warn") + '</div>' +
         '<div class="exp-grid2" style="margin-top:14px">' +
-          kv("Top performing executives", d.top.map(function (p) { return execLine(p, true); }).join("")) +
+          kv("Top performing executives", d.top.length ? d.top.map(function (p) { return execLine(p, true); }).join("") : '<p class="muted-sm">No executive delivery data yet.</p>') +
           kv("Executives requiring attention", d.attention.length ? d.attention.map(function (p) { return execLine(p, true) + (p.flagged ? '<div class="lt-flag">⚠ Escalation threshold exceeded</div>' : ""); }).join("") : '<p class="muted-sm">All executives within thresholds. 👍</p>') +
           kv("Routes with frequent delays", rArows(d.routes)) +
           kv("Areas with frequent delays", rArows(d.areas)) +
@@ -341,7 +350,7 @@ window.DOODLY_LATE = (function () {
           '<td>' + (r.notified ? '<span class="badge green">Sent</span>' : '<span class="badge grey">No</span>') + '</td>' +
           '<td><span class="badge ' + (r.status === "Resolved" ? "green" : r.status === "Reviewed" ? "blue" : "amber") + '">' + esc(r.status) + '</span></td></tr>';
       }).join("") || '<tr><td colspan="10" class="muted-sm" style="text-align:center;padding:22px">No late deliveries 🎉</td></tr>';
-      var execs = EXECS.map(function (e) { return e.name; }), areas = AREAS;
+      var execs = execRoster().map(function (e) { return e.name; }), areas = AREAS;
       return '<div class="lt-filters">' +
           '<input class="input" id="lt-q" placeholder="Search customer, executive, area, ID…" value="' + esc(f.q || "") + '">' +
           '<div class="lt-flrow"><label class="lt-fl"><span>Period</span><select class="input" id="lt-scope">' + scopes.map(function (s) { return '<option value="' + s[0] + '" ' + ((f.scope || "") === s[0] ? "selected" : "") + '>' + s[1] + '</option>'; }).join("") + '</select></label>' +
@@ -366,7 +375,7 @@ window.DOODLY_LATE = (function () {
           '</div>' + (p.flagged ? '<div class="lt-flag">⚠ Flagged — ' + p.monthLate + ' late this month · ' + p.monthPct + '% on-time. Escalated to Super Admin & Operations.</div>' : "") + '</div>';
       }).join("");
       function mt(l, v) { return '<div class="lt-mt"><b>' + v + '</b><span>' + l + '</span></div>'; }
-      return '<div class="lt-scopebar">' + scopes.map(function (s) { return '<button class="lt-chip ' + (st.scope === s[0] ? "on" : "") + '" data-scope="' + s[0] + '">' + s[1] + '</button>'; }).join("") + '</div><div class="lt-pcards">' + cards + '</div>';
+      return '<div class="lt-scopebar">' + scopes.map(function (s) { return '<button class="lt-chip ' + (st.scope === s[0] ? "on" : "") + '" data-scope="' + s[0] + '">' + s[1] + '</button>'; }).join("") + '</div><div class="lt-pcards">' + (cards || '<p class="muted-sm" style="padding:16px">No executive performance data yet — this fills in as deliveries are completed.</p>') + '</div>';
     }
 
     /* ---- reports ---- */
