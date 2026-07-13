@@ -23,12 +23,13 @@ async function alertLowStock(v: { label: string; stock: number; lowStockThreshol
 export async function commitOrderStock(orderId: string): Promise<{ committed: boolean } | null> {
   const order = await db.order.findUnique({
     where: { id: orderId },
-    select: { id: true, status: true, stockVariantId: true, stockUnits: true, stockCommittedAt: true },
+    select: { id: true, status: true, stockVariantId: true, stockUnits: true, stockCommittedAt: true, payment: { select: { method: true } } },
   });
   if (!order) return null;
   if (order.stockCommittedAt) return { committed: false };            // already decremented (idempotent)
   if (!order.stockVariantId || order.stockUnits <= 0) return null;    // order doesn't track stock
-  if (order.status !== "PAID") return null;                          // only paid orders decrement
+  // Confirmed = prepaid (PAID) OR cash-on-delivery (CASH payment, confirmed at placement).
+  if (order.status !== "PAID" && order.payment?.method !== "CASH") return null;
 
   const result = await db.$transaction(async (tx) => {
     // re-check inside the tx (webhook + verify can race)

@@ -9,7 +9,8 @@ import { ok, parseBody, route, Errors } from "@/lib/http";
 import { requireUserId } from "@/lib/auth/authorize";
 import { reqContext } from "@/lib/auth/request";
 import { audit } from "@/lib/auth/audit";
-import { earn } from "@/lib/loyalty/service";
+import { completeDelivery } from "@/lib/delivery/complete";
+import { notifyOutForDelivery } from "@/lib/notifications/dispatch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,44 +41,37 @@ export const PATCH = route("driver.delivery.update", async (req: NextRequest, { 
   if (!del) throw Errors.notFound("Delivery not found on your route.");
 
   const becomingDelivered = body.status === "DELIVERED" && del.status !== "DELIVERED";
-  const bottlesOut = body.bottlesOut ?? (becomingDelivered ? del.bottleCount : undefined);
 
+  // Completion → the shared side-effect path (ledger ISSUED+RETURNED, loyalty, delivered
+  // notification, one-time review request, address snapshot) — identical to /delivery/stop.
+  if (becomingDelivered) {
+    const res = await completeDelivery(del.id, {
+      bottlesIn: body.bottlesIn ?? 0,
+      bottlesOut: body.bottlesOut,
+      cashCollected: body.cashCollected,
+      customerRemark: body.customerRemark ?? null,
+    });
+    await audit({ userId, actorRole: "delivery_executive", action: "delivery.delivered", target: del.id, ctx: reqContext(req) });
+    return ok({ delivery: res?.delivery ?? { id: del.id, status: "DELIVERED" } });
+  }
+
+  // Non-completion status / field update.
   const delivery = await db.delivery.update({
     where: { id: del.id },
     data: {
       ...(body.status !== undefined ? { status: body.status } : {}),
       ...(body.bottlesIn !== undefined ? { bottlesIn: body.bottlesIn } : {}),
-      ...(bottlesOut !== undefined ? { bottlesOut } : {}),
+      ...(body.bottlesOut !== undefined ? { bottlesOut: body.bottlesOut } : {}),
       ...(body.cashCollected !== undefined ? { cashCollected: body.cashCollected } : {}),
       ...(body.customerRemark !== undefined ? { customerRemark: body.customerRemark } : {}),
-      ...(becomingDelivered ? { deliveredAt: new Date() } : {}),
     },
     select: { id: true, status: true, bottlesIn: true, bottlesOut: true, cashCollected: true, customerRemark: true, deliveredAt: true },
   });
-
-  // On first delivery, post the customer's bottle ledger.
-  if (becomingDelivered) {
+  // Out-for-delivery notification on the first en-route flip (parity with the exec app).
+  if (body.status === "ON_THE_WAY" && del.status !== "ON_THE_WAY") {
     const custId = del.subscription?.userId ?? del.order?.userId;
-    if (custId) {
-      const out = bottlesOut ?? del.bottleCount;
-      const inn = body.bottlesIn ?? 0;
-      if (out > 0) await db.bottleLedger.create({ data: { userId: custId, deliveryId: del.id, event: "ISSUED", qty: out } });
-      if (inn > 0) await db.bottleLedger.create({ data: { userId: custId, deliveryId: del.id, event: "RETURNED", qty: inn } });
-
-      // DOODLY Pure Rewards (best-effort, idempotent): points for bottles returned +
-      // a 200-point bonus at every 12 consecutive DELIVERED stops on the subscription.
-      try {
-        if (inn > 0) await earn.bottleReturn(custId, del.id, inn);
-        if (del.subscriptionId) {
-          const seq = await db.delivery.findMany({ where: { subscriptionId: del.subscriptionId }, orderBy: { date: "asc" }, select: { status: true } });
-          let streak = 0;
-          for (let i = seq.length - 1; i >= 0; i--) { if (seq[i].status === "DELIVERED") streak++; else break; }
-          if (streak > 0 && streak % 12 === 0) await earn.deliveryStreak(custId, del.subscriptionId, streak / 12);
-        }
-      } catch { /* non-blocking */ }
-    }
+    if (custId) { try { await notifyOutForDelivery(custId); } catch { /* non-blocking */ } }
   }
-
   await audit({ userId, actorRole: "delivery_executive", action: `delivery.${body.status?.toLowerCase() ?? "update"}`, target: del.id, ctx: reqContext(req) });
   return ok({ delivery });
 });

@@ -293,6 +293,8 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     });
     // COD is confirmed at placement (paid on arrival) → bridge it into the delivery flow now.
     try { const { ensureDeliveryForOrder } = await import("@/lib/orders/delivery-bridge"); await ensureDeliveryForOrder(order.id); } catch (e) { console.error("delivery.ensure", (e as Error)?.message); }
+    // Inventory: decrement the filled-bottle stock (COD is confirmed at placement; idempotent).
+    try { const { commitOrderStock } = await import("@/lib/inventory/order-stock"); await commitOrderStock(order.id); } catch (e) { console.error("stock.commit", (e as Error)?.message); }
     return { ...base, paid: false, method: "cod" };
   }
 

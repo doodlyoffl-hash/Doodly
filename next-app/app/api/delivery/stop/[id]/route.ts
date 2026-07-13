@@ -10,7 +10,8 @@ import { requireUserId } from "@/lib/auth/authorize";
 import { readRole } from "@/lib/auth/identity";
 import { audit } from "@/lib/auth/audit";
 import { reqContext } from "@/lib/auth/request";
-import { notify, notifyOutForDelivery, notifyDelivered } from "@/lib/notifications/dispatch";
+import { notifyOutForDelivery } from "@/lib/notifications/dispatch";
+import { completeDelivery } from "@/lib/delivery/complete";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,39 +63,10 @@ export const POST = route("delivery.stop", async (req: NextRequest, { params }: 
   if (body.action === "deliver") {
     if (delivery.status === "DELIVERED") return ok({ status: "delivered", idempotent: true });
     const bottles = body.bottles ?? 0;
-    // Pin the address this delivery was actually made to (history snapshot), so a
-    // later address change never rewrites this completed delivery's address.
-    const snapshotAddressId = delivery.addressId ?? delivery.subscription?.addressId ?? null;
-    await db.$transaction(async (tx) => {
-      await tx.delivery.update({
-        where: { id: delivery.id },
-        data: { status: "DELIVERED", deliveredAt: new Date(), bottlesIn: bottles, customerRemark: body.notes || null, addressId: snapshotAddressId },
-      });
-      if (bottles > 0 && custId) {
-        await tx.bottleLedger.create({
-          data: { userId: custId, deliveryId: delivery.id, event: "RETURNED", qty: bottles, note: "Collected by delivery executive" },
-        });
-      }
-    });
+    // Single source of truth for the full completion side-effects (ledger ISSUED+RETURNED,
+    // loyalty, delivered notification, one-time review request, address snapshot).
+    await completeDelivery(delivery.id, { bottlesIn: bottles, customerRemark: body.notes || null });
     await audit({ userId, actorRole: role, action: "delivery.completed", target: `${delivery.id} bottles=${bottles}`, ctx });
-    if (custId) { try { await notifyDelivered(custId, { bottles }); } catch { /* non-blocking */ } }
-    // Review request — fire ONCE per order/subscription, on its FIRST completed delivery,
-    // so a daily subscription never prompts every day.
-    if (custId) {
-      try {
-        const scope = delivery.subscriptionId ? { subscriptionId: delivery.subscriptionId } : delivery.orderId ? { orderId: delivery.orderId } : null;
-        if (scope) {
-          const deliveredCount = await db.delivery.count({ where: { ...scope, status: "DELIVERED" } });
-          if (deliveredCount === 1) {
-            await notify(custId, {
-              title: "How was your milk? 🥛",
-              body: "Your delivery is complete — rate it in a tap and help other families discover fresh A2 milk. Open My Orders to leave a quick review.",
-              email: true, emailSubject: "Rate your DOODLY delivery 🥛",
-            });
-          }
-        }
-      } catch { /* non-blocking */ }
-    }
     return ok({ status: "delivered", bottles });
   }
 
