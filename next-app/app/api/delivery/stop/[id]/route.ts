@@ -10,7 +10,7 @@ import { requireUserId } from "@/lib/auth/authorize";
 import { readRole } from "@/lib/auth/identity";
 import { audit } from "@/lib/auth/audit";
 import { reqContext } from "@/lib/auth/request";
-import { notifyOutForDelivery, notifyDelivered } from "@/lib/notifications/dispatch";
+import { notify, notifyOutForDelivery, notifyDelivered } from "@/lib/notifications/dispatch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -78,6 +78,23 @@ export const POST = route("delivery.stop", async (req: NextRequest, { params }: 
     });
     await audit({ userId, actorRole: role, action: "delivery.completed", target: `${delivery.id} bottles=${bottles}`, ctx });
     if (custId) { try { await notifyDelivered(custId, { bottles }); } catch { /* non-blocking */ } }
+    // Review request — fire ONCE per order/subscription, on its FIRST completed delivery,
+    // so a daily subscription never prompts every day.
+    if (custId) {
+      try {
+        const scope = delivery.subscriptionId ? { subscriptionId: delivery.subscriptionId } : delivery.orderId ? { orderId: delivery.orderId } : null;
+        if (scope) {
+          const deliveredCount = await db.delivery.count({ where: { ...scope, status: "DELIVERED" } });
+          if (deliveredCount === 1) {
+            await notify(custId, {
+              title: "How was your milk? 🥛",
+              body: "Your delivery is complete — rate it in a tap and help other families discover fresh A2 milk. Open My Orders to leave a quick review.",
+              email: true, emailSubject: "Rate your DOODLY delivery 🥛",
+            });
+          }
+        }
+      } catch { /* non-blocking */ }
+    }
     return ok({ status: "delivered", bottles });
   }
 

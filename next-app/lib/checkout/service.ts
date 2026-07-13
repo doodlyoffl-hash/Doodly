@@ -286,6 +286,11 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     await db.payment.create({ data: { userId, orderId: order.id, method: "CASH", amountPaise: payablePaise, status: "PENDING" } });
     await db.orderEvent.create({ data: { orderId: order.id, type: "NOTE", title: "Cash on delivery", note: `Pay the delivery executive on arrival${noteBits ? ` (${noteBits})` : ""}` } });
     await audit({ userId, actorRole: "customer", action: "order.placed", target: `${base.number} cod ₹${payablePaise / 100}`, ctx });
+    // COD order is confirmed at placement (pay on arrival) → confirm the customer (parity with prepaid).
+    await notifyOrderConfirmed(userId, {
+      number: base.number, amountPaise: totalPaise,
+      firstDelivery: startDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+    });
     // COD is confirmed at placement (paid on arrival) → bridge it into the delivery flow now.
     try { const { ensureDeliveryForOrder } = await import("@/lib/orders/delivery-bridge"); await ensureDeliveryForOrder(order.id); } catch (e) { console.error("delivery.ensure", (e as Error)?.message); }
     return { ...base, paid: false, method: "cod" };
