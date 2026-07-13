@@ -267,9 +267,20 @@ window.DOODLY_LIVEORDER = (function () {
   function isCollapsed() { try { return localStorage.getItem(collapseKey()) === "1"; } catch (e) { return false; } }
   function setCollapsed(v) { try { localStorage.setItem(collapseKey(), v ? "1" : "0"); } catch (e) {} }
 
+  var _lastLoKind = null;
   function paintHost(h) {
     var st = resolveState();
     if (!st) { h.el.innerHTML = ""; h.el.classList.remove("lo-host-on"); return; }
+    // Delivery-status change → soft milk-bottle + morning bell. Only on a LIVE
+    // transition into a notable state (out-for-delivery / arrived / delivered),
+    // never on the first render or page load. The kind is shared across hosts, so
+    // updating _lastLoKind here also stops a second host re-triggering it.
+    try {
+      if (st.kind !== _lastLoKind) {
+        if (_lastLoKind !== null && (st.kind === "onway" || st.kind === "near" || st.kind === "delivered") && window.DOODLY_SOUND) DOODLY_SOUND.playDelivery();
+        _lastLoKind = st.kind;
+      }
+    } catch (e) {}
     h.el.classList.add("lo-host-on");
     h.el.innerHTML = ORDER_KINDS[st.kind] ? orderBanner(st, isCollapsed()) : heroBanner(st);
     wireBanner(h.el, st);

@@ -192,6 +192,7 @@ window.DOODLY_LOYALTY = (function () {
       if (pts % ratio !== 0) return show("Points must be a multiple of " + ratio + " (a whole-rupee amount).", false);
       btn.disabled = true; btn.textContent = "Redeeming…";
       API().post("/api/account/rewards/redeem", { points: pts }).then(function (res) {
+        try { if (window.DOODLY_SOUND) DOODLY_SOUND.playReward(); } catch (e) {}   // uplifting farm chime
         toast("₹" + Math.round((res.creditedPaise || 0) / 100) + " added to your wallet 🎉");
         _sum = null; // invalidate cache
         try { if (window.DOODLY_WALLET && DOODLY_WALLET.refresh) DOODLY_WALLET.refresh(); } catch (e) {}

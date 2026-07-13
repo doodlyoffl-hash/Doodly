@@ -207,7 +207,7 @@ window.DOODLY_WALLET = (function () {
   }
 
   /* ---------- notifications (in-app; WhatsApp/SMS/Email = future) ---------- */
-  function notify(amount) { toast("🎉 " + inr(amount) + " added to your DOODLY Wallet!"); }
+  function notify(amount) { try { if (window.DOODLY_SOUND) DOODLY_SOUND.playWallet(); } catch (e) {} toast("🎉 " + inr(amount) + " added to your DOODLY Wallet!"); }
   function toast(m) { if (window.DOODLY_PINCODE && DOODLY_PINCODE.toast) return DOODLY_PINCODE.toast(m); }
 
   var typeLabel = { cashback: "Trial cashback", referral: "Referral reward", promo: "Promo credit", topup: "Wallet top-up", usage: "Used on order", refund: "Refund", adjustment: "Adjustment", reversal: "Reversal" };

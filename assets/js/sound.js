@@ -126,9 +126,10 @@ window.DOODLY_SOUND = (function () {
   var OPTIONAL = { page: 1 };   // suppressed under reduced-motion even when sounds are on
 
   /* ---------- polyphony / rapid-fire throttle ---------- */
-  var lastAt = {}, voices = 0;
+  var lastAt = {}, voices = 0, lastAny = 0;
+  function nowMs() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
   function canPlay(name) {
-    var now = (window.performance && performance.now) ? performance.now() : Date.now();
+    var now = nowMs();
     var gap = name === "click" ? 45 : 60;                 // min ms between identical sounds
     if (lastAt[name] && now - lastAt[name] < gap) return false;
     if (voices > 6) return false;                         // cap simultaneous voices
@@ -147,7 +148,7 @@ window.DOODLY_SOUND = (function () {
     if (!Ctx) return;                                     // no Web Audio → silent (never breaks)
     if (!opts.force && !canPlay(key)) return;
     if (!ctx()) return;
-    try { voices++; LIB[key](); setTimeout(function () { voices = Math.max(0, voices - 1); }, 350); } catch (e) {}
+    try { voices++; lastAny = nowMs(); LIB[key](); setTimeout(function () { voices = Math.max(0, voices - 1); }, 350); } catch (e) {}
   }
 
   /* ---------- global click delegation (buttons, cards, tabs, CTAs) ---------- */
@@ -167,7 +168,9 @@ window.DOODLY_SOUND = (function () {
       var PC = window.DOODLY_PINCODE;
       if (PC && PC.toast && !PC.toast.__soundwrapped) {
         var orig = PC.toast;
-        PC.toast = function (m) { try { play("notification"); } catch (e) {} return orig.apply(this, arguments); };
+        // a calm notification on toasts — but skip it if a more specific sound
+        // (wallet / reward / delivery / success…) just played, so they never double.
+        PC.toast = function (m) { try { if (nowMs() - lastAny > 260) play("notification"); } catch (e) {} return orig.apply(this, arguments); };
         PC.toast.__soundwrapped = true;
       }
     } catch (e) {}
