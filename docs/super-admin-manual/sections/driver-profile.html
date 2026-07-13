@@ -1,0 +1,184 @@
+<section class="sheet" id="driver-profile">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Delivery Executive · Profile &amp; Attendance</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Delivery Executive</span></div>
+  <h2 class="section-title">Profile &amp; Attendance</h2>
+  <p class="lead">The delivery executive's own account screen — read their driver record (zone, vehicle, rating, tenure) and keep their contact details and shift status current.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — where this screen lives</div><p>This page is served on the <b>Delivery</b> surface at <span class="navpath">/driver/profile.html</span> (manifest route key <code>driver/profile</code>, <code>surface: "driver"</code>). It is the executive's <b>self-service</b> account page. The <b>authoritative</b> driver record — zone, vehicle number, delivery capacity, active/suspended state — is created and edited by an Admin on <span class="navpath">Admin → Operations → Drivers</span>, and the day-by-day <b>attendance ledger</b> for salaried staff lives on <span class="navpath">Admin → Human Resources → Attendance</span>. Both are cross-referenced below.</p></div></div>
+
+  <!-- ============================ SCREEN 1 ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">My Profile</p><p class="sm">Driver details card + update-your-details form</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Let the delivery executive see their own driver record at a glance and keep their phone and emergency contact up to date.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Delivery Executive</span> (their own record) · <span class="pill role">Super Admin</span> (view any / oversight)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Delivery → Account → Profile</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Delivery portal — <b>Profile</b> · sidebar: Today · Tasks · Records · Account</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Top bar</b><span>Avatar "RK" · name "Ramesh K." · bell · account menu ("Profile &amp; settings")</span></div>
+          <div class="wf-cell"><b>Page head</b><span>Title "Profile" with sub-line "Your driver details."</span></div>
+          <div class="wf-cell"><b>Left column — Details card</b><span>Definition list headed "Ramesh Kumar · DRV-07": Zone, Vehicle, Rating, Joined, Deliveries</span></div>
+          <div class="wf-cell"><b>Right column — Update details form</b><span>Phone · Emergency contact fields with a <b>Save</b> button and <b>Reset</b></span></div>
+        </div>
+      </div><div class="wire-cap">Figure 1 — Two-column layout: read-only driver record (left) and the editable contact form (right).</div></div>
+
+      <h4>The details card (read-only)</h4>
+      <p>Rendered as a definition list titled with the executive's name and employee ID (for example <b>Ramesh Kumar · DRV-07</b>). Each row shows a label and value pulled from the driver record. These values are set and maintained by an Admin on the Drivers screen; the executive cannot change them here.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Detail</th><th>Meaning</th><th>Backing driver field</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Employee ID</b></td><td>The executive's login and staff code, shown in the card title next to their name.</td><td><code>Driver.employeeId</code> (unique)</td><td>DRV-07</td></tr>
+        <tr><td><b>Zone</b></td><td>The delivery zone the executive is assigned to — it scopes which deliveries and routes they see.</td><td><code>Driver.zoneId</code> → resolved to <code>DeliveryZone.name</code></td><td>Jubilee Hills</td></tr>
+        <tr><td><b>Vehicle</b></td><td>The registered vehicle number used for the round.</td><td><code>Driver.vehicleNo</code></td><td>TS09 EZ 4421</td></tr>
+        <tr><td><b>Rating</b></td><td>Service rating out of 5, averaged from delivery feedback.</td><td><code>Driver.rating</code> (defaults to 5)</td><td>4.9★</td></tr>
+        <tr><td><b>Joined</b></td><td>When the executive started with DOODLY (tenure).</td><td>Derived from the linked <code>User.createdAt</code></td><td>Feb 2026</td></tr>
+        <tr><td><b>Deliveries</b></td><td>Lifetime completed deliveries — a badge of experience.</td><td>Count of <code>Delivery</code> rows for this driver</td><td>2,840</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Related driver fields the Admin controls</div><p>The full driver record also carries <b>Delivery capacity</b> (<code>DeliveryCapacity.maxBottles</code>, default 45 bottles), <b>Active / suspended</b> state (<code>Driver.active</code> and the linked <code>User.status</code>), <b>last-known GPS</b> (<code>lat</code>, <code>lng</code>, <code>lastSeenAt</code> for live tracking) and a soft-delete flag (<code>deletedAt</code>). These are managed from <span class="navpath">Admin → Operations → Drivers → Manage</span> — see the Drivers module in the Operations chapter.</p></div></div>
+
+      <h4>The "Update details" form</h4>
+      <p>A short self-service form the executive uses to keep their reachable numbers current. It is the only editable part of this screen.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Phone</b></td><td>The executive's own contact number, used by ops and customers.</td><td>Telephone number (<code>type="tel"</code>), placeholder "+91 …"</td><td class="t-opt">Opt.</td><td>No format mask is enforced client-side; a value is only rejected if it is submitted blank while marked required (this field is optional here). On Save the form data is persisted for the current device.</td><td>+91 91177 99143</td></tr>
+        <tr><td><b>Emergency contact</b></td><td>A backup number to reach in case of an on-road emergency.</td><td>Telephone number (<code>type="tel"</code>), placeholder "+91 …"</td><td class="t-opt">Opt.</td><td>Same handling as Phone — saved with the form on Save.</td><td>+91 90000 12345</td></tr>
+      </tbody></table></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Save</b></td><td>Validates any required fields, then confirms with an inline "Saved ✓ Your changes have been applied." message plus a toast reading "Save ✓".</td><td>Handled by the shared form handler (<code>wireForms</code> in layout.js). It reads every named field, checks required fields are non-blank (blank ones get an "invalid" outline and focus), and stores the values under the key <code>doodly-form-form</code> so they pre-fill next time. In this build the profile save is <b>client-side</b> — it does not yet write back to the <code>Driver</code> record.</td><td><span class="pill role">Delivery Executive</span></td></tr>
+        <tr><td><b>Reset</b></td><td>Clears validation outlines and the status message, and shows a "Changes reset" toast.</td><td>Native form reset intercepted by the <code>js-formreset</code> handler; removes <code>.invalid</code> flags and hides the inline message.</td><td><span class="pill role">Delivery Executive</span></td></tr>
+      </tbody></table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — self-service Save is local in this build</div><p>The "Update details" form saves to the executive's <b>browser/device</b> (local storage), not to the central driver record. If a phone or emergency number must be authoritative across the system, an Admin should also update it on <span class="navpath">Admin → Operations → Drivers → Manage</span>. Treat the on-page form as a convenience note-to-self until the server write is wired.</p></div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Ask each executive to confirm both numbers on their first login and after any SIM change. Keep the <b>emergency contact</b> different from the primary phone (a family member or nearest hub), so ops can reach someone if the executive is unreachable on the road.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================ SCREEN 2 ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Shift &amp; Attendance</p><p class="sm">Start / end shift availability toggle</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> The executive marks themselves on- or off-shift. Only executives who are on-shift (AVAILABLE) receive new auto-assigned deliveries, so this toggle is the real attendance signal for the routing engine.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Delivery Executive</span> (own shift) · <span class="pill role">Super Admin</span> (oversight)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Delivery → Today → Dashboard</span> (availability pill)</span>
+    </div>
+    <div class="spec-body">
+
+      <p>The shift control appears on the executive's <b>route dashboard</b> as a tappable status pill in the header — a green "🟢 Available for assignment" when on-shift, or a grey "⚪ Not available — start shift" when off. It is driven by the executive's own availability endpoint and is the closest thing to a clock-in for a delivery executive: it decides whether the auto-assignment engine can hand them work.</p>
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Delivery dashboard — <b>Good morning, Ramesh</b> · route &amp; date · availability pill</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Availability pill</b><span>Green "Available for assignment" ⇄ grey "Not available — start shift"; tap to toggle</span></div>
+          <div class="wf-cell"><b>Today's KPIs</b><span>Assigned · Completed · Pending · Remaining stops · Bottles to collect · Distance left</span></div>
+          <div class="wf-cell"><b>Route map</b><span>Today's stops with Start route / Open navigation / Refresh</span></div>
+          <div class="wf-cell"><b>Stop list</b><span>Per-stop cards (status, bottles, call/WhatsApp/SMS, deliver, report issue)</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 2 — The availability pill sits in the dashboard header alongside the day's summary KPIs.</div></div>
+
+      <h4>Availability states</h4>
+      <p>The executive's live status is stored on their <code>ExecutiveStatus</code> row. The engine treats only <b>AVAILABLE</b> (and <b>RETURNED_TO_DAIRY</b>, i.e. back at the hub, empty) as eligible for new work.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>State</th><th>Meaning</th><th>Takes new assignments?</th>
+      </tr></thead><tbody>
+        <tr><td><b>AVAILABLE</b></td><td>On-shift and free — the engine can assign new deliveries.</td><td>Yes</td></tr>
+        <tr><td><b>ASSIGNED</b></td><td>Deliveries have been handed to them but the trip has not started.</td><td>No (mid-trip)</td></tr>
+        <tr><td><b>ACCEPTED</b></td><td>The executive accepted the trip.</td><td>No (mid-trip)</td></tr>
+        <tr><td><b>OUT_FOR_DELIVERY</b></td><td>On the road delivering.</td><td>No (mid-trip)</td></tr>
+        <tr><td><b>COMPLETED</b></td><td>Finished the current trip's stops.</td><td>No (until returned)</td></tr>
+        <tr><td><b>RETURNED_TO_DAIRY</b></td><td>Back at the hub, ready for the next round.</td><td>Yes</td></tr>
+        <tr><td><b>OFFLINE</b></td><td>Off-shift — ended their shift.</td><td>No</td></tr>
+        <tr><td><b>BREAK</b></td><td>Temporarily paused (break).</td><td>No</td></tr>
+      </tbody></table></div>
+
+      <h4>The toggle action</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Control</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Start shift</b> (grey pill)</td><td>Puts the executive on-shift; the pill turns green and a "Shift started — you're available" toast appears.</td><td><code>POST /api/driver/availability</code> with <code>{ available: true }</code> → sets <code>ExecutiveStatus.availability = AVAILABLE</code> (upserts the row if missing).</td><td><span class="pill role">Delivery Executive</span></td></tr>
+        <tr><td><b>End shift</b> (green pill)</td><td>Takes the executive off-shift; the pill turns grey and a "Shift ended" toast appears.</td><td><code>POST /api/driver/availability</code> with <code>{ available: false }</code> → sets availability to <code>OFFLINE</code> and clears <code>currentTripId</code> and <code>assignedBottles</code>.</td><td><span class="pill role">Delivery Executive</span></td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Every shift change is audited</div><p>Each toggle writes an <code>AssignmentLog</code> entry with action <code>STATUS_CHANGE</code>, the executive as the actor (<code>actorRole: delivery_executive</code>) and a note such as "shift started → AVAILABLE" or "shift ended → OFFLINE". A Super Admin can review this trail in the assignment history — it is the auditable record of when each executive clocked on and off.</p></div></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — a delivery executive's shift</div>
+        <div class="wf-flow"><span>Log in to Delivery portal</span><span>Tap "Start shift" → AVAILABLE</span><span>Engine auto-assigns stops</span><span>Start route → out for delivery</span><span>Complete stops / Return to dairy</span><span>Tap "End shift" → OFFLINE</span></div>
+      </div><div class="wire-cap">Figure 3 — From clock-in to clock-out; new work only flows while the executive is AVAILABLE.</div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — you cannot go offline mid-trip</div><p>If the executive is <b>ASSIGNED</b>, <b>ACCEPTED</b> or <b>OUT_FOR_DELIVERY</b>, trying to end their shift is rejected with a 409 and the message: "You have an active trip — complete your deliveries (or mark returned to dairy) before changing availability." They must finish the round (or mark returned to dairy) first. This protects customers from a half-delivered route being abandoned.</p></div></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — the missing-profile guard</div><p>Both the availability endpoint and the day-summary endpoint require a <b>driver profile linked to the account</b>. If someone signs in without one, they get "No delivery profile is linked to this account." Fix it by creating the driver on <span class="navpath">Admin → Operations → Drivers</span> and linking it to their user.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================ SCREEN 3 (cross-ref) ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Attendance ledger (HR)</p><p class="sm">Where a salaried executive's days are recorded</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> For executives who are on payroll, formal day-by-day attendance (present, leave, off) is recorded in Human Resources and feeds payroll — separate from the live shift toggle above.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> · <span class="pill role">Manager</span> (HR-permitted)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → Attendance</span></span>
+    </div>
+    <div class="spec-body">
+      <p>The shift toggle answers "are they working <em>right now</em>?"; the HR attendance ledger answers "how many days did they work <em>this month</em>?" for pay. Each attendance record (<code>Attendance</code>) carries a date, a status, optional check-in / check-out times, worked minutes, overtime minutes and a source (manual, biometric, etc.). It attaches to an <code>EmployeeProfile</code>, so it applies to any delivery executive who is also set up as an employee.</p>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Attendance status</th><th>Meaning</th>
+      </tr></thead><tbody>
+        <tr><td><b>PRESENT</b></td><td>Full working day.</td></tr>
+        <tr><td><b>HALF_DAY</b></td><td>Worked half the day.</td></tr>
+        <tr><td><b>ABSENT</b></td><td>Did not report and no leave applied.</td></tr>
+        <tr><td><b>PAID_LEAVE</b></td><td>Approved leave that is paid.</td></tr>
+        <tr><td><b>SICK_LEAVE</b></td><td>Medical leave.</td></tr>
+        <tr><td><b>WEEKLY_OFF</b></td><td>Scheduled weekly rest day.</td></tr>
+        <tr><td><b>HOLIDAY</b></td><td>Company/public holiday.</td></tr>
+        <tr><td><b>WFH</b></td><td>Worked from home (office roles).</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — two separate ideas, on purpose</div><p>The live availability pill and the HR attendance ledger are intentionally distinct: the pill drives <b>routing</b> in real time, the ledger drives <b>payroll</b>. Full documentation of the attendance ledger, bulk marking and payroll linkage lives in the Human Resources chapter (Attendance module).</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================ TROUBLESHOOTING ============================ -->
+  <h3>Troubleshooting</h3>
+  <div class="twrap"><table><thead><tr>
+    <th>Symptom</th><th>Likely cause</th><th>Fix</th>
+  </tr></thead><tbody>
+    <tr><td>"No delivery profile is linked to this account." when opening the dashboard or toggling shift.</td><td>The signed-in user has no <code>Driver</code> record.</td><td>Create/link the driver on <span class="navpath">Admin → Operations → Drivers</span>; confirm <code>employeeId</code> is set.</td></tr>
+    <tr><td>Tapping "End shift" fails with a conflict.</td><td>The executive is mid-trip (ASSIGNED / ACCEPTED / OUT_FOR_DELIVERY).</td><td>Finish the remaining stops, or mark "Returned to dairy", then end the shift.</td></tr>
+    <tr><td>Executive is on-shift but the engine never assigns them stops.</td><td>Availability is not AVAILABLE, capacity is inactive, or they are in the wrong zone.</td><td>Confirm the pill is green; check <code>DeliveryCapacity.active</code> and <code>maxBottles</code>, and the assigned <b>Zone</b> on the Drivers screen.</td></tr>
+    <tr><td>Updated phone number on the Profile form but ops still sees the old one.</td><td>The self-service form saved locally only, not to the driver record.</td><td>Have an Admin update the number on <span class="navpath">Admin → Operations → Drivers → Manage</span>.</td></tr>
+    <tr><td>Profile card shows placeholder details (Ramesh Kumar · DRV-07, Jubilee Hills…).</td><td>Signed-out / demo view of the driver surface.</td><td>Sign in as the executive; the card then reflects their real linked <code>Driver</code> record.</td></tr>
+  </tbody></table></div>
+
+  <!-- ============================ FAQ ============================ -->
+  <h3>Frequently asked questions</h3>
+  <h4>Can an executive change their own zone, vehicle or rating on this page?</h4>
+  <p>No. Those are read-only on the Profile card. Zone and vehicle are set by an Admin on the Drivers screen; rating is averaged automatically from delivery feedback. Only Phone and Emergency contact are editable by the executive.</p>
+
+  <h4>Does ending a shift cancel deliveries already assigned?</h4>
+  <p>No. You cannot end a shift while a trip is active — the system blocks it (409). You must complete or return the current trip first, which is exactly why abandoned half-routes cannot happen from the toggle.</p>
+
+  <h4>Is the shift toggle the same as marking attendance for payroll?</h4>
+  <p>No. The toggle is a live routing signal (AVAILABLE vs OFFLINE) and is audited in the assignment log. Payroll attendance is recorded separately in <span class="navpath">Admin → Human Resources → Attendance</span> against the executive's employee profile.</p>
+
+  <h4>Where can a Super Admin see when an executive clocked on and off?</h4>
+  <p>In the assignment audit trail: every shift change writes an <code>AssignmentLog</code> row of type <code>STATUS_CHANGE</code> with the timestamp, the executive as actor, and a note like "shift started → AVAILABLE".</p>
+
+</section>

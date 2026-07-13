@@ -1,0 +1,201 @@
+<section class="sheet" id="admin-hr-dashboard">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · HR · HR Dashboard</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · HR</span></div>
+  <h2 class="section-title">HR Dashboard</h2>
+  <p class="lead">A single, read-only snapshot of the whole workforce — headcount, who is present or absent today, who is on leave, how many payslips still need to be run, how much salary-advance money is still owed, and how staff are split across departments — pulled live from the same records that power Employees, Attendance, Leave, Salary Advances and Payroll.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">What this screen is (and is not)</div>
+      <p>The <b>HR Dashboard</b> item under <span class="navpath">Admin → Human Resources</span> is served by the storefront admin page <code>/admin/hr-dashboard.html</code>, which mounts the <code>DOODLY_HR</code> module's <code>mountDashboard()</code> renderer into <code>#hrDashboardMount</code>. It is a <b>reporting screen only</b> — there are no forms, no filters, no buttons and nothing to save. Every number is calculated fresh by the backend each time the page loads, from one call to <code>GET /api/admin/employees?view=dashboard</code> (server function <code>hrDashboard()</code>). To change any of the underlying figures you go to the relevant HR section — the dashboard just summarises them. Money (the "Advances outstanding" figure) is shown in <b>₹</b>; the backend stores it as integer <b>paise</b> (₹1 = 100 paise).</p>
+    </div>
+  </div>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Who can open it</div>
+      <p>The API gate is <code>requirePermission(req, "employees", "view")</code> — access is granted by the <b>Employees</b> module permission, not a separate one. In the default role matrix that means <b>Super Admin</b> and <b>Admin</b> (full access to everything HR) and <b>Accountant</b> (view-level access to Employees, HR Dashboard, Attendance and Leave, plus deeper rights on Payroll and Advances). No other staff role — Operations, Procurement, Inventory, Quality, Marketing, Support, Delivery Executive — can open HR at all, and Customers never can. Server-side permission checks are the real boundary; hiding the menu item is only convenience.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 1 : HR DASHBOARD -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">HR Dashboard</p>
+      <p class="sm">Eight workforce KPI cards over a department-wise headcount table — the people pulse of the business at a glance.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Give HR and management one place to see, at a glance, the size of the team, today's attendance picture, who is on leave, how much payroll and advance work is outstanding, how many people have exited, and how the team is distributed across departments — without opening five separate screens.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> — anyone with <b>Employees · view</b></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → HR Dashboard</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Human Resources — <b>HR Dashboard</b> · 8 KPI cards + department headcount panel</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>KPI cards — row 1</b><span>Total employees · Present today · Absent today · On leave</span></div>
+          <div class="wf-cell"><b>KPI cards — row 2</b><span>Payroll pending · Advances outstanding · Resigned / exited · Active</span></div>
+          <div class="wf-cell"><b>Department-wise headcount</b><span>Panel with a two-column table: Department · Employees (highest count first)</span></div>
+          <div class="wf-cell"><b>Footer hint</b><span>"Attendance, leave, salary, advances and payroll are managed under Human Resources → their sections."</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the HR Dashboard: eight colour-coded KPI cards laid out in a responsive grid, above the department-wise headcount panel.</div></div>
+
+      <h4>Every KPI card and where the number comes from</h4>
+      <p>Cards render in a fixed order left-to-right, top-to-bottom. Each card shows a large number (or a ₹ amount) with a small label under it. A colour tone is applied to draw the eye: green = healthy, amber = needs attention, red = loss of headcount. All counts ignore soft-deleted (removed) employees — every query filters <code>deletedAt: null</code>.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Total employees</b><div class="muted-sm">neutral</div></td>
+            <td>Whole active workforce on the books, regardless of status.</td>
+            <td>Whole number ≥ 0</td>
+            <td class="t-opt">Read</td>
+            <td>Count of <code>EmployeeProfile</code> where <code>deletedAt = null</code>. Includes on-leave, resigned and terminated staff (anyone not removed). Returned as <code>kpis.total</code>.</td>
+            <td>42</td>
+          </tr>
+          <tr>
+            <td><b>Present today</b><div class="muted-sm">green</div></td>
+            <td>How many people are marked in today's attendance as working.</td>
+            <td>Whole number ≥ 0</td>
+            <td class="t-opt">Read</td>
+            <td>Count of <code>Attendance</code> rows for <b>today</b> (00:00 local) whose status is <code>PRESENT</code>, <code>HALF_DAY</code> or <code>WFH</code>. Returned as <code>kpis.presentToday</code>.</td>
+            <td>31</td>
+          </tr>
+          <tr>
+            <td><b>Absent today</b><div class="muted-sm">amber</div></td>
+            <td>Rough count of active staff not accounted for as present or on leave today.</td>
+            <td>Whole number ≥ 0</td>
+            <td class="t-opt">Read</td>
+            <td><b>Derived, not a direct query.</b> Calculated as <code>max(0, Active − Present today − On leave)</code>. It is <i>not</i> a count of attendance rows marked <code>ABSENT</code> — see the Warning below. Returned as <code>kpis.absentToday</code>.</td>
+            <td>6</td>
+          </tr>
+          <tr>
+            <td><b>On leave</b><div class="muted-sm">amber</div></td>
+            <td>Staff whose employment status is currently "On Leave".</td>
+            <td>Whole number ≥ 0</td>
+            <td class="t-opt">Read</td>
+            <td>Count of <code>EmployeeProfile</code> where <code>status = ON_LEAVE</code> and <code>deletedAt = null</code>. This is the <i>status flag on the employee record</i>, set from the Employee detail ("Mark on leave"), not a count of approved Leave requests. Returned as <code>kpis.onLeave</code>.</td>
+            <td>5</td>
+          </tr>
+          <tr>
+            <td><b>Payroll pending</b><div class="muted-sm">neutral</div></td>
+            <td>Payslips created but not yet finalised — payroll work still to do.</td>
+            <td>Whole number ≥ 0</td>
+            <td class="t-opt">Read</td>
+            <td>Count of <code>Payslip</code> rows where <code>status = DRAFT</code>. Finalised and Paid payslips are excluded. Returned as <code>kpis.payslipsPending</code>.</td>
+            <td>12</td>
+          </tr>
+          <tr>
+            <td><b>Advances outstanding</b><div class="muted-sm">neutral · ₹</div></td>
+            <td>Total salary-advance money still owed back by staff.</td>
+            <td>₹ amount ≥ ₹0</td>
+            <td class="t-opt">Read</td>
+            <td>Sum of <code>remainingPaise</code> across all <code>SalaryAdvance</code> rows whose status is <code>APPROVED</code> (i.e. disbursed and being recovered; <code>COMPLETED</code>, <code>PENDING</code> and <code>REJECTED</code> advances are excluded). Returned as paise in <code>kpis.advancesOutstandingPaise</code> and shown in ₹.</td>
+            <td>₹18,500</td>
+          </tr>
+          <tr>
+            <td><b>Resigned / exited</b><div class="muted-sm">red</div></td>
+            <td>People who have left — resignations and terminations combined.</td>
+            <td>Whole number ≥ 0</td>
+            <td class="t-opt">Read</td>
+            <td>Count of <code>EmployeeProfile</code> where <code>status ∈ {RESIGNED, TERMINATED}</code> and <code>deletedAt = null</code>. Returned as <code>kpis.resigned</code>.</td>
+            <td>3</td>
+          </tr>
+          <tr>
+            <td><b>Active</b><div class="muted-sm">green</div></td>
+            <td>Currently employed and working staff.</td>
+            <td>Whole number ≥ 0</td>
+            <td class="t-opt">Read</td>
+            <td>Count of <code>EmployeeProfile</code> where <code>status = ACTIVE</code> and <code>deletedAt = null</code>. This is the denominator behind the "Absent today" derivation. Returned as <code>kpis.active</code>.</td>
+            <td>34</td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">"Absent today" is an estimate, not a headcount of absences</div>
+          <p>Read this card carefully. It is computed arithmetically as <b>Active − Present today − On leave</b> (floored at zero). It does <b>not</b> read attendance rows marked <code>ABSENT</code>. So early in the day, before attendance has been marked, this number will be large simply because few people are marked present yet — it will shrink as staff are marked in. It also treats employees whose <i>status flag</i> is <code>ON_LEAVE</code> as "on leave", but not those merely marked <code>PAID_LEAVE</code>/<code>SICK_LEAVE</code> in today's register. For the true, per-person absence picture use <span class="navpath">Admin → Human Resources → Attendance</span>, which counts real <code>ABSENT</code> marks for the chosen date.</p>
+        </div>
+      </div>
+
+      <h4>Department-wise headcount</h4>
+      <p>Below the KPI cards sits one panel titled <b>Department-wise headcount</b>. It lists how many people belong to each department, so you can see where the team is concentrated. When there are no employees yet it shows the plain message "No employees yet." A short footer line under the panel reminds you that the detailed work lives elsewhere: <i>"Attendance, leave, salary, advances and payroll are managed under Human Resources → their sections."</i></p>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Behaviour on this screen</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td><b>Department</b> (name) and <b>Employees</b> (the count, shown in bold).</td></tr>
+          <tr><td><b>Rows</b></td><td>One row per department that currently has at least one non-removed employee. Departments with no one are omitted. Source: <code>groupBy(department)</code> over <code>EmployeeProfile</code> where <code>deletedAt = null</code>, returned as <code>byDepartment</code>.</td></tr>
+          <tr><td><b>Sorting</b></td><td>Fixed — highest headcount first (descending by count), decided by the backend. Not clickable / not user-sortable.</td></tr>
+          <tr><td><b>Filters / Search</b></td><td>None. This screen has no filter bar and no search box.</td></tr>
+          <tr><td><b>Pagination</b></td><td>None — every department is shown in one list.</td></tr>
+          <tr><td><b>Row actions</b></td><td>None. Rows are display-only; there is nothing to click.</td></tr>
+          <tr><td><b>Export</b></td><td>None on this screen. (CSV export exists on the Attendance and Leave screens, not here.)</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">The known departments</div>
+          <p>Each employee is filed under one of ten standard departments defined in the module: <b>Delivery, Procurement, Production, Quality, Inventory, Customer Support, Finance, Marketing, Operations, Administration</b>. The headcount table only lists departments that actually have staff, so a brand-new business may show just two or three rows.</p>
+        </div>
+      </div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">The API also returns an employment-type breakdown</div>
+          <p>Behind the scenes the same <code>hrDashboard()</code> response includes a <code>byType</code> array (headcount split by Full Time / Part Time / Contract / Internship). This screen does not draw it — it renders only the eight KPI cards and the department table — but the figure is available to other tools and reports.</p>
+        </div>
+      </div>
+
+      <h4>Loading and error states</h4>
+      <p>While the figures are being fetched the page shows a skeleton placeholder (a shimmering panel). If the request fails — no network, session expired, or no permission — the whole area is replaced by an amber warning box reading <i>"Couldn't load the HR dashboard."</i> (or the specific server message). There is no auto-refresh: the numbers are captured at page load, so reload the page to get the latest figures.</p>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — how the dashboard builds itself</div>
+        <div class="wf-flow"><span>Open HR Dashboard</span><span>Show skeleton</span><span>GET ?view=dashboard</span><span>hrDashboard() runs 9 live counts in parallel</span><span>Render 8 KPI cards</span><span>Render department table (desc)</span></div>
+      </div><div class="wire-cap">Figure — one page-load runs nine database aggregates at once, then paints the cards and the headcount table.</div></div>
+
+    </div>
+  </div>
+
+  <div class="call best">
+    <span class="ci">✅</span>
+    <div class="cbody">
+      <div class="ctitle">Best Practice — read it in the right order, at the right time</div>
+      <p>Check the HR Dashboard <b>after</b> the morning attendance is marked, not before — otherwise "Present today" is artificially low and "Absent today" artificially high. Treat the two amber cards (Absent today, On leave) and the red card (Resigned / exited) as your daily watch-list, and the two work-queue cards (Payroll pending, Advances outstanding) as your month-end to-do list: a non-zero "Payroll pending" means draft payslips still need finalising, and a large "Advances outstanding" is money you are still recovering. When a number looks wrong, don't fix it here — open the matching HR section, correct the source record, then reload the dashboard.</p>
+    </div>
+  </div>
+
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>"Absent today" is very high in the morning</td><td>Attendance hasn't been marked yet, so few people count as "Present today"; the card is <code>Active − Present − On leave</code>.</td><td>Mark attendance in <span class="navpath">HR → Attendance</span> for today, then reload. The number falls as staff are marked present.</td></tr>
+      <tr><td>Whole area shows "Couldn't load the HR dashboard."</td><td>Session expired, offline, or the account lacks <b>Employees · view</b>.</td><td>Sign in again / check the connection. If it persists, confirm the role has Employees view rights (Super Admin, Admin or Accountant).</td></tr>
+      <tr><td>"On leave" doesn't match today's leave register</td><td>This card counts employees whose <b>status flag</b> is <code>ON_LEAVE</code>, not approved leave requests for the date.</td><td>Set the person's status via the Employee detail ("Mark on leave" / "Mark active"), or use <span class="navpath">HR → Leave</span> for the day-by-day picture.</td></tr>
+      <tr><td>A department is missing from the headcount table</td><td>No non-removed employee is currently filed under it.</td><td>Add or reassign an employee to that department in <span class="navpath">HR → Employees</span>; the row appears once someone is in it.</td></tr>
+      <tr><td>Numbers look stale after I changed a record</td><td>The dashboard is a one-time snapshot taken at page load — it does not live-refresh.</td><td>Reload the page to re-run the queries.</td></tr>
+      <tr><td>"Advances outstanding" seems too low</td><td>Only <code>APPROVED</code> advances still being recovered are summed; <code>PENDING</code> and <code>COMPLETED</code> ones are excluded by design.</td><td>Approve pending advances in <span class="navpath">HR → Salary Advances</span> so they enter the outstanding total.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Frequently asked questions</h4>
+  <h4>Can I edit anything from the HR Dashboard?</h4>
+  <p>No. It is entirely read-only — there are no forms, buttons, filters or exports. It only <i>reports</i>. To change a figure, open the underlying section (Employees, Attendance, Leave, Salary Advances or Payroll), make the change there, then reload the dashboard.</p>
+  <h4>Does "Total employees" include people who have left?</h4>
+  <p>Yes. "Total" counts everyone still on the books (not soft-deleted), including On-leave, Resigned and Terminated staff. Use the "Active" card for the number of currently-working people, and "Resigned / exited" for those who have left.</p>
+  <h4>Why doesn't "Present + Absent + On leave" always add up to "Active"?</h4>
+  <p>Because "Present today" counts attendance rows (Present, Half-day or WFH) which can include employees whose profile status isn't strictly Active, while "Absent today" is floored at zero and derived arithmetically. The three cards are indicators, not a strict reconciliation. For an exact daily tally, use the Attendance register.</p>
+  <h4>Is the ₹ figure in rupees or paise?</h4>
+  <p>The card shows rupees. Internally the API returns <code>advancesOutstandingPaise</code> in paise and the screen divides by 100 for display, so ₹18,500 is stored as 1,850,000 paise.</p>
+
+</section>

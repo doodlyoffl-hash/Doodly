@@ -1,0 +1,346 @@
+<section class="sheet" id="admin-offers">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Growth · Offers</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Growth</span></div>
+  <h2 class="section-title">Offers</h2>
+  <p class="lead">A campaign-driven promotion engine — create typed, prioritised, scheduled discounts that either apply automatically at checkout (codeless) or by code, then watch them earn revenue live through ten KPI cards and a single searchable, filterable table.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">What this screen is, and how it is built</div>
+      <p>The <b>Offers</b> item under <span class="navpath">Admin → Growth</span> opens the storefront admin page <code>/admin/offers.html</code>. That page renders a single block, <code>offersBoard</code>, which mounts into <code>#offersMount</code> and is driven entirely by the live DOODLY database through the API <code>/api/admin/offers</code>. Everything you see — the KPI cards, the filters, the table, the <b>New offer</b> and <b>Manage</b> forms — is real data; when the backend is reachable a green <b>“● Live”</b> banner confirms it and names the database. All money is typed and shown in <b>₹</b>, but the backend stores every amount as integer <b>paise</b> (₹1 = 100 paise), so a 10% offer is stored as <code>discountBps = 1000</code> and a ₹50 offer as <code>flatPaise = 5000</code>.</p>
+    </div>
+  </div>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Offers vs Coupons — same maths, more power</div>
+      <p>Offers deliberately <b>reuse the Coupons discount engine</b> for all the arithmetic and eligibility rules (percent/flat, caps, minimum order, first-order, product/category/plan targeting, usage limits). What Offers add on top is a <b>type</b> (Percentage, BOGO, Bundle, Festival, Cashback and more), a numeric <b>priority</b>, a <b>campaign</b> name for roll-up reporting, and a full <b>Draft → Active ⇄ Paused → Archived</b> lifecycle. The other key difference: an offer’s <b>code is optional</b>. Leave it blank and the offer is <b>codeless</b> — it is resolved and applied automatically at checkout with no code to type.</p>
+    </div>
+  </div>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Who can view and who can manage</div>
+      <p>Two permission levels guard this module. <b>Viewing</b> (the board, KPIs, table and analytics) is open to any role that can view offers, reports or customers — that is <span class="pill role">Super Admin</span>, <span class="pill role">Admin</span>, <span class="pill role">Marketing</span>, and read-only viewers such as Accountant, Operations, Procurement, Quality, Inventory and Support (through their reports/customers access). <b>Managing</b> (create, edit, activate, pause, resume, archive, delete, restore, duplicate, bulk) requires the <code>offers</code> edit permission, which by default only <span class="pill role">Super Admin</span>, <span class="pill role">Admin</span> and <span class="pill role">Marketing</span> hold. A blocked mutation returns <b>HTTP 403</b> and the screen shows “Only Marketing / Admin can manage offers (403)”. The server-side checks <code>canViewOffers</code> / <code>canManageOffers</code> are the real boundary — hidden buttons are convenience only.</p>
+    </div>
+  </div>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Status is derived — you set a state, the system decides the badge</div>
+      <p>You control an offer’s <b>state</b> (Draft / Active / Paused / Archived), but the coloured <b>status badge</b> on the table is <i>computed</i> from that state together with the scheduling window and the deletion flag. The rule, in order: deleted → <b>Deleted</b>; state ARCHIVED → <b>Archived</b>; state DRAFT → <b>Draft</b>; state PAUSED → <b>Paused</b>; a start date still in the future → <b>Scheduled</b>; an end date already passed → <b>Expired</b>; otherwise → <b>Active</b>. So an offer set to <b>Active</b> with a start date next week correctly shows as <b>Scheduled</b> until that date, then flips to <b>Active</b> on its own, and to <b>Expired</b> after its end date — no manual toggling required.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 1 : OFFERS BOARD -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Offers Board</p>
+      <p class="sm">Ten live KPI cards over a searchable, filterable, priority-ordered table of every offer — the growth pulse of every promotion at a glance.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Show at a glance how many offers exist and in what state, how many redemptions and how much revenue and discount they have generated, which campaigns are live and which offer is winning — then let you drill into any one offer to manage it.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span> (+ read-only report/customer viewers) — view. Managing requires the <code>offers</code> edit permission.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Offers</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Offers — <b>Board</b> · header “New offer” button · 10 KPI cards · toolbar · table</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Page header</b><span>Title “Offers” + intro line + <b>New offer</b> primary button (top-right)</span></div>
+          <div class="wf-cell"><b>KPI row (10)</b><span>Total Offers · Active · Scheduled · Draft · Paused · Redemptions · Revenue · Discount Given · Active Campaigns · Top Offer</span></div>
+          <div class="wf-cell"><b>Toolbar</b><span>Search box · “All statuses” dropdown · “All types” dropdown</span></div>
+          <div class="wf-cell"><b>Offers table</b><span>Panel headed “Offers” with a live count badge; columns Offer · Type · Discount · Priority · Usage · Status · Manage</span></div>
+          <div class="wf-cell"><b>Live banner</b><span>Green “● Live — N offer(s) · M active · K campaign(s)” from the database, or an amber/red offline / 403 notice</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Offers board: KPI cards, a three-control toolbar, and the offers table.</div></div>
+
+      <h4>Every KPI card and where the number comes from</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>KPI card</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Total Offers</td><td>Every live (non-deleted) offer</td><td>Count</td><td class="t-opt">Read-only</td><td>Count of all offers where <code>deletedAt</code> is null (<code>kpis.totalOffers</code>).</td><td>18</td></tr>
+          <tr><td>Active</td><td>Offers live right now</td><td>Count</td><td class="t-opt">Read-only</td><td>Offers whose derived status is <b>Active</b> (state ACTIVE, started, not expired) — <code>kpis.activeOffers</code>.</td><td>6</td></tr>
+          <tr><td>Scheduled</td><td>Set to go live later</td><td>Count</td><td class="t-opt">Read-only</td><td>Active offers whose <b>start date</b> is still in the future (<code>kpis.scheduledOffers</code>).</td><td>2</td></tr>
+          <tr><td>Draft</td><td>Not yet launched</td><td>Count</td><td class="t-opt">Read-only</td><td>Offers in state <b>DRAFT</b> (<code>kpis.draftOffers</code>).</td><td>4</td></tr>
+          <tr><td>Paused</td><td>Temporarily switched off</td><td>Count</td><td class="t-opt">Read-only</td><td>Offers in state <b>PAUSED</b> (<code>kpis.pausedOffers</code>).</td><td>1</td></tr>
+          <tr><td>Redemptions</td><td>Total times offers were used</td><td>Count</td><td class="t-opt">Read-only</td><td>Count of all <code>OfferRedemption</code> rows (<code>kpis.offerRedemptions</code>).</td><td>312</td></tr>
+          <tr><td>Revenue</td><td>Order value on offer-bearing orders</td><td>₹ amount</td><td class="t-opt">Read-only</td><td>Sum of <code>orderTotalPaise</code> across all redemptions (<code>kpis.revenueGeneratedPaise</code>), shown in ₹.</td><td>₹4,86,200</td></tr>
+          <tr><td>Discount Given</td><td>Money handed back to customers</td><td>₹ amount</td><td class="t-opt">Read-only</td><td>Sum of <code>discountPaise</code> across all redemptions (<code>kpis.totalDiscountPaise</code>), in ₹.</td><td>₹58,900</td></tr>
+          <tr><td>Active Campaigns</td><td>Distinct live campaigns</td><td>Count</td><td class="t-opt">Read-only</td><td>Number of distinct <b>campaign names</b> among currently-<b>Active</b> offers (<code>kpis.activeCampaigns</code>).</td><td>3</td></tr>
+          <tr><td>Top Offer</td><td>The best-earning offer</td><td>Offer name (or “—”)</td><td class="t-opt">Read-only</td><td>The offer whose redemptions summed to the highest revenue (<code>kpis.topPerformingOffer</code>).</td><td>Monsoon 10%</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Tip — more analytics are computed than are shown</div>
+          <p>The dashboard endpoint also returns a <b>conversion rate</b> (discount ÷ revenue as a %), <b>offers used today</b>, and the <b>average discount</b> per redemption. Per-offer detail (a full redemption log with customer, order, discount and order total, plus unique-customer count) and campaign/offer report roll-ups are available from the same API (<code>?view=detail</code> and <code>?view=reports</code>, with date presets Today, Last 7, Last 30, This Month, Financial Year, All). Generating a report writes an audit line via the <code>log</code> action.</p>
+        </div>
+      </div>
+
+      <h4>The toolbar — search and two filters</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Control</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Search box</td><td>Free-text find</td><td>Any text</td><td class="t-opt">Opt.</td><td>Debounced ~300&nbsp;ms; matches offer <b>name</b>, <b>code</b>, <b>campaign</b> or <b>description</b>, case-insensitive (<code>q=</code>).</td><td>monsoon</td></tr>
+          <tr><td>Status dropdown</td><td>Filter by lifecycle/derived status</td><td>All statuses · Active · Scheduled · Draft · Paused · Expired · Archived</td><td class="t-opt">Opt.</td><td>Filters the list to the chosen derived <b>status</b> (<code>status=</code>).</td><td>Active</td></tr>
+          <tr><td>Type dropdown</td><td>Filter by offer type</td><td>All types + the 13 offer types</td><td class="t-opt">Opt.</td><td>Filters by <code>offerType</code> exactly (<code>offerType=</code>).</td><td>Festival</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The offers table</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>Shows</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><b>Offer</b></td><td>Offer name in bold, with the campaign name beneath it (if set)</td><td>The campaign appears as a small muted sub-line.</td></tr>
+          <tr><td><b>Type</b></td><td>Friendly type label (e.g. “Percentage”, “Buy X Get Y”, “Festival”)</td><td>Mapped from the stored <code>offerType</code> enum.</td></tr>
+          <tr><td><b>Discount</b></td><td>The discount value — “10%” or “₹50”</td><td>Adds a muted “max ₹…” note when a maximum-discount cap is set.</td></tr>
+          <tr><td><b>Priority</b></td><td>The numeric priority — higher wins at checkout</td><td>Used to pick between competing codeless offers.</td></tr>
+          <tr><td><b>Usage</b></td><td>Times used, as <code>usageCount / limit</code></td><td>Shows just the count when no total usage limit is set.</td></tr>
+          <tr><td><b>Status</b></td><td>Coloured badge — Active (green), Scheduled (blue), Draft/Paused (amber), Expired/Archived (grey), Deleted (red)</td><td>Derived, not stored (see the callout above).</td></tr>
+          <tr><td><b>Manage</b></td><td>A <b>Manage</b> link that opens the Edit-offer form</td><td>Only actionable for roles with manage permission.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Table behaviour</th><th>How it works</th></tr></thead>
+        <tbody>
+          <tr><td>Search</td><td>Live debounced search over name / code / campaign / description.</td></tr>
+          <tr><td>Filters</td><td>Status (All/Active/Scheduled/Draft/Paused/Expired/Archived) and Type (all 13 types).</td></tr>
+          <tr><td>Sorting</td><td>Default is newest first (by created date). The API also supports sort by priority, redemptions, expiry or recently-updated.</td></tr>
+          <tr><td>Pagination</td><td>The board requests up to 500 rows at once (<code>pageSize=500</code>); the API paginates and reports total / page / pages.</td></tr>
+          <tr><td>Row action</td><td><b>Manage</b> → opens the Edit-offer modal for that offer.</td></tr>
+          <tr><td>Count badge</td><td>The panel header shows the total number of matching offers.</td></tr>
+          <tr><td>Empty state</td><td>“No offers match these filters.” when nothing matches.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">Best Practice — always name a campaign</div>
+          <p>Filling the <b>Campaign</b> field on related offers (e.g. “Monsoon 2026”) costs nothing but unlocks the <b>Active Campaigns</b> KPI and the by-campaign report roll-up, so you can measure a whole promotion, not just one offer, and compare campaigns side by side.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 : NEW / EDIT OFFER -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">New / Edit Offer</p>
+      <p class="sm">The single modal form that creates an offer or edits an existing one — type, discount, targeting, limits, schedule and state, plus Duplicate and Delete.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Capture everything about one promotion in one dialog: what kind of offer it is, how much it takes off, who and what it applies to, how often it can be used, when it runs, and whether it is live — then save it to the database.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span> — the <code>offers</code> edit permission is required; other roles get a 403.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Offers → New offer / Manage</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Offers — <b>New / Edit offer</b> · modal dialog · 8 rows of paired fields · footer actions</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Header</b><span>Title “New offer” or “Edit offer” + close (×)</span></div>
+          <div class="wf-cell"><b>Row 1</b><span>Offer name* · Offer type</span></div>
+          <div class="wf-cell"><b>Row 2</b><span>Campaign · Code (blank = codeless auto-apply)</span></div>
+          <div class="wf-cell"><b>Row 3</b><span>Discount type (%/₹) · Value*</span></div>
+          <div class="wf-cell"><b>Row 4</b><span>Max discount (₹) · Min order (₹)</span></div>
+          <div class="wf-cell"><b>Row 5</b><span>Priority · Usage limit (total)</span></div>
+          <div class="wf-cell"><b>Row 6</b><span>Applicable products (slugs) · Applicable plans (slugs)</span></div>
+          <div class="wf-cell"><b>Row 7</b><span>Eligibility · Status</span></div>
+          <div class="wf-cell"><b>Row 8</b><span>Start date · End date</span></div>
+          <div class="wf-cell"><b>Footer</b><span>Duplicate · Delete/Restore (edit only) · Cancel · Create offer / Save changes</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the offer editor: eight rows of paired fields with lifecycle actions in the footer.</div></div>
+
+      <h4>Every field on the form</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Offer name</td><td>Human title of the promotion</td><td>Text</td><td class="t-req">Yes</td><td>At least 2 characters (blocked client-side); server enforces 2–140 chars (<code>name</code>).</td><td>Monsoon 10% Off</td></tr>
+          <tr><td>Offer type</td><td>Classifies the promotion for reporting/badges</td><td>One of 13 types (see reference table)</td><td class="t-opt">Opt.</td><td>Enum <code>offerType</code>; defaults to <b>Percentage</b>. Descriptive — the money maths is driven by Discount type, not this field.</td><td>Festival</td></tr>
+          <tr><td>Campaign</td><td>Groups related offers for roll-up analytics</td><td>Text</td><td class="t-opt">Opt.</td><td>Up to 120 chars; stored as <code>campaignName</code>; blank is stored as none.</td><td>Monsoon 2026</td></tr>
+          <tr><td>Code</td><td>Optional coupon code; blank = auto-apply</td><td>Letters, digits, <code>-</code> and <code>_</code></td><td class="t-opt">Opt.</td><td>Up to 40 chars, matched to <code>^[A-Za-z0-9_-]*$</code>, force-uppercased, and <b>must be unique</b> (a duplicate returns “Offer code … already exists”, HTTP 409). Leave blank for a codeless offer.</td><td>MONSOON10</td></tr>
+          <tr><td>Discount type</td><td>Whether the value is a percent or a flat rupee amount</td><td>Percentage % · Flat ₹</td><td class="t-req">Yes</td><td>Defaults to Percentage. Switches the Value hint between “(enter %)” and “(enter ₹)”. Stored as <code>discountType</code>.</td><td>Percentage %</td></tr>
+          <tr><td>Value</td><td>The size of the discount</td><td>Number &gt; 0</td><td class="t-req">Yes</td><td>Must be greater than zero (blocked client-side). For %, stored as <code>discountBps</code> = value × 100, capped at 100%. For ₹, stored as <code>flatPaise</code> = value × 100.</td><td>10</td></tr>
+          <tr><td>Max discount (₹)</td><td>Ceiling on a percentage discount</td><td>₹ number</td><td class="t-opt">Opt.</td><td>Stored as <code>maxDiscountPaise</code>; a % discount is never allowed to exceed it. Leave blank for no cap.</td><td>₹100</td></tr>
+          <tr><td>Min order (₹)</td><td>Smallest order the offer applies to</td><td>₹ number</td><td class="t-opt">Opt.</td><td>Stored as <code>minOrderPaise</code>; defaults to 0. Orders below it are declined with “does not meet the minimum”.</td><td>₹499</td></tr>
+          <tr><td>Priority</td><td>Which codeless offer wins when several qualify</td><td>Whole number</td><td class="t-opt">Opt.</td><td>Integer, defaults to 0; <b>higher wins</b>. At checkout, eligible offers sort by priority, then by discount amount (<code>priority</code>).</td><td>10</td></tr>
+          <tr><td>Usage limit (total)</td><td>Cap on total redemptions across all customers</td><td>Positive whole number</td><td class="t-opt">Opt.</td><td>Stored as <code>maxRedemptions</code>; once reached the offer is declined with “reached its usage limit”. Blank = unlimited.</td><td>500</td></tr>
+          <tr><td>Applicable products (slugs)</td><td>Restrict the offer to specific products</td><td>Comma-separated slugs</td><td class="t-opt">Opt.</td><td>Split on commas, trimmed, blanks dropped → <code>applicableProductSlugs</code>. If set, the cart must contain at least one; else “does not apply to the items in your cart”.</td><td>milk,curd</td></tr>
+          <tr><td>Applicable plans (slugs)</td><td>Restrict the offer to subscription plans</td><td>Comma-separated slugs</td><td class="t-opt">Opt.</td><td>Same parsing → <code>applicablePlanSlugs</code>. If set, the selected plan must match; else “does not apply to the selected plan”.</td><td>p30,p90</td></tr>
+          <tr><td>Eligibility</td><td>Which customers can use the offer</td><td>All customers · First order only</td><td class="t-opt">Opt.</td><td>Stored as <code>eligibility</code> (ALL / FIRST_ORDER). First-order offers are declined for anyone who already has a paid order.</td><td>First order only</td></tr>
+          <tr><td>Status</td><td>The lifecycle state of the offer</td><td>Draft · Active · Paused · Archived</td><td class="t-opt">Opt.</td><td>Stored as <code>state</code>; defaults to <b>Draft</b> on new offers. Setting Active makes it live (subject to schedule). Only ACTIVE offers auto-apply at checkout.</td><td>Active</td></tr>
+          <tr><td>Start date</td><td>When the offer should begin</td><td>Date</td><td class="t-opt">Opt.</td><td>Stored as <code>startsAt</code>; before it, the badge reads <b>Scheduled</b> and checkout declines with “not yet active”. Blank = starts immediately.</td><td>2026-07-15</td></tr>
+          <tr><td>End date</td><td>When the offer should stop</td><td>Date</td><td class="t-opt">Opt.</td><td>Stored as <code>expiresAt</code>; on/after it, the badge reads <b>Expired</b> and checkout declines with “has expired”. Blank = never expires.</td><td>2026-08-31</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">The API stores a little more than the form shows</div>
+          <p>The offer record and its validation engine also support a <b>description</b>, a <b>banner text/image</b> for storefront display, <b>category</b> targeting (<code>applicableCategorySlugs</code>), a <b>per-customer</b> usage limit (<code>perCustomerLimit</code>), and a <b>customer-specific</b> eligibility list (<code>eligibleUserIds</code> when eligibility is SPECIFIC). These fields exist on the backend and are honoured at checkout but are not exposed on this admin form, which focuses on the common promotion controls above.</p>
+        </div>
+      </div>
+
+      <h4>Buttons on the form and table</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>New offer</b> (header)</td><td>Opens the blank offer form (state defaults to Draft)</td><td>None until you save.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Manage</b> (table row)</td><td>Opens the Edit-offer form pre-filled from that offer</td><td>None until you save.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Create offer</b></td><td>Validates then saves a new offer</td><td><code>POST</code> action <b>create</b> → parses the schema, checks code uniqueness, writes the Offer, appends an audit line, toasts “Offer created”, reloads the board.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Save changes</b></td><td>Saves edits to an existing offer</td><td><code>POST</code> action <b>update</b> → partial-schema update (incl. changing the Status/state), re-checks code uniqueness, audits, toasts “Offer updated”, reloads.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Duplicate</b> (edit only)</td><td>Clones the offer as a fresh Draft</td><td><code>POST</code> action <b>duplicate</b> → copies all settings, names it “… (copy)”, appends “-COPY” to the code (de-duplicated), resets redemptions to 0 and state to DRAFT.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Delete</b> (edit only)</td><td>Soft-deletes the offer after a confirm prompt</td><td><code>POST</code> action <b>delete</b> → sets <code>deletedAt</code> (the offer is hidden, not erased). Confirms “Soft-delete offer …?” first.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Restore</b> (edit only)</td><td>Brings a deleted offer back</td><td><code>POST</code> action <b>restore</b> → clears <code>deletedAt</code> and sets state back to <b>Draft</b> (shown in place of Delete once an offer is deleted).</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Cancel</b> / <b>×</b> / Esc</td><td>Closes the form without saving</td><td>None.</td><td>Anyone with the form open</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Tip — activate, pause, resume and archive from one dropdown</div>
+          <p>This form manages the whole lifecycle through the single <b>Status</b> dropdown: pick Active to launch, Paused to switch off temporarily, Archived to retire, Draft to pull back into editing — then <b>Save changes</b>. (The backend also exposes dedicated <b>activate / deactivate / pause / resume / archive</b> actions and a <b>bulk</b> action over many offers at once for API and future multi-select use.)</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ REFERENCE : OFFER TYPES -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Offer types reference</p>
+      <p class="sm">The 13 selectable types and what each is for.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Explain each value in the Offer type dropdown. The type classifies the promotion for filtering and reporting; the actual discount is always driven by the Discount type (% or ₹) and Value.</span>
+    </div>
+    <div class="spec-body">
+      <div class="twrap"><table>
+        <thead><tr><th>Stored value</th><th>Label on screen</th><th>Typical use</th></tr></thead>
+        <tbody>
+          <tr><td><code>PERCENT</code></td><td>Percentage</td><td>A straight “X% off” promotion (the default).</td></tr>
+          <tr><td><code>FLAT</code></td><td>Flat</td><td>A fixed “₹X off” promotion.</td></tr>
+          <tr><td><code>BOGO</code></td><td>Buy X Get Y</td><td>Buy-one-get-one style deals.</td></tr>
+          <tr><td><code>BUNDLE</code></td><td>Bundle</td><td>Discount on a combined set of products.</td></tr>
+          <tr><td><code>SUBSCRIPTION</code></td><td>Subscription</td><td>Deals aimed at subscription plans (pair with plan slugs).</td></tr>
+          <tr><td><code>FIRST_ORDER</code></td><td>First Order</td><td>New-customer welcome deal (pair with First-order eligibility).</td></tr>
+          <tr><td><code>SEASONAL</code></td><td>Seasonal</td><td>Season-long promotions (e.g. Monsoon, Summer).</td></tr>
+          <tr><td><code>FESTIVAL</code></td><td>Festival</td><td>Festival-specific campaigns (e.g. Diwali, Pongal).</td></tr>
+          <tr><td><code>LIMITED_TIME</code></td><td>Limited-Time</td><td>Short, deadline-driven pushes (pair with a tight start/end).</td></tr>
+          <tr><td><code>CUSTOMER_SPECIFIC</code></td><td>Customer</td><td>Targeted at specific customers (backend eligibility list).</td></tr>
+          <tr><td><code>PRODUCT_SPECIFIC</code></td><td>Product</td><td>Tied to particular products (pair with product slugs).</td></tr>
+          <tr><td><code>CATEGORY_SPECIFIC</code></td><td>Category</td><td>Tied to a product category (backend category slugs).</td></tr>
+          <tr><td><code>CASHBACK</code></td><td>Cashback</td><td>Cashback-style promotions.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ WORKFLOWS -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Lifecycle &amp; checkout workflows</p>
+      <p class="sm">How an offer moves from draft to retired, and how it is chosen at checkout.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Show the two processes this module drives: the admin lifecycle of an offer, and the automatic resolution of the best offer for a customer’s cart.</span>
+    </div>
+    <div class="spec-body">
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — offer lifecycle</div>
+        <div class="wf-flow"><span>Create (Draft)</span><span>Set Active</span><span>Scheduled → Active (on start date)</span><span>Pause ⇄ Resume</span><span>Expired (on end date)</span><span>Archive</span><span>Delete → Restore</span></div>
+      </div><div class="wire-cap">Figure — a new offer starts as Draft; going Active makes it live (or Scheduled until its start date, then Expired after its end date); it can be Paused/Resumed, Archived, or soft-Deleted and later Restored.</div></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — auto-apply at checkout (codeless offers)</div>
+        <div class="wf-flow"><span>Cart total + items sent to /api/offers/validate</span><span>Gather Active, in-window offers</span><span>Validate each (min order · eligibility · targeting · limits)</span><span>Sort by priority, then discount</span><span>Best offer applied</span><span>Redemption recorded (idempotent per order)</span></div>
+      </div><div class="wire-cap">Figure — at checkout the storefront asks the offers API for the best eligible offer; codeless offers apply automatically, a code validates one specific offer, and redemption is recorded once per order.</div></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Warning — only Active, in-window offers reach customers</div>
+          <p>An offer set to <b>Draft</b>, <b>Paused</b> or <b>Archived</b>, one whose <b>start date</b> has not arrived, one past its <b>end date</b>, or one that has hit its <b>usage limit</b> will never apply at checkout — even if its code is typed. If a customer says a promotion “isn’t working”, check the Status badge and the schedule first.</p>
+        </div>
+      </div>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">Best Practice — build in Draft, schedule the launch, cap the risk</div>
+          <p>Create the offer as a <b>Draft</b>, review the numbers, then set it <b>Active</b> with a future <b>Start date</b> so it goes live on its own. Always set a <b>Max discount</b> on percentage offers and a <b>Usage limit</b> on aggressive ones so a single promotion can never give away more than you planned. Give competing codeless offers distinct <b>priorities</b> so the intended one wins.</p>
+        </div>
+      </div>
+
+      <div class="call danger">
+        <span class="ci">⛔</span>
+        <div class="cbody">
+          <div class="ctitle">Caution — a live code cannot be reused elsewhere</div>
+          <p>Offer <b>codes are globally unique</b>. If you need the same wording on a new offer, either duplicate the existing one (the copy gets a “-COPY” code you can rename) or archive the old offer first. Deleting is a <b>soft delete</b> — the offer and its redemption history are kept and can be <b>Restored</b> — but the code stays reserved until then.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOTING + FAQ -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Troubleshooting &amp; FAQ</p>
+      <p class="sm">Common issues and answers.</p>
+    </div>
+    <div class="spec-body">
+
+      <h4>Troubleshooting</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>Amber/red banner instead of the “● Live” one; no data</td><td>The Next.js backend is offline, or your role can’t view offers</td><td>Start the backend; if it reads “403”, ask an Admin to grant offers/reports/customers view access.</td></tr>
+          <tr><td>“Only Marketing / Admin can manage offers (403).”</td><td>Your role has view but not <b>edit</b> on the offers module</td><td>Have a Super Admin, Admin or Marketing user make the change, or request the permission.</td></tr>
+          <tr><td>“Offer code … already exists.”</td><td>Another offer already uses that code (codes are unique)</td><td>Choose a different code, leave it blank for a codeless offer, or archive/rename the other offer.</td></tr>
+          <tr><td>Saving is blocked with “Enter an offer name.”</td><td>Name is empty or under 2 characters</td><td>Type a name of at least 2 characters.</td></tr>
+          <tr><td>Saving is blocked with “Enter a discount value greater than zero.”</td><td>The Value field is 0 or empty</td><td>Enter a positive number; for %, remember it is capped at 100%.</td></tr>
+          <tr><td>Offer shows <b>Scheduled</b>, customers can’t use it</td><td>Its Start date is still in the future</td><td>Expected — it will flip to Active on that date, or clear the Start date to launch now.</td></tr>
+          <tr><td>Active offer never applies at checkout</td><td>Below min order, wrong products/plan, first-order-only, or usage limit hit</td><td>Check Min order, product/plan slugs, Eligibility and Usage limit against the cart.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Frequently asked questions</h4>
+      <h4>Q: What’s the difference between an Offer and a Coupon?</h4>
+      <p>They share the same discount engine and rules. Offers add a type, a priority, a campaign name and a lifecycle, and — crucially — can be <b>codeless</b> so they apply automatically at checkout. Use Coupons for a plain typed code; use Offers when you want auto-apply, campaign reporting, or several promotions competing by priority.</p>
+
+      <h4>Q: If two offers both qualify for a cart, which one wins?</h4>
+      <p>The one with the higher <b>Priority</b>. If priorities tie, the one giving the larger discount wins. Set distinct priorities to control the outcome.</p>
+
+      <h4>Q: How do I run a limited festival promotion safely?</h4>
+      <p>Create it as a Draft with type <b>Festival</b> and a campaign name, set the <b>Discount type/Value</b>, add a <b>Max discount</b> cap and a <b>Usage limit</b>, set the <b>Start</b> and <b>End</b> dates, then set Status to <b>Active</b> and save. It goes live on the start date and expires on its own.</p>
+
+      <h4>Q: I deleted an offer by mistake — is the data gone?</h4>
+      <p>No. Delete is a soft delete: the offer and its redemption history remain in the database. Open it (list deleted offers) and click <b>Restore</b> to bring it back as a Draft.</p>
+
+      <h4>Q: Does editing an offer change orders that already used it?</h4>
+      <p>No. Past redemptions are recorded with the discount that was given at the time; editing only affects future checkouts.</p>
+
+    </div>
+  </div>
+
+</section>

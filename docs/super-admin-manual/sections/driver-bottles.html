@@ -1,0 +1,204 @@
+<section class="sheet" id="driver-bottles">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Delivery Executive · Bottle Collection</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Delivery Executive</span></div>
+  <h2 class="section-title">Bottle Collection</h2>
+  <p class="lead">The delivery executive's task list for picking up empty glass bottles along today's route — a count-and-confirm screen whose totals feed straight into each customer's bottle ledger and reward points.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where this screen sits</div><p>Bottle Collection is a page inside the <b>Delivery Executive portal</b> (surface <code>driver</code>), not the admin console. Its manifest key is <code>driver/bottles</code> and it lives at <span class="navpath">/driver/bottles.html</span>. The executive reaches it from the driver navigation under <b>Tasks</b>. A <span class="pill role">Super Admin</span> normally looks at this screen to understand what an executive sees in the field, or while helping an executive over the phone; the same numbers reconcile against the customer's <span class="navpath">/account/bottles.html</span> ledger and the warehouse view under <span class="navpath">Admin → Catalogue → Bottle Inventory</span>. This is a <b>reference and count</b> screen — the empties count is actually written when the executive marks the stop delivered (see the Workflow).</p></div></div>
+
+  <!-- ============================ SCREEN 1 ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Bottle Collection task page</p><p class="sm">Today's empties dashboard plus the route stop list, so the executive knows how many bottles to pick up and from whom.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Show the executive, at a glance, how many empty bottles are due for collection today, how many have already been collected, how many remain, and how many were damaged — then let them work stop-by-stop down the day's route.</span></div>
+
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Delivery Executive</span> (sees only their own assigned route — the API resolves the <code>Driver</code> record from the signed-in user id) · <span class="pill role">Super Admin</span> may open the driver portal to view the same page</span>
+      <span class="m"><b>Path</b> <span class="navpath">Driver Portal → Tasks → Bottle Collection</span></span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Route</b> <span class="navpath">/driver/bottles.html</span></span>
+      <span class="m"><b>Manifest key</b> <code>driver/bottles</code></span>
+      <span class="m"><b>KPI source</b> <span class="navpath">GET /api/driver/summary</span></span>
+      <span class="m"><b>Stops source</b> <span class="navpath">GET /api/driver/route</span></span>
+    </div>
+
+    <div class="spec-body">
+
+      <!-- Wireframe -->
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Bottle Collection — <b>Header</b> · "Empties to pick up on today's route"</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Page header</b><span>Title "Bottle Collection" and the sub-line "Empties to pick up on today's route." No action button on this page.</span></div>
+          <div class="wf-cell"><b>KPI strip (4 cards)</b><span>To collect · Collected · Remaining · Damaged. Big number + label per card (the <code>kpis</code> block). Numbers reflect today's route totals.</span></div>
+          <div class="wf-cell"><b>Today's stops table</b><span>The route stop list — # · Customer · Address · Item · Payment · Status. No search toolbar and no pager (one continuous list for the day).</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Bottle Collection screen (three stacked regions: header, KPI strip, stop list).</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">This page shares the route stop list</div><p>The table on Bottle Collection is the same <code>driverStops</code> dataset used by <b>Today's Route</b> and <b>Deliveries</b> — it is declared <code>tbl("driverStops",{toolbar:false,pager:false})</code>. It therefore has <b>no dedicated "bottles" column</b>: it is a cross-reference of the day's stops so the executive can see which customer is next. The actual per-stop empties count is entered on the <b>Delivery Detail / mark-delivered</b> step, which is where the number is captured and saved (documented in Screen 2). Think of this page as "how many, and where", and the delivery step as "record what I collected here".</p></div></div>
+
+      <!-- KPI cards -->
+      <h4>The four KPI cards</h4>
+      <p>The KPI strip is the <code>kpis</code> block with four hard-declared items in the manifest. In a live signed-in session those figures are the executive's real day totals, computed server-side by <span class="navpath">GET /api/driver/summary</span> from every <code>Delivery</code> assigned to this driver for today.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Card</th><th>What it shows</th><th>How it is calculated (real code)</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>To collect</b></td><td>Total empty bottles still expected across today's <i>un-finished</i> stops.</td><td><code>bottlesToCollect</code> = sum of <code>bottleCount</code> over stops that are <b>not</b> DELIVERED, FAILED or SKIPPED.</td><td>31</td></tr>
+          <tr><td><b>Collected</b></td><td>Empties already picked up today.</td><td><code>bottlesCollectedToday</code> = sum of <code>bottlesIn</code> over stops already marked DELIVERED.</td><td>26</td></tr>
+          <tr><td><b>Remaining</b></td><td>Empties still to be collected before the route is done.</td><td>The gap between "To collect" and what has been collected on completed stops — the still-pending balance for the day.</td><td>5</td></tr>
+          <tr><td><b>Damaged</b></td><td>Bottles that came back broken / could not be collected intact.</td><td>Not returned by the summary API (no "damaged" total exists server-side). A damaged bottle is handled as a delivery <b>issue</b> ("Damaged bottle") and, if written off, as a <code>LOST</code> event on the customer's bottle ledger — see the callout below.</td><td>0</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — "Damaged" is not an automatic counter</div><p>The backend bottle ledger tracks five events — <code>ISSUED</code>, <code>RETURNED</code>, <code>LOST</code>, <code>DEPOSIT_CHARGED</code>, <code>DEPOSIT_REFUNDED</code> — and the driver summary returns only "to collect" and "collected today". There is <b>no separate "damaged" tally</b>. The <b>Damaged</b> KPI is a placeholder that stays at 0 unless a damaged bottle is explicitly recorded through the stop's <b>issue report</b> (the "Damaged bottle" reason) and later written off as a <code>LOST</code> ledger row by operations. Do not read a non-zero "Damaged" figure as an audited financial number — trace it to the issue report and the <code>LOST</code> row.</p></div></div>
+
+      <!-- Table spec -->
+      <h4>Today's stops — table specification</h4>
+      <p>Declared as <code>tbl("driverStops",{toolbar:false,pager:false})</code>: it runs on the shared DataTable engine but with the toolbar and pager switched off, so it reads as a plain, complete route list for the day.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Behaviour on this screen</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td><b>#</b> (stop sequence) · <b>Customer</b> · <b>Address</b> · <b>Item</b> (e.g. 500 ml / 1000 ml) · <b>Payment</b> (Prepaid or "₹70 COD") · <b>Status</b> (coloured badge).</td></tr>
+          <tr><td><b>Row order</b></td><td>By the route sequence the operations team set; the live API returns stops ordered by date (newest first) then <code>sequence</code> ascending.</td></tr>
+          <tr><td><b>Search</b></td><td>Hidden — the search box is part of the toolbar, which is off.</td></tr>
+          <tr><td><b>Facet filters</b></td><td>Hidden on this page. (The sibling <b>Deliveries</b> page turns filters on with All / Pending / Delivered.)</td></tr>
+          <tr><td><b>Sorting</b></td><td>Column-header sort still works client-side; the list is short enough that most executives just read top-to-bottom.</td></tr>
+          <tr><td><b>Pagination</b></td><td>Off — every stop for the day shows on one page.</td></tr>
+          <tr><td><b>Export</b></td><td>Hidden (export lives in the toolbar, which is off).</td></tr>
+          <tr><td><b>Row actions</b></td><td>None on this reference page. Collection is recorded from the delivery step (Screen 2).</td></tr>
+          <tr><td><b>Empty state</b></td><td>When there is no live route (not signed in as a real executive, or no route assigned today) the list shows an empty state rather than any demo data.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Reading the Status badge</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Badge</th><th>Colour</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><b>Delivered</b></td><td>green</td><td>Stop is done; its empties (if any) have been recorded.</td></tr>
+          <tr><td><b>Next stop</b></td><td>amber</td><td>The stop the executive is heading to now.</td></tr>
+          <tr><td><b>Pending</b></td><td>grey</td><td>Not yet reached.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- ============================ SCREEN 2 ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Recording empties at a stop</p><p class="sm">The count-and-confirm step where the executive actually logs how many empty bottles they collected from a customer.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Capture the real number of empties picked up (and full bottles handed over) at one stop, so the customer's bottle ledger and reward points update the moment the stop is marked delivered.</span></div>
+
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Delivery Executive</span> (own stops only) · <span class="pill role">Super Admin</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Driver Portal → Deliveries → open a stop → Bottles &amp; remarks</span></span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Save endpoint</b> <span class="navpath">PATCH /api/driver/deliveries/[id]</span></span>
+      <span class="m"><b>Also writes</b> <code>BottleLedger</code> (ISSUED / RETURNED) + DOODLY Pure Rewards points</span>
+    </div>
+
+    <div class="spec-body">
+
+      <!-- Wireframe -->
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Delivery Detail — <b>Bottles &amp; remarks</b> panel</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Empties to collect</b><span>A read-out of how many empty bottles this customer is expected to return (from the delivery's <code>bottleCount</code>).</span></div>
+          <div class="wf-cell"><b>Empty bottles collected — stepper</b><span>A − / count / + control ("Collected empty bottle"). The executive taps to match the real number picked up; it is capped at the expected count.</span></div>
+          <div class="wf-cell"><b>Remarks</b><span>Free-text note, e.g. "left with guard". Saved as <code>customerRemark</code> (max 200 characters).</span></div>
+          <div class="wf-cell"><b>Capture proof photo</b><span>Attach a proof-of-delivery photo for the stop.</span></div>
+          <div class="wf-cell"><b>Mark delivered</b><span>The confirm action. It flips the stop to DELIVERED, stamps the time, and posts the ledger.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Bottles &amp; remarks panel on the delivery step, where the empties count is entered and saved.</div></div>
+
+      <!-- Field table -->
+      <h4>Fields saved to the delivery</h4>
+      <p>When the stop is updated, the portal sends a <code>PATCH</code> to <span class="navpath">/api/driver/deliveries/[id]</span>. Every field is validated server-side (Zod schema) before it is stored. All fields are optional on a partial update — the executive usually only touches the empties count and, occasionally, a remark.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>bottlesIn</b></td><td>Empty bottles collected <i>from</i> the customer at this stop.</td><td>Whole number 0–99</td><td class="t-opt">Opt.</td><td><code>z.number().int().min(0).max(99)</code>. On delivery, written as a <code>RETURNED</code> ledger row (qty = bottlesIn) against the customer.</td><td>1</td></tr>
+          <tr><td><b>bottlesOut</b></td><td>Full bottles handed <i>to</i> the customer at this stop.</td><td>Whole number 0–99</td><td class="t-opt">Opt.</td><td><code>int 0–99</code>. If left blank when the stop becomes DELIVERED, it defaults to the delivery's <code>bottleCount</code>. Written as an <code>ISSUED</code> ledger row.</td><td>1</td></tr>
+          <tr><td><b>cashCollected</b></td><td>COD cash taken at the stop (for a COD order).</td><td>Whole number ≥ 0, in paise</td><td class="t-opt">Opt.</td><td><code>int min(0)</code>. Stored on the delivery and reconciled on the Cash Collection page.</td><td>7000 (= ₹70)</td></tr>
+          <tr><td><b>customerRemark</b></td><td>Note about how the drop-off went.</td><td>Text, trimmed, up to 200 chars</td><td class="t-opt">Opt.</td><td><code>string().trim().max(200)</code>.</td><td>left with guard</td></tr>
+          <tr><td><b>status</b></td><td>The stop's workflow state.</td><td>ACCEPTED · PACKED · OUT_FOR_DELIVERY · ON_THE_WAY · REACHED · DELIVERED · FAILED · SKIPPED</td><td class="t-opt">Opt.</td><td>Enum. Setting it to <b>DELIVERED</b> (from any other state) stamps <code>deliveredAt</code> and triggers the ledger + points writes.</td><td>DELIVERED</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Bottles out vs. bottles in</div><p><b>bottlesOut</b> = the full bottles you delivered (the customer <i>receives</i> them → an <code>ISSUED</code> row, defaulting to the stop's <code>bottleCount</code>). <b>bottlesIn</b> = the empties you picked up (the customer <i>returns</i> them → a <code>RETURNED</code> row). Bottle Collection is about the <b>bottlesIn</b> side: how many empties came back.</p></div></div>
+
+      <!-- Buttons -->
+      <h4>Buttons &amp; controls</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button / control</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>−</b> / <b>+</b> stepper ("Empty bottles collected")</td><td>Decreases / increases the collected count. Floored at 0 and capped at the number of empties expected for the stop.</td><td>Adjusts the value locally; sent as <code>bottlesIn</code> on the next save. Nothing is written until the stop is confirmed.</td><td><span class="pill role">Delivery Executive</span></td></tr>
+          <tr><td><b>Collected empty bottle</b> (checkbox, on the simple detail panel)</td><td>Quick yes/no confirmation that one empty was picked up.</td><td>Feeds the same <code>bottlesIn</code> field.</td><td><span class="pill role">Delivery Executive</span></td></tr>
+          <tr><td><b>Remarks</b> (textarea)</td><td>Records a short note about the drop-off.</td><td>Saved as <code>customerRemark</code>.</td><td><span class="pill role">Delivery Executive</span></td></tr>
+          <tr><td><b>Capture proof photo</b></td><td>Attaches a proof-of-delivery image to the stop.</td><td>Proof-of-delivery capture on the delivery record.</td><td><span class="pill role">Delivery Executive</span></td></tr>
+          <tr><td><b>Mark delivered</b> (confirm)</td><td>Completes the stop. This is the moment the empties count becomes final.</td><td><code>PATCH …status=DELIVERED</code> → stamps <code>deliveredAt</code>, writes <code>ISSUED</code> (bottlesOut) and <code>RETURNED</code> (bottlesIn) ledger rows for the customer, and awards Pure Rewards points.</td><td><span class="pill role">Delivery Executive</span></td></tr>
+          <tr><td><b>Report issue</b> (e.g. "Damaged bottle")</td><td>Logs a problem at the stop instead of a clean collection.</td><td>Raises a delivery issue; a written-off bottle later becomes a <code>LOST</code> ledger row.</td><td><span class="pill role">Delivery Executive</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- Workflow -->
+      <h4>What happens when a stop is marked delivered</h4>
+      <p>The empties number the executive entered is not just a note — marking the stop delivered posts permanent ledger entries and reward points, all inside one server transaction.</p>
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — collecting empties and posting the ledger</div>
+        <div class="wf-flow"><span>Arrive at stop</span><span>Count empties, set the stepper (bottlesIn)</span><span>Add remark / proof photo</span><span>Mark delivered → PATCH status=DELIVERED</span><span>deliveredAt stamped</span><span>ISSUED (bottlesOut) + RETURNED (bottlesIn) written to customer ledger</span><span>Pure Rewards points: bottle-return + 12-stop streak bonus</span></div>
+      </div><div class="wire-cap">Figure — the delivery confirmation posts the bottle ledger and reward points for the customer.</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>On DELIVERED, the server…</th><th>Detail (real code)</th></tr></thead>
+        <tbody>
+          <tr><td>Stamps the delivery time</td><td>Sets <code>deliveredAt = now</code> (only on the first transition into DELIVERED).</td></tr>
+          <tr><td>Issues full bottles</td><td>If <code>bottlesOut &gt; 0</code>, writes a <code>BottleLedger</code> row <code>event: ISSUED, qty: bottlesOut</code> for the customer.</td></tr>
+          <tr><td>Records returned empties</td><td>If <code>bottlesIn &gt; 0</code>, writes a <code>BottleLedger</code> row <code>event: RETURNED, qty: bottlesIn</code>.</td></tr>
+          <tr><td>Awards return points</td><td>Best-effort <code>earn.bottleReturn(customer, deliveryId, bottlesIn)</code> — idempotent, non-blocking.</td></tr>
+          <tr><td>Awards a streak bonus</td><td>Every 12 consecutive DELIVERED stops on the subscription grants a 200-point bonus (<code>earn.deliveryStreak</code>).</td></tr>
+          <tr><td>Writes an audit entry</td><td><code>action: "delivery.delivered"</code>, actor role <code>delivery_executive</code>, with request context.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — the count is final once you confirm the stop</div><p>Marking the stop delivered writes the <code>RETURNED</code> row to the customer's <b>append-only</b> ledger and stamps <code>deliveredAt</code>. The ledger is never edited in place — a wrong count can only be corrected by posting a new, opposite entry through operations. <b>Count the empties in front of the customer and set the stepper correctly before you tap "Mark delivered".</b></p></div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">You can only touch your own stops</div><p>The endpoint first resolves the <code>Driver</code> record for the signed-in user, then loads the delivery <b>where <code>driverId</code> matches that driver</b>. A stop that belongs to another executive returns "Delivery not found on your route." A user with no linked delivery profile gets a 403 "No delivery profile is linked to this account."</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================ SHARED: best practice, troubleshooting, faq ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Operating notes</p><p class="sm">Best practice, troubleshooting and common questions for Bottle Collection.</p></div>
+    <div class="spec-body">
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Work the route in sequence and clear the <b>Remaining</b> KPI to zero before you head back to the hub. Because "To collect" is the sum of expected empties over <i>un-finished</i> stops, any bottle you forget to log stays counted against the customer forever (an <code>ISSUED</code> with no matching <code>RETURNED</code>) and inflates their pending-bottle balance. If a customer genuinely has no empty to give today, still mark the stop delivered with <code>bottlesIn = 0</code> so the day reconciles cleanly.</p></div></div>
+
+      <h4>Troubleshooting</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>The stop list is empty and KPIs read 0.</td><td>Not signed in as a real executive, or no route has been assigned for today.</td><td>Confirm the executive is logged in with a <code>delivery_executive</code> account and that operations has assigned/generated today's route.</td></tr>
+          <tr><td>Saving a stop fails with "No delivery profile is linked to this account."</td><td>The user has no <code>Driver</code> record.</td><td>An Admin must create the driver profile (Admin → Delivery → Drivers) before the account can update stops.</td></tr>
+          <tr><td>"Delivery not found on your route."</td><td>The stop belongs to a different executive, or the delivery id is wrong.</td><td>Only stops assigned to this executive can be updated — reload the route so the id list is current.</td></tr>
+          <tr><td>The empties stepper won't go higher.</td><td>The count is capped at the number of empties expected for that stop.</td><td>If the customer genuinely has extra bottles, log the expected amount and raise a "Damaged bottle" / mismatch issue for the rest rather than forcing the count.</td></tr>
+          <tr><td>Customer's pending-bottle count stays high after you collected empties.</td><td>The stop was marked delivered with <code>bottlesIn = 0</code> (empties not logged), so no <code>RETURNED</code> row was written.</td><td>Report it to operations; a corrective <code>RETURNED</code> entry is posted against the customer's ledger.</td></tr>
+          <tr><td>"Damaged" KPI shows a number nobody expected.</td><td>It is a placeholder, not an audited total (the summary API has no damaged field).</td><td>Trust the issue reports and the ledger's <code>LOST</code> rows for the real damaged/write-off picture.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Frequently asked questions</h4>
+      <h4>Q. What is the difference between "bottles out" and "bottles in"?</h4>
+      <p><b>Bottles out</b> are the full bottles you deliver — they create an <code>ISSUED</code> row and default to the stop's planned <code>bottleCount</code>. <b>Bottles in</b> are the empty bottles you collect back — they create a <code>RETURNED</code> row. Bottle Collection is about the "in" side: how many empties came home.</p>
+      <h4>Q. Does the customer get anything when I collect their empties?</h4>
+      <p>Yes. On delivery the system awards DOODLY Pure Rewards points for the bottles returned (<code>earn.bottleReturn</code>), and a 200-point bonus every 12 consecutive delivered stops on their subscription. That is why an accurate empties count matters to the customer, not just to inventory.</p>
+      <h4>Q. Can I fix a wrong empties count after I've marked the stop delivered?</h4>
+      <p>Not from the field — the bottle ledger is append-only. Ask operations to post an offsetting entry (for example a <code>RETURNED</code> to correct an under-count). This is why you should confirm the number with the customer before tapping "Mark delivered".</p>
+      <h4>Q. How do these numbers reach the customer and the warehouse?</h4>
+      <p>The <code>RETURNED</code> / <code>ISSUED</code> rows you post appear immediately on the customer's <span class="navpath">/account/bottles.html</span> ledger (their Pending and Deposit figures recompute from all-time totals), and the physical fleet is reconciled by operations under <span class="navpath">Admin → Catalogue → Bottle Inventory</span>.</p>
+      <h4>Q. Where do damaged or lost bottles go?</h4>
+      <p>They are not part of the clean "collected" count. Raise the stop's <b>issue report</b> with the "Damaged bottle" reason; if the bottle is written off, operations record it as a <code>LOST</code> ledger event, which reduces the customer's pending bottles without counting as a return.</p>
+
+    </div>
+  </div>
+</section>

@@ -1,0 +1,272 @@
+<section class="sheet" id="admin-audit">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · System · Audit Logs</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · System</span></div>
+  <h2 class="section-title">Audit Logs</h2>
+  <p class="lead">An append-only, tamper-evident record of every sensitive action across DOODLY — who did what, when, from where and how — with change tracking (old → new value), a live dashboard, powerful search and filters, a per-user activity timeline, sensitive-activity alerts, CSV / Excel / PDF export and configurable retention.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — what the Audit Log is (and is not)</div><p>The Audit Log is the platform's <b>black box recorder</b>. It captures a rich record for every meaningful event — logins and failed logins, user and role changes, permission grants, order status changes, payments, price and GST edits, report exports, deliveries, procurement and more. Records are <b>append-only</b>: they can never be edited or deleted through the application. There is deliberately <b>no "delete" and no "edit" button anywhere on this screen</b> — the only way records leave the active log is retention/archive, and even archived records can be restored. This is what makes the log trustworthy for investigations and compliance.</p></div></div>
+
+  <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">How the records get created</div><p>You never write audit records by hand. Every module in DOODLY calls one central logger (<code>DOODLY_RBAC.audit()</code> in the browser, <code>lib/auth/audit.ts</code> on the server), which auto-classifies each action into a <b>Module · Action · Entity</b>, extracts any <b>old → new</b> change out of the description, stamps the actor, role, department, IP, browser, OS, device and session, and appends it. In production this screen reads the <b>real Postgres <code>AuditLog</code> table</b> (up to the most recent 2,000 records) through <span class="navpath">/api/admin/audit-logs</span> and mirrors it into the viewer. A live green banner at the top confirms the source and record count; opening the screen is itself audited as an <code>audit.view</code> event.</p></div></div>
+
+  <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Who can open this screen</div><p>Audit Logs is a <b>System</b> module reserved for the highest trust levels. By default <span class="pill role">Super Admin</span> has full access and <span class="pill role">Admin</span> has <b>view-only</b> access; every other role is denied and does not even see the menu item. <b>Exporting</b> the log (CSV / Excel / PDF) and the <b>Retention</b> tab are <b>Super Admin only</b> — an Admin can read and search but cannot export or change the retention policy. The backend enforces the same rule and returns <b>403 Forbidden</b> to anyone without the <code>auditLogs · view</code> permission.</p></div></div>
+
+  <!-- ============================================================ SCREEN 1: DASHBOARD -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Screen 1 — Audit Dashboard</p><p class="sm">Today's activity health at a glance, plus sensitive-activity alerts and a breakdown of where the activity is happening.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Answer "is anything unusual happening on the platform today?" in one look, then click any number to drill straight into the matching events.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> full · <span class="pill role">Admin</span> view-only</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Audit Logs → Dashboard</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Audit Logs — <b>Dashboard</b> · tabs: Dashboard · Activity Logs · User Timeline · Retention (Super Admin) · <b>Run tests</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Live source banner</b><span>"● Live — N audit record(s) from the DOODLY database … Append-only."</span></div>
+          <div class="wf-cell"><b>Stat cards (7)</b><span>Total Activities Today · Total Logins · Failed Logins · Data Modifications · Reports Downloaded · Orders Edited · System Changes — each clickable</span></div>
+          <div class="wf-cell"><b>Sensitive activity alerts</b><span>Failed-login bursts, permission / role changes, deletions, config changes, high export volume (last 24h)</span></div>
+          <div class="wf-cell"><b>Activity by module</b><span>Every module with its total event count, most-active first, with an icon</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 1 — Dashboard tab: a seven-card stat strip above the alerts panel and the module-activity panel.</div></div>
+
+      <h4>Stat cards</h4>
+      <p>All seven cards count <b>today's</b> events only, and every card is a button — clicking it jumps to the <b>Activity Logs</b> tab pre-filtered to those events.</p>
+      <div class="twrap"><table><thead><tr><th>Stat card</th><th>What it counts (today)</th><th>Click jumps to…</th></tr></thead><tbody>
+        <tr><td>Total Activities Today</td><td>Every audit record stamped with today's date</td><td>Logs, cleared filters</td></tr>
+        <tr><td>Total Logins</td><td>Successful sign-ins (<code>auth.login</code>)</td><td>Logs filtered Action = Login</td></tr>
+        <tr><td>Failed Logins</td><td>Failed sign-ins (<code>auth.login_failed</code>) — the card turns <b>amber</b> when above zero</td><td>Logs filtered Action = Failed Login</td></tr>
+        <tr><td>Data Modifications</td><td>Create / update / edit / delete / change / status / adjust / set / reset events (excluding Authentication and Reports)</td><td>Logs filtered Status = Success</td></tr>
+        <tr><td>Reports Downloaded</td><td>Events in the <b>Reports</b> module (exports, downloads, prints)</td><td>Logs filtered Module = Reports</td></tr>
+        <tr><td>Orders Edited</td><td>Orders-module events that edit / update / change status / cancel</td><td>Logs filtered Module = Orders</td></tr>
+        <tr><td>System Changes</td><td>Business Settings events (GST, pricing, referral, settings, invoice config)</td><td>Logs filtered Module = Business Settings</td></tr>
+      </tbody></table></div>
+
+      <h4>Sensitive activity alerts</h4>
+      <p>This panel scans the <b>last 24 hours</b> and raises a coloured alert whenever a risky pattern appears. Each alert is clickable and drops you into the Activity Logs pre-searched for that pattern. When nothing is flagged it reads "No sensitive activity in the last 24 hours."</p>
+      <div class="twrap"><table><thead><tr><th>Alert</th><th>Trigger (rolling 24h)</th><th>Tone</th><th>Meaning</th></tr></thead><tbody>
+        <tr><td>Failed login attempts</td><td>A single user reaches <b>3 or more</b> failed logins</td><td>Red</td><td>Possible brute-force / account takeover attempt</td></tr>
+        <tr><td>Permission change(s)</td><td>Any <code>permission.*</code> event</td><td>Amber</td><td>Someone's access rights were granted or revoked — review</td></tr>
+        <tr><td>Role change(s)</td><td>Any <code>role.*</code> event</td><td>Amber</td><td>Roles assigned or modified</td></tr>
+        <tr><td>Deletion(s)</td><td>Any <code>user.delete</code> or <code>*.delete</code> event</td><td>Red</td><td>Records were deleted in the last 24 hours</td></tr>
+        <tr><td>System configuration change(s)</td><td>Any Business Settings event</td><td>Amber</td><td>GST, pricing, settings or referral configuration changed</td></tr>
+        <tr><td>Exports / downloads</td><td><b>5 or more</b> Reports or <code>audit.export</code> events</td><td>Blue</td><td>Unusually high data-export volume — check for data exfiltration</td></tr>
+      </tbody></table></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — start your day on this tab</div><p>Open the Dashboard first thing each morning. If the <b>Failed Logins</b> card is amber or a red alert is showing, click straight through and investigate before doing anything else. A 30-second daily glance catches most access problems while they are still small.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2: ACTIVITY LOGS -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Screen 2 — Activity Logs</p><p class="sm">The full searchable, filterable, paginated table of every audit record, with export and a click-through detail card.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Find and inspect any individual event — trace who changed a price, when a customer record was edited, which device a login came from — and export the result for evidence.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> view + export · <span class="pill role">Admin</span> view only (Export buttons are blocked by the <b>export</b> permission)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Audit Logs → Activity Logs</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Activity Logs — <b>search + filters + table</b> · CSV · Excel · PDF</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Search box</b><span>Free text over user, action, module, description, entity, old/new value and audit ID</span></div>
+          <div class="wf-cell"><b>Filter row (8)</b><span>User · Role · Module · Action · Status · Entity Type · Entity ID · From / To dates</span></div>
+          <div class="wf-cell"><b>Count + Clear + Export</b><span>"N events" · Clear filters · CSV / Excel / PDF</span></div>
+          <div class="wf-cell"><b>Data table (8 columns)</b><span>When · User · Module · Action · Entity · Change · Status · Device / IP</span></div>
+          <div class="wf-cell"><b>Pager</b><span>25 / 50 / 100 rows per page · ‹ Prev / Next › · "Page X of Y"</span></div>
+          <div class="wf-cell"><b>Row click → detail card</b><span>Opens the full-record modal (see Screen 3)</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 2 — Activity Logs tab: a keyword box, an eight-field filter row, an eight-column table and a pager with export buttons.</div></div>
+
+      <h4>Filters — field reference</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Search</td><td>Free-text keyword match across the record</td><td>Any text</td><td class="t-opt">Opt.</td><td>Case-insensitive; matches user, action, module, description, entity type/ID, old value, new value and audit ID; re-filters as you type</td><td><code>C-4821</code></td></tr>
+        <tr><td>User</td><td>Restrict to one actor</td><td>Any user seen in the log</td><td class="t-opt">Opt.</td><td>Dropdown auto-built from users present in the log, most-active first</td><td>Aarav Sharma</td></tr>
+        <tr><td>Role</td><td>Restrict to one role</td><td>Super Admin, Admin, Accountant…</td><td class="t-opt">Opt.</td><td>Options come from the RBAC role list; matches the record's stored role key</td><td>Accountant</td></tr>
+        <tr><td>Module</td><td>Restrict to one functional area</td><td>Authentication, User Management, Orders, Payments, Reports, Business Settings…</td><td class="t-opt">Opt.</td><td>Built from the modules present in the log</td><td>Payments</td></tr>
+        <tr><td>Action</td><td>Restrict to one action label</td><td>Login, Failed Login, User Created, Order Status Changed…</td><td class="t-opt">Opt.</td><td>Distinct action labels found in the log, alphabetical</td><td>Failed Login</td></tr>
+        <tr><td>Status</td><td>Outcome of the action</td><td>Success · Failed</td><td class="t-opt">Opt.</td><td>Failed is set automatically for <code>*_failed</code> / <code>*.fail</code> actions</td><td>Failed</td></tr>
+        <tr><td>Entity Type</td><td>Restrict to one kind of object</td><td>Session, User, Customer, Order, Subscription, Payment, Report, Stock, Purchase, Delivery, Setting, Business, Expense, Audit</td><td class="t-opt">Opt.</td><td>Fixed list of entity types the classifier assigns</td><td>Order</td></tr>
+        <tr><td>Entity ID</td><td>Find events touching one specific record</td><td>Any partial ID</td><td class="t-opt">Opt.</td><td>Case-insensitive "contains" match on the record's entity ID</td><td>C-4821</td></tr>
+        <tr><td>From</td><td>Start of the date range</td><td>Date</td><td class="t-opt">Opt.</td><td>Keeps events on or after this date (compares the record's date part)</td><td>2026-07-01</td></tr>
+        <tr><td>To</td><td>End of the date range</td><td>Date</td><td class="t-opt">Opt.</td><td>Keeps events on or before this date</td><td>2026-07-12</td></tr>
+      </tbody></table></div>
+
+      <h4>Table specification</h4>
+      <div class="twrap"><table><thead><tr><th>Property</th><th>Detail</th></tr></thead><tbody>
+        <tr><td>Columns (8)</td><td><b>When</b> (timestamp + audit ID beneath, e.g. <code>AUD-00000123</code>) · <b>User</b> (name + role beneath) · <b>Module</b> (icon + name) · <b>Action</b> · <b>Entity</b> (type + entity ID beneath) · <b>Change</b> (old → new, or "—") · <b>Status</b> (green Success / red Failed badge) · <b>Device / IP</b> (device + IP beneath)</td></tr>
+        <tr><td>Search</td><td>Single box; case-insensitive across user, action, module, description, entity type, entity ID, old/new value and audit ID</td></tr>
+        <tr><td>Filters</td><td>Eight: User · Role · Module · Action · Status · Entity Type · Entity ID · From / To (all combine with AND)</td></tr>
+        <tr><td>Sorting</td><td>Fixed — newest event first (append-only order); columns are not manually re-sortable</td></tr>
+        <tr><td>Pagination</td><td>25 rows per page by default; page-size selector offers <b>25 / 50 / 100</b>; ‹ Prev / Next › with "Page X of Y"</td></tr>
+        <tr><td>Exports</td><td><b>CSV</b>, <b>Excel</b> (.xls) and <b>PDF</b> (print dialog) — export the <b>currently filtered</b> rows, not just the visible page (Super Admin only)</td></tr>
+        <tr><td>Row actions</td><td>Click any row to open the full-record detail card (Screen 3). There are no edit / delete row actions by design; an empty result shows "No matching audit events."</td></tr>
+      </tbody></table></div>
+
+      <h4>Buttons on this screen</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td>Clear filters</td><td>Resets the keyword box and all eight filters, returns to page 1</td><td>Client-side state reset; re-renders the full list</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+        <tr><td>‹ Prev / Next ›</td><td>Moves one page back or forward through the filtered results</td><td>Client-side paging over the filtered set</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+        <tr><td>Rows-per-page (25 / 50 / 100)</td><td>Changes how many events show per page</td><td>Client-side; resets to page 1</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+        <tr><td>CSV</td><td>Downloads the filtered rows as <code>audit-log.csv</code> (18 columns)</td><td>Builds CSV in the browser; posts an <code>audit.export</code> event so the export is itself logged</td><td><span class="pill role">Super Admin</span></td></tr>
+        <tr><td>Excel</td><td>Downloads the filtered rows as <code>audit-log.xls</code></td><td>Builds an Excel-compatible HTML table; logs <code>audit.export</code></td><td><span class="pill role">Super Admin</span></td></tr>
+        <tr><td>PDF</td><td>Opens the browser print dialog to save the log as PDF</td><td>Native print; logs <code>audit.export</code></td><td><span class="pill role">Super Admin</span></td></tr>
+        <tr><td>Run tests</td><td>Runs the built-in self-check suite and shows an "X/Y tests" badge (green when all pass)</td><td>In-memory unit tests of classify / change-tracking / filtering / append-only / performance; snapshots and restores storage — writes nothing permanent</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+      </tbody></table></div>
+
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — exports are sensitive and are themselves audited</div><p>The moment you press CSV, Excel or PDF, DOODLY writes an <code>audit.export</code> record capturing who exported how many records in which format — so the act of taking data out of the platform is permanently on the record. Treat every export as sensitive customer/business data: do not email it, and delete local copies once the investigation is closed. Repeated exports also raise the blue "high export volume" alert on the Dashboard.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3: FULL-RECORD DETAIL CARD -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Screen 3 — Full-Record Detail Card</p><p class="sm">The complete who / what / when / where / how of a single audit event, opened by clicking any row.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Show every captured field for one event in a clean read-only card so you can verify exactly what happened, from which device and session.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> (read-only — no edit controls exist)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Audit Logs → Activity Logs → (click a row)</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Detail card — <b>Action + Status</b> · Audit ID · timestamp · ✕ close</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Who</b><span>User · Role · Department</span></div>
+          <div class="wf-cell"><b>What</b><span>Module · Action · Action key · Entity type · Entity ID</span></div>
+          <div class="wf-cell"><b>Change</b><span>Old value → New value (highlighted, only when present)</span></div>
+          <div class="wf-cell"><b>Where / How</b><span>IP address · Browser · Operating system · Device · Session ID · Location</span></div>
+          <div class="wf-cell"><b>Context</b><span>Description · Status</span></div>
+          <div class="wf-cell"><b>Close</b><span>✕ top-right, "Close" button, click-outside or Esc key</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 3 — Full-record modal: a read-only breakdown of one event across who / what / change / where-how.</div></div>
+
+      <h4>Every field on the detail card</h4>
+      <div class="twrap"><table><thead><tr><th>Field</th><th>What it tells you</th><th>Example</th></tr></thead><tbody>
+        <tr><td>User</td><td>The person (or "System") who performed the action</td><td>Rohan Mehta</td></tr>
+        <tr><td>Role</td><td>The role they were acting as at the time</td><td>Accountant</td></tr>
+        <tr><td>Department</td><td>Department derived from the role</td><td>Finance</td></tr>
+        <tr><td>Module</td><td>Functional area the action belongs to</td><td>Payments</td></tr>
+        <tr><td>Action</td><td>Human-readable action label</td><td>Payment Received</td></tr>
+        <tr><td>Action key</td><td>The raw machine key that generated the record</td><td><code>b2b.order.pay</code></td></tr>
+        <tr><td>Entity type</td><td>The kind of object the action touched</td><td>Payment</td></tr>
+        <tr><td>Entity ID</td><td>The specific record's identifier</td><td>B2B-ORD-2026-000004</td></tr>
+        <tr><td>Change</td><td>Old value → New value, shown only when the event changed something</td><td>₹78 → ₹76</td></tr>
+        <tr><td>Description</td><td>Free-text summary of what happened</td><td>Dairy 5%→12%</td></tr>
+        <tr><td>IP address</td><td>Network address the action came from</td><td>192.168.24.15</td></tr>
+        <tr><td>Browser</td><td>Browser used</td><td>Chrome</td></tr>
+        <tr><td>Operating system</td><td>OS of the device</td><td>Windows 10/11</td></tr>
+        <tr><td>Device</td><td>Device class</td><td>Desktop</td></tr>
+        <tr><td>Session ID</td><td>The login session the action belonged to</td><td>S-1A2B3C4D</td></tr>
+        <tr><td>Location</td><td>Geo location if resolved (else "—")</td><td>—</td></tr>
+        <tr><td>Status</td><td>Outcome badge — green Success / red Failed</td><td>Success</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — the card is strictly read-only</div><p>There is no "Edit", "Correct" or "Delete" control on the detail card — only <b>Close</b>. That is intentional: if a record looks wrong, you do not fix it, you add a <b>new</b> corrective event elsewhere in the system. The original stays exactly as captured. Blank fields (like Location) are simply hidden rather than shown empty.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 4: USER TIMELINE -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Screen 4 — User Timeline</p><p class="sm">One person's entire activity history, grouped by day, with a quick behaviour summary.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Reconstruct exactly what a single staff member did and when — essential for onboarding reviews, incident investigations and off-boarding checks.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> view + export · <span class="pill role">Admin</span> view only</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Audit Logs → User Timeline</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">User Timeline — <b>user picker</b> · summary chips · Export timeline</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>User selector</b><span>Dropdown of everyone who appears in the log</span></div>
+          <div class="wf-cell"><b>Summary chips (5)</b><span>Logins · Logouts · Reports · Orders · Permission changes for the chosen user</span></div>
+          <div class="wf-cell"><b>Export timeline</b><span>Downloads this user's full activity as CSV (Super Admin)</span></div>
+          <div class="wf-cell"><b>Day groups</b><span>Events grouped under each day header (e.g. "Mon, 12 Jul 2026")</span></div>
+          <div class="wf-cell"><b>Event rows</b><span>Icon · action · module · description · old → new · time · status — click to open the detail card</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 4 — User Timeline tab: pick a user, read their five behaviour chips, then scroll their day-by-day event stream.</div></div>
+
+      <p>Choose a user and the screen rebuilds their entire history newest-day first. The five summary chips count that user's <b>Logins</b>, <b>Logouts</b>, <b>Reports</b> touched, <b>Orders</b> touched and <b>Permission changes</b> (role or permission events). Each event row shows the module icon, the action, the description and any old → new change, with the time and a Success/Failed badge on the right; clicking a row opens the same full-record detail card from Screen 3. If the user has no activity the screen reads "No activity for this user."</p>
+
+      <div class="twrap"><table><thead><tr><th>Element</th><th>Detail</th></tr></thead><tbody>
+        <tr><td>User selector</td><td>Lists every distinct user found in the log; defaults to the most-active user</td></tr>
+        <tr><td>Grouping</td><td>Events are bucketed by calendar day, days shown newest first, events within a day newest first</td></tr>
+        <tr><td>Summary chips</td><td>Logins · Logouts · Reports · Orders · Permission changes — computed live for the selected user</td></tr>
+        <tr><td>Row action</td><td>Click any event to open its full-record detail card</td></tr>
+        <tr><td>Export timeline</td><td>CSV of the selected user's complete timeline; itself logged as an <code>audit.export</code> event (Super Admin only)</td></tr>
+      </tbody></table></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — off-boarding checklist</div><p>Before you disable a departing employee's account, open their User Timeline and export it. This gives you a permanent, dated record of everything they did in their final weeks — invaluable if a question comes up months later. Pair it with the User Management "disable" step so access ends and the history is preserved in one sitting.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 5: RETENTION & ARCHIVE -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Screen 5 — Retention &amp; Archive</p><p class="sm">Control how long records stay in the active log and archive or restore older records. Super Admin only.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Keep the active log fast and manageable while never losing history — old records move to a restorable archive rather than being deleted.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> only — this tab is hidden from every other role</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Audit Logs → Retention</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Retention &amp; archive — <b>policy form + archive actions</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Retention period (days)</b><span>How long records stay in the active log (default 365)</span></div>
+          <div class="wf-cell"><b>Max active records</b><span>Cap on the active log; overflow auto-archives (default 5,000)</span></div>
+          <div class="wf-cell"><b>Save policy</b><span>Persists the two settings; logs a settings-update event</span></div>
+          <div class="wf-cell"><b>Archive old now</b><span>Immediately moves records older than the retention window to the archive</span></div>
+          <div class="wf-cell"><b>Restore archive (N)</b><span>Pulls every archived record back into the active log</span></div>
+          <div class="wf-cell"><b>Counters</b><span>"Active records: N · Archived: N"</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 5 — Retention tab: two policy fields, three action buttons and live active/archived counters.</div></div>
+
+      <h4>Policy fields</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Retention period (days)</td><td>How many days a record stays in the active log before it is eligible for archive</td><td>Whole number of days</td><td class="t-req">Yes</td><td>Falls back to <b>365</b> if left blank; applied on load and whenever "Archive old now" runs</td><td>365</td></tr>
+        <tr><td>Max active records</td><td>Hard cap on active-log size; anything beyond the cap overflows into the archive automatically as new records arrive</td><td>Whole number</td><td class="t-req">Yes</td><td>Falls back to <b>5,000</b> if left blank</td><td>5000</td></tr>
+      </tbody></table></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td>Save policy</td><td>Saves the retention period and max-records values</td><td>Persists the settings and writes a <code>settings.update</code> audit event ("Audit retention policy updated")</td><td><span class="pill role">Super Admin</span></td></tr>
+        <tr><td>Archive old now</td><td>Moves records older than the retention window out of the active log immediately</td><td>Runs the retention sweep; shows how many records were archived (or "Nothing to archive")</td><td><span class="pill role">Super Admin</span></td></tr>
+        <tr><td>Restore archive (N)</td><td>Brings all archived records back into the active log and re-sorts newest-first</td><td>Merges the archive into the active log and empties the archive; the count N shows how many are currently archived</td><td><span class="pill role">Super Admin</span></td></tr>
+      </tbody></table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Archiving is not deleting</div><p>"Archive old now" and the automatic overflow <b>never destroy data</b> — records move to a separate archive that "Restore archive" can pull back at any time. There is deliberately no way to permanently erase audit records from this screen. Retention only keeps the <b>active</b> log fast; for long-term compliance the manual also notes the design is future-ready for SIEM streaming and compliance reporting off the same append-only writer.</p></div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where retention runs automatically</div><p>Retention is also applied every time the Audit Logs screen is opened, so the active log is trimmed to your policy without anyone pressing a button. The two policy numbers therefore quietly govern the whole log's size in the background.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ WORKFLOW: HOW A RECORD IS BORN -->
+  <div class="diagram"><div class="wf">
+    <div class="wf-topbar">Workflow — from action to searchable audit record</div>
+    <div class="wf-flow"><span>User performs an action anywhere in DOODLY</span><span>Central logger is called (audit key + description)</span><span>Auto-classify → Module · Action · Entity · Sensitivity</span><span>Extract old → new change + stamp who / when / IP / device / session</span><span>Append (never edit/delete); dedupe identical events within 1.5s</span><span>Server writes the Postgres AuditLog row</span><span>Screen reads &amp; mirrors it, live, into Dashboard / Logs / Timeline</span></div>
+  </div><div class="wire-cap">Figure 6 — Every meaningful action is auto-classified, enriched and appended; the viewer only ever reads.</div></div>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — the data behind the screen</div><p>In production each row comes from the Postgres <code>AuditLog</code> table (fields: user, role, action, target, IP, device, browser, timestamp), joined to the user's name for display and served read-only from <span class="navpath">/api/admin/audit-logs</span> (views: <code>list</code>, <code>facets</code>, <code>logins</code>). A companion <code>LoginHistory</code> table records every sign-in success/failure and feeds the failed-login alerts. The API is guarded by the same <code>auditLogs · view</code> permission as the screen and returns <b>403</b> to anyone else.</p></div></div>
+
+  <!-- ============================================================ TROUBLESHOOTING -->
+  <h3>Troubleshooting</h3>
+  <div class="twrap"><table><thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead><tbody>
+    <tr><td>"Access restricted — you don't have permission to view audit logs"</td><td>Your role lacks the <code>auditLogs · view</code> permission (only Super Admin and, by default, Admin have it)</td><td>Ask a Super Admin to grant view access, or use an account that has it</td></tr>
+    <tr><td>Banner reads "⚠ Audit Logs are Super Admin only (403)"</td><td>The backend rejected the read because the signed-in role is not permitted</td><td>Sign in as Super Admin; the 403 comes from the API's permission check, not a bug</td></tr>
+    <tr><td>Banner reads "⚠ Backend offline — start next-app"</td><td>The Next.js API is not running, so the live database records can't be loaded</td><td>Start the backend (next-app); the screen still shows any locally cached records meanwhile</td></tr>
+    <tr><td>CSV / Excel / PDF buttons do nothing / toast "You don't have permission to export"</td><td>You are signed in as Admin (view-only); export needs the <code>export</code> permission</td><td>Export as Super Admin, or ask one to run the export</td></tr>
+    <tr><td>Expected event isn't in the log</td><td>An active filter or date range is hiding it, or it happened before your retention window</td><td>Click "Clear filters"; widen the From/To dates; if older than retention, use "Restore archive"</td></tr>
+    <tr><td>Two identical events seem to be missing / merged</td><td>The writer de-duplicates the same action + description by the same user within 1.5 seconds</td><td>This is intentional double-click protection; genuinely distinct events are always kept</td></tr>
+    <tr><td>Record shows the actor as "System" with role "system"</td><td>The action had no signed-in user (a background/server task), or the actor's name couldn't be resolved</td><td>Normal for automated events; check the IP, session and description for context</td></tr>
+  </tbody></table></div>
+
+  <!-- ============================================================ FAQ -->
+  <h3>Frequently asked questions</h3>
+  <h4>Can anyone edit or delete an audit record to cover their tracks?</h4>
+  <p>No. The log is append-only by design — there is no edit or delete control anywhere in the UI or the API, and even the built-in self-test verifies that no such function is exposed. Records can only be archived (and restored), never erased. That is exactly what makes the log trustworthy as evidence.</p>
+
+  <h4>What is the difference between "archive" and "delete"?</h4>
+  <p>Archiving moves older records out of the fast active log into a separate store to keep things responsive; "Restore archive" brings them all back. Nothing is destroyed. There is no delete operation for audit data at all.</p>
+
+  <h4>Why can an Admin see the log but not export it?</h4>
+  <p>Reading the log is low-risk; taking a copy of it out of the platform is sensitive. By default Admin gets the <code>view</code> permission but not <code>export</code>, so only a Super Admin can produce CSV/Excel/PDF files — and every such export is itself recorded as an <code>audit.export</code> event.</p>
+
+  <h4>Does opening this screen create a record?</h4>
+  <p>Yes. Simply opening Audit Logs writes an <code>audit.view</code> event ("Opened audit logs"), and every export writes an <code>audit.export</code> event. The audit trail even audits the people auditing it.</p>
+
+  <h4>How far back does the log go?</h4>
+  <p>The active log holds up to your "Max active records" cap (default 5,000) and records within your retention window (default 365 days); the live screen loads up to the most recent 2,000 from the database. Older records sit in the archive and can be restored when you need to investigate further back.</p>
+
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — use the log, don't just keep it</div><p>Make the Audit Log part of your weekly rhythm, not a box you open only after an incident. A five-minute weekly pass — glance at the Dashboard alerts, spot-check any permission or role changes, and skim exports — turns the log from passive insurance into active early warning. When something does go wrong, you will already know the log inside out.</p></div></div>
+</section>

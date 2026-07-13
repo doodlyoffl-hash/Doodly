@@ -1,0 +1,174 @@
+<section class="sheet" id="admin-referrals">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Growth · Referrals</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Growth</span></div>
+  <h2 class="section-title">Referral Management</h2>
+  <p class="lead">The control room for the refer-a-friend programme — every code, every friendship it created, the one-time ₹100 rewards, and the fraud alerts that keep it honest. Approve, reject or reverse a reward; only the Super Admin (and finance roles) can touch the money.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — how a referral becomes a reward</div><p>A customer shares their code → a friend signs up with it → the friend buys a qualifying subscription (30-day or longer) → the relationship becomes <b>Eligible</b> → the ₹100 is credited to the referrer's wallet as <b>Reward Credited</b>. The reward is intentionally <b>delayed</b> until the qualifying purchase, which is what stops fraud.</p></div></div>
+
+  <div class="diagram"><div class="wf">
+    <div class="wf-topbar">Workflow — referral to reward</div>
+    <div class="wf-flow"><span>Share code</span><span>Friend signs up</span><span>Qualifying plan</span><span>Eligible</span><span>Fraud checks</span><span>₹100 → wallet</span></div>
+  </div><div class="wire-cap">Figure — a reward is only credited after the friend's qualifying purchase clears the fraud checks.</div></div>
+
+  <!-- SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Referrals — Overview</p><p class="sm">The programme's health at a glance, plus recent referral history.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> See how the programme is performing and spot anything that needs action.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> (full) · finance roles <span class="pill role">view</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Referrals</span></span>
+      <span class="m"><b>Data</b> <span class="navpath">GET /api/admin/referrals?section=stats</span></span>
+    </div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Referral Management — <b>tabs:</b> Overview · Referrals · Top Referrers · Fraud Alerts · Settings</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>KPI strip</b><span>Total · Successful · Pending · Rejected · Rewards credited · Total paid · Fraud alerts</span></div>
+          <div class="wf-cell"><b>Referral history</b><span>Friend · Contact · Plan · Status · Reward · Date</span></div>
+          <div class="wf-cell"><b>Fraud badge</b><span>red count on the Fraud Alerts tab when alerts exist</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the five-tab Referral Management workspace; Overview shown.</div></div>
+
+      <h4>The KPI strip</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>KPI</th><th>What it counts</th></tr></thead>
+        <tbody>
+          <tr><td><b>Total referrals</b></td><td>Every referral relationship ever created.</td></tr>
+          <tr><td><b>Successful</b></td><td>Relationships that reached <em>Reward Credited</em>.</td></tr>
+          <tr><td><b>Pending</b></td><td>Registered/eligible but not yet credited — awaiting a qualifying purchase or review.</td></tr>
+          <tr><td><b>Rejected</b></td><td>Rejected or cancelled relationships.</td></tr>
+          <tr><td><b>Rewards credited</b></td><td>Count of active (non-reversed) ₹100 rewards paid to wallets.</td></tr>
+          <tr><td><b>Total paid</b></td><td>Sum of active reward amounts — the programme's spend.</td></tr>
+          <tr><td><b>Fraud alerts</b></td><td>Open alerts flagged by the automatic checks.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- SCREEN 2 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Referrals — ledger</p><p class="sm">Every referral relationship, searchable and filterable, with per-row actions.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Find a specific referral and act on it — approve, reject or reverse the reward.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> manages · finance <span class="pill role">view</span></span>
+      <span class="m"><b>Data</b> <span class="navpath">GET /api/admin/referrals?section=records&amp;q&amp;status&amp;planSlug&amp;sort&amp;page&amp;from&amp;to</span></span>
+    </div>
+    <div class="spec-body">
+      <h4>The table</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Element</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td>Friend (referred), Contact (mobile/email), Plan, Status, Reward, Date.</td></tr>
+          <tr><td><b>Search</b></td><td>By referrer, friend, mobile or email (<code>q</code>).</td></tr>
+          <tr><td><b>Filters</b></td><td>Status and plan (<code>status</code>, <code>planSlug</code>), and a date range (<code>from</code>/<code>to</code>).</td></tr>
+          <tr><td><b>Sort &amp; pages</b></td><td><code>sort</code> and <code>page</code> — the ledger is paginated.</td></tr>
+          <tr><td><b>Row actions</b></td><td>Approve/process · Reject (with reason) · Reverse (with reason).</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Status values</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><b>Invited</b></td><td>Code shared; the friend hasn't signed up yet.</td></tr>
+          <tr><td><b>Registered</b></td><td>The friend created an account with the code.</td></tr>
+          <tr><td><b>Trial Purchased</b></td><td>The friend bought a trial — not yet a qualifying plan.</td></tr>
+          <tr><td><b>Eligible Purchase</b></td><td>The friend bought a qualifying subscription — the reward is due.</td></tr>
+          <tr><td><b>Reward Credited</b></td><td>₹100 credited to the referrer's wallet. ✔</td></tr>
+          <tr><td><b>Rejected / Cancelled</b></td><td>Blocked by an admin or a fraud check.</td></tr>
+          <tr><td><b>Expired</b></td><td>The window to qualify passed without a purchase.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Buttons &amp; actions</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Approve / Process</b></td><td>Credits the ₹100 reward for an eligible relationship.</td><td><code>POST {action:"process"}</code> → credits the wallet, marks <em>Reward Credited</em>, audits.</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Reject</b></td><td>Blocks a relationship (with a reason).</td><td><code>POST {action:"reject", refereeId, reason}</code> → sets Rejected, audits.</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Reverse</b></td><td>Claws back a reward already credited (with a reason).</td><td><code>POST {action:"reverse", refereeId, reason}</code> → debits the wallet credit, marks reversed, audits.</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Regenerate code</b></td><td>Issues a fresh referral code for a customer.</td><td><code>POST {action:"regenerate"}</code>.</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Bulk process</b></td><td>Approves many eligible rewards at once.</td><td><code>POST {action:"bulkProcess"}</code>.</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Export</b></td><td>Downloads the current (filtered) ledger.</td><td>Client-side export of the loaded records.</td><td>view+</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — Reverse moves real money</div><p><b>Reverse</b> pulls the ₹100 back out of the customer's wallet. Only do it for a confirmed fraudulent or mistaken reward, and always type a reason — it is written to the audit log. If the customer has already spent the balance, coordinate with Finance before reversing.</p></div></div>
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Permission</div><p>Approve, Reject and Reverse require <b>manage</b> rights (Super Admin / finance). Other roles that can open this screen see it <em>read-only</em> — the action buttons return <code>403 Forbidden</code>.</p></div></div>
+    </div>
+  </div>
+
+  <!-- SCREEN 3 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Top Referrers</p><p class="sm">Your best advocates, ranked.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> See who refers the most so you can thank or reward them.</span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Top Referrers</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Rank &amp; name</b><span>referrer</span></div>
+          <div class="wf-cell"><b>Referrals</b><span>total invited / converted</span></div>
+          <div class="wf-cell"><b>Rewards earned</b><span>total ₹ credited</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — leaderboard of the highest-performing referrers.</div></div>
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip</div><p>Your top referrers are your cheapest growth channel. A small personal thank-you or bonus to the leaderboard often produces more referrals than a broad discount.</p></div></div>
+    </div>
+  </div>
+
+  <!-- SCREEN 4 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Fraud Alerts</p><p class="sm">Automatic checks that block gamed rewards.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Review and clear the relationships the system flagged as suspicious before any money moves.</span></div>
+    <div class="spec-body">
+      <h4>What the system checks automatically</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Check</th><th>What it catches</th></tr></thead>
+        <tbody>
+          <tr><td><b>Self-referral</b></td><td>Someone using their own code (same email/phone).</td></tr>
+          <tr><td><b>Duplicate account</b></td><td>The same person creating a second account to farm rewards.</td></tr>
+          <tr><td><b>Circular referral</b></td><td>Two people referring each other in a loop.</td></tr>
+          <tr><td><b>Duplicate reward</b></td><td>An attempt to credit the same relationship twice.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Clear the Fraud Alerts tab (the red badge) before running a <b>Bulk process</b>. Bulk approval credits everything eligible — you want the flagged ones resolved first.</p></div></div>
+    </div>
+  </div>
+
+  <!-- SCREEN 5 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Settings</p><p class="sm">Turn the programme on/off and set the reward.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Configure the reward amount, the qualifying plan, and whether referrals are accepted right now.</span></div>
+    <div class="spec-meta"><span class="m"><b>Data</b> <span class="navpath">POST /api/admin/referrals {action:"config", …}</span></span></div>
+    <div class="spec-body">
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Backend behaviour</th></tr></thead>
+        <tbody>
+          <tr><td><b>Programme enabled</b></td><td>Accept new referrals or pause the whole programme.</td><td>On / Off</td><td>When Off, new codes are rejected and the storefront hides referral entry.</td></tr>
+          <tr><td><b>Reward amount</b></td><td>The one-time wallet credit per successful referral.</td><td>₹ (default 100)</td><td>Applied to future rewards; past rewards keep their original amount.</td></tr>
+          <tr><td><b>Qualifying plan</b></td><td>The minimum plan the friend must buy.</td><td>e.g. 30-day+</td><td>Relationships below this never reach Eligible.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning</div><p>Turning the programme <b>Off</b> immediately stops new referrals across the storefront. Existing eligible rewards are unaffected, but customers can no longer enter a code — announce a pause before you flip it.</p></div></div>
+    </div>
+  </div>
+
+  <h3>Troubleshooting</h3>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>Referrer says they didn't get ₹100</td><td>Friend hasn't bought a qualifying plan yet, or the relationship is Pending/flagged.</td><td>Find them in the ledger; if <em>Eligible</em> and clean, use <b>Approve</b>. If <em>Pending</em>, the friend still needs to buy the qualifying plan.</td></tr>
+      <tr><td>Reward looks fraudulent</td><td>Self/duplicate/circular referral.</td><td>Check the Fraud Alerts tab; <b>Reject</b> before crediting, or <b>Reverse</b> if already paid.</td></tr>
+      <tr><td>Action button gives "Forbidden"</td><td>Your role has view-only rights.</td><td>Approvals/reversals need Super Admin (or finance) — ask the Super Admin.</td></tr>
+      <tr><td>Referral link opens a 404</td><td>Wrong share URL format.</td><td>Links must be <code>/signup.html?ref=CODE</code>.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>FAQ</h3>
+  <h4>Can one customer earn the reward many times?</h4>
+  <p>Yes — once per <em>successful</em> friend. Each referral is a separate relationship; the reward is one-time <em>per friend</em>, not per referrer.</p>
+  <h4>What happens to the reward if I reject after crediting?</h4>
+  <p>Use <b>Reverse</b> (not Reject) once a reward is credited — Reverse is the action that pulls the ₹100 back from the wallet and marks the reward reversed. Both are audited.</p>
+  <h4>Does the customer see any of this?</h4>
+  <p>Customers only see their own side on <span class="navpath">Account → Referrals</span> — their code, share link, friends referred and rewards earned. This admin screen is internal.</p>
+</section>

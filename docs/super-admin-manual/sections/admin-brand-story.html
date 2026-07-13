@@ -1,0 +1,181 @@
+<section class="sheet" id="admin-brand-story">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Content · Brand Story</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Content</span></div>
+  <h2 class="section-title">Brand Story</h2>
+  <p class="lead">Edit the headline copy and packaging-QR of the public “UNFOLD PURE.” story page (<b>/doodly.html</b>) — and download the QR that goes on your milk-bottle labels — without touching any code. Changes go live instantly.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where this lives</div><p>Open it from <b>Admin → Content → Brand Story</b> (URL <b>/admin/brand-story.html</b>). It is a small content-management screen that edits one thing: the storefront <b>brand-story page</b> at <b>/doodly.html</b> (titled “UNFOLD PURE.” — the digital version of the insert printed inside DOODLY packaging). The editor is loaded from, and saved back to, the DOODLY database through the endpoint <b>/api/brand-story</b>. When it loads cleanly you see a green banner: “● Live — brand story loaded from the DOODLY database … Edits persist to Postgres.” A red banner means the backend is offline or your role is not allowed to edit — see Troubleshooting.</p></div></div>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">What this page is NOT</div><p>This is <b>not</b> a full drag-and-drop page builder. The long story panels (Market Reality, Why DOODLY, the farm journey, Trust, contact channels) are fixed in the product and are <b>not</b> edited here. This screen lets you override a small set of <b>headline fields</b> and the <b>QR destination</b>. Everything you leave blank keeps its built-in default.</p></div></div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 1 — BRAND STORY EDITOR                                 -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Brand Story Editor</p><p class="sm">A single screen split into two panels — an <b>Editable content</b> form on the left and a <b>Packaging QR</b> panel on the right.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Change the hero headline copy and the products heading on the public story page, set where the printed QR code points, and download that QR as an image for your packaging — all live, with no deployment.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span> can load <b>and</b> edit. Any other role is blocked at the backend (403) and can only tinker locally — nothing they change reaches the live page.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Brand Story</span></span>
+    </div>
+
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Brand Story — Unfold Pure</b> · “Edit the /doodly story hero &amp; CTAs and download the packaging QR.”</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Live status banner</b><span>Green “● Live — brand story loaded from the DOODLY database …” on success; red warning if offline or blocked</span></div>
+          <div class="wf-cell"><b>Left panel — Editable content</b><span>Six text fields (Hero eyebrow · Hero title · Hero lead · Hero sub-line · Products heading · QR destination URL), each showing its default as a grey placeholder</span></div>
+          <div class="wf-cell"><b>Left panel — actions</b><span>[Save changes] · [Reset to defaults] · transient “✓ Saved” tick</span></div>
+          <div class="wf-cell"><b>Right panel — Packaging QR</b><span>Live QR preview (190×190) · the destination URL in text · [Download SVG] · [Download PNG] · “Preview the live page →” link</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Brand Story editor: content form on the left, packaging-QR tools on the right.</div></div>
+
+      <h4>How editing works</h4>
+      <p>Each field is an <b>override</b>. Type a value to replace the built-in text on the live page; <b>leave a field blank to keep the built-in default</b>, which is shown to you as the field's grey placeholder. There is nothing to “publish” separately — <b>Save changes</b> writes straight to the live page and the DOODLY database. The screen tells you exactly this above the form: “Leave a field blank to use the built-in default (shown as placeholder). Saved instantly to the live page — no code change.”</p>
+
+      <!-- FIELD TABLE -->
+      <h4>The six editable fields (left panel)</h4>
+      <p>Every field below is real and appears on this screen. The “Where it shows” column tells you exactly what part of the public <b>/doodly.html</b> page it controls.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose / where it shows</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Hero eyebrow</b></td><td>The small line of text with a ✦ above the giant hero title, at the very top of the story.</td><td>Short free text.</td><td class="t-opt">Opt.</td><td>Trimmed. Blank keeps the default. Stored server-side as <code>heroEyebrow</code>.</td><td>The DOODLY packaging insert, reborn digitally</td></tr>
+          <tr><td><b>Hero title</b></td><td>The huge headline at the top of the page (the brand promise).</td><td>Short free text — a few words.</td><td class="t-opt">Opt.</td><td>Trimmed. Placeholder is the default “UNFOLD PURE.”. Stored as <code>heroTitle</code>.</td><td>UNFOLD PURE.</td></tr>
+          <tr><td><b>Hero lead</b></td><td>The first line directly under the hero title.</td><td>Short sentence.</td><td class="t-opt">Opt.</td><td>Trimmed. Blank keeps “This is not just dairy.” Stored as <code>heroLead</code>.</td><td>This is not just dairy.</td></tr>
+          <tr><td><b>Hero sub-line</b></td><td>The second, smaller line under the hero title.</td><td>Short sentence.</td><td class="t-opt">Opt.</td><td>Trimmed. Blank keeps “A story of honesty, freshness, and trust.” Stored as <code>heroSub</code>.</td><td>A story of honesty, freshness, and trust.</td></tr>
+          <tr><td><b>Products heading</b></td><td>The heading over the “Our Products” section further down the story.</td><td>Short free text.</td><td class="t-opt">Opt.</td><td>Trimmed; updates the page locally. <b>See the caution below</b> — this one field is not persisted to the central database.</td><td>Our Premium Collection</td></tr>
+          <tr><td><b>QR destination URL</b></td><td>The web address the printed packaging QR opens when scanned. Also drives the live QR preview in the right panel.</td><td>A full URL.</td><td class="t-opt">Opt.</td><td>Trimmed. Blank defaults to your site's <code>/doodly.html</code>. Stored as <code>qrDestination</code>. The QR preview redraws as you type.</td><td>https://doodly.in/doodly.html</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">“Products heading” saves locally, but not to the database</div><p>The backend deliberately accepts only a fixed whitelist of fields (<code>heroEyebrow</code>, <code>heroTitle</code>, <code>heroLead</code>, <code>heroSub</code>, <code>hookTitle</code>, <code>hookLine</code>, <code>qrDestination</code>, and the three CTA links). <b>Products heading is not on that list.</b> When you save it, it updates the page in your own browser immediately, but the DOODLY database drops it — so after a hard reload (which reloads the copy from the database) or on any other device, the Products heading reverts to its default “Our Premium Collection”. To change it permanently, ask a developer to update the source. Treat this field as a preview, not a permanent setting.</p></div></div>
+
+      <!-- BUTTON TABLE -->
+      <h4>Buttons on this screen</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Save changes</b></td><td>Saves every non-blank field. Shows a green “✓ Saved” tick for ~2 seconds and pops a toast.</td><td>Collects the filled fields into a patch, mirrors it into the browser, then sends <code>PUT /api/brand-story</code>. On success the toast reads “Saved to the DOODLY database”. The page at /doodly.html picks up the change on its next load.</td><td><span class="pill role">Marketing</span> <span class="pill role">Admin</span> <span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Reset to defaults</b></td><td>Clears every override so the page falls back to its built-in copy. The form empties and the placeholders return.</td><td>Wipes the local override and sends an empty patch via <code>PUT /api/brand-story</code>. Toast reads “Reset — saved to the DOODLY database”.</td><td><span class="pill role">Marketing</span> <span class="pill role">Admin</span> <span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Download SVG</b></td><td>Downloads the packaging QR as a crisp vector file, <b>doodly-qr.svg</b> — best for print and large signage.</td><td>Client-side only. Renders the current QR destination to an SVG and triggers the download. No save.</td><td><span class="pill role">Marketing</span>+</td></tr>
+          <tr><td><b>Download PNG</b></td><td>Downloads the QR as a high-resolution image, <b>doodly-qr.png</b> — best for slides, social and quick sharing.</td><td>Client-side only. Renders the QR at 16× scale to a PNG and downloads it. No save.</td><td><span class="pill role">Marketing</span>+</td></tr>
+          <tr><td><b>Preview the live page →</b></td><td>Opens the actual public story page, <b>/doodly.html</b>, in a new browser tab so you can check your edit.</td><td>None — it is a plain link.</td><td><span class="pill role">Marketing</span>+ (the page itself is public)</td></tr>
+          <tr><td><b>✓ Saved</b> <span class="pill">indicator</span></td><td>Not a button — a small confirmation tick that appears after a successful Save and fades after about 2 seconds.</td><td>None.</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — the QR preview is live</div><p>As you type in the <b>QR destination URL</b> box, the QR image in the right panel redraws in real time and the URL under it updates. So you can point the code at a campaign landing page, watch the preview change, then hit <b>Download PNG/SVG</b> to hand the exact code to your packaging printer — no third-party QR site needed.</p></div></div>
+
+      <h4>The Packaging QR panel (right side)</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Element</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td><b>QR preview</b></td><td>A 190×190 live render of the code for the current destination, drawn in the DOODLY dark-green ink. It updates instantly as you edit the destination field.</td></tr>
+          <tr><td><b>Destination text</b></td><td>The full URL the code points to, printed below the preview so you can read and verify it at a glance.</td></tr>
+          <tr><td><b>Download SVG / Download PNG</b></td><td>Two download buttons (see the button table above) that save the code as a print-ready vector or a high-res image.</td></tr>
+          <tr><td><b>Preview the live page →</b></td><td>A full-width link that opens /doodly.html in a new tab.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- WORKFLOW — SAVE + PERSISTENCE                                 -->
+  <!-- ============================================================ -->
+  <div class="diagram"><div class="wf">
+    <div class="wf-topbar">Workflow — how an edit reaches the live page</div>
+    <div class="wf-flow">
+      <span>Open Brand Story</span>
+      <span>Backend loads saved overrides (GET /api/brand-story)</span>
+      <span>You edit a field</span>
+      <span>Save changes</span>
+      <span>Patch saved to DOODLY database (PUT)</span>
+      <span>/doodly.html reads it on next load</span>
+    </div>
+  </div><div class="wire-cap">Figure — an edit is saved as an override patch, stored in the database, and applied over the built-in copy the next time the story page loads.</div></div>
+
+  <h4>How your changes are stored and applied</h4>
+  <p>Behind the scenes, your edits are not a full copy of the page — they are a small <b>override</b> stored as a single record in the DOODLY database (the “brand story config”, a singleton row). When the public page renders, it starts from the built-in defaults and <b>merges your overrides on top</b>. That is why a blank field simply keeps the default: there is no override to apply. It also means you can never “break” the page by clearing a field — the worst case is that it shows the original text.</p>
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Only safe text is stored</div><p>When you save, the backend sanitises the payload: it keeps only the recognised fields, and only non-empty trimmed strings. Anything unexpected is silently dropped. This keeps the story page safe no matter what is typed in.</p></div></div>
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">A short cache delay is normal</div><p>Because the public story page is cached for speed, a saved change can take a few minutes to appear for everyone. If your own <b>Preview the live page</b> still shows the old text, give it a moment and refresh — the parallel implementation states edits go live “within 10 minutes”.</p></div></div>
+
+  <!-- ============================================================ -->
+  <!-- THE PAGE IT CONTROLS                                          -->
+  <!-- ============================================================ -->
+  <h4>The page this screen controls — /doodly.html (“UNFOLD PURE.”)</h4>
+  <p>Editing here changes the public brand-story page. It is a long, single-scroll “story” with a side navigation, and it is completely public (customers reach it from packaging QR scans and links). It is built from these parts, top to bottom:</p>
+  <div class="twrap"><table>
+    <thead><tr><th>Part of the page</th><th>What it is</th><th>Editable here?</th></tr></thead>
+    <tbody>
+      <tr><td><b>Hero</b></td><td>The full-screen opener: the ✦ eyebrow, the giant title, the lead and sub-line, and “Begin the story ↓ / Order Now” buttons.</td><td><b>Yes</b> — eyebrow, title, lead, sub-line.</td></tr>
+      <tr><td><b>Farm scene</b></td><td>An animated “From our farms to your morning” illustration (buffalo, tractor, dairy crate, sunrise) with the DOODLY logo and floating fact cards.</td><td>No.</td></tr>
+      <tr><td><b>Market Reality</b></td><td>Section 1 — the problem with most dairy (stored too long, treated, far from source).</td><td>No.</td></tr>
+      <tr><td><b>Why DOODLY</b></td><td>Section 2 — A2 buffalo milk, farm-fresh in 12 hours, and the 5-step farm-to-door journey.</td><td>No.</td></tr>
+      <tr><td><b>Our Products</b></td><td>Section 3 — a grid of products (milk, curd, paneer, ghee, palkova) that automatically show “Coming soon” from the live catalogue.</td><td>Heading only (locally — see the caution above).</td></tr>
+      <tr><td><b>Trust</b></td><td>Section 4 — the “for kids / parents / grandparents” trust lines.</td><td>No.</td></tr>
+      <tr><td><b>Scan &amp; Connect</b></td><td>Section 5 — the on-page QR code (pointing at your <b>QR destination URL</b>), the contact channels (website, WhatsApp, phone, email, Instagram, hours) and the call-to-action buttons.</td><td>QR destination, yes. Channels/CTAs, no (in this editor).</td></tr>
+    </tbody>
+  </table></div>
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">The QR you download and the QR on the page match</div><p>The <b>QR destination URL</b> you set here drives both the code shown in the “Scan &amp; Connect” section of the live page <b>and</b> the SVG/PNG you download for packaging. Set it once and everything stays in sync.</p></div></div>
+
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Keep the <b>QR destination URL</b> pointed at your own <b>/doodly.html</b> story page (the default) unless you are running a specific campaign — that way every bottle scanned lands on the trust-building story, and you can change where it goes later without reprinting. Edit hero copy sparingly and in short, punchy lines (this is a hero, not a paragraph). After any change, click <b>Preview the live page</b> and read it on both desktop and phone before you consider it done. Before a packaging print run, always <b>re-download a fresh QR</b> here so the printed code matches the current destination.</p></div></div>
+
+  <!-- ============================================================ -->
+  <!-- WHO CAN DO WHAT                                               -->
+  <!-- ============================================================ -->
+  <h4>Who can do what</h4>
+  <p>Brand Story is governed by the <b>CMS (content)</b> permission. Unusually for an admin screen, <b>viewing and editing need the same permission</b> — there is no view-only tier here, because loading the editor already reads the live overrides.</p>
+  <div class="twrap"><table>
+    <thead><tr><th>Role</th><th>Load the editor</th><th>Save / reset (persist to database)</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill role">Super Admin</span></td><td>Yes</td><td>Yes</td></tr>
+      <tr><td><span class="pill role">Admin</span></td><td>Yes</td><td>Yes</td></tr>
+      <tr><td><span class="pill role">Marketing</span></td><td>Yes</td><td>Yes</td></tr>
+      <tr><td><span class="pill role">Accountant</span> · <span class="pill role">Manager</span> · other staff roles</td><td>No — the backend returns 403 and shows a red banner</td><td>No</td></tr>
+      <tr><td><span class="pill role">Delivery Executive</span> · <span class="pill role">Customer</span></td><td>No — they never reach /admin</td><td>No</td></tr>
+    </tbody>
+  </table></div>
+  <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">A blocked role can still type — but nothing saves</div><p>If a role without CMS permission opens this screen, the editor UI still appears, but the backend load fails with a red “Your role can't edit Brand Story (403)” banner and any <b>Save</b> is refused by the server with the toast “Only Marketing / Admin can edit (403).” In that state the person is only changing their own browser copy — <b>the live page and other users are unaffected</b>. Real edits require Super Admin, Admin or Marketing.</p></div></div>
+
+  <!-- ============================================================ -->
+  <!-- TROUBLESHOOTING                                               -->
+  <!-- ============================================================ -->
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>Red banner “Your role can't edit Brand Story (403)”.</td><td>Your account does not have CMS (content) edit permission.</td><td>Ask a Super Admin to grant your role CMS access (Marketing has it by default), or have a Marketing/Admin/Super Admin user make the change.</td></tr>
+      <tr><td>Toast “Only Marketing / Admin can edit (403).” when you click Save.</td><td>Same as above — you can see the form but the server refuses to persist your change.</td><td>Have an authorised user save it. Your local edits are not on the live page.</td></tr>
+      <tr><td>Red banner “Backend offline — editing locally only.”</td><td>The DOODLY backend is unreachable.</td><td>Confirm the backend is running; reload the page once it is back. Do not rely on edits made while offline — they are browser-only.</td></tr>
+      <tr><td>Toast “Saved locally — backend error.”</td><td>The save reached the browser but the database call failed for a non-permission reason.</td><td>Check your connection and try again; if it persists, report the error code to a developer.</td></tr>
+      <tr><td>The “Products heading” I saved keeps reverting to the default.</td><td>By design — that field is not stored in the database (it is not on the backend whitelist).</td><td>Use it only as a temporary preview; to change it permanently, a developer must edit the source.</td></tr>
+      <tr><td>I saved, but /doodly.html still shows the old text.</td><td>The public page is cached and served from a copy.</td><td>Wait a few minutes and refresh. Use <b>Preview the live page</b> to re-check.</td></tr>
+      <tr><td>The QR preview looks empty or doesn't update.</td><td>The QR helper hasn't loaded, or the destination field is blank.</td><td>Reload the page; if a field is blank the code falls back to the default /doodly.html destination.</td></tr>
+      <tr><td>I want the original wording back.</td><td>You overrode a field and want the built-in copy.</td><td>Clear that field and Save, or use <b>Reset to defaults</b> to clear everything at once — you cannot break the page this way.</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- ============================================================ -->
+  <!-- FAQ                                                          -->
+  <!-- ============================================================ -->
+  <h4>Frequently asked questions</h4>
+
+  <h4>Q. Where exactly do my changes appear?</h4>
+  <p>On the public page <b>/doodly.html</b> (“UNFOLD PURE.”). The four hero fields change the very top of that page; the QR destination changes the code in its “Scan &amp; Connect” section and the file you download. Use <b>Preview the live page →</b> to see it.</p>
+
+  <h4>Q. Do I need to publish or deploy after saving?</h4>
+  <p>No. Saving writes straight to the live page and the DOODLY database — there is no separate publish step and no code change. Allow a few minutes for caching.</p>
+
+  <h4>Q. What happens if I leave a field blank?</h4>
+  <p>The page uses its built-in default for that field (shown to you as the grey placeholder). Blank never means “empty on the page”.</p>
+
+  <h4>Q. Can I edit the whole story — the panels about the farm, trust, and products?</h4>
+  <p>Not from this screen. Only the hero copy, the products heading (locally) and the QR destination are editable here. The long narrative panels are part of the product and are changed in code by a developer.</p>
+
+  <h4>Q. What is the difference between the SVG and PNG downloads?</h4>
+  <p>Both encode the same QR destination. <b>SVG</b> is a vector — it stays razor-sharp at any size, ideal for printing on packaging and large signage. <b>PNG</b> is a high-resolution image — handy for slides, documents and social posts.</p>
+
+  <h4>Q. If I change the QR destination, do old printed codes still work?</h4>
+  <p>Only if you point the destination at a URL you keep serving. Codes already printed are fixed images pointing at whatever the destination was when they were made. Keeping the destination at your stable <b>/doodly.html</b> lets you change the page's content later without reprinting.</p>
+</section>

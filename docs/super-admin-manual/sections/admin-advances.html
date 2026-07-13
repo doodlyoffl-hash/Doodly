@@ -1,0 +1,269 @@
+<section class="sheet" id="admin-advances">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · HR · Salary Advances</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Human Resources</span></div>
+  <h2 class="section-title">Salary Advances</h2>
+  <p class="lead">Request, approve and recover staff salary advances — a small loan against future pay that DOODLY automatically claws back, installment by installment, from the employee's next payslips.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">What a "salary advance" is at DOODLY</div>
+      <p>A salary advance is money paid to a team member <b>ahead of payday</b> — for an emergency, a festival, a medical bill. HR raises the advance, a decision-maker <b>approves</b> it, and payroll then <b>recovers</b> it in equal installments (up to 24 salary cycles) by deducting from each month's net pay until the full amount is repaid. This screen is the control room for that whole lifecycle: raise, approve/reject, and watch the outstanding balance shrink. It shares one backend with Salary Structure and Payroll — every rupee is stored in <b>paise</b> (₹1 = 100 paise) so nothing is ever lost to rounding.</p>
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 1 : ADVANCES REGISTER -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Salary Advances register</p><p class="sm">Live KPIs plus a searchable, filterable list of every advance and its recovery status.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> See every advance on record, how much is still outstanding, which requests are waiting for a decision, and act on any one — raise a new advance, approve or reject a pending request — from a single page.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> · <span class="pill role">Accountant</span> (view). Raising, approving and rejecting need the same three roles (<code>payroll → edit</code>).</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → Salary Advances</span> (<span class="navpath">/admin/advances.html</span>)</span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Salary Advances</b> · "Request, approve and recover staff salary advances."</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Toolbar</b><span>Status dropdown · Search box (code / employee) · <b>New advance</b> button · <b>Export CSV</b> button.</span></div>
+          <div class="wf-cell"><b>KPI strip</b><span>Two live tiles: <b>Pending</b> (amber) and <b>Outstanding</b> (₹ still to be recovered).</span></div>
+          <div class="wf-cell"><b>Advances table</b><span>Code · Employee (name + code · department) · Amount · Recovery (installments × per-installment) · Remaining · Status badge · Actions.</span></div>
+          <div class="wf-cell"><b>Row actions</b><span>For a <i>Pending</i> row only: <b>Approve</b> · <b>Reject</b>. Decided rows show their reason instead.</span></div>
+          <div class="wf-cell"><b>New advance modal</b><span>Employee · Amount (₹) · Recover over (installments) · Reason → Submit advance.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Salary Advances screen</div></div>
+
+      <!-- ---------- KPI STRIP ---------- -->
+      <h4>The KPI strip — two live tiles</h4>
+      <p>Both tiles are computed by the backend (<code>listAdvances()</code>) directly from the advance table — never typed in. They update on every filter, search or action.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Tile</th><th>What it counts</th><th>How it is calculated (backend)</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Pending</b> <span class="t-opt">(amber)</span></td><td>Requests still waiting for an approve/reject decision</td><td>Count of <code>SalaryAdvance</code> rows with status <code>PENDING</code> (ignores the current filter — it is the true global backlog)</td><td>3</td></tr>
+          <tr><td><b>Outstanding</b></td><td>Total rupees still to be recovered across all live advances</td><td>Sum of <code>remainingPaise</code> for every <code>APPROVED</code> advance, shown in ₹ (rejected/completed advances contribute nothing)</td><td>₹42,500</td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- ---------- FILTERS ---------- -->
+      <h4>Filters &amp; search controls</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Control</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Status dropdown</td><td>Narrow the list to one advance state</td><td>All status · Pending · Approved · Rejected · Completed</td><td class="t-opt">Opt.</td><td>Sent as <code>?status=</code> (PENDING / APPROVED / REJECTED / COMPLETED); reloads the table on change</td><td>Pending</td></tr>
+          <tr><td>Search box</td><td>Find an advance by its code or the employee</td><td>Free text — "Search code / employee…"</td><td class="t-opt">Opt.</td><td>Sent as <code>?q=</code> after a 350 ms pause; backend matches the advance <code>code</code>, the employee's <code>employeeCode</code>, or the employee's <b>name</b> (all case-insensitive "contains")</td><td>ADV-0007 / Ramesh</td></tr>
+          <tr><td>Export CSV</td><td>Download the rows currently loaded</td><td>Button</td><td class="t-opt">Opt.</td><td>Client-side export of the rows on screen (respects the active status + search)</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+
+      <!-- ---------- TABLE SPEC ---------- -->
+      <h4>The advances table</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Behaviour (from the real renderer &amp; backend)</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td><b>Code</b> (e.g. ADV-0007) · <b>Employee</b> (name, with an <code>employeeCode · department</code> subline) · <b>Amount</b> (₹, from <code>amountPaise</code>) · <b>Recovery</b> (shown as <code>installments × ₹per-installment</code>, e.g. "6 × ₹2,500") · <b>Remaining</b> (₹ still owed) · <b>Status</b> (colour badge) · <b>Actions</b>.</td></tr>
+          <tr><td><b>Sorting</b></td><td>Fixed server order: newest first (<code>createdAt</code> descending), so the latest requests sit at the top.</td></tr>
+          <tr><td><b>Search</b></td><td>The toolbar search box (code / employee code / name), debounced 350 ms, re-queries the backend.</td></tr>
+          <tr><td><b>Filters</b></td><td>Status dropdown (see above). Status and search combine.</td></tr>
+          <tr><td><b>Pagination</b></td><td>No page controls on screen — the backend returns up to <b>50</b> advances per load (server cap 200), newest first. Use status + search to narrow larger sets.</td></tr>
+          <tr><td><b>Exports</b></td><td><b>Export CSV</b> → file <code>doodly-advances.csv</code> with columns Advance, Employee, Emp Code, Department, Amount, Installments, Recovered, Remaining, Status (amounts in ₹).</td></tr>
+          <tr><td><b>Row actions</b></td><td>Only on a <b>Pending</b> row (and only for editors): <b>Approve</b> / <b>Reject</b>. A decided row shows its stored reason in grey instead of buttons.</td></tr>
+          <tr><td><b>Empty state</b></td><td>"No advances." when the filter/search returns nothing.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Status badges</h4>
+      <p>The <b>Status</b> column colour-codes each advance's stage so requests that need action stand out.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Backend status</th><th>Badge</th><th>Colour</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>PENDING</code></td><td>Pending</td><td>Amber</td><td>Raised, waiting for an approve/reject decision. This is the only state with row buttons.</td></tr>
+          <tr><td><code>APPROVED</code></td><td>Approved</td><td>Blue</td><td>Granted. Payroll now recovers it installment-by-installment; the "Remaining" balance shrinks each paid payslip.</td></tr>
+          <tr><td><code>REJECTED</code></td><td>Rejected</td><td>Red</td><td>Declined. No money is paid and no recovery happens; the rejection reason is stored on the row.</td></tr>
+          <tr><td><code>COMPLETED</code></td><td>Completed</td><td>Green</td><td>Fully recovered — Remaining has reached ₹0. Set automatically by payroll on the last recovery.</td></tr>
+        </tbody>
+      </table></div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 2 : NEW ADVANCE -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">New salary advance</p><p class="sm">Raise an advance for a team member — it starts as a Pending request.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Record that a staff member has asked for money ahead of payday, choose how many salary cycles to recover it over, and submit it for approval.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Accountant</span> (<code>payroll → edit</code>) — the <b>New advance</b> button is hidden for view-only roles.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → Salary Advances → New advance</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Modal — <b>New salary advance</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Employee *</b><span>Dropdown of all staff (code · name), loaded live from the employee master.</span></div>
+          <div class="wf-cell"><b>Amount (₹) *</b><span>Whole-rupee number, minimum ₹1.</span></div>
+          <div class="wf-cell"><b>Recover over</b><span>Installments — number 1 to 24, default 1.</span></div>
+          <div class="wf-cell"><b>Reason</b><span>Optional free text, up to 500 characters.</span></div>
+          <div class="wf-cell"><b>Footer</b><span>Cancel · <b>Submit advance</b> (disabled while saving).</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the New salary advance form</div></div>
+
+      <h4>Every field on the form</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Employee</td><td>Who the advance is for</td><td>One staff member from the dropdown</td><td class="t-req">Yes</td><td>Options come from <span class="navpath">GET /api/admin/employees?pageSize=500</span> (each shown as <code>employeeCode · name</code>); the id is validated server-side — an unknown employee returns <b>404 "Employee not found."</b></td><td>EMP-0012 · Ramesh Kumar</td></tr>
+          <tr><td>Amount (₹)</td><td>How much money is advanced</td><td>Whole rupees, min ₹1</td><td class="t-req">Yes</td><td>Converted to paise before sending. Client blocks ≤ 0 ("Employee and a valid amount are required."). Server (Zod) requires an integer <code>amountPaise</code> between <b>1</b> and <b>100,000,000</b> (₹1 – ₹10,00,000); zero or below is rejected "Amount must be greater than zero."</td><td>15000</td></tr>
+          <tr><td>Recover over (installments)</td><td>How many salary cycles to spread the recovery across</td><td>Number 1–24, default 1</td><td class="t-opt">Opt.</td><td>Clamped to <b>1…24</b> server-side. The per-installment amount is computed as <code>ceil(amount ÷ installments)</code> and stored on the advance; "1" means recover the whole amount from the next payslip.</td><td>6</td></tr>
+          <tr><td>Reason</td><td>Why the advance is being given</td><td>Free text, ≤ 500 characters</td><td class="t-opt">Opt.</td><td>Trimmed; stored on the advance and shown to approvers. Max length 500 (Zod).</td><td>Medical emergency — hospital bill</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">How the installment is worked out</div>
+          <p>You enter the <b>total</b> amount and the number of installments; DOODLY does the maths. Per-installment = <code>ceil(amount ÷ installments)</code>, so a ₹15,000 advance over 6 cycles becomes 6 × ₹2,500. The final installment is automatically trimmed so the employee never repays more than they borrowed — recovery stops the moment <b>Remaining</b> hits ₹0. Recovery is always taken from <b>salary</b> (the recovery method defaults to SALARY; the form does not offer a lump-sum option).</p>
+        </div>
+      </div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Submitting does not pay any money out</div>
+          <p><b>Submit advance</b> only creates a <b>Pending</b> record and writes an audit entry (<code>advance.create</code>). No cash moves and no recovery begins until someone <b>approves</b> it. The advance is auto-numbered <code>ADV-0001</code>, <code>ADV-0002</code>… and its Remaining balance is set to the full amount.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 3 : APPROVE / REJECT -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Approve or reject a request</p><p class="sm">The decision that turns a Pending advance into a live loan — or declines it.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Decide each pending advance. Approving starts salary recovery and notifies the employee; rejecting records a reason and notifies the employee that the request was declined.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Accountant</span> (<code>payroll → edit</code>).</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → Salary Advances</span> → row actions on a Pending advance</span>
+    </div>
+    <div class="spec-body">
+
+      <h4>The two row buttons</h4>
+      <p>They appear only on a <b>Pending</b> row, and only for editors. Each posts to <span class="navpath">POST /api/admin/salary</span> with <code>{action:"decide"}</code>, updates the advance, notifies the employee, writes an audit record, then reloads the list.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Approve</b> <span class="t-opt">(primary)</span></td><td>Grants the advance. Recovery now begins on the employee's next paid payslip.</td><td><code>{action:"decide", decision:"approve"}</code> → status <code>APPROVED</code>, stamps <code>approvedById</code> + <code>approvalDate</code>, notifies the employee ("Salary advance approved ✅ — recovered over N cycle(s)"), audit <code>advance.approve</code>. Toast: "Advance approved ✓".</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Accountant</span></td></tr>
+          <tr><td><b>Reject</b> <span class="t-opt">(red)</span></td><td>Declines the request. Prompts "Reason for rejection:" first — you may leave it blank, but Cancel on the prompt aborts.</td><td><code>{action:"decide", decision:"reject", reason}</code> → status <code>REJECTED</code>, stores <code>rejectReason</code>, stamps decider + date, notifies the employee ("Salary advance rejected" + your reason), audit <code>advance.reject</code>. Toast: "Advance rejected".</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Accountant</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">A decision can only be made once</div>
+          <p>The server checks the advance is still <b>Pending</b> before acting. If it was already approved or rejected (for example by a colleague a moment earlier), the request is refused with <b>"This advance is already decided."</b> Reload the page to see the current state. There is no "undo" and no "edit" on a decided advance — approve or reject is final.</p>
+        </div>
+      </div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — advance lifecycle</div>
+        <div class="wf-flow"><span>HR raises advance → PENDING</span><span>Approver clicks Approve → APPROVED (employee notified)</span><span>Payroll drafts a payslip → plans this cycle's installment as a deduction</span><span>Payslip marked PAID → installment recovered, Remaining drops</span><span>Remaining reaches ₹0 → COMPLETED</span></div>
+      </div><div class="wire-cap">Figure — from request to fully recovered (rejection ends the flow at PENDING → REJECTED)</div></div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 4 : RECOVERY THROUGH PAYROLL -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">How advances are recovered (via Payroll)</p><p class="sm">Advances are never collected here — Payroll deducts them automatically from each payslip.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Understand where the "Recovered" and "Remaining" figures come from, so you can explain to staff exactly how their repayment works.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> (reference)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → Payroll</span> (recovery is applied there)</span>
+    </div>
+    <div class="spec-body">
+
+      <p>The Salary Advances screen never takes money back directly. Recovery is a side-effect of <b>Payroll</b>:</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Stage</th><th>What happens</th><th>Where it is driven</th></tr></thead>
+        <tbody>
+          <tr><td><b>Planned (draft payslip)</b></td><td>When a payslip is generated, DOODLY looks up every <b>Approved</b> advance for that employee with a balance and plans this cycle's deduction — the sum of <code>min(per-installment, remaining)</code> across their advances. It appears on the payslip as "Advance recovery".</td><td>Payroll generate → <code>advanceRecoverPaise</code> on the draft</td></tr>
+          <tr><td><b>Recovered (payslip marked Paid)</b></td><td>Only when the payslip status becomes <b>Paid</b> is money actually taken back. DOODLY records an <code>AdvanceRecovery</code> ledger row, decreases <b>Remaining</b> and increases <b>Recovered</b> on the advance. Multiple advances are paid off oldest-first.</td><td>Payroll "Mark paid" → recovery applied inside one transaction</td></tr>
+          <tr><td><b>Completed</b></td><td>When an advance's <b>Remaining</b> reaches ₹0 its status flips to <b>Completed</b> automatically — no further deductions are ever planned for it.</td><td>Set during the same Mark-paid step</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Recovery is idempotent and oldest-first</div>
+          <p>Recovery is applied <b>once per payslip</b> — re-marking or reloading never double-deducts, because DOODLY checks for existing recovery ledger rows before applying. When an employee has more than one live advance, the current cycle's recovery is applied to their <b>oldest</b> advance first (by creation date) until this cycle's planned amount is used up.</p>
+        </div>
+      </div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Tip — to actually reduce a balance, pay the payslip</div>
+          <p>Approving an advance sets up the plan, but the <b>Remaining</b> figure on this screen only moves when the matching payslip is marked <b>Paid</b> in <span class="navpath">Admin → Human Resources → Payroll</span>. If a balance "isn't going down", check whether that month's payslip has actually been paid.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= SCREEN 5 : EMPLOYEE SELF-SERVICE -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">What the employee sees (My HR → Advances)</p><p class="sm">A read-only view of their own advances — they cannot raise one themselves.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Let a team member track their own advances and outstanding balance, so HR doesn't have to answer "how much do I still owe?" by hand.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Delivery Executive</span> and any staff member (their own record only) via <span class="navpath">/api/account/hr</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → My HR → Advances</span></span>
+    </div>
+    <div class="spec-body">
+      <p>On the employee's <b>My HR</b> page the Overview card shows an <b>Advance outstanding</b> figure with the number of active advances, and the <b>Advances</b> tab lists their own advances read-only: <b>Code · Amount · Recovery</b> (installments × per-installment) <b>· Remaining · Status</b>. Employees have <b>no request button</b> — when they have none, the panel reads <i>"No salary advances. Advances are requested through your manager or HR."</i> All raising and approving stays with Super Admin, Admin and Accountant on the admin screen above.</p>
+    </div>
+  </div>
+
+  <!-- ========================================================= BEST PRACTICE / TROUBLESHOOTING / FAQ -->
+  <div class="call best">
+    <span class="ci">✅</span>
+    <div class="cbody">
+      <div class="ctitle">Best Practice</div>
+      <p>Clear the <b>Pending</b> queue daily — filter by status "Pending" and decide each request while the reason is fresh, because the employee is waiting and nothing recovers until you approve. Always type a reason when you <b>reject</b>: it is stored on the advance and sent to the employee, so a blank rejection just creates a follow-up question. Set the <b>installments</b> to something the employee's take-home can absorb — a large advance recovered in one cycle can wipe out a payslip; spreading it over several months keeps their salary livable while still clearing the balance. Reconcile the <b>Outstanding</b> KPI against your books at month-end; it is the single source of truth for money the company is still owed.</p>
+    </div>
+  </div>
+
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>No <b>New advance</b> button, or approve/reject buttons missing</td><td>Signed-in role lacks <code>payroll → edit</code> (view-only)</td><td>Use a Super Admin, Admin or Accountant account, or have a Super Admin grant payroll edit in <span class="navpath">Admin → System → Roles &amp; Permissions</span>.</td></tr>
+      <tr><td>"Couldn't load advances." warning where the table should be</td><td>The Next.js backend (<span class="navpath">/api/admin/salary</span>) isn't reachable</td><td>Confirm the backend is running and the API base is correct, then reload.</td></tr>
+      <tr><td>"Employee and a valid amount are required." on submit</td><td>No employee chosen, or amount is blank / zero</td><td>Pick an employee and enter a whole-rupee amount of ₹1 or more.</td></tr>
+      <tr><td>"This advance is already decided."</td><td>The advance was approved/rejected already (often by a colleague)</td><td>Reload the page — the row is stale; a decided advance can't be re-decided.</td></tr>
+      <tr><td>Approved advance's <b>Remaining</b> isn't going down</td><td>The employee's payslips haven't been marked <b>Paid</b> yet</td><td>Recovery only happens at Mark-paid in Payroll; generate and pay the payslip for that month.</td></tr>
+      <tr><td>Employee says they can't find where to request an advance</td><td>Employees can't self-raise — it's an HR/admin action</td><td>Raise it for them from this screen; they'll then see it under My HR → Advances.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Frequently asked questions</h4>
+  <h4>Q. Who can raise and approve advances?</h4>
+  <p>A. Super Admin, Admin and Accountant. Viewing needs the <code>payroll</code> permission at "view"; raising, approving and rejecting need it at "edit". The client hides the buttons for other roles, but the real check is on the server — a role without payroll access is refused with a 403.</p>
+
+  <h4>Q. Does approving an advance immediately deduct money?</h4>
+  <p>A. No. Approving only starts the recovery plan and notifies the employee. The actual deduction happens later, cycle by cycle, when each of the employee's payslips is marked <b>Paid</b> in Payroll.</p>
+
+  <h4>Q. Can I edit or cancel an advance after it's approved?</h4>
+  <p>A. There is no edit or cancel action. An advance moves PENDING → APPROVED → COMPLETED (as it is recovered) or PENDING → REJECTED, and a decision can't be reversed. If a mistake was made, raise a correcting entry and note it in the reason field.</p>
+
+  <h4>Q. What happens if an employee has several advances at once?</h4>
+  <p>A. Each payslip plans a combined "Advance recovery" and, at Mark-paid, pays them off <b>oldest first</b> until this cycle's planned amount is used up. Each advance tracks its own Recovered and Remaining independently and completes on its own.</p>
+
+  <h4>Q. What's in the CSV export?</h4>
+  <p>A. The rows currently loaded (respecting your status filter and search), with Advance code, Employee, Emp Code, Department, Amount, Installments, Recovered, Remaining and Status — amounts in rupees — saved as <code>doodly-advances.csv</code>.</p>
+
+  <h4>Q. What is the maximum advance and how many installments are allowed?</h4>
+  <p>A. Up to <b>₹10,00,000</b> per advance, recovered over <b>1 to 24</b> salary cycles. Entering "1" installment recovers the whole amount from the next payslip.</p>
+
+</section>

@@ -1,0 +1,459 @@
+<section class="sheet" id="admin-chat">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · System · Chat Support</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · System</span></div>
+  <h2 class="section-title">Chat Support</h2>
+  <p class="lead">Manage every conversation the Doodly Assistant has with customers — read live, resolved and escalated chats, watch satisfaction and volume, take over a chat as a human agent, keep a library of canned replies, and tune the assistant's answers without touching code.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">What this module is, in plain words</div>
+      <p>Every DOODLY storefront and customer page carries a floating chat button — the <b>Doodly Assistant</b>. It answers questions about subscriptions, deliveries, products, referrals, wallet, bulk orders, invoices and payments from a built-in knowledge base, and can hand a customer over to a real person on WhatsApp, phone or callback. <b>Chat Support</b> is the admin side of that assistant: it is where you, as Super Admin, see all those conversations gathered from the DOODLY database, jump into any one, mark it resolved or assign it to yourself, curate the ready-made replies your team uses, and add or override the assistant's answers. It is one workspace split into four tabs — <b>Dashboard</b>, <b>Conversations</b>, <b>Canned Responses</b> and <b>Knowledge Base</b>.</p>
+    </div>
+  </div>
+
+  <div class="call warn">
+    <span class="ci">⚠️</span>
+    <div class="cbody">
+      <div class="ctitle">Who can open and manage chats</div>
+      <p>The page itself is gated by the <code>chatSupport</code> permission. If your role cannot view it, the whole workspace is replaced by an <b>"Access restricted"</b> panel (<i>"You don't have permission to view chat support."</i>). On the server the rule is broader than one permission: <b>viewing</b> chats is allowed to anyone with <code>chatSupport:view</code>, <code>support:view</code>, <b>or</b> <code>customers:view</code>; <b>managing</b> chats (assign, resolve, send, close, escalate, delete…) needs <code>chatSupport:edit</code> <b>or</b> <code>support:edit</code>. In practice that means the <span class="pill role">Super Admin</span> and <span class="pill role">Admin</span> get full control, the <span class="pill role">Support</span> role can view and handle chats, and read-only viewers get the list without the action buttons. Every change is written to the shared Audit Log as <code>chat.&lt;action&gt;</code>.</p>
+    </div>
+  </div>
+
+  <!-- ======================================================= WORKSPACE OVERVIEW -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Chat Support — the four tabs &amp; the live feed</p><p class="sm">A single workspace: Dashboard, Conversations, Canned Responses, Knowledge Base — kept in sync with the database.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the Super Admin one place to monitor assistant activity, step into any conversation, standardise replies, and shape the assistant's answers — all backed by the live DOODLY database, never demo data on production.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> (full) · <span class="pill role">Admin</span> (full) · <span class="pill role">Support</span> (view + handle) · other roles with <code>customers:view</code> can read</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Chat Support</span> (<span class="navpath">/admin/chat-support.html</span>)</span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>AI Chat Support</b> · live status banner · tab bar (Dashboard · Conversations · Canned Responses · Knowledge Base)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Live status banner</b><span>A green line — "● Live — N conversation(s) from the DOODLY database" — or a red warning if the backend is offline or your role is blocked (403).</span></div>
+          <div class="wf-cell"><b>Tab: Dashboard</b><span>Six KPI cards (active / resolved / escalated / satisfaction / response time / total) plus the "Frequently asked topics" panel.</span></div>
+          <div class="wf-cell"><b>Tab: Conversations</b><span>A table of every chat; click a row to open its full transcript and take action.</span></div>
+          <div class="wf-cell"><b>Tab: Canned Responses</b><span>An editable library of ready-made replies your team can reuse.</span></div>
+          <div class="wf-cell"><b>Tab: Knowledge Base</b><span>The list of topics the assistant answers, plus a box to add an override answer for any topic.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Chat Support workspace</div></div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Tip — the page stays live on its own</div>
+          <p>When you open Chat Support, the page fetches the latest chats from <code>/api/admin/chat</code> and then <b>auto-refreshes the Dashboard every 20 seconds</b> so your counts stay current without a manual reload. The polling is considerate: it pauses while you have a conversation transcript open or a pop-up showing, and it only refreshes while you are on the <b>Dashboard</b> tab, so it never yanks you out of a chat you are reading. If the banner turns red — <i>"⚠ Backend offline… start next-app"</i> — the counts you see are the last good copy held on the page.</p>
+        </div>
+      </div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Where the conversations come from</div>
+          <p>Each chat here is a real <b>ChatSession</b> in the DOODLY database, created when a customer talks to the Doodly Assistant on the storefront. A background sync mirrors those sessions (and their messages) into the admin view, translating the server's status names into the three you see on screen — a database <b>Waiting</b> chat shows as <b>Active</b>, and a <b>Closed</b> chat shows as <b>Resolved</b>. On a fresh production site the list is deliberately <b>empty</b> until customers actually start chatting — sample conversations are never seeded on the live domain.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= SCREEN 1 : DASHBOARD -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Tab 1 — Dashboard</p><p class="sm">At-a-glance health of the assistant: volume, outcomes, satisfaction and the most-asked topics.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Show, in one screen, how many chats are live, how many were resolved or escalated, how happy customers are, and what they ask about most — so you can spot a spike or a problem area early.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Support</span> — read</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Chat Support → Dashboard</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Dashboard — six KPI cards on top · "Frequently asked topics" panel below</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Active chats</b><span>How many conversations are open right now.</span></div>
+          <div class="wf-cell"><b>Resolved</b><span>How many have been closed/resolved.</span></div>
+          <div class="wf-cell"><b>Escalated</b><span>How many were handed to a human.</span></div>
+          <div class="wf-cell"><b>Customer satisfaction</b><span>Average CSAT rating, shown as "X / 5".</span></div>
+          <div class="wf-cell"><b>Avg response time</b><span>The assistant's reply speed (shown as 1.0s).</span></div>
+          <div class="wf-cell"><b>Total chats</b><span>Every conversation on record.</span></div>
+          <div class="wf-cell"><b>Frequently asked topics</b><span>Top six topics by how often they came up, each with a count.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Dashboard tab</div></div>
+
+      <h4>The six KPI cards</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Card</th><th>What it means</th><th>How it is worked out</th></tr></thead>
+        <tbody>
+          <tr><td><b>Active chats</b></td><td>Conversations currently open (including database "Waiting" chats, which display as Active).</td><td>Count of chats whose status is <code>active</code>.</td></tr>
+          <tr><td><b>Resolved</b></td><td>Conversations that have been closed off.</td><td>Count of chats whose status is <code>resolved</code> (a database "Closed" chat also counts here).</td></tr>
+          <tr><td><b>Escalated</b></td><td>Conversations handed over to a human agent.</td><td>Count of chats flagged <code>escalated</code>.</td></tr>
+          <tr><td><b>Customer satisfaction</b></td><td>The average of the star ratings customers gave.</td><td>Mean of every chat's CSAT (1–5), shown to one decimal as "X / 5"; shows "—" when no ratings exist yet.</td></tr>
+          <tr><td><b>Avg response time</b></td><td>How quickly the assistant replies.</td><td>Shown as <b>1.0s</b> — the assistant answers instantly from its knowledge base; this is a headline figure, not a per-chat measurement.</td></tr>
+          <tr><td><b>Total chats</b></td><td>Every conversation on record.</td><td>The full count of non-deleted chats.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Frequently asked topics</h4>
+      <p>Below the cards, a panel lists the <b>top six topics</b> customers raised, in order, each with a count on the right (for example "Subscription plans — 12"). The topics come from tallying every conversation's detected intents — the same intent ids the assistant matches against (see the Knowledge Base tab). When there is no data yet it reads <i>"No data yet."</i></p>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">The API tracks more than the six cards show</div>
+          <p>The dashboard cards above are the headline figures. The underlying <code>/api/admin/chat?view=dashboard</code> endpoint computes several more that power reporting: <b>waiting</b>, <b>AI-handled</b> vs <b>human-handled</b> counts, the number of CSAT responses, and <b>resolved today</b>, plus the top eight topics. These are available to any tooling built on the API even though the on-screen dashboard focuses on the six most useful cards.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= SCREEN 2 : CONVERSATIONS -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Tab 2 — Conversations (list)</p><p class="sm">Every chat in one table; click any row to read it in full.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give you a scannable register of every customer conversation with its owner, length, handler, start time, status and satisfaction, and a one-click way into the full transcript.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Support</span> — read; actions inside a chat need manage rights</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Chat Support → Conversations</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Conversations — a single table, newest activity first</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Chat ID</b><span>The conversation reference, e.g. CHAT-9F2A1.</span></div>
+          <div class="wf-cell"><b>User</b><span>The customer's name, or "Guest" if not logged in.</span></div>
+          <div class="wf-cell"><b>Turns</b><span>How many messages the conversation contains.</span></div>
+          <div class="wf-cell"><b>Handled by</b><span>AI or Human.</span></div>
+          <div class="wf-cell"><b>Started</b><span>When the chat began.</span></div>
+          <div class="wf-cell"><b>Status</b><span>A colour badge: Active (amber) · Resolved (green) · Escalated (red).</span></div>
+          <div class="wf-cell"><b>CSAT</b><span>The star rating (e.g. 5★) or "—" if none.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Conversations list</div></div>
+
+      <h4>The conversations table — columns</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>What it shows</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><b>Chat ID</b></td><td>The unique conversation number in bold (format <code>CHAT-XXXXX</code>).</td><td>Generated by the system; the same number appears on the transcript header.</td></tr>
+          <tr><td><b>User</b></td><td>The customer's name, or <b>Guest</b> for a not-logged-in visitor.</td><td>The assistant never exposes one customer's data to another — a guest chat only carries what the guest typed.</td></tr>
+          <tr><td><b>Turns</b></td><td>The number of messages exchanged.</td><td>Counts customer, assistant, agent and system lines.</td></tr>
+          <tr><td><b>Handled by</b></td><td><b>AI</b> (assistant only) or <b>Human</b> (a staff member replied or it was assigned).</td><td>Flips to Human automatically the moment an agent sends a reply or takes the chat.</td></tr>
+          <tr><td><b>Started</b></td><td>The time the conversation began.</td><td>Shown as local time.</td></tr>
+          <tr><td><b>Status</b></td><td>A badge — <span class="pill role">Active</span> (amber), <span class="pill role">Resolved</span> (green) or <span class="pill role">Escalated</span> (red).</td><td>Database "Waiting" shows as Active and "Closed" as Resolved.</td></tr>
+          <tr><td><b>CSAT</b></td><td>The customer's satisfaction rating as stars (e.g. <b>5★</b>), or <b>—</b> if unrated.</td><td>Read-only here.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Table behaviour</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Capability</th><th>How it works here</th></tr></thead>
+        <tbody>
+          <tr><td><b>Ordering</b></td><td>The list is fetched newest-activity-first (by last message time) from the database.</td></tr>
+          <tr><td><b>Search / Filters</b></td><td>No filter controls on this screen — the table lists the whole synced set. (The server list endpoint <i>does</i> support query, status, handler, assignee and date filters for tooling; see the backend reference.)</td></tr>
+          <tr><td><b>Pagination</b></td><td>Up to 200 conversations are loaded into the view at once; there are no page controls on screen.</td></tr>
+          <tr><td><b>Exports</b></td><td>No export button here. (The API accepts a <code>log</code> action to record an export event in the audit trail when tooling exports.)</td></tr>
+          <tr><td><b>Row action</b></td><td>Click any row to open its <b>transcript</b> (see the next screen). There is no separate row menu.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Empty list</div>
+          <p>When there are no conversations, the table shows a single centred line — <i>"No conversations."</i> — which is the correct, honest state for a new production site until customers begin chatting.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= SCREEN 3 : TRANSCRIPT -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Conversation transcript &amp; actions</p><p class="sm">Read the whole chat, mark it resolved, or take it over as a human agent.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Let you read a conversation end to end and act on it — close it out, or assign it to yourself so it becomes a human-handled chat.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> read for viewers; the action buttons run only for roles with <b>manage</b> rights (<span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Support</span>)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Chat Support → Conversations → (open a chat)</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Transcript — <b>← Back to conversations</b> · CHAT-ID · customer name · status badge</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Back link</b><span>"← Back to conversations" returns to the list.</span></div>
+          <div class="wf-cell"><b>Header</b><span>The chat ID, the customer's name, and the status badge.</span></div>
+          <div class="wf-cell"><b>Transcript</b><span>Every message in order, labelled by who sent it — the customer, the Assistant, or System.</span></div>
+          <div class="wf-cell"><b>Mark resolved</b><span>Closes the conversation (hidden once it is already resolved).</span></div>
+          <div class="wf-cell"><b>Assign to me</b><span>Takes ownership; afterwards shows an "Assigned: name" badge instead.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — a conversation opened in full</div></div>
+
+      <h4>How the transcript reads</h4>
+      <p>Messages appear top to bottom in time order. Each line is tagged with its author: the <b>customer's name</b> for their own messages, <b>Assistant</b> for the bot's replies, and <b>System</b> for automatic notes (for example "Assigned to …", "Chat marked Resolved", or "Chat escalated to a human agent"). Each message shows its time. When you send a reply as an agent through the backend, it is labelled with your name.</p>
+
+      <h4>Action buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>← Back to conversations</b></td><td>Returns to the list without changing anything.</td><td>None — client navigation only.</td><td>Any viewer</td></tr>
+          <tr><td><b>Mark resolved</b></td><td>Closes the conversation and clears its escalated flag. The button disappears once the chat is resolved.</td><td>POST <code>/api/admin/chat</code> with <code>action:"close"</code> → sets status to <b>RESOLVED</b>, stamps <code>closedAt</code>, writes a "Chat marked Resolved" system note, and logs <code>chat.close</code>.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Support</span></td></tr>
+          <tr><td><b>Assign to me</b></td><td>Assigns the chat to you and switches it to human-handled. Replaced afterwards by a blue <b>Assigned: name</b> badge.</td><td>POST <code>/api/admin/chat</code> with <code>action:"assign"</code> (your user id + name) → sets the assignee, flips <b>Handled by</b> to <b>Human</b>, writes an "Assigned to …" system note, and logs <code>chat.assign</code>.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Support</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">These two buttons are database-backed and instant</div>
+          <p>When you click <b>Mark resolved</b> or <b>Assign to me</b> on a chat that exists in the database, the action is sent straight to the server, a small toast confirms it ("Marked resolved" / "Assigned to you"), and the list re-syncs so the status and handler update everywhere. If the server rejects it because your role can't manage chats, you'll see <i>"Only Support / Admin can manage chats (403)."</i> A rare chat that exists only locally (not yet in the database) is handled on the page instead, so the buttons always do something sensible.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= SCREEN 4 : CANNED RESPONSES -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Tab 3 — Canned Responses</p><p class="sm">A small library of ready-made replies your team can reuse in chats.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Keep the phrases your team says most often — refund timelines, delivery windows, pause instructions — in one editable list so replies stay consistent and fast.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Support</span> — edit</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Chat Support → Canned Responses</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Canned responses — one editable box per reply · <b>+ Add response</b> · <b>Save</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Response boxes</b><span>A multi-line text box for each saved reply.</span></div>
+          <div class="wf-cell"><b>Remove</b><span>A link beside each box to delete that reply.</span></div>
+          <div class="wf-cell"><b>+ Add response</b><span>Adds a fresh empty box at the bottom.</span></div>
+          <div class="wf-cell"><b>Save</b><span>Stores the whole list; empty boxes are dropped.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Canned Responses editor</div></div>
+
+      <h4>Field</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Response text</b></td><td>One ready-made reply.</td><td>Free text (multi-line).</td><td class="t-opt">Opt.</td><td>Trimmed on Save; blank boxes are discarded. The saved list is kept on the device for reuse.</td><td>Your refund has been initiated and will reflect in 3–5 business days.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>+ Add response</b></td><td>Appends a new empty response box.</td><td>Client-side only until you Save.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Support</span></td></tr>
+          <tr><td><b>Remove</b></td><td>Deletes that response box from the list.</td><td>Client-side; the removal is committed on Save.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Support</span></td></tr>
+          <tr><td><b>Save</b></td><td>Stores every non-empty box as the canned-response library and shows "Canned responses saved".</td><td>Trims and filters out blanks, then persists the list for reuse.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Support</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">The starter set</div>
+          <p>The tab ships with four sensible defaults you can edit or delete: a friendly opener ("Thanks for reaching out! How can I help?"), the refund timeline, the delivery window ("Deliveries arrive every morning before 7:00 AM."), and the pause/Vacation Mode note. Edit them to match your team's exact wording.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= SCREEN 5 : KNOWLEDGE BASE -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Tab 4 — Knowledge Base</p><p class="sm">The topics the assistant answers, and a way to override any answer without code.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Show every topic the Doodly Assistant can answer, and let you supply a replacement answer for any of them — so you can correct or localise a reply instantly, no developer needed.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Support</span> — edit</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Chat Support → Knowledge Base</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Knowledge Base — add-override form on top · active overrides · full topic table</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Topic id</b><span>Which topic to override, e.g. sub.plans.</span></div>
+          <div class="wf-cell"><b>Override answer</b><span>The replacement text the assistant should say.</span></div>
+          <div class="wf-cell"><b>Save override</b><span>Applies the override immediately.</span></div>
+          <div class="wf-cell"><b>Active overrides</b><span>The overrides in force, each with a Remove link.</span></div>
+          <div class="wf-cell"><b>Topics table</b><span>Topic id · Name · the default answer.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Knowledge Base tab</div></div>
+
+      <p>An explainer line at the top reminds you: <i>"The assistant answers from these topics before any AI model. Add an override answer for any topic (no code change)."</i> The assistant always tries its built-in knowledge base first; only if nothing matches (and a server AI proxy has been configured) does it fall back to an AI model, and otherwise it offers to connect the customer to a human. Your overrides sit on top of the built-in answers.</p>
+
+      <h4>Add-override form</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Topic id</b></td><td>The internal id of the topic you want to override.</td><td>A topic code from the table below.</td><td class="t-req">Yes</td><td>Both fields must be filled or you get "Enter a topic id and answer". Use an id exactly as shown in the topics table.</td><td>sub.plans</td></tr>
+          <tr><td><b>Override answer</b></td><td>The exact text the assistant will say for that topic instead of the default.</td><td>Free text (multi-line).</td><td class="t-req">Yes</td><td>Saved as the override; from then on the assistant uses this wherever it would have used the built-in answer for that topic.</td><td>Our plans start at ₹70/day — Single, 7-day, 30-day and 90-day. Longer plans save more.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Save override</b></td><td>Stores the override for the entered topic and refreshes the list; shows "Override saved".</td><td>Requires both fields; the override is kept and layered over the assistant's answer for that topic.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Support</span></td></tr>
+          <tr><td><b>Remove</b> (on an active override)</td><td>Deletes that override so the topic reverts to its built-in default.</td><td>Drops the override for that topic id and re-renders.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Support</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The topics table</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>What it shows</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><b>Topic</b></td><td>The topic id as code, e.g. <code>sub.plans</code>, <code>delivery.bottles</code>, <code>pay.failed</code>.</td><td>Copy this exact id into the "Topic id" box to override it.</td></tr>
+          <tr><td><b>Name</b></td><td>A friendly label — e.g. "Subscription plans", "Bottle returns", "Failed payment".</td><td>Documentary; the internal id is what actually addresses the topic.</td></tr>
+          <tr><td><b>Default answer</b></td><td>The first part of the built-in answer the assistant gives today.</td><td>Shown truncated so you can recognise the topic at a glance.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Tip — a few of the topics you can tune</div>
+          <p>The assistant already answers dozens of topics out of the box, including greetings, all five products (A2 milk, paneer, ghee, curd, palkova), subscription plans / pause / resume / renewal / schedule, order &amp; delivery status, bottle returns, referral, wallet, payment methods and failed payments, invoices &amp; GST, the company story, farmers, quality, refunds, privacy, and human handover. Pick the id from the table and drop in your own wording to fine-tune any of them.</p>
+        </div>
+      </div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Overrides change what customers see</div>
+          <p>An override is applied on top of the assistant's answer <b>the moment you save it</b> — the next customer who asks about that topic sees your wording, on the live storefront widget. Keep overrides accurate and on-brand; if in doubt, remove the override to fall back to the tested default.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= LIFECYCLE WORKFLOW -->
+  <div class="diagram"><div class="wf">
+    <div class="wf-topbar">Workflow — the life of a support chat</div>
+    <div class="wf-flow"><span>Customer opens the Doodly Assistant</span><span>Assistant answers from the knowledge base</span><span>Session saved to the database</span><span>Customer asks for a human → chat escalates</span><span>Super Admin opens it here &amp; "Assign to me"</span><span>Chat becomes Human-handled</span><span>Issue solved → "Mark resolved"</span><span>Customer rates it (CSAT)</span></div>
+  </div><div class="wire-cap">Figure — from first message to a resolved, rated conversation</div></div>
+
+  <!-- ======================================================= BACKEND / DATA MODEL -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Backend &amp; data model — for reference</p><p class="sm">What sits behind the screen: the API, the record fields, and the full action set.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Document the real endpoint, the stored fields and every server action, so power users and integrators understand exactly what the module can do beyond the four on-screen tabs.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> — reference</span>
+      <span class="m"><b>Endpoint</b> <span class="navpath">/api/admin/chat</span></span>
+    </div>
+    <div class="spec-body">
+
+      <h4>What a conversation stores (ChatSession)</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Meaning</th><th>Values / notes</th></tr></thead>
+        <tbody>
+          <tr><td><b>number</b></td><td>The human-readable chat reference.</td><td>Format <code>CHAT-XXXXX</code>; unique.</td></tr>
+          <tr><td><b>customerName / customerEmail / customerId</b></td><td>Who the chat is with.</td><td>Name defaults to "Guest" when not logged in; email/id optional.</td></tr>
+          <tr><td><b>channel</b></td><td>Where the chat came from.</td><td>Defaults to <code>web</code>.</td></tr>
+          <tr><td><b>status</b></td><td>Lifecycle state.</td><td>ACTIVE · WAITING · RESOLVED · ESCALATED · CLOSED.</td></tr>
+          <tr><td><b>handledBy</b></td><td>Who is answering.</td><td><b>AI</b> or <b>Human</b>; flips to Human on an agent reply, assign or transfer.</td></tr>
+          <tr><td><b>assigneeId / assigneeName</b></td><td>The staff member who owns the chat.</td><td>Set by Assign / Transfer; cleared when unassigned.</td></tr>
+          <tr><td><b>csat</b></td><td>The customer's satisfaction rating.</td><td>1–5, or empty.</td></tr>
+          <tr><td><b>escalated</b></td><td>Whether it was handed to a human.</td><td>Set when a chat is escalated.</td></tr>
+          <tr><td><b>topics</b></td><td>A tally of the intents the assistant matched.</td><td>Powers the "Frequently asked topics" panel.</td></tr>
+          <tr><td><b>lastMessageAt / closedAt / createdAt / deletedAt</b></td><td>Timestamps.</td><td>Sort key is <code>lastMessageAt</code>; deletes are soft (<code>deletedAt</code>), so nothing is truly erased.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>What a message stores (ChatMessage)</h4>
+      <p>Each line carries a <b>role</b> — <code>user</code> (customer), <code>bot</code> (Assistant), <code>agent</code> (a staff reply), <code>note</code> (an internal note) or <code>system</code> (automatic events) — plus the <b>author name</b>, the <b>body</b> text, an optional detected <b>intent</b>, and the time it was created.</p>
+
+      <h4>Every server action</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Action</th><th>What it does</th><th>Surfaced in this UI?</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><code>GET view=list</code></td><td>Lists conversations (optionally with messages); supports query, status, handler, assignee, date-range, sort and paging filters.</td><td>Yes — this is what fills the Conversations table (up to 200 with messages).</td><td>view</td></tr>
+          <tr><td><code>GET view=dashboard</code></td><td>Returns the KPI totals and top topics.</td><td>Powers the Dashboard figures.</td><td>view</td></tr>
+          <tr><td><code>GET view=detail</code></td><td>Returns one chat with its full message timeline.</td><td>Behind the transcript view.</td><td>view</td></tr>
+          <tr><td><code>send</code></td><td>Posts an agent reply into the chat (flips it to Human).</td><td>API — not a button on this screen yet.</td><td>manage</td></tr>
+          <tr><td><code>note</code></td><td>Adds an internal note (not shown to the customer).</td><td>API only.</td><td>manage</td></tr>
+          <tr><td><code>assign</code></td><td>Assigns the chat to a staff member.</td><td>Yes — <b>Assign to me</b>.</td><td>manage</td></tr>
+          <tr><td><code>transfer</code></td><td>Reassigns to another agent and reactivates the chat.</td><td>API only.</td><td>manage</td></tr>
+          <tr><td><code>status</code></td><td>Sets any status directly (Active/Waiting/Resolved/Escalated/Closed).</td><td>API only.</td><td>manage</td></tr>
+          <tr><td><code>close</code></td><td>Resolves the chat.</td><td>Yes — <b>Mark resolved</b>.</td><td>manage</td></tr>
+          <tr><td><code>reopen</code></td><td>Re-activates a resolved chat.</td><td>API only.</td><td>manage</td></tr>
+          <tr><td><code>escalate</code></td><td>Flags the chat as escalated to a human.</td><td>API only (customers also trigger this from the widget).</td><td>manage</td></tr>
+          <tr><td><code>csat</code></td><td>Records a 1–5 satisfaction rating.</td><td>API only.</td><td>manage</td></tr>
+          <tr><td><code>delete</code> / <code>restore</code></td><td>Soft-deletes or restores a chat.</td><td>API only.</td><td>manage</td></tr>
+          <tr><td><code>bulk</code></td><td>Applies delete/restore or a status to many chats at once.</td><td>API only.</td><td>manage</td></tr>
+          <tr><td><code>log</code></td><td>Records an export or other event in the audit trail.</td><td>API only.</td><td>view</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Everything is audited</div>
+          <p>Every mutation writes an entry to the shared Audit Log as <code>chat.&lt;action&gt;</code> (for example <code>chat.close</code>, <code>chat.assign</code>). Status changes and assignments also drop a <b>System</b> message into the transcript itself, so the conversation carries its own history of who did what and when.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= BEST PRACTICE -->
+  <div class="call best">
+    <span class="ci">✅</span>
+    <div class="cbody">
+      <div class="ctitle">Best Practice — assign before you reply, resolve when you're done</div>
+      <p>When you step into a customer chat, click <b>Assign to me</b> first. That flips the chat to <b>Human-handled</b> and stamps your name on it, so a teammate can see at a glance that it's covered and won't double-answer. When the issue is settled, click <b>Mark resolved</b> — it closes the chat, clears any escalation flag, and moves it out of the Active count. Both actions leave a System note in the transcript, giving you a clean, auditable record of ownership and outcome.</p>
+    </div>
+  </div>
+
+  <div class="call best">
+    <span class="ci">✅</span>
+    <div class="cbody">
+      <div class="ctitle">Best Practice — fix a wrong answer in seconds with a Knowledge Base override</div>
+      <p>If the assistant is giving an outdated or off-brand answer (say, an old price or delivery cut-off), don't wait for a code change. Open the <b>Knowledge Base</b> tab, copy the topic id from the table, and paste a corrected <b>Override answer</b>. It goes live to the storefront widget the moment you save. Once the underlying answer is properly updated, <b>Remove</b> the override so you fall back to the tested default.</p>
+    </div>
+  </div>
+
+  <!-- ======================================================= TROUBLESHOOTING -->
+  <h3>Troubleshooting</h3>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>The page shows "Access restricted — You don't have permission to view chat support."</td><td>Your role lacks the <code>chatSupport</code> view permission.</td><td>Sign in as Super Admin or Admin, or have the Super Admin grant your role <code>chatSupport:view</code> (Support and roles with <code>customers:view</code> can also view via the server).</td></tr>
+      <tr><td>A red banner reads "Backend offline… start next-app".</td><td>The API server isn't reachable.</td><td>Start the next-app backend. Until it responds, the page shows the last synced copy of the chats.</td></tr>
+      <tr><td>Clicking Mark resolved / Assign to me shows "Only Support / Admin can manage chats (403)."</td><td>Your role can view chats but not manage them.</td><td>Managing needs <code>chatSupport:edit</code> or <code>support:edit</code>. Ask the Super Admin to grant it, or have a Support/Admin user act.</td></tr>
+      <tr><td>The Conversations table is empty on a live site.</td><td>No customers have chatted yet; sample chats are never seeded in production.</td><td>Expected. The list fills as real conversations happen. Confirm the backend banner is green so you know it's connected.</td></tr>
+      <tr><td>The Dashboard counts look stale.</td><td>Auto-refresh pauses while a transcript or pop-up is open, and only runs on the Dashboard tab.</td><td>Close any open chat, return to the Dashboard tab, and it refreshes within 20 seconds — or reopen the page to force a fresh fetch.</td></tr>
+      <tr><td>"Enter a topic id and answer" when saving an override.</td><td>One of the two Knowledge Base fields was blank.</td><td>Fill both the Topic id (exactly as shown in the topics table) and the Override answer, then Save.</td></tr>
+      <tr><td>A chat shows Active even though it looks finished.</td><td>A database "Waiting" chat is displayed as Active in this view.</td><td>Open it and Mark resolved when the issue is genuinely closed; the badge then turns green.</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- ======================================================= FAQ -->
+  <h3>Frequently asked questions</h3>
+
+  <h4>Where do these conversations come from?</h4>
+  <p>From the Doodly Assistant — the chat button on every storefront and customer page. Each conversation is saved to the DOODLY database and mirrored into this admin view. You are reading real customer chats, not a simulation.</p>
+
+  <h4>Can I type a reply to the customer from this screen?</h4>
+  <p>The current admin screen focuses on reading a chat and two actions — Mark resolved and Assign to me. The backend already supports agent replies and internal notes (the <code>send</code> and <code>note</code> actions), which flip a chat to Human-handled; those are available to tooling built on the API. For live back-and-forth, the assistant hands customers to WhatsApp, phone or a callback.</p>
+
+  <h4>What's the difference between "Escalated" and "Assigned"?</h4>
+  <p><b>Escalated</b> means the chat was flagged for a human (often because the customer asked to talk to someone). <b>Assigned</b> means a specific staff member owns it. You typically assign an escalated chat to yourself, which also switches Handled by to Human.</p>
+
+  <h4>If I delete a chat, is it gone forever?</h4>
+  <p>No. Deletes are <b>soft</b> — the record is marked deleted (hidden from the list) but preserved and can be restored. This keeps your history and audit trail intact.</p>
+
+  <h4>Does changing a Knowledge Base override affect what customers see immediately?</h4>
+  <p>Yes. Once you save an override, the assistant uses your wording for that topic straight away on the live widget. Remove the override to return to the built-in answer.</p>
+
+  <h4>Why does "Avg response time" always say 1.0s?</h4>
+  <p>The assistant answers instantly from its knowledge base, so the dashboard shows a fixed, representative 1.0s as a headline. It is an indicative figure for how fast the AI replies, not a per-conversation stopwatch.</p>
+
+</section>

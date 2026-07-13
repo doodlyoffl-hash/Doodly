@@ -1,0 +1,350 @@
+<section class="sheet" id="admin-cms">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Content · CMS</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Content</span></div>
+  <h2 class="section-title">CMS</h2>
+  <p class="lead">The Content Management System — one place to edit the words, images, banners, FAQs, legal pages, testimonials and product details that appear on the public DOODLY storefront, so marketing copy and product launches can change without a code deploy.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where this lives &amp; what it really is</div><p>Open it from <b>Admin → Content → CMS</b> (URL <b>/admin/cms.html</b>). The page has two halves. The top half is a <b>hub of six tiles</b> that route you to each content area. The bottom half is the <b>Content Blocks manager</b> — a live table of every editable content block stored in the DOODLY database, driven through the endpoints <b>/api/admin/cms</b> (list &amp; create) and <b>/api/admin/cms/&lt;id&gt;</b> (edit &amp; delete). When it loads you will see a green banner reading “● Live — N content block(s) · P published from the DOODLY database”. If the banner is red, the backend is offline or your role is not allowed — see Troubleshooting.</p></div></div>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Two content systems, one screen</div><p>CMS covers <b>two kinds of content</b> that are edited from different places but both reach the live site: (1) <b>Content blocks</b> — free-form JSON records of type <i>page</i>, <i>banner</i>, <i>testimonial</i>, <i>legal</i>, <i>hero</i>, <i>faq</i> and so on, stored in the <b>CmsBlock</b> table, published blocks are overlaid onto storefront pages at load time; and (2) <b>Product content</b> — every attribute of a product (pricing, variants, plans, nutrition, quality, description, badges, images, availability, SEO), edited through the tabbed <b>Product CMS</b> editor that opens from the <b>Products</b> screen. Both are documented below.</p></div></div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 1 — CMS HUB (landing tiles)                            -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">CMS Hub</p><p class="sm">The landing screen — six shortcut tiles that jump to each content area.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give a plain-English map of everything that can be edited on the public site, and one-click routes into each area.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> can view, create, edit <b>and delete</b>; <span class="pill role">Marketing</span> can view, create <b>and edit</b> but <b>not delete</b>. No other role can open this page.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → CMS</span></span>
+    </div>
+
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>CMS</b> · “Edit storefront content — pages, FAQs, banners, products.”</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Tile 1 · Products &amp; status</b><span>“Launch products with a status flip.” → opens <b>/admin/products.html</b> (link: <i>Open</i>)</span></div>
+          <div class="wf-cell"><b>Tile 2 · FAQs</b><span>“Edit the customer FAQ.” → routes to the Help Center admin</span></div>
+          <div class="wf-cell"><b>Tile 3 · Pages</b><span>“About, farmers, quality copy.” → opens the <i>page</i>-type block manager</span></div>
+          <div class="wf-cell"><b>Tile 4 · Banners</b><span>“Homepage hero &amp; promos.” → opens the <i>banner</i>-type block manager</span></div>
+          <div class="wf-cell"><b>Tile 5 · Testimonials</b><span>“Manage reviews shown publicly.” → opens the <i>testimonial</i>-type block manager</span></div>
+          <div class="wf-cell"><b>Tile 6 · Legal</b><span>“Privacy, terms, refund, shipping.” → opens the <i>legal</i>-type block manager</span></div>
+          <div class="wf-cell"><b>Live status banner + Content Blocks manager</b><span>Below the tiles — see Screen 2</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the CMS hub: six routing tiles on top, the live Content Blocks manager below.</div></div>
+
+      <h4>What each tile does</h4>
+      <p>Each tile shows an icon, a title and a one-line description. When the page loads, the five non-product tiles gain a green “<b>Manage →</b>” hint and become clickable buttons (keyboard-accessible with Enter or Space). Here is exactly where each one takes you.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Tile</th><th>Icon</th><th>What it says</th><th>What clicking it does</th></tr></thead>
+        <tbody>
+          <tr><td class="t-req"><b>Products &amp; status</b></td><td>tag</td><td>“Launch products with a status flip.”</td><td>A real link — opens <b>/admin/products.html</b>, where each product's <b>Edit</b> button launches the tabbed Product CMS editor (Screen 4). This is how you flip a product between Draft, Coming Soon and Active.</td></tr>
+          <tr><td><b>FAQs</b></td><td>msg</td><td>“Edit the customer FAQ.”</td><td>Navigates to the live Help Center admin at <b>/admin/help-center.html</b>, where FAQ questions and answers are managed.</td></tr>
+          <tr><td><b>Pages</b></td><td>edit</td><td>“About, farmers, quality copy.”</td><td>Opens the typed block manager filtered to blocks of type <b>page</b> (About, Farmers, Quality prose sections).</td></tr>
+          <tr><td><b>Banners</b></td><td>gift</td><td>“Homepage hero &amp; promos.”</td><td>Opens the typed block manager filtered to blocks of type <b>banner</b> (homepage hero &amp; promo strips).</td></tr>
+          <tr><td><b>Testimonials</b></td><td>star</td><td>“Manage reviews shown publicly.”</td><td>Opens the typed block manager filtered to blocks of type <b>testimonial</b>.</td></tr>
+          <tr><td><b>Legal</b></td><td>file</td><td>“Privacy, terms, refund, shipping.”</td><td>Opens the typed block manager filtered to blocks of type <b>legal</b>.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — the tiles are shortcuts, not separate stores</div><p>Pages, Banners, Testimonials and Legal all point at the <b>same</b> Content Blocks table underneath — the tiles simply pre-filter it to one type and pre-fill the <i>Key</i> with the right prefix when you create a new block. You can achieve the same thing from the Content Blocks manager below by choosing the type yourself.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 2 — CONTENT BLOCKS MANAGER                             -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Content Blocks Manager</p><p class="sm">The live table of every editable content block, with headline counts on top.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> See, create, edit and remove every free-form content block that the storefront reads — hero copy, banners, page prose, testimonials and legal text — all backed by the DOODLY database.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> View/Create/Edit — <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span>. Delete — <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> only.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → CMS → (scroll to Content blocks)</span></span>
+    </div>
+
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Panel — <b>Content blocks</b> · <b>[＋ New block]</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>KPI strip (4 cards)</b><span>Total Blocks · Published · Drafts · Types</span></div>
+          <div class="wf-cell"><b>Live status banner</b><span>Green “● Live — N content block(s) · P published…”; red if offline or blocked</span></div>
+          <div class="wf-cell"><b>Blocks table</b><span>Columns: Key · Type · Status · Updated · Manage</span></div>
+          <div class="wf-cell"><b>Row action</b><span>“Manage” opens the block editor dialog</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Content Blocks manager: four KPI cards, then a table of every block.</div></div>
+
+      <h4>The four dashboard cards (KPI strip)</h4>
+      <p>These are computed live from the list of blocks returned by <b>/api/admin/cms</b>, and sit above the table.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Card</th><th>What it counts</th></tr></thead>
+        <tbody>
+          <tr><td><b>Total Blocks</b></td><td>Every content block in the database, published or not.</td></tr>
+          <tr><td><b>Published</b></td><td>Blocks whose <i>Published</i> flag is on — the ones the live site actually reads.</td></tr>
+          <tr><td><b>Drafts</b></td><td>Total minus Published — blocks saved but not yet live.</td></tr>
+          <tr><td><b>Types</b></td><td>How many distinct block <i>types</i> exist (e.g. page, banner, testimonial, legal, hero).</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The content-blocks table</h4>
+      <p>Every block is one row. The table is sorted by <b>Key</b> (A→Z) — the order returned by the backend.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Element</th><th>Detail (from the real render)</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td><b>Key</b> (the unique block identifier, e.g. <code>hero.home</code> or <code>page.about</code>, shown in bold) · <b>Type</b> (the block type, e.g. banner) · <b>Status</b> (a green “Published” badge or a grey “Draft” badge) · <b>Updated</b> (the last-changed date, shown as YYYY-MM-DD, or “—” if never) · <b>Manage</b> (opens the editor).</td></tr>
+          <tr><td><b>Sorting</b></td><td>Fixed — ascending by Key, straight from the database.</td></tr>
+          <tr><td><b>Empty state</b></td><td>When there are no blocks yet, the table shows “No content blocks yet — create one.”</td></tr>
+          <tr><td><b>Row action</b></td><td><b>Manage</b> opens the block editor dialog (next section) pre-filled with that block.</td></tr>
+          <tr><td><b>Create</b></td><td>The panel header carries a <b>＋ New block</b> button that opens the same dialog empty.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — this table has no search, filter or export</div><p>Unlike the big operational tables elsewhere in the admin, the Content Blocks list is a simple database-ordered table without the DataTable toolbar. To narrow to one type, use the hub tiles (Pages / Banners / Testimonials / Legal), which open a per-type list instead.</p></div></div>
+
+      <h4>Create / Edit block dialog</h4>
+      <p>The <b>＋ New block</b> button and every <b>Manage</b> button open the same modal form. It has four inputs.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Key</b></td><td>The unique name the storefront uses to find this block.</td>
+            <td>Letters, numbers, dot, dash, underscore.</td><td class="t-req">Yes</td>
+            <td>Client &amp; server both enforce <code>^[a-z0-9._-]+$</code>, length 2–60. Must be unique — a duplicate key returns a “conflict” error (“A block with that key already exists.”). <b>Locked (disabled) when editing</b> an existing block — a key can never be renamed.</td>
+            <td>hero.home</td>
+          </tr>
+          <tr>
+            <td><b>Type</b></td><td>Groups the block and decides which storefront slot reads it.</td>
+            <td>A short label — hero, banner, faq, page, testimonial, legal…</td><td class="t-req">Yes</td>
+            <td>Free text, length 2–30. The hub tiles preset this (page / banner / testimonial / legal); you may set any type from the generic form.</td>
+            <td>banner</td>
+          </tr>
+          <tr>
+            <td><b>Data (JSON payload)</b></td><td>The actual content — a flexible JSON object holding the fields for that block type.</td>
+            <td>Any valid JSON object.</td><td class="t-opt">Opt.</td>
+            <td>Must parse as valid JSON or the form refuses to save (“Data must be valid JSON.”). Empty defaults to <code>{}</code>. Stored verbatim in the <b>CmsBlock.data</b> column. Common keys read by pages: <code>eyebrow</code>, <code>heading</code>, <code>text</code>, <code>html</code>.</td>
+            <td>{ "heading": "Fresh A2 milk", "text": "Delivered by 7 AM" }</td>
+          </tr>
+          <tr>
+            <td><b>Published</b></td><td>Whether this block is live on the public site.</td>
+            <td>On / Off checkbox.</td><td class="t-opt">Opt.</td>
+            <td>On by default for new blocks. Only <b>published</b> blocks are returned to the storefront by <b>/api/cms/page</b>; unpublished ones are saved as drafts and stay invisible to customers.</td>
+            <td>On</td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <h4>Buttons in the block dialog</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Create block</b> (new mode)</td><td>Saves a brand-new block and refreshes the table.</td><td><b>POST /api/admin/cms</b> with key, type, data, published. Records a <code>cms.create</code> audit entry.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Save changes</b> (edit mode)</td><td>Updates the block's type, data and/or published flag.</td><td><b>PATCH /api/admin/cms/&lt;id&gt;</b>. Records a <code>cms.update</code> audit entry. (Key is never sent — it cannot change.)</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Delete</b> (edit mode only)</td><td>Removes the block after a confirmation prompt (“Delete block '…'?”).</td><td><b>DELETE /api/admin/cms/&lt;id&gt;</b>. Records a <code>cms.delete</code> audit entry.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> only</td></tr>
+          <tr><td><b>Cancel</b> / <b>×</b> / Esc</td><td>Closes the dialog without saving.</td><td>None.</td><td>Any who can open it</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — Delete is permanent and Marketing cannot do it</div><p>Deleting a block hard-removes the record from the database; there is no soft-delete or undo. Only <b>Admin</b> and <b>Super Admin</b> may delete — a <span class="pill role">Marketing</span> user who tries gets a 403 (“Only Marketing / Admin can manage CMS”). If a page suddenly loses content, check whether its block was deleted rather than merely unpublished.</p></div></div>
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — draft, preview, then publish</div><p>Create or edit a block with <b>Published off</b>, confirm the JSON is right, then flip it on. Because only published blocks reach the storefront, this lets you stage copy safely. Keep keys descriptive and prefixed by area (<code>page.about</code>, <code>banner.hero</code>, <code>legal.privacy</code>) so the storefront's prefix-based hydration finds them.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 3 — TYPED BLOCK MANAGER (Pages/Banners/Legal/etc.)     -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Typed Block Manager (Pages · Banners · Testimonials · Legal)</p><p class="sm">A focused pop-up listing only the blocks of one type, opened from the hub tiles.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Work on one content area at a time — e.g. all the homepage banners together — without scrolling the full blocks table.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> Same as the blocks manager — <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span> (delete Admin/Super only).</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → CMS → (Pages / Banners / Testimonials / Legal tile)</span></span>
+    </div>
+
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Dialog — <b>Banners</b> · “· N blocks”</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Intro line</b><span>“Content blocks of type <code>banner</code>, stored in the DOODLY database. Published blocks are the ones the storefront reads.”</span></div>
+          <div class="wf-cell"><b>Block rows</b><span>Each row: Key (bold) · Published/Draft badge · a short preview of the JSON · [Edit]</span></div>
+          <div class="wf-cell"><b>Empty state</b><span>“No banners blocks yet — create the first one.”</span></div>
+          <div class="wf-cell"><b>Footer</b><span>[Close] · [＋ New Banner]</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the typed block manager (Banners shown): a filtered list plus a type-scoped “New” button.</div></div>
+
+      <h4>How it works</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Element</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td><b>What it lists</b></td><td>Only blocks whose <i>type</i> matches the tile — <code>page</code>, <code>banner</code>, <code>testimonial</code> or <code>legal</code>. The count in the title updates to match.</td></tr>
+          <tr><td><b>Preview</b></td><td>Each row shows a truncated (~90-character) preview of the block's JSON data, so you can tell blocks apart at a glance.</td></tr>
+          <tr><td><b>Edit</b></td><td>Opens the same Create/Edit dialog from Screen 2, pre-filled with that block.</td></tr>
+          <tr><td><b>＋ New &lt;type&gt;</b></td><td>Opens the create dialog with the <i>Type</i> already set and the <i>Key</i> pre-seeded with the type prefix (e.g. <code>banner.</code>) so you only add the suffix.</td></tr>
+          <tr><td><b>Close</b> / × / click-outside</td><td>Dismisses the pop-up.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — FAQs is different</div><p>The <b>FAQs</b> tile does <b>not</b> open a typed block manager. It navigates to the dedicated Help Center admin (<b>/admin/help-center.html</b>), which has its own question/answer/video tooling. Everything else on the hub uses the CmsBlock manager described here.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 4 — PRODUCT CMS EDITOR (tabbed slide-over)             -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Product CMS Editor</p><p class="sm">A tabbed slide-over that edits every attribute of a product and pushes it live across the storefront.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Launch, price, describe and merchandise a product — 12 tabs covering basics, pricing, variants, subscription plans, nutrition, quality, description, badges, images, availability, SEO and analytics.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (full products control); reached from the Products screen.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → CMS → Products &amp; status → Products → Edit</span></span>
+    </div>
+
+    <div class="spec-body">
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">How to open it</div><p>Click <b>Products &amp; status</b> on the CMS hub to reach <b>/admin/products.html</b>, then click any product's <b>Edit</b> button. A slide-over panel opens on the right with a tab strip and Save / Cancel / Reset controls. Edits are applied to the live catalogue the whole storefront reads (localStorage overlay in the static build; a PATCH API + cache revalidation in production), so changes reflect with no redeploy.</p></div></div>
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Slide-over — <b>Product CMS · &lt;product name&gt;</b> · <b>[×]</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Tab strip (12 tabs)</b><span>Basic · Pricing · Variants · Subscriptions · Nutrition · Quality · Description · Badges · Images · Availability · SEO · Analytics</span></div>
+          <div class="wf-cell"><b>Tab body</b><span>The fields/table for the selected tab</span></div>
+          <div class="wf-cell"><b>Footer left</b><span>[Reset all CMS edits]</span></div>
+          <div class="wf-cell"><b>Footer right</b><span>[Cancel] · [Save changes]</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Product CMS slide-over: a 12-tab editor with a save/reset footer.</div></div>
+
+      <h4>Tab 1 · Basic</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Product name</b></td><td>The name shown everywhere on the site.</td><td>Text</td><td class="t-req">Yes</td><td>Free text; written to <code>name</code>.</td><td>A2 Buffalo Milk</td></tr>
+          <tr><td><b>Slug</b></td><td>The URL-friendly identifier for the product page.</td><td>Text</td><td class="t-opt">Opt.</td><td>Defaults to the product id if blank; written to <code>slug</code>.</td><td>a2-buffalo-milk</td></tr>
+          <tr><td><b>Status</b></td><td>The product's lifecycle state — this is the “status flip” that launches a product.</td><td>Active · Draft · Coming Soon · Out of Stock · Discontinued</td><td class="t-req">Yes</td><td>Dropdown; written to <code>status</code> (values: available / draft / coming_soon / out_of_stock / discontinued).</td><td>Active</td></tr>
+          <tr><td><b>Visible on site</b></td><td>Whether the product is listed in the storefront at all.</td><td>“Listed in storefront” checkbox</td><td class="t-opt">Opt.</td><td>On unless explicitly unchecked; written to <code>visible</code>.</td><td>On</td></tr>
+          <tr><td><b>Category</b></td><td>Groups the product in the catalogue.</td><td>Text</td><td class="t-opt">Opt.</td><td>Written to <code>category</code>.</td><td>Milk</td></tr>
+          <tr><td><b>Display order</b></td><td>Sort position among products (lower shows first).</td><td>Number</td><td class="t-opt">Opt.</td><td>Written to <code>order</code>; defaults 0.</td><td>1</td></tr>
+          <tr><td><b>From (label)</b></td><td>A short “from …” tagline, e.g. a starting price label.</td><td>Text</td><td class="t-opt">Opt.</td><td>Written to <code>from</code>.</td><td>From ₹90/day</td></tr>
+          <tr><td><b>Rating value</b></td><td>The star rating shown on the card.</td><td>Number (step 0.1)</td><td class="t-opt">Opt.</td><td>Written to <code>rating.value</code>.</td><td>4.8</td></tr>
+          <tr><td><b>Rating count</b></td><td>How many ratings the value is based on.</td><td>Number</td><td class="t-opt">Opt.</td><td>Written to <code>rating.count</code>.</td><td>1240</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Tab 2 · Pricing</h4>
+      <p>Nine money fields (all numeric, in ₹ except the percentage ones), written under <code>pricing.*</code>.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Writes to</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><b>MRP (₹)</b></td><td>pricing.mrp</td><td>Maximum retail price (strike-through).</td></tr>
+          <tr><td><b>Selling (₹)</b></td><td>pricing.selling</td><td>The price customers actually pay.</td></tr>
+          <tr><td><b>Cost (₹)</b></td><td>pricing.cost</td><td>Internal cost price (for margin).</td></tr>
+          <tr><td><b>Offer (₹)</b></td><td>pricing.offer</td><td>A special offer price.</td></tr>
+          <tr><td><b>Discount %</b></td><td>pricing.discountPct</td><td>Displayed discount percentage.</td></tr>
+          <tr><td><b>Tax %</b></td><td>pricing.taxPct</td><td>GST / tax rate applied.</td></tr>
+          <tr><td><b>Glass deposit (₹)</b></td><td>pricing.deposit</td><td>Refundable bottle deposit.</td></tr>
+          <tr><td><b>Delivery charge (₹)</b></td><td>pricing.deliveryCharge</td><td>Per-order delivery fee.</td></tr>
+          <tr><td><b>Free delivery over (₹)</b></td><td>pricing.freeDeliveryThreshold</td><td>Order value above which delivery is free.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — pricing is charged live</div><p>Because storefront display and checkout both read this catalogue, changing <b>Selling</b> here changes what customers are charged with no further step. Double-check the number before Save.</p></div></div>
+
+      <h4>Tab 3 · Variants</h4>
+      <p>A table of every variant tied to this product. Editable columns: <b>Display name</b>, <b>SKU</b>, <b>Price</b> (labelled <i>/day</i> for normal variants or <i>fixed</i> for a trial variant — it writes to <code>dailyPrice</code> or <code>fixedPrice</code> accordingly), <b>Stock</b>, <b>Weight</b>, and an <b>Active</b> checkbox. If the product has no variants it shows “No variants for this product.”</p>
+
+      <h4>Tab 4 · Subscriptions (plans)</h4>
+      <p>A table of the shared subscription plans. Columns: <b>Plan</b> (name), <b>Days</b> (duration), <b>Discount</b> (entered as a whole percentage and stored as a fraction), <b>Badge</b> (a promo tag), <b>Auto-renew</b> checkbox and <b>Active</b> checkbox.</p>
+
+      <h4>Tab 5 · Nutrition</h4>
+      <p>Nine label fields written under <code>nutrition.*</code>: <b>Fat</b>, <b>SNF</b>, <b>Protein</b>, <b>Calcium</b>, <b>Energy</b>, <b>Carbohydrates</b>, <b>Sugar</b>, <b>Minerals</b>, <b>Vitamins</b>.</p>
+
+      <h4>Tab 6 · Quality</h4>
+      <p>Ten fields written under <code>quality.*</code>: <b>Fat %</b>, <b>SNF</b>, <b>Lactometer</b>, <b>Collection temp</b>, <b>Storage temp</b>, <b>Batch no.</b>, <b>Milk type</b>, <b>Animal type</b>, <b>Collection date</b>, <b>Expiry</b>.</p>
+
+      <h4>Tab 7 · Description</h4>
+      <p>Seven fields written under <code>description.*</code>. The first five are multi-line text areas: <b>Short description</b>, <b>Long description</b>, <b>Product story</b>, <b>Usage instructions</b>, <b>Storage instructions</b>; plus <b>Ingredients</b> and <b>Allergen info</b>.</p>
+
+      <h4>Tab 8 · Badges</h4>
+      <p>Toggles which trust badges appear on the storefront. Each badge row shows its icon, an editable <b>label</b>, and a <b>Show</b> checkbox. On save, the badge list is rebuilt from the rows and written to the product's <code>badges</code>.</p>
+
+      <h4>Tab 9 · Images</h4>
+      <p>Manages the product gallery. Each image row shows a thumbnail and filename, a <b>★ featured</b> radio (picks the main image), and <b>↑ / ↓</b> buttons to reorder. On save, the new order is written to <code>gallery</code> and the chosen featured image to <code>image</code>. Changes apply across the whole site.</p>
+
+      <h4>Tab 10 · Availability</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Writes to</th><th>Type</th></tr></thead>
+        <tbody>
+          <tr><td><b>Low-stock threshold (units)</b></td><td>lowStockThreshold</td><td>Number</td></tr>
+          <tr><td><b>Launch date (YYYY-MM-DD)</b></td><td>launchDate</td><td>Text (date)</td></tr>
+          <tr><td><b>Restock date (YYYY-MM-DD)</b></td><td>restockDate</td><td>Text (date)</td></tr>
+          <tr><td><b>Available cities</b></td><td>availability.cities</td><td>Comma-separated list</td></tr>
+          <tr><td><b>Delivery slots</b></td><td>availability.slots</td><td>Comma-separated list</td></tr>
+          <tr><td><b>End date</b></td><td>availability.endDate</td><td>Text</td></tr>
+          <tr><td><b>Inventory status</b></td><td>availability.inventoryStatus</td><td>Text</td></tr>
+        </tbody>
+      </table></div>
+      <p class="muted-sm">List fields accept comma-separated values (e.g. “Hyderabad, Bengaluru”) and are stored as arrays.</p>
+
+      <h4>Tab 11 · SEO</h4>
+      <p>Five fields under <code>seo.*</code>: <b>Meta title</b>, <b>Meta description</b> (text area), <b>OG image</b>, <b>Canonical URL</b>, and <b>Keywords</b> (comma-separated list).</p>
+
+      <h4>Tab 12 · Analytics</h4>
+      <p><b>Read-only.</b> Six KPI cards — <b>Total orders</b>, <b>Revenue</b>, <b>Views</b>, <b>Conversion</b>, <b>Stock remaining</b>, <b>Rating</b> — with a note that they are “populated from orders/payments in production”.</p>
+
+      <h4>Footer buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Save changes</b></td><td>Writes every edited field across all tabs (products, variants, plans, badges, gallery, featured image) to the live catalogue, refreshes the products table, and shows a “Saved — live across the storefront” toast.</td><td>Applies the field overrides through the CMS layer (localStorage overlay here; PATCH + cache revalidation in production).</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+          <tr><td><b>Cancel</b> / <b>×</b> / scrim click</td><td>Closes the slide-over without saving.</td><td>None.</td><td>Same</td></tr>
+          <tr><td><b>Reset all CMS edits</b></td><td>Clears every stored CMS override and reloads the page, restoring the original catalogue values.</td><td>Wipes the CMS override store, then reloads.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+        </tbody>
+      </table></div>
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — “Reset all CMS edits” is global</div><p>Reset does <b>not</b> undo only this product — it discards <b>every</b> product/variant/plan CMS edit and reloads. Use it only when you genuinely want to return the whole catalogue to its baseline. There is no per-product undo.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- WORKFLOW — how an edit reaches the live site                  -->
+  <!-- ============================================================ -->
+  <div class="diagram"><div class="wf">
+    <div class="wf-topbar">Workflow — a content edit reaching the storefront</div>
+    <div class="wf-flow"><span>Open CMS</span><span>Pick a tile / block / product</span><span>Edit fields (or JSON)</span><span>Set Published / Status</span><span>Save (writes CmsBlock or catalogue)</span><span>Audit entry recorded</span><span>Storefront reads published content on next load</span></div>
+  </div><div class="wire-cap">Figure — from an admin edit to live customer-facing content.</div></div>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — how blocks reach a page</div><p>Storefront prose sections (About, Farmers, Bottle-Returns, etc.) carry <code>data-cms="&lt;key&gt;"</code> wrappers. After the page renders, the site fetches the <b>published</b> blocks for each key-prefix on that page via <b>/api/cms/page?prefix=&lt;prefix&gt;</b> and overlays their <code>eyebrow</code>, <code>heading</code>, <code>text</code> and <code>html</code> fields onto the DOM. If the backend is unreachable it silently keeps the built-in copy — so a page never goes blank. This is why block <b>keys are prefixed</b> by area (e.g. <code>about.hero</code>, <code>about.story</code>).</p></div></div>
+
+  <!-- ============================================================ -->
+  <!-- TROUBLESHOOTING                                                -->
+  <!-- ============================================================ -->
+  <h3>Troubleshooting</h3>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>Red banner “⚠ Your role can't view CMS (403)”.</td><td>You are signed in as a role without <code>cms:view</code> (only Super Admin, Admin, Marketing have it).</td><td>Ask a Super Admin to grant CMS access, or sign in with an authorised account.</td></tr>
+      <tr><td>Red banner “⚠ Backend offline — start next-app”.</td><td>The Next.js backend that serves <code>/api/admin/cms</code> is not running or unreachable.</td><td>Start / restore the backend, then reload the page.</td></tr>
+      <tr><td>Save fails with “A block with that key already exists.”</td><td>Another block already uses that Key (keys are unique).</td><td>Choose a different Key, or edit the existing block instead of creating a new one.</td></tr>
+      <tr><td>Save fails with “Data must be valid JSON.”</td><td>The Data box contains malformed JSON (missing quote/brace/comma).</td><td>Fix the JSON — every key and string value must be double-quoted; no trailing commas.</td></tr>
+      <tr><td>Delete fails with “Only Marketing / Admin (403).”</td><td>Delete needs Admin/Super Admin; a Marketing user cannot delete blocks.</td><td>Ask an Admin to delete it, or just un-publish the block to hide it instead.</td></tr>
+      <tr><td>Edited a block but the storefront still shows old copy.</td><td>The block is saved as a Draft (Published off), or the page/section key-prefix does not match.</td><td>Turn Published on; confirm the block Key's prefix matches the page's <code>data-cms</code> wrapper.</td></tr>
+      <tr><td>A product edit didn't stick / everything reverted.</td><td>Someone clicked “Reset all CMS edits”, which clears every override globally.</td><td>Re-enter the product edits; reserve Reset for a genuine full rollback.</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- ============================================================ -->
+  <!-- FAQ                                                            -->
+  <!-- ============================================================ -->
+  <h3>Frequently asked questions</h3>
+  <h4>Do I need to redeploy the site after a content change?</h4>
+  <p>No. Published content blocks are read at page load, and product edits apply to the live catalogue immediately. That is the whole point of the CMS — copy, banners, prices and product status change with no deploy.</p>
+
+  <h4>What is the difference between “un-publish” and “delete”?</h4>
+  <p>Un-publishing (Published off) keeps the block in the database but hides it from customers — fully reversible. Deleting removes the record permanently and is Admin/Super-Admin-only. Prefer un-publish unless you are sure the block is gone for good.</p>
+
+  <h4>Why can I create and edit blocks but not delete them?</h4>
+  <p>Your role is probably <b>Marketing</b>. Marketing has “manage” rights on CMS (view, create, edit, export) but not delete. Delete is reserved for Admin and Super Admin.</p>
+
+  <h4>Can I change a block's Key later?</h4>
+  <p>No. The Key is locked once a block exists (the field is disabled in edit mode) because the storefront looks blocks up by Key. If you need a different key, create a new block and delete the old one.</p>
+
+  <h4>Where do I actually launch a new product?</h4>
+  <p>On the <b>Products &amp; status</b> tile → Products screen → the product's Edit → Product CMS editor → <b>Basic</b> tab → set <b>Status</b> to Active and <b>Visible on site</b> on, then Save.</p>
+
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — every change is audited</div><p>Creating, editing and deleting content blocks each write an audit entry (<code>cms.create</code> / <code>cms.update</code> / <code>cms.delete</code>) tied to the acting role. If live copy changes unexpectedly, the Audit Logs screen tells you who changed which block and when — use it before assuming a bug.</p></div></div>
+
+</section>

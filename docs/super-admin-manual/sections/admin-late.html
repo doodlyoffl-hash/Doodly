@@ -2,411 +2,310 @@
   <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Operations · Late Delivery Monitoring</span></div>
   <div class="secnum"><span class="n">§</span><span class="k">Admin · Operations</span></div>
   <h2 class="section-title">Late Delivery Monitoring</h2>
-  <p class="lead">The screen that guards DOODLY's single biggest promise — fresh A2 buffalo milk at the doorstep before 7:00 AM every morning — by automatically catching every delivery that arrives late, apologising to the customer, scoring the delivery executive, escalating repeat offenders, and turning it all into reports and configurable rules.</p>
+  <p class="lead">Protects the 7:00 AM morning-milk promise — it auto-detects deliveries that arrive after the promised time, sends the customer one apology, scores each Delivery Executive, escalates repeat offenders, and reports the trend across routes, areas and customers.</p>
 
-  <div class="call note">
-    <span class="ci">ℹ️</span>
-    <div class="cbody">
-      <div class="ctitle">What "Late Delivery Monitoring" does at DOODLY</div>
-      <p>Morning milk is only useful if it arrives on time. DOODLY commits to delivering before a <b>promised clock time</b> (7:00 AM by default, with an optional grace window). This screen watches every completed delivery: the moment one is delivered later than the promise, the system marks it <b>Late</b>, works out the <b>delay in minutes</b>, sends the customer a personalised <b>apology</b> (once), records the incident against the <b>delivery executive</b>, and — if that executive breaks the monthly threshold — <b>escalates</b> them to the Super Admin and Operations. You also get a live dashboard, an executive scoreboard, downloadable reports, and a Super-Admin configuration page for the promise time, apology wording and all the thresholds.</p>
-    </div>
-  </div>
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — what this module measures</div><p>DOODLY promises every morning milk delivery <b>before 7:00 AM</b>. A delivery is "late" when its <b>actual delivery time</b> is after the configured <b>promise time plus any grace minutes</b>. Delivered exactly at 7:00 AM counts as <b>on-time</b>. The module never changes an order or a payment — it only monitors timing, notifies customers, and holds executives accountable.</p></div></div>
 
-  <div class="call note">
-    <span class="ci">ℹ️</span>
-    <div class="cbody">
-      <div class="ctitle">Live engine vs on-screen monitor</div>
-      <p>This screen has two layers working together. The <b>on-screen monitor</b> (<code>DOODLY_LATE</code>) draws every tab — Dashboard, Late Deliveries, Executive Performance, Reports and Configuration — and handles the detail pop-up, apology preview, filters and exports. The <b>live detection engine</b> runs on the DOODLY database: <span class="navpath">GET /api/admin/deliveries/late</span> reads real <code>Delivery</code> records over the last 30 days, compares each against the SLA promise time stored in <code>DeliveryConfig</code>, and returns the true late count, average delay and per-executive figures. When the backend is reachable, the top five stat cards are overwritten with the live numbers and a green banner appears — <i>"● Live — SLA late-detection on the DOODLY database …: promise 07:00, N late / N waiting · N% on-time."</i> In production there is <b>no fake history</b>: the monitor shows only real completions fed in as deliveries are closed. <b>This manual documents the live behaviour.</b></p>
-    </div>
-  </div>
+  <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">How the data reaches this screen</div><p>In production the monitor reads <b>real Delivery records from the last 30 days</b> (up to 500) and compares each completed delivery's time against the SLA promise from <span class="navpath">Admin → Catalogue → Delivery Settings</span>. Live driver completions also flow in the moment an executive marks a stop delivered, so a late delivery is flagged and the apology fires <b>automatically</b> — no one has to press a button.</p></div></div>
 
-  <!-- ========================================================= SCREEN 1 : DASHBOARD -->
+  <!-- ============================================================ SCREEN 1: DASHBOARD -->
   <div class="spec">
-    <div class="spec-h"><p class="st">Dashboard</p><p class="sm">The morning-at-a-glance view: five headline numbers plus four ranked panels.</p></div>
-    <div class="spec-meta"><span class="m"><b>Purpose</b> Answer "how did this morning go?" in one look — how many deliveries went out, how many were late, the average lateness, the on-time rate, who your best and worst executives are, and which routes and areas keep slipping.</span></div>
-    <div class="spec-meta">
-      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> — the module key is <code>lateDeliveries</code> in Operations; the live data comes from the delivery engine, which needs <code>deliveries → view</code> (so <span class="pill role">Operations</span> can also see the live figures). Customers and Delivery Executives never reach any <span class="navpath">/admin</span> page.</span>
-      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Late Deliveries</span> (<span class="navpath">/admin/late-deliveries.html</span>)</span>
-    </div>
+    <div class="spec-h"><p class="st">Screen 1 — Monitoring Dashboard</p><p class="sm">Today's on-time health at a glance, plus the executives, routes and areas that need attention.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the manager a one-look answer to "did we keep the 7 AM promise today, and who is dragging the numbers down?"</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span><span class="pill role">Admin</span> view</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Late Deliveries → Dashboard</span></span></div>
     <div class="spec-body">
-
       <div class="wire"><div class="wf">
-        <div class="wf-topbar">Header — <b>Late Delivery Monitoring</b> · live-status banner · tab bar · Run tests</div>
+        <div class="wf-topbar">Late Delivery Monitoring — <b>Dashboard</b> · tabs: Dashboard · Late Deliveries · Executive Performance · Reports · Configuration · <b>Run tests</b></div>
         <div class="wf-grid">
-          <div class="wf-cell"><b>Tab bar</b><span>Dashboard · Late Deliveries · Executive Performance · Reports · Configuration (Configuration shows for the Super Admin only). A "Run tests" button and pass badge sit on the right.</span></div>
-          <div class="wf-cell"><b>Stat cards (5)</b><span>Today's Deliveries · On-Time · Late · Avg Delay · On-Time Rate. The live overlay replaces these five with real database figures.</span></div>
-          <div class="wf-cell"><b>Top performing executives</b><span>The three highest-scoring executives this month — name, zone, score · band, on-time % and late count.</span></div>
-          <div class="wf-cell"><b>Executives requiring attention</b><span>Anyone flagged, Critical or Needs Improvement, worst first, each with an escalation warning line if over threshold.</span></div>
-          <div class="wf-cell"><b>Routes with frequent delays</b><span>The five routes with the most late deliveries this month — late count and late %.</span></div>
-          <div class="wf-cell"><b>Areas with frequent delays</b><span>The five areas with the most late deliveries this month — late count and late %.</span></div>
+          <div class="wf-cell"><b>KPI strip (5)</b><span>Today's Deliveries · On-Time · Late · Avg Delay · On-Time Rate %</span></div>
+          <div class="wf-cell"><b>Top performing executives</b><span>Best 3 execs by score, with band + on-time% + late count</span></div>
+          <div class="wf-cell"><b>Executives requiring attention</b><span>Flagged / Critical / Needs-Improvement execs, worst first, with escalation banner</span></div>
+          <div class="wf-cell"><b>Routes with frequent delays</b><span>Top 5 routes this month by late count &amp; late %</span></div>
+          <div class="wf-cell"><b>Areas with frequent delays</b><span>Top 5 areas this month by late count &amp; late %</span></div>
         </div>
-      </div><div class="wire-cap">Figure — labelled layout of the Dashboard tab</div></div>
+      </div><div class="wire-cap">Figure 1 — Dashboard tab: a KPI strip over four insight panels.</div></div>
 
-      <h4>The five stat cards</h4>
-      <p>These are the headline numbers for <b>today</b>. On a live connection they are overwritten from <span class="navpath">GET /api/admin/deliveries/late</span> so they always match the database.</p>
-      <div class="twrap"><table>
-        <thead><tr><th>Card</th><th>What it counts</th><th>Live source (backend field)</th><th>Colour cue</th></tr></thead>
-        <tbody>
-          <tr><td><b>Today's Deliveries</b></td><td>All deliveries scheduled for today</td><td><code>stats.scheduledToday</code></td><td>Neutral</td></tr>
-          <tr><td><b>On-Time</b></td><td>Today's deliveries completed on or before the promise</td><td><code>stats.todayOnTime</code></td><td>Green (good)</td></tr>
-          <tr><td><b>Late</b></td><td>Today's deliveries that missed the promise</td><td><code>stats.todayLate</code></td><td>Red when above zero</td></tr>
-          <tr><td><b>Avg Delay</b></td><td>Average minutes late across today's late deliveries</td><td><code>stats.avgDelayMin</code></td><td>Amber when above zero</td></tr>
-          <tr><td><b>On-Time Rate</b></td><td>Share of completed deliveries that were on time</td><td><code>stats.onTimeRatePct</code></td><td>Green ≥ 95%, else amber</td></tr>
-        </tbody>
-      </table></div>
+      <p>The five KPI cards summarise <b>today</b> only:</p>
+      <div class="twrap"><table><thead><tr><th>KPI card</th><th>What it shows</th><th>How it is computed</th></tr></thead><tbody>
+        <tr><td>Today's Deliveries</td><td>Count of deliveries scheduled/completed today</td><td>All of today's rows in the 30-day window</td></tr>
+        <tr><td>On-Time</td><td>Deliveries delivered at or before the deadline</td><td>Today total − today late</td></tr>
+        <tr><td>Late</td><td>Deliveries past the promise time (turns red when &gt; 0)</td><td>Today rows where actual time &gt; promise + grace</td></tr>
+        <tr><td>Avg Delay</td><td>Average minutes late across today's late deliveries</td><td>Sum of delay minutes ÷ number of late deliveries</td></tr>
+        <tr><td>On-Time Rate</td><td>Percentage on-time today (green ≥ 95%, else amber)</td><td>On-time ÷ total × 100</td></tr>
+      </tbody></table></div>
 
-      <div class="call tip">
-        <span class="ci">💡</span>
-        <div class="cbody">
-          <div class="ctitle">Tip — read the live banner first</div>
-          <p>The green banner under the header confirms you are looking at real data and prints the current promise time, the total <b>delayed-beyond-SLA</b> count, how many customers are still <b>waiting</b> (a late delivery that hasn't been completed yet), and the overall on-time rate. If you see a red "Backend offline — showing the local monitor" banner instead, the numbers below are the built-in monitor, not the database.</p>
-        </div>
-      </div>
+      <p>The two executive panels rank by <b>performance score</b>. "Executives requiring attention" lists anyone who is flagged, Critical or Needs Improvement, worst score first, and shows a "⚠ Escalation threshold exceeded" banner when the monthly limits are breached. If everyone is inside their thresholds the panel reads "All executives within thresholds. 👍".</p>
 
-      <h4>The four ranking panels</h4>
-      <p>Below the cards, four panels rank this month's performance so you know where to act:</p>
-      <ul>
-        <li><b>Top performing executives</b> — the three highest scores, each showing <i>score · band</i> and <i>on-time % · late count</i>.</li>
-        <li><b>Executives requiring attention</b> — everyone who is <b>flagged</b> or sits in the <b>Critical</b> or <b>Needs Improvement</b> band, worst score first; a flagged executive gets a "⚠ Escalation threshold exceeded" line. If everyone is within thresholds you see "All executives within thresholds. 👍".</li>
-        <li><b>Routes with frequent delays</b> — top five routes by late count, badge colour rising with the late % (red ≥ 15%, amber ≥ 8%).</li>
-        <li><b>Areas with frequent delays</b> — top five areas by late count, same badge scale.</li>
-      </ul>
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — start every morning here</div><p>Open the Dashboard just after the 7:00 AM window closes. If "Late" is above zero, jump straight to the <b>Late Deliveries</b> tab, add a reason to each row, and confirm the apology went out. A clean daily habit keeps the on-time rate visible to the whole team.</p></div></div>
     </div>
   </div>
 
-  <!-- ========================================================= SCREEN 2 : LATE DELIVERIES LOG -->
+  <!-- ============================================================ SCREEN 2: LATE DELIVERIES LOG -->
   <div class="spec">
-    <div class="spec-h"><p class="st">Late Deliveries log</p><p class="sm">The searchable, filterable list of every late delivery, with a detail pop-up on each row.</p></div>
-    <div class="spec-meta"><span class="m"><b>Purpose</b> Find, review and act on individual late deliveries — read who was affected and by how much, record a reason, mark the incident reviewed or resolved, and send or resend the apology.</span></div>
-    <div class="spec-meta">
-      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> — viewing needs the module's <code>view</code> right; exporting needs <code>export</code> (or Super Admin); recording a reason needs <code>edit</code> (or Super Admin).</span>
-      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Late Deliveries → Late Deliveries tab</span></span>
-    </div>
+    <div class="spec-h"><p class="st">Screen 2 — Late Deliveries Log</p><p class="sm">The filterable list of every late delivery, with the apology status and a click-through detail card.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Investigate individual late deliveries, record why they happened, review or resolve them, and send or resend the customer apology.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span><span class="pill role">Admin</span> view; recording a reason / review / resolve / apology needs the <b>edit</b> permission</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Late Deliveries → Late Deliveries</span></span></div>
     <div class="spec-body">
-
       <div class="wire"><div class="wf">
-        <div class="wf-topbar">Late Deliveries — <b>search · filter bar · export</b> · table · pagination</div>
+        <div class="wf-topbar">Late Deliveries — <b>filters + table</b> · CSV · Excel · PDF</div>
         <div class="wf-grid">
-          <div class="wf-cell"><b>Search box</b><span>Free text across customer, executive, area, route, delivery ID and reason.</span></div>
-          <div class="wf-cell"><b>Filter row</b><span>Period · Executive · Area · Status · Notified dropdowns, plus a running "N late deliveries" count and a Clear link.</span></div>
-          <div class="wf-cell"><b>Export buttons</b><span>CSV · Excel · PDF of the currently filtered rows.</span></div>
-          <div class="wf-cell"><b>Table</b><span>Date · Customer · Executive · Area · Scheduled · Actual · Delay · Reason · Apology · Status — one row per late delivery.</span></div>
-          <div class="wf-cell"><b>Pagination</b><span>25 rows per page with Prev / Next when there are more.</span></div>
-          <div class="wf-cell"><b>Detail pop-up</b><span>Opens when you click a row (documented as Screen 3).</span></div>
+          <div class="wf-cell"><b>Search box</b><span>Free text over customer, executive, area, route, ID, reason</span></div>
+          <div class="wf-cell"><b>Filter row</b><span>Period · Executive · Area · Status · Notified</span></div>
+          <div class="wf-cell"><b>Count + Clear + Export</b><span>"N late deliveries" · Clear filters · CSV / Excel / PDF</span></div>
+          <div class="wf-cell"><b>Data table (10 columns)</b><span>Date · Customer · Executive · Area · Scheduled · Actual · Delay · Reason · Apology · Status</span></div>
+          <div class="wf-cell"><b>Pager</b><span>25 rows per page · ‹ Prev / Next › · "Page X of Y"</span></div>
+          <div class="wf-cell"><b>Row click → detail card</b><span>Opens the late-delivery modal (see Screen 3)</span></div>
         </div>
-      </div><div class="wire-cap">Figure — labelled layout of the Late Deliveries log</div></div>
+      </div><div class="wire-cap">Figure 2 — Late Deliveries tab: search, five filters, a 10-column table and a pager.</div></div>
 
-      <h4>Filters and search</h4>
-      <div class="twrap"><table>
-        <thead><tr><th>Filter</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
-        <tbody>
-          <tr><td><b>Search</b></td><td>Type-ahead text filter</td><td>Free text</td><td class="t-opt">Opt.</td><td>Matches customer, executive, area, route, delivery ID and reason; the list re-filters as you type and the caret position is preserved.</td><td>Krishnalanka</td></tr>
-          <tr><td><b>Period</b></td><td>Time window for the list</td><td>Today · This Week · This Month · 30 Days · All</td><td class="t-opt">Opt.</td><td>Client filter by delivery date. The live engine itself reads a rolling 30-day window from the database.</td><td>This Week</td></tr>
-          <tr><td><b>Executive</b></td><td>One delivery executive</td><td>Any executive name</td><td class="t-opt">Opt.</td><td>Shows only that executive's late deliveries.</td><td>Anil R.</td></tr>
-          <tr><td><b>Area</b></td><td>One delivery area</td><td>Any serviced area</td><td class="t-opt">Opt.</td><td>Shows only that area's late deliveries.</td><td>Patamata</td></tr>
-          <tr><td><b>Status</b></td><td>Where the incident stands</td><td>Late · Reviewed · Resolved</td><td class="t-opt">Opt.</td><td>Filters on the incident's workflow state.</td><td>Reviewed</td></tr>
-          <tr><td><b>Notified</b></td><td>Was the apology sent?</td><td>All · Sent · Not sent</td><td class="t-opt">Opt.</td><td>Splits the list by whether the customer has received an apology.</td><td>Not sent</td></tr>
-          <tr><td><b>Clear</b></td><td>Reset every filter</td><td>Link</td><td class="t-opt">Opt.</td><td>Clears the search and all dropdowns and returns to page 1.</td><td>—</td></tr>
-        </tbody>
-      </table></div>
+      <h4>Table specification</h4>
+      <div class="twrap"><table><thead><tr><th>Property</th><th>Detail</th></tr></thead><tbody>
+        <tr><td>Columns</td><td>Date (with delivery ID beneath), Customer (with customer ID), Executive, Area (with route beneath), Scheduled, Actual, Delay, Reason, Apology, Status</td></tr>
+        <tr><td>Search</td><td>Single box; matches across customer, executive, area, route, delivery ID and reason (case-insensitive)</td></tr>
+        <tr><td>Filters</td><td><b>Period</b> (Today / This Week / This Month / 30 Days / All) · <b>Executive</b> · <b>Area</b> · <b>Status</b> (Late / Reviewed / Resolved) · <b>Notified</b> (All / Sent / Not sent)</td></tr>
+        <tr><td>Sorting</td><td>Fixed — newest date first, then longest delay first</td></tr>
+        <tr><td>Pagination</td><td>25 rows per page with Prev / Next controls</td></tr>
+        <tr><td>Row actions</td><td>Click any row to open the detail card; an empty result shows "No late deliveries 🎉"</td></tr>
+        <tr><td>Exports</td><td>CSV, Excel (.xls) and PDF (browser print). Export honours the current filters and is audited</td></tr>
+      </tbody></table></div>
 
-      <h4>The late-deliveries table</h4>
-      <div class="twrap"><table>
-        <thead><tr><th>Property</th><th>Detail</th></tr></thead>
-        <tbody>
-          <tr><td><b>Columns</b></td><td>Date (with the delivery ID beneath) · Customer (with customer ID) · Executive · Area (with route) · Scheduled · Actual · Delay · Reason · Apology · Status.</td></tr>
-          <tr><td><b>Delay badge</b></td><td>Shown as "+N min"; red when the delay is 20 minutes or more, amber below that.</td></tr>
-          <tr><td><b>Apology column</b></td><td>Green "Sent" if the customer was notified, grey "No" otherwise.</td></tr>
-          <tr><td><b>Status badge</b></td><td>Green for Resolved, blue for Reviewed, amber for an open Late incident.</td></tr>
-          <tr><td><b>Sorting</b></td><td>Newest date first, then largest delay first (fixed order).</td></tr>
-          <tr><td><b>Search</b></td><td>The search box above the table (customer / executive / area / route / ID / reason).</td></tr>
-          <tr><td><b>Pagination</b></td><td>25 rows per page, with Prev / Next controls when the filtered list is longer.</td></tr>
-          <tr><td><b>Row action</b></td><td>Click any row to open the detail pop-up (Screen 3).</td></tr>
-          <tr><td><b>Empty state</b></td><td>"No late deliveries 🎉" when nothing matches the filters.</td></tr>
-        </tbody>
-      </table></div>
+      <h4>How each cell reads</h4>
+      <div class="twrap"><table><thead><tr><th>Column</th><th>Meaning</th><th>Display rule</th></tr></thead><tbody>
+        <tr><td>Delay</td><td>Minutes past the deadline</td><td>Amber badge, or <b>red</b> when the delay is 20 minutes or more</td></tr>
+        <tr><td>Apology</td><td>Whether the customer apology was sent</td><td>Green "Sent" badge, or grey "No"</td></tr>
+        <tr><td>Status</td><td>Where the incident stands</td><td>Amber "Late" (open) → blue "Reviewed" → green "Resolved"</td></tr>
+        <tr><td>Reason</td><td>Recorded cause</td><td>Reason text, or "—" until a manager records one</td></tr>
+      </tbody></table></div>
 
-      <h4>Export</h4>
-      <p>Three buttons export exactly the rows currently on screen (after filtering):</p>
-      <div class="twrap"><table>
-        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
-        <tbody>
-          <tr><td><b>CSV</b></td><td>Downloads <code>late-deliveries.csv</code></td><td>Builds a comma-separated file in the browser and records a <code>delivery.export</code> audit entry.</td><td><span class="pill role">Super Admin</span> or module <code>export</code></td></tr>
-          <tr><td><b>Excel</b></td><td>Downloads <code>late-deliveries.xls</code></td><td>Builds an Excel-readable HTML table in the browser; same audit entry.</td><td><span class="pill role">Super Admin</span> or module <code>export</code></td></tr>
-          <tr><td><b>PDF</b></td><td>Opens the print dialog to save a PDF</td><td>Calls the browser print flow on the current list.</td><td><span class="pill role">Super Admin</span> or module <code>export</code></td></tr>
-        </tbody>
-      </table></div>
-      <p>The exported file carries these columns: <b>Delivery ID, Date, Customer, Customer ID, Executive, Route, Area, Scheduled, Actual, Delay (min), Reason, Notified, Reviewed, Status</b> (Notified and Reviewed print as Yes / No).</p>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — the "Notified" filter</div><p>"Sent" lists deliveries where the apology has already gone out; "Not sent" surfaces late deliveries that still owe the customer an apology — a useful daily clean-up view.</p></div></div>
+
+      <p>The export files carry these columns in order: <b>Delivery ID, Date, Customer, Customer ID, Executive, Route, Area, Scheduled, Actual, Delay (min), Reason, Notified, Reviewed, Status</b> (Notified and Reviewed print as Yes / No).</p>
     </div>
   </div>
 
-  <!-- ========================================================= SCREEN 3 : DETAIL POP-UP -->
+  <!-- ============================================================ SCREEN 3: DETAIL CARD -->
   <div class="spec">
-    <div class="spec-h"><p class="st">Late-delivery detail pop-up</p><p class="sm">The action panel for a single incident — reason, review, resolve and apology.</p></div>
-    <div class="spec-meta"><span class="m"><b>Purpose</b> Handle one late delivery end to end: read every fact about it, choose why it happened, move it through Reviewed → Resolved, and control the apology.</span></div>
-    <div class="spec-meta">
-      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> — "Save reason" needs <code>edit</code> (or Super Admin); review, resolve and apology actions are available to anyone who can open the row.</span>
-      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Late Deliveries → click a row</span></span>
-    </div>
+    <div class="spec-h"><p class="st">Screen 3 — Late Delivery Detail Card</p><p class="sm">The action modal that opens from any row — record the reason, review/resolve, and send or resend the apology.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Work a single late delivery end-to-end: understand it, log the cause, notify the customer and close it out.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span><span class="pill role">Admin</span> — "Save reason" appears only with the <b>edit</b> permission</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Late Deliveries → (click a row)</span></span></div>
     <div class="spec-body">
-
       <div class="wire"><div class="wf">
-        <div class="wf-topbar">Modal — <b>Late delivery · +N min</b> · delivery ID · date · close</div>
+        <div class="wf-topbar">Late delivery <b>+N min</b> · delivery ID · date · ✕</div>
         <div class="wf-grid">
-          <div class="wf-cell"><b>Fact list</b><span>Customer (+ID) · Delivery Executive · Route / Area · Scheduled deadline · Actual delivery · Delay duration · Customer notified · Manager reviewed · Status.</span></div>
-          <div class="wf-cell"><b>Reason picker</b><span>A dropdown to classify why the delivery was late.</span></div>
-          <div class="wf-cell"><b>Apology preview</b><span>The exact message the customer receives, with placeholders already filled in.</span></div>
-          <div class="wf-cell"><b>Footer actions</b><span>Save reason · Mark reviewed / Resolve · Send apology / Resend apology · Close.</span></div>
+          <div class="wf-cell"><b>Facts panel</b><span>Customer (ID) · Executive · Route / Area · Scheduled deadline · Actual delivery · Delay duration · Customer notified · Manager reviewed · Status</span></div>
+          <div class="wf-cell"><b>Reason picker</b><span>Dropdown of standard reasons</span></div>
+          <div class="wf-cell"><b>Apology preview</b><span>The exact message that will reach the customer, with placeholders filled in</span></div>
+          <div class="wf-cell"><b>Action footer</b><span>Save reason · Mark reviewed / Resolve · Send apology / Resend apology · Close</span></div>
         </div>
-      </div><div class="wire-cap">Figure — labelled layout of the detail pop-up</div></div>
+      </div><div class="wire-cap">Figure 3 — Detail card: facts, reason picker, apology preview and the action buttons.</div></div>
 
-      <h4>The reason field</h4>
-      <div class="twrap"><table>
-        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
-        <tbody>
-          <tr><td><b>Reason</b></td><td>Classify why the delivery was late</td><td>Traffic · Vehicle Breakdown · Heavy Rain · Route Change · Milk Collection Delay · Customer Unavailable · Other</td><td class="t-opt">Opt.</td><td>Chosen from a fixed list; saving records a <code>delivery.reason_added</code> audit entry with the old and new value.</td><td>Traffic</td></tr>
-        </tbody>
-      </table></div>
+      <h4>Reason field</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Reason</td><td>Records why the delivery was late so trends can be analysed</td><td>Traffic · Vehicle Breakdown · Heavy Rain · Route Change · Milk Collection Delay · Customer Unavailable · Other</td><td class="t-opt">Opt.</td><td>Saved against the delivery; writes an audited "Reason Added" record (old → new value). On the server a reason can also accompany an escalation (max 500 characters)</td><td>Heavy Rain</td></tr>
+      </tbody></table></div>
 
-      <h4>Footer buttons</h4>
-      <div class="twrap"><table>
-        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
-        <tbody>
-          <tr><td><b>Save reason</b></td><td>Stores the reason you picked</td><td>Writes the reason to the incident and audits <code>delivery.reason_added</code>. Shown only when you can edit.</td><td><span class="pill role">Super Admin</span> or module <code>edit</code></td></tr>
-          <tr><td><b>Mark reviewed</b></td><td>Marks that a manager has looked at it</td><td>Sets status to <b>Reviewed</b> and audits <code>delivery.manager_review</code>. Appears while the incident is still open.</td><td><span class="pill role">Super Admin</span> · <span class="pill role">Admin</span></td></tr>
-          <tr><td><b>Resolve</b></td><td>Closes the incident</td><td>Sets status to <b>Resolved</b> and audits <code>delivery.manager_review</code>. Replaces "Mark reviewed" once the row has been reviewed.</td><td><span class="pill role">Super Admin</span> · <span class="pill role">Admin</span></td></tr>
-          <tr><td><b>Send apology</b></td><td>Sends the customer their apology now</td><td>Marks the delivery notified, stamps the send time, and audits <code>delivery.apology_sent</code> with the channels used. Shown when no apology has gone out yet.</td><td><span class="pill role">Super Admin</span> · <span class="pill role">Admin</span></td></tr>
-          <tr><td><b>Resend apology</b></td><td>Sends the apology again</td><td>Re-sends the same message (a forced send that bypasses the once-only guard). Replaces "Send apology" once one has been sent.</td><td><span class="pill role">Super Admin</span> · <span class="pill role">Admin</span></td></tr>
-          <tr><td><b>Close</b> / ✕</td><td>Dismisses the pop-up</td><td>Closes the panel; Escape and clicking the dim backdrop do the same. No data change.</td><td>Any viewer</td></tr>
-        </tbody>
-      </table></div>
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td>Save reason</td><td>Stores the chosen reason on the delivery</td><td>Records the reason; audit "delivery.reason_added" capturing the previous and new value</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span> edit</td></tr>
+        <tr><td>Mark reviewed</td><td>Marks that a manager has looked at the incident; status → Reviewed</td><td>Audit "delivery.manager_review" (Open → Reviewed)</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+        <tr><td>Resolve</td><td>Closes the incident; status → Resolved (replaces "Mark reviewed" once reviewed)</td><td>Audit "delivery.manager_review" (Open → Resolved). Server: the <code>resolve</code> action logs "delivery.late.resolve"</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+        <tr><td>Send apology</td><td>Sends the customer the apology message shown in the preview</td><td>Marks the delivery notified (once) and audits "delivery.apology_sent" with the channels used. Server: the <code>notify</code> action logs the customer notification to the audit trail</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+        <tr><td>Resend apology</td><td>Re-sends the apology if the customer needs it again (shown once an apology exists)</td><td>Forces a fresh send even though the delivery is already marked notified</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+        <tr><td>Close / ✕</td><td>Dismisses the card without changes (also closes on Esc or clicking the backdrop)</td><td>—</td><td>Any viewer</td></tr>
+      </tbody></table></div>
 
-      <div class="call note">
-        <span class="ci">ℹ️</span>
-        <div class="cbody">
-          <div class="ctitle">Apology preview placeholders</div>
-          <p>The preview shows the live apology text with <code>{{Customer Name}}</code> and <code>{{Actual Time}}</code> already substituted for this customer and this delivery. The wording comes from the template on the Configuration tab, so editing the template changes what every future apology says.</p>
-        </div>
-      </div>
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — one automatic apology per delivery</div><p>The system sends <b>exactly one</b> apology per late delivery automatically. Use <b>Resend apology</b> only when the customer genuinely needs another message — repeated apologies for the same delay read as clumsy, not caring.</p></div></div>
     </div>
   </div>
 
-  <!-- ========================================================= SCREEN 4 : EXECUTIVE PERFORMANCE -->
+  <!-- ============================================================ SCREEN 4: EXECUTIVE PERFORMANCE -->
   <div class="spec">
-    <div class="spec-h"><p class="st">Executive Performance</p><p class="sm">A scorecard per delivery executive, with a period switch and escalation flags.</p></div>
-    <div class="spec-meta"><span class="m"><b>Purpose</b> Rank and grade your delivery executives on punctuality so you know who to reward and who to coach, and see at a glance who has broken the monthly escalation threshold.</span></div>
-    <div class="spec-meta">
-      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span></span>
-      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Late Deliveries → Executive Performance tab</span></span>
-    </div>
+    <div class="spec-h"><p class="st">Screen 4 — Executive Performance</p><p class="sm">A scorecard per Delivery Executive with an on-time score, a band and an escalation flag.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Rank executives fairly on punctuality so coaching and escalation target the right people.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span><span class="pill role">Admin</span> view</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Late Deliveries → Executive Performance</span></span></div>
     <div class="spec-body">
-
       <div class="wire"><div class="wf">
-        <div class="wf-topbar">Executive Performance — <b>period chips</b> · one scorecard per executive</div>
+        <div class="wf-topbar">Executive Performance — <b>scope chips</b>: Today · This Week · This Month · 30 Days</div>
         <div class="wf-grid">
-          <div class="wf-cell"><b>Period chips</b><span>Today · This Week · This Month · 30 Days — switch the window the scores are computed over.</span></div>
-          <div class="wf-cell"><b>Scorecards</b><span>One card per executive, sorted best score first; flagged cards are highlighted.</span></div>
-          <div class="wf-cell"><b>Score &amp; band</b><span>A big score (0–100) with an Excellent / Good / Needs Improvement / Critical band badge.</span></div>
-          <div class="wf-cell"><b>Metrics grid</b><span>Total · On-time · Late · On-time % · Avg delay · Longest · Complaints · Avg completion.</span></div>
-          <div class="wf-cell"><b>Flag line</b><span>An escalation warning on any executive over the monthly threshold.</span></div>
+          <div class="wf-cell"><b>Per-executive card</b><span>Name · zone · score · band badge</span></div>
+          <div class="wf-cell"><b>Metric grid (8)</b><span>Total · On-time · Late · On-time % · Avg delay · Longest · Complaints · Avg completion</span></div>
+          <div class="wf-cell"><b>Flag banner</b><span>Shown when the monthly late count or on-time rate breaches the escalation thresholds</span></div>
         </div>
-      </div><div class="wire-cap">Figure — labelled layout of the Executive Performance tab</div></div>
+      </div><div class="wire-cap">Figure 4 — Executive Performance: one scorecard per executive, sorted best-score first.</div></div>
 
-      <h4>What each card shows</h4>
-      <div class="twrap"><table>
-        <thead><tr><th>Metric</th><th>Meaning</th></tr></thead>
-        <tbody>
-          <tr><td><b>Score</b></td><td>0–100 punctuality score for the chosen period (see the formula below).</td></tr>
-          <tr><td><b>Band</b></td><td>Excellent / Good / Needs Improvement / Critical, set by the configurable score thresholds.</td></tr>
-          <tr><td><b>Total</b></td><td>Deliveries handled in the period.</td></tr>
-          <tr><td><b>On-time</b></td><td>Deliveries at or before the promise.</td></tr>
-          <tr><td><b>Late</b></td><td>Deliveries after the promise.</td></tr>
-          <tr><td><b>On-time %</b></td><td>Share of the period's deliveries that were on time.</td></tr>
-          <tr><td><b>Avg delay</b></td><td>Average minutes late across this executive's late deliveries.</td></tr>
-          <tr><td><b>Longest</b></td><td>The single worst delay in minutes.</td></tr>
-          <tr><td><b>Complaints</b></td><td>Complaints tied to this executive's deliveries.</td></tr>
-          <tr><td><b>Avg completion</b></td><td>The average clock time the executive actually finishes deliveries.</td></tr>
-        </tbody>
-      </table></div>
+      <div class="twrap"><table><thead><tr><th>Metric</th><th>Meaning</th></tr></thead><tbody>
+        <tr><td>Score (0–100)</td><td>On-time rate for the period, minus a small penalty for each complaint. Drives the band and the sort order</td></tr>
+        <tr><td>Band</td><td><b>Excellent</b> (green) / <b>Good</b> (blue) / <b>Needs Improvement</b> (amber) / <b>Critical</b> (red), decided by the configured thresholds</td></tr>
+        <tr><td>Total · On-time · Late</td><td>Delivery counts for the selected period (On-time + Late = Total)</td></tr>
+        <tr><td>On-time %</td><td>Share of deliveries that met the deadline</td></tr>
+        <tr><td>Avg delay / Longest</td><td>Average and worst delay in minutes among that executive's late deliveries</td></tr>
+        <tr><td>Complaints</td><td>Customer complaints attributed to that executive</td></tr>
+        <tr><td>Avg completion</td><td>The executive's typical delivery clock time</td></tr>
+      </tbody></table></div>
 
-      <div class="call note">
-        <span class="ci">ℹ️</span>
-        <div class="cbody">
-          <div class="ctitle">How the score is calculated</div>
-          <p><b>Score = on-time % − (deduct-per-complaint × complaints)</b>, clamped to the 0–100 range. In plain terms: start from the executive's on-time percentage, then subtract a small penalty for each complaint (2 points each by default). The <b>band</b> is then read off the thresholds on the Configuration tab — by default Excellent ≥ 95, Good ≥ 85, Needs Improvement ≥ 70, and anything lower is Critical. An executive is <b>flagged</b> when, over the current month, their late count reaches the "max late / month" limit <i>or</i> their on-time rate falls below the "min on-time rate". The live per-executive figures (total, late, on-time %, average delay) also come from the database via <span class="navpath">GET /api/admin/deliveries/late</span>.</p>
-        </div>
-      </div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — the flag always uses the month</div><p>The scope chips change what the metric numbers cover (Today, Week, Month, 30 Days), but the red <b>Flagged</b> banner is always judged on the <b>monthly</b> late count and monthly on-time rate against the escalation thresholds — so a good day never hides a bad month.</p></div></div>
     </div>
   </div>
 
-  <!-- ========================================================= SCREEN 5 : REPORTS -->
+  <!-- ============================================================ SCREEN 5: REPORTS -->
   <div class="spec">
-    <div class="spec-h"><p class="st">Reports</p><p class="sm">Five month-to-date breakdowns you can download for review meetings.</p></div>
-    <div class="spec-meta"><span class="m"><b>Purpose</b> Give management a printable pack — the day-by-day late trend and how lateness breaks down by executive, route, area and the customers who felt it most.</span></div>
-    <div class="spec-meta">
-      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> — export needs <code>export</code> (or Super Admin).</span>
-      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Late Deliveries → Reports tab</span></span>
-    </div>
+    <div class="spec-h"><p class="st">Screen 5 — Reports</p><p class="sm">Five month-to-date breakdowns of the late-delivery trend, exportable to CSV, Excel and PDF.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> See where lateness clusters — which days, executives, routes, areas and customers — to drive process fixes.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span><span class="pill role">Admin</span> view; export needs the <b>export</b> permission</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Late Deliveries → Reports</span></span></div>
     <div class="spec-body">
-
       <div class="wire"><div class="wf">
-        <div class="wf-topbar">Reports — <b>this month</b> · CSV · Excel · PDF</div>
+        <div class="wf-topbar">Late-delivery reports · this month — <b>CSV · Excel · PDF</b></div>
         <div class="wf-grid">
-          <div class="wf-cell"><b>Daily late deliveries (14 days)</b><span>Date · Deliveries · Late · On-time %, one row per day for the last two weeks.</span></div>
-          <div class="wf-cell"><b>Executive performance</b><span>Executive · Late · On-time % · Score for the month.</span></div>
-          <div class="wf-cell"><b>Route performance</b><span>Route · Late · Late % · Avg delay.</span></div>
-          <div class="wf-cell"><b>Area performance</b><span>Area · Late · Late % · Avg delay.</span></div>
-          <div class="wf-cell"><b>Customer impact</b><span>The most-affected customers — Customer · Late · Apologies · Avg time (top 8).</span></div>
-          <div class="wf-cell"><b>Export bar</b><span>CSV and Excel download the month's late records; PDF opens the print dialog.</span></div>
+          <div class="wf-cell"><b>Daily late deliveries</b><span>Last 14 days: Date · Deliveries · Late · On-time %</span></div>
+          <div class="wf-cell"><b>Executive performance</b><span>Executive · Late · On-time % · Score</span></div>
+          <div class="wf-cell"><b>Route performance</b><span>Route · Late · Late % · Avg delay</span></div>
+          <div class="wf-cell"><b>Area performance</b><span>Area · Late · Late % · Avg delay</span></div>
+          <div class="wf-cell"><b>Customer impact</b><span>Most-affected 8: Customer · Late · Apologies · Avg time</span></div>
         </div>
-      </div><div class="wire-cap">Figure — labelled layout of the Reports tab</div></div>
+      </div><div class="wire-cap">Figure 5 — Reports tab: five month-to-date tables with export buttons.</div></div>
 
-      <p>The CSV and Excel buttons here export this month's full late-record list (the same 14-column layout as the Late Deliveries export); PDF prints the on-screen report. Every export is audited as <code>delivery.export</code>.</p>
+      <div class="twrap"><table><thead><tr><th>Report table</th><th>Columns</th><th>Coverage</th></tr></thead><tbody>
+        <tr><td>Daily late deliveries</td><td>Date · Deliveries · Late · On-time %</td><td>Rolling 14 days</td></tr>
+        <tr><td>Executive performance</td><td>Executive · Late · On-time % · Score (band-coloured)</td><td>This month</td></tr>
+        <tr><td>Route performance</td><td>Route · Late · Late % · Avg delay</td><td>This month, worst first</td></tr>
+        <tr><td>Area performance</td><td>Area · Late · Late % · Avg delay</td><td>This month, worst first</td></tr>
+        <tr><td>Customer impact</td><td>Customer · Late · Apologies · Avg time</td><td>Top 8 most-affected customers</td></tr>
+      </tbody></table></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — fix the pattern, not the incident</div><p>If one route or area sits at the top of these tables week after week, the fix is usually structural — re-sequence the route, shift the milk-collection cut-off, or reassign the executive — not another apology. Export the Route and Area tables and take them to the operations review.</p></div></div>
     </div>
   </div>
 
-  <!-- ========================================================= SCREEN 6 : CONFIGURATION -->
+  <!-- ============================================================ SCREEN 6: CONFIGURATION -->
   <div class="spec">
-    <div class="spec-h"><p class="st">Configuration</p><p class="sm">The Super-Admin rules page — promise time, apology wording, channels and thresholds.</p></div>
-    <div class="spec-meta"><span class="m"><b>Purpose</b> Set the single source of truth for what "late" means and how DOODLY responds — the delivery promise, the grace window, whether apologies go out automatically, the exact apology text, the notification channels, the scoring bands and the escalation limits.</span></div>
-    <div class="spec-meta">
-      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> only — the Configuration tab is hidden for every other role, and saving the SLA to the database needs <code>deliverySettings → edit</code>.</span>
-      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Late Deliveries → Configuration tab</span></span>
-    </div>
+    <div class="spec-h"><p class="st">Screen 6 — Configuration <span class="pill role">Super Admin</span> only</p><p class="sm">The promise time, grace, apology message, channels, scoring bands and escalation thresholds that drive the whole module.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Define what "late" means, what the apology says and where it goes, and the thresholds for scoring and escalation.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> only — the Configuration tab is hidden for every other role</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Late Deliveries → Configuration</span></span></div>
     <div class="spec-body">
-
       <div class="wire"><div class="wf">
-        <div class="wf-topbar">Configuration — <b>Delivery promise &amp; monitoring</b> · Save configuration</div>
+        <div class="wf-topbar">Delivery promise &amp; monitoring — <b>Save configuration</b></div>
         <div class="wf-grid">
-          <div class="wf-cell"><b>Promise &amp; apology</b><span>Delivery promise time · Grace period · Auto-apology on/off.</span></div>
-          <div class="wf-cell"><b>Apology template</b><span>A text box for the message, with the placeholders it supports.</span></div>
-          <div class="wf-cell"><b>Notification channels</b><span>In-App · WhatsApp · SMS · Email check-boxes.</span></div>
-          <div class="wf-cell"><b>Scoring thresholds</b><span>Excellent ≥ · Good ≥ · Needs Improvement ≥ · Deduct / complaint.</span></div>
-          <div class="wf-cell"><b>Escalation thresholds</b><span>Max late / month · Min on-time rate %.</span></div>
-          <div class="wf-cell"><b>Save configuration</b><span>Stores the rules and pushes the promise time and grace to the database SLA.</span></div>
+          <div class="wf-cell"><b>Promise block</b><span>Delivery promise time · Grace period (minutes) · Auto-apology on/off</span></div>
+          <div class="wf-cell"><b>Apology template</b><span>Editable message with {{Customer Name}} and {{Actual Time}} placeholders</span></div>
+          <div class="wf-cell"><b>Notification channels</b><span>In-App · WhatsApp · SMS · Email checkboxes</span></div>
+          <div class="wf-cell"><b>Scoring thresholds</b><span>Excellent ≥ · Good ≥ · Needs Improvement ≥ · Deduct per complaint</span></div>
+          <div class="wf-cell"><b>Escalation thresholds</b><span>Max late / month · Min on-time rate %</span></div>
         </div>
-      </div><div class="wire-cap">Figure — labelled layout of the Configuration tab</div></div>
+      </div><div class="wire-cap">Figure 6 — Configuration tab (Super Admin only): five setting blocks and one Save button.</div></div>
 
-      <h4>Every configuration field</h4>
-      <div class="twrap"><table>
-        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
-        <tbody>
-          <tr><td><b>Delivery promise time</b></td><td>The clock time you promise to deliver by</td><td>Time (HH:MM)</td><td class="t-req">Yes</td><td>Any delivery completed after this time (plus grace) is late. Saved to <code>DeliveryConfig.slaPromiseTime</code> via <span class="navpath">PATCH /api/admin/delivery/config</span> (regex <code>HH:MM</code>). Defaults to 07:00.</td><td>07:00</td></tr>
-          <tr><td><b>Grace period (minutes)</b></td><td>A cushion before a delivery counts as late</td><td>Whole number of minutes</td><td class="t-opt">Opt.</td><td>Added to the promise time. Saved to <code>DeliveryConfig.slaGraceMin</code> (0–720). Defaults to 0.</td><td>5</td></tr>
-          <tr><td><b>Auto-apology</b></td><td>Send apologies automatically on late detection</td><td>Enabled · Disabled</td><td class="t-req">Yes</td><td>When enabled, a late delivery triggers one apology with no manual step; when disabled you send them by hand from the pop-up.</td><td>Enabled</td></tr>
-          <tr><td><b>Apology message template</b></td><td>The wording customers receive</td><td>Free text</td><td class="t-req">Yes</td><td>Supports <code>{{Customer Name}}</code> and <code>{{Actual Time}}</code>, filled in per delivery. Stored with the local monitor config.</td><td>"Dear {{Customer Name}}, we're sorry today's milk reached you at {{Actual Time}}…"</td></tr>
-          <tr><td><b>Notification channels</b></td><td>Where the apology is delivered</td><td>In-App · WhatsApp · SMS · Email (any combination)</td><td class="t-opt">Opt.</td><td>Check the channels to use; the send is audited with the channel list. In-App is on by default.</td><td>In-App + WhatsApp</td></tr>
-          <tr><td><b>Excellent ≥</b></td><td>Score at or above this is Excellent</td><td>Number (0–100)</td><td class="t-opt">Opt.</td><td>Top scoring band cut-off. Defaults to 95.</td><td>95</td></tr>
-          <tr><td><b>Good ≥</b></td><td>Score at or above this is Good</td><td>Number (0–100)</td><td class="t-opt">Opt.</td><td>Second band cut-off. Defaults to 85.</td><td>85</td></tr>
-          <tr><td><b>Needs Improvement ≥</b></td><td>Score at or above this is Needs Improvement</td><td>Number (0–100)</td><td class="t-opt">Opt.</td><td>Third band cut-off; below it is Critical. Defaults to 70.</td><td>70</td></tr>
-          <tr><td><b>Deduct / complaint</b></td><td>Points removed from the score per complaint</td><td>Number</td><td class="t-opt">Opt.</td><td>Applied in the score formula. Defaults to 2.</td><td>2</td></tr>
-          <tr><td><b>Max late / month</b></td><td>Late count that triggers escalation</td><td>Whole number</td><td class="t-opt">Opt.</td><td>An executive at or above this many late deliveries in the month is flagged and escalated. Defaults to 30.</td><td>30</td></tr>
-          <tr><td><b>Min on-time rate %</b></td><td>On-time floor that triggers escalation</td><td>Number (0–100)</td><td class="t-opt">Opt.</td><td>An executive whose monthly on-time rate drops below this is flagged and escalated. Defaults to 95.</td><td>95</td></tr>
-        </tbody>
-      </table></div>
+      <h4>Configuration fields</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Delivery promise time</td><td>The morning deadline every delivery must beat</td><td>Time (HH:MM, 24-hour)</td><td class="t-req">Yes</td><td>Defaults to 07:00 if blank. In production this is the <code>slaPromiseTime</code> on Delivery Settings, shared with the SLA engine</td><td>07:00</td></tr>
+        <tr><td>Grace period (minutes)</td><td>Minutes of slack added to the promise before a delivery counts as late</td><td>Whole number ≥ 0</td><td class="t-opt">Opt.</td><td>Defaults to 0. Deadline = promise time + grace (<code>slaGraceMin</code>)</td><td>0</td></tr>
+        <tr><td>Auto-apology</td><td>Whether apologies send automatically on a late delivery</td><td>Enabled / Disabled</td><td class="t-req">Yes</td><td>When Disabled, apologies must be sent manually from the detail card</td><td>Enabled</td></tr>
+        <tr><td>Apology message template</td><td>The exact wording the customer receives</td><td>Free text with placeholders</td><td class="t-req">Yes</td><td>Supports <code>{{Customer Name}}</code> and <code>{{Actual Time}}</code>, filled in per delivery. Previewed live in the detail card</td><td>"Dear {{Customer Name}}, we're sorry today's milk reached you at {{Actual Time}}…"</td></tr>
+        <tr><td>Notification channels</td><td>Where the apology is delivered</td><td>In-App · WhatsApp · SMS · Email (any combination)</td><td class="t-opt">Opt.</td><td>Recorded on the apology audit entry. Real WhatsApp / SMS / Email sending depends on the provider keys configured for Notifications</td><td>In-App + WhatsApp</td></tr>
+        <tr><td>Excellent ≥</td><td>Score at or above which an executive is rated Excellent</td><td>Whole number (0–100)</td><td class="t-req">Yes</td><td>Defaults to 95</td><td>95</td></tr>
+        <tr><td>Good ≥</td><td>Score threshold for the Good band</td><td>Whole number (0–100)</td><td class="t-req">Yes</td><td>Defaults to 85</td><td>85</td></tr>
+        <tr><td>Needs Improvement ≥</td><td>Score threshold for Needs Improvement (below it is Critical)</td><td>Whole number (0–100)</td><td class="t-req">Yes</td><td>Defaults to 70</td><td>70</td></tr>
+        <tr><td>Deduct / complaint</td><td>Score points removed for each customer complaint</td><td>Whole number ≥ 0</td><td class="t-opt">Opt.</td><td>Defaults to 2</td><td>2</td></tr>
+        <tr><td>Max late / month</td><td>Monthly late-delivery count that triggers an escalation</td><td>Whole number ≥ 1</td><td class="t-req">Yes</td><td>Defaults to 30 (falls back to 5 if left blank on save)</td><td>30</td></tr>
+        <tr><td>Min on-time rate %</td><td>Monthly on-time rate below which an executive is escalated</td><td>Whole number (0–100)</td><td class="t-req">Yes</td><td>Defaults to 95</td><td>95</td></tr>
+      </tbody></table></div>
 
-      <h4>Save configuration</h4>
-      <div class="twrap"><table>
-        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
-        <tbody>
-          <tr><td><b>Save configuration</b></td><td>Stores all the rules on this page</td><td>Saves the full monitor config and audits <code>settings.update</code>. In parallel it reads the promise time and grace and calls <span class="navpath">PATCH /api/admin/delivery/config</span> so the database SLA (<code>slaPromiseTime</code>, <code>slaGraceMin</code>) that drives live late-detection is updated too — you'll see "SLA saved to the database — live for late detection".</td><td><span class="pill role">Super Admin</span> (SLA save also needs <code>deliverySettings → edit</code>)</td></tr>
-        </tbody>
-      </table></div>
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td>Save configuration</td><td>Persists every setting on this tab and re-runs the monitor against the new rules</td><td>Writes the config, clears the cached delivery calculations, and audits "settings.update" (System Settings Modified)</td><td><span class="pill role">Super Admin</span></td></tr>
+      </tbody></table></div>
 
-      <div class="call warn">
-        <span class="ci">⚠️</span>
-        <div class="cbody">
-          <div class="ctitle">Warning — the promise time changes what counts as late</div>
-          <p>Lowering the promise time or the grace window instantly makes more past and future deliveries "late" across the dashboard, scoreboard and reports; raising it makes fewer. Change it deliberately and tell the operations team, because it also feeds the live database detection that everyone else sees.</p>
-        </div>
-      </div>
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — the promise time is a company-wide commitment</div><p>Changing the <b>Delivery promise time</b> or <b>Grace period</b> instantly re-scores every executive and re-labels history as more or less late. It shares the same SLA value used across Delivery Settings and the late-detection engine, so change it only with an operational decision behind it — not to make a bad week look better.</p></div></div>
 
-      <div class="call note">
-        <span class="ci">ℹ️</span>
-        <div class="cbody">
-          <div class="ctitle">If the SLA save is refused</div>
-          <p>The rules always save on this screen, but the database SLA push is a separate step guarded by <code>deliverySettings → edit</code>. If your role lacks that right you'll see "Saved locally — your role can't edit SLA (403)": the on-screen monitor updates, but the live database detection keeps its previous promise time until a Super Admin saves it.</p>
-        </div>
-      </div>
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — keep the score bands in order</div><p>Set the thresholds so Excellent ≥ Good ≥ Needs Improvement. If they overlap or invert, executives can land in the wrong band. The shipped 95 / 85 / 70 ladder is a sensible default for a fresh setup.</p></div></div>
     </div>
   </div>
 
-  <!-- ========================================================= THE DETECTION ENGINE -->
+  <!-- ============================================================ SCREEN 7: CUSTOMER-FACING WIDGET -->
   <div class="spec">
-    <div class="spec-h"><p class="st">How detection, apology and escalation work</p><p class="sm">The automatic pipeline behind the screens.</p></div>
-    <div class="spec-meta"><span class="m"><b>Purpose</b> Explain what happens the instant a delivery is completed, so you can trust the numbers and know why an apology or escalation fired.</span></div>
-    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> — reference only.</span></div>
+    <div class="spec-h"><p class="st">Screen 7 — Customer "Your delivery quality" panel</p><p class="sm">The read-only summary a signed-in customer sees on their account page — built from their own deliveries.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Show each customer, honestly, how well DOODLY kept the 7 AM promise for <em>them</em>.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Customer</span> (their own data only)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Account → Dashboard → Your delivery quality</span></span></div>
     <div class="spec-body">
-
-      <div class="diagram"><div class="wf">
-        <div class="wf-topbar">Workflow — one completed delivery</div>
-        <div class="wf-flow"><span>Delivery completed</span><span>Compare actual vs promise + grace</span><span>On time? → recorded, no action</span><span>Late? → mark Late, compute delay</span><span>Send apology (once)</span><span>Log against executive</span><span>Over monthly threshold? → escalate</span></div>
-      </div><div class="wire-cap">Figure — the automatic late-handling pipeline</div></div>
-
-      <p>When the driver app closes a delivery, the system compares the <b>actual delivery time</b> against the <b>promise time plus grace</b>:</p>
-      <ul>
-        <li><b>On time</b> (at or before the deadline) — recorded, nothing else happens.</li>
-        <li><b>Late</b> — the incident is marked <b>Late</b>, the delay in minutes is calculated, a <code>delivery.late_detected</code> audit entry is written, and — if auto-apology is on — <b>one</b> apology is sent (a second automatic send is blocked so a customer is never apologised to twice for the same delivery).</li>
-      </ul>
-      <p>On the live database the same idea runs over the last 30 days: a delivery marked <b>DELIVERED</b> after the SLA is <b>Late</b>; a delivery still open once the promise time has passed is <b>Pending · late</b> (a customer still waiting); a <b>FAILED</b> delivery reads <b>Failed</b> and a <b>SKIPPED</b> one reads <b>Rescheduled</b>.</p>
-
-      <div class="diagram"><div class="wf">
-        <div class="wf-topbar">Workflow — escalation (once per executive per month)</div>
-        <div class="wf-flow"><span>Late delivery logged</span><span>Recount executive's month</span><span>Late ≥ max/month OR on-time % &lt; min rate?</span><span>Raise escalation</span><span>Flag on dashboard + scoreboard</span><span>Notify Super Admin &amp; Operations</span></div>
-      </div><div class="wire-cap">Figure — when and how an executive is escalated</div></div>
-
-      <p>Escalation fires at most <b>once per executive per month</b>. On the live backend an escalation is recorded as a <code>DeliveryIssue</code> (type <i>Delivery failed</i>, priority <i>High</i> by default) via the late-action endpoint, while <b>notify</b> and <b>resolve</b> actions are written to the audit log (<code>delivery.late.notify</code> / <code>delivery.late.resolve</code>) — no new tables are added.</p>
-
-      <div class="call note">
-        <span class="ci">ℹ️</span>
-        <div class="cbody">
-          <div class="ctitle">The customer sees their own version</div>
-          <p>Every customer has a small "Your delivery quality — last 30 days" card in their account showing their deliveries, on-time count, late count, average time and apologies received, measured against the same 7:00 AM promise from their own real delivery records. It is honest by design: a brand-new customer with no deliveries yet sees "Your delivery quality will appear here once your deliveries begin."</p>
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Your delivery quality — <b>last 30 days</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Stat cards (5)</b><span>Deliveries · On-time · Late · Avg time · Apologies</span></div>
+          <div class="wf-cell"><b>Honest note</b><span>A friendly line — "Every delivery arrived before our 7:00 AM promise" or an apology acknowledgement</span></div>
         </div>
-      </div>
-
-      <div class="call best">
-        <span class="ci">✅</span>
-        <div class="cbody">
-          <div class="ctitle">Best Practice</div>
-          <p>Work the Late Deliveries log every morning: sort is already newest-and-worst first, so open the top rows, pick an accurate <b>Reason</b> (this is what powers the route and area trend panels), <b>Mark reviewed</b>, and only <b>Resolve</b> once the customer is genuinely looked after. Keep <b>Auto-apology</b> on so no late customer is ever left without a message, and re-check the "Executives requiring attention" panel weekly rather than waiting for the monthly escalation to fire.</p>
-        </div>
-      </div>
+      </div><div class="wire-cap">Figure 7 — The customer's own delivery-quality summary.</div></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — real data only, never the demo set</div><p>For a genuinely signed-in customer this panel is computed from <b>their own delivered records</b> against the 7:00 AM promise. Before any deliveries exist it says the quality will appear once deliveries begin — it never borrows the monitoring sample data.</p></div></div>
     </div>
   </div>
 
-  <!-- ========================================================= TROUBLESHOOTING -->
-  <div class="spec">
-    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Quick answers for the common questions on this screen.</p></div>
-    <div class="spec-body">
-
-      <h4>Troubleshooting</h4>
-      <div class="twrap"><table>
-        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
-        <tbody>
-          <tr><td>Red banner "Backend offline — showing the local monitor"; numbers look sample-like</td><td>The delivery API isn't reachable, so the built-in monitor is shown</td><td>Confirm the backend is running; once it responds the five stat cards refresh to live figures and the banner turns green.</td></tr>
-          <tr><td>Everything shows zero / empty in production</td><td>There is genuinely no late delivery yet, and there is no synthetic history in production</td><td>Expected — the log fills only as real deliveries are completed. "No late deliveries 🎉" is a good sign.</td></tr>
-          <tr><td>I can't see the Configuration tab</td><td>Configuration is Super-Admin only</td><td>Sign in as the Super Admin; other roles never see the tab.</td></tr>
-          <tr><td>"Saved locally — your role can't edit SLA (403)" after saving config</td><td>Your role lacks <code>deliverySettings → edit</code></td><td>The monitor rules still saved; ask a Super Admin to save so the database SLA updates for live detection.</td></tr>
-          <tr><td>An expected late delivery isn't in the list</td><td>A filter is narrowing the view, or it fell outside the period / 30-day window</td><td>Click <b>Clear</b>, set Period to "All", and check the search box is empty.</td></tr>
-          <tr><td>A customer says they got two apologies</td><td>Someone pressed <b>Resend apology</b> (a deliberate forced re-send)</td><td>The automatic path only ever sends once; use Resend sparingly and note it in the reason.</td></tr>
-          <tr><td>An executive I fixed still shows flagged</td><td>Flags are based on the whole month to date</td><td>The flag clears as the month's on-time rate recovers or a new month starts; escalation itself only fires once per month.</td></tr>
-        </tbody>
-      </table></div>
-
-      <h4>Frequently asked questions</h4>
-      <h4>Q. Does changing the promise time affect deliveries that already happened?</h4>
-      <p>A. Yes. "Late" is recalculated live against the current promise time and grace, so past deliveries can move between on-time and late when you change the setting. Change it deliberately.</p>
-
-      <h4>Q. What exactly counts as "late"?</h4>
-      <p>A. A delivery completed after the promise time plus the grace window. With the defaults (7:00 AM, 0 grace), a 7:01 AM completion is one minute late; set a 5-minute grace and the deadline becomes 7:05 AM.</p>
-
-      <h4>Q. Who gets told when an executive is escalated?</h4>
-      <p>A. The Super Admin and Operations. The executive is flagged on the dashboard and their scorecard, and on the live backend the escalation is filed as a High-priority delivery issue. It happens at most once per executive per month.</p>
-
-      <h4>Q. Can I turn off automatic apologies?</h4>
-      <p>A. Yes — set <b>Auto-apology</b> to Disabled on the Configuration tab. Late deliveries are still detected and logged; you then send apologies by hand from each delivery's detail pop-up.</p>
+  <!-- ============================================================ WORKFLOW -->
+  <h3>End-to-end workflow — from a late stop to a closed incident</h3>
+  <div class="diagram"><div class="wf">
+    <div class="wf-topbar">Workflow — automatic late detection, apology and escalation</div>
+    <div class="wf-flow">
+      <span>Executive marks stop delivered</span>
+      <span>Actual time vs promise + grace</span>
+      <span>Late? create delay record</span>
+      <span>Send one apology (if auto-apology on)</span>
+      <span>Log against the executive</span>
+      <span>Audit the incident</span>
+      <span>Over monthly threshold? escalate (once)</span>
+      <span>Manager adds reason → review → resolve</span>
     </div>
-  </div>
+  </div><div class="wire-cap">Figure 8 — The detector runs on every completed delivery; managers finish the loop from the detail card.</div></div>
 
+  <p>Late detection is a simple, transparent rule: <b>delay = actual delivery time − (promise time + grace)</b>. If the delay is greater than zero the delivery is late; delivered at or before the deadline is on-time. On the server, a delivery still un-delivered after the promise time shows as <b>"Pending · late"</b> so a stuck stop is visible before it is even completed; a <b>FAILED</b> delivery shows as "Failed" and a <b>SKIPPED</b> one as "Rescheduled".</p>
+
+  <div class="diagram"><div class="wf">
+    <div class="wf-topbar">Workflow — escalation guard</div>
+    <div class="wf-flow">
+      <span>Monthly late count ≥ Max late / month</span>
+      <span>OR monthly on-time % &lt; Min on-time rate</span>
+      <span>Already escalated this month? stop</span>
+      <span>Raise escalation (once per executive per month)</span>
+      <span>Flag on dashboard + alert Super Admin &amp; Operations</span>
+    </div>
+  </div><div class="wire-cap">Figure 9 — Escalation fires at most once per executive per month. On the server it also opens a HIGH-priority Delivery Issue.</div></div>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — how the parts connect in production</div><p>The read screens are served by <code>GET /api/admin/deliveries/late</code> (needs <b>deliveries:view</b>), which reads real Delivery rows, applies the SLA from Delivery Settings, and returns the stats, the late list and the per-executive performance. The detail-card actions call <code>POST /api/admin/deliveries/[id]/late-action</code> (needs <b>deliveries:edit</b>) with <code>notify</code>, <code>escalate</code> or <code>resolve</code>. An <code>escalate</code> opens a <b>HIGH-priority Delivery Issue</b> for that driver; <code>notify</code> and <code>resolve</code> are written to the audit trail. No new database tables were added — escalations reuse Delivery Issues and notifications ride on the audit log.</p></div></div>
+
+  <!-- ============================================================ TROUBLESHOOTING -->
+  <h3>Troubleshooting</h3>
+  <div class="twrap"><table><thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead><tbody>
+    <tr><td>Deliveries that were clearly on time show as "Late"</td><td>Promise time or grace is set too tight, or the delivery clock is in a different time zone</td><td>Check <b>Configuration → Delivery promise time / Grace</b>; delivered-at times are read in India Standard Time on the server</td></tr>
+    <tr><td>No apology went out for a late delivery</td><td>Auto-apology is disabled, or the apology was already sent once</td><td>Turn on <b>Auto-apology</b> in Configuration, or use <b>Send apology</b> in the detail card; the "Notified · Not sent" filter lists everyone still owed one</td></tr>
+    <tr><td>Sending a second apology does nothing</td><td>One automatic apology per delivery is the rule</td><td>Use <b>Resend apology</b> in the detail card to force another send</td></tr>
+    <tr><td>The Configuration tab is missing</td><td>You are not signed in as Super Admin</td><td>Configuration is Super-Admin-only; ask a Super Admin to change the settings</td></tr>
+    <tr><td>An executive is not flagged despite many late days</td><td>The flag is judged monthly, and the monthly totals are still under both thresholds</td><td>Review <b>Max late / month</b> and <b>Min on-time rate %</b>; lower them if your service level demands it</td></tr>
+    <tr><td>The screen shows no deliveries at all</td><td>No real Delivery records fall in the last 30 days (a fresh or off-day environment)</td><td>Monitoring only shows real completions; the empty state is expected until deliveries exist</td></tr>
+    <tr><td>Export button does nothing / says no permission</td><td>Your role lacks the export permission</td><td>Ask a Super Admin to grant <b>export</b> on the Late Deliveries module in Roles &amp; Permissions</td></tr>
+  </tbody></table></div>
+
+  <!-- ============================================================ FAQ -->
+  <h3>Frequently asked questions</h3>
+  <h4>Is a delivery at exactly 7:00 AM counted as late?</h4>
+  <p>No. Delivered <b>at or before</b> the promise time (plus any grace) is on-time. Only a delivery strictly after the deadline is late.</p>
+
+  <h4>Does changing the grace period rewrite the past?</h4>
+  <p>Yes. The delay for every delivery is recalculated live against the current promise time and grace, so history is re-labelled the moment you save. Adjust these settings deliberately.</p>
+
+  <h4>Who gets told when an executive is escalated?</h4>
+  <p>The dashboard shows an escalation banner and an on-screen alert flags the executive to the Super Admin and Operations. In production the escalation also opens a HIGH-priority Delivery Issue for that driver, which the operations team works from the delivery tools.</p>
+
+  <h4>How is the executive score calculated?</h4>
+  <p>It starts from the on-time rate for the selected period and subtracts the configured points for each complaint, clamped between 0 and 100. That score then maps to the Excellent / Good / Needs Improvement / Critical bands.</p>
+
+  <h4>Can the apology message be customised per customer?</h4>
+  <p>The wording is one shared template, but it automatically fills in each customer's name and the actual delivery time via the <code>{{Customer Name}}</code> and <code>{{Actual Time}}</code> placeholders, so every message reads personally.</p>
+
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — close the loop, don't just apologise</div><p>An apology soothes today; a recorded <b>reason</b> plus a <b>Resolve</b> builds the trend that fixes tomorrow. Make it routine: for every late delivery, pick a reason, confirm the apology, and resolve the incident once it is understood. The Reports tab then turns that discipline into the insight that protects the 7 AM promise.</p></div></div>
 </section>

@@ -1,0 +1,328 @@
+<section class="sheet" id="admin-employees">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · HR · Employees</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · HR</span></div>
+  <h2 class="section-title">Employees</h2>
+  <p class="lead">The Employee Master — the single place to add staff, record their employment and personal details, keep their identity and bank documents safely, and manage their working status across their whole time at DOODLY.</p>
+
+  <p>The Employees page is the <b>master record for every person who works at DOODLY</b> — delivery executives, procurement and production staff, support agents, accountants, managers and admins. In DOODLY an employee is <b>not a separate thing from a login account</b>: each employee record is joined one-to-one to a staff <b>user account</b>. When you add an employee here, DOODLY quietly creates their sign-in account too (with the login role you pick), and when you mark them Resigned, Terminated or remove them, that same account is switched off. This means you manage the whole person — who they are, what they do, and whether they can sign in — from one screen.</p>
+
+  <p>Every employee gets an auto-generated <b>employee code</b> in the form <code>EMP-0001</code>, <code>EMP-0002</code> and so on (four digits, counted up and checked so two people never share a code). This code, not the name, is the stable handle used across Attendance, Leave, Salary Advances and Payroll.</p>
+
+  <p>The page is built from three parts that we document in turn: a live <b>statistics strip</b> at the top, the <b>employee directory table</b> with its search and filters, and the <b>Add / Edit employee form</b> that opens as a pop-up. We then cover the <b>employee detail view</b> (opened by the View button on each row) and the <b>photo &amp; documents</b> area inside the form.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where the data lives</div><p>This page is fully backend-driven — it reads and writes real records through <code>/api/admin/employees</code> (Postgres). There is no demo data. An employee record is an <code>EmployeeProfile</code> row joined 1:1 to a <code>User</code> account: HR fields (department, identity, bank, documents) live on the profile; the name, email, phone, login role and account status live on the user. Every create, edit, status change, delete and document upload is written to the <b>Audit Log</b>.</p></div></div>
+
+  <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Who can open this page</div><p>Employees is an <b>HR module</b>. <span class="pill role">Super Admin</span> and <span class="pill role">Admin</span> have full access (view, create, edit, delete). <span class="pill role">Accountant</span> has <b>view-only</b> access and sees sensitive identity numbers <b>masked</b>. All other roles (Operations, Procurement, Inventory, Quality, Marketing, Support, Delivery Executive, Customer) have <b>no access</b> to this page at all. Permission is enforced on the server for every request — the buttons you see are only the UX half of the same rule.</p></div></div>
+
+  <!-- ============================================================= -->
+  <!-- SCREEN 1 — STATISTICS STRIP -->
+  <!-- ============================================================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Employee statistics strip</p><p class="sm">Four live counters summarising your whole workforce at a glance.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give a one-look picture of the team — total headcount, how many are actively working, how many are on leave, and how many departments you span — before you drill into the table.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> (view). Hidden entirely for roles without the <b>Employees → View</b> permission.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → Employees</span> (top of page)</span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Employee Master</b> · "Manage staff records, employment details and identity documents."</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Total</b><span>Count of all non-deleted employees</span></div>
+          <div class="wf-cell"><b>Active</b><span>Employees with status = Active (green)</span></div>
+          <div class="wf-cell"><b>On leave</b><span>Employees with status = On Leave (amber)</span></div>
+          <div class="wf-cell"><b>Departments</b><span>How many distinct departments have staff</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the four KPI tiles that sit above the employee table</div></div>
+
+      <div class="twrap"><table><thead><tr><th>Tile</th><th>What it counts</th><th>Colour</th><th>Where it comes from</th></tr></thead><tbody>
+        <tr><td><b>Total</b></td><td>Every employee that has not been soft-deleted.</td><td>Neutral</td><td>Count of <code>EmployeeProfile</code> rows where <code>deletedAt</code> is empty.</td></tr>
+        <tr><td><b>Active</b></td><td>Employees whose status is <b>Active</b> — currently working.</td><td>Green</td><td>status = <code>ACTIVE</code>.</td></tr>
+        <tr><td><b>On leave</b></td><td>Employees whose status is <b>On Leave</b> — temporarily away but still on the roll.</td><td>Amber</td><td>status = <code>ON_LEAVE</code>.</td></tr>
+        <tr><td><b>Departments</b></td><td>Number of different departments that have at least one employee.</td><td>Neutral</td><td>Distinct departments among non-deleted employees.</td></tr>
+      </tbody></table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip</div><p>The strip refreshes automatically after every action — add, edit, mark on leave, mark active, or remove. You never need to reload the page to see the numbers update. The counters reflect your <b>current filter is not applied to them</b>: they always show the whole workforce, so they stay a true company-wide summary even while you filter the table below.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- SCREEN 2 — EMPLOYEE DIRECTORY TABLE -->
+  <!-- ============================================================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Employee directory</p><p class="sm">The searchable, filterable list of every employee, one row each, with a View button.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> The working list of the whole team. Search or filter to find a person, then open their full record. The "Add employee" button starts a brand-new record.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (full) · <span class="pill role">Accountant</span> (view-only — no "Add employee" button). The <b>Add employee</b> button appears only if your role has <b>Employees → Create</b>.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → Employees</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Toolbar — Search box · Department ▾ · Status ▾ · <b>+ Add employee</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Code</b><span>Employee code, bold (e.g. EMP-0007)</span></div>
+          <div class="wf-cell"><b>Employee</b><span>Full name + designation underneath</span></div>
+          <div class="wf-cell"><b>Department</b><span>Which team they belong to</span></div>
+          <div class="wf-cell"><b>Phone</b><span>Mobile number (or —)</span></div>
+          <div class="wf-cell"><b>Type</b><span>Full Time / Part Time / Contract / Internship</span></div>
+          <div class="wf-cell"><b>Status</b><span>Active (green) · On Leave (amber) · Resigned/Terminated (red)</span></div>
+          <div class="wf-cell"><b>Joined</b><span>Date of joining</span></div>
+          <div class="wf-cell"><b>View</b><span>Opens the full employee record</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — one row per employee; a footer reads "N employees"</div></div>
+
+      <h4>Table specification</h4>
+      <div class="twrap"><table><thead><tr><th>Aspect</th><th>Behaviour in this table</th></tr></thead><tbody>
+        <tr><td><b>Columns</b></td><td>Code, Employee (name + designation), Department, Phone, Type, Status, Joined, and a View button.</td></tr>
+        <tr><td><b>Rows shown</b></td><td>All employees that are <b>not</b> soft-deleted, matching your current search and filters.</td></tr>
+        <tr><td><b>Search</b></td><td>One box at the top ("Search name, code, phone, designation…"). It searches server-side across <b>employee code, designation, department, name, phone and email</b> (case-insensitive). Typing is <b>debounced by ~350 ms</b> so it waits until you pause before searching.</td></tr>
+        <tr><td><b>Filters</b></td><td>Two dropdowns: <b>Department</b> (All departments, or one of the 10 departments) and <b>Status</b> (All status, Active, On Leave, Resigned, Terminated). Changing either reloads the list immediately.</td></tr>
+        <tr><td><b>Sorting</b></td><td>Always by <b>employee code, ascending</b> (EMP-0001 first). There are no clickable column sorts on this screen.</td></tr>
+        <tr><td><b>Pagination</b></td><td>Loads the first page of up to <b>50</b> employees (the backend supports up to 200 per page). The footer shows the total count.</td></tr>
+        <tr><td><b>Row action</b></td><td>A single <b>View</b> button per row opens the full detail pop-up, where all the edit / status / delete actions live.</td></tr>
+        <tr><td><b>Exports</b></td><td>None on this screen — employee identity and bank data are sensitive. Attendance, Leave and Payroll have their own CSV exports.</td></tr>
+        <tr><td><b>Empty state</b></td><td>With no employees yet, the table shows "No employees yet — add your first with 'Add employee'."</td></tr>
+      </tbody></table></div>
+
+      <h4>Status badges</h4>
+      <div class="twrap"><table><thead><tr><th>Badge</th><th>Colour</th><th>Meaning</th><th>Can they still sign in?</th></tr></thead><tbody>
+        <tr><td><b>Active</b></td><td>Green</td><td>Normal, currently-working employee.</td><td class="t-req">Yes</td></tr>
+        <tr><td><b>On Leave</b></td><td>Amber</td><td>Temporarily away (long leave, sabbatical) but still employed.</td><td class="t-req">Yes</td></tr>
+        <tr><td><b>Resigned</b></td><td>Red</td><td>Has left of their own accord. Their sign-in account is disabled automatically.</td><td>No</td></tr>
+        <tr><td><b>Terminated</b></td><td>Red</td><td>Employment ended by the company. Their sign-in account is disabled automatically.</td><td>No</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Status is tied to the login account</div><p>Setting an employee to <b>Resigned</b> or <b>Terminated</b> automatically disables their staff sign-in account, so they can no longer log in. Setting them back to <b>Active</b> re-enables the account. <b>On Leave</b> keeps the account enabled — leave is about attendance, not access.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- SCREEN 3 — ADD / EDIT EMPLOYEE FORM -->
+  <!-- ============================================================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Add / Edit employee form</p><p class="sm">The pop-up that creates a new employee or updates an existing one — grouped into four sections.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Capture everything about a person: their basics and personal details, their employment and login role, their identity &amp; bank details, and (once saved) their photo and documents. On create, DOODLY also builds their staff sign-in account.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> — creating needs <b>Employees → Create</b>; editing needs <b>Employees → Edit</b>. Accountant (view-only) cannot open this form.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → Employees → Add employee</span> (or the View button → Edit on any row)</span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Modal — <b>Add employee</b> / <b>Edit employee — EMP-0007</b> · ✕ close</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Basic information</b><span>Name, mobile, email, alt mobile, DOB, gender, blood group, emergency contact</span></div>
+          <div class="wf-cell"><b>Employment details</b><span>Department, designation, type, joining date, login role, reporting manager, location, status</span></div>
+          <div class="wf-cell"><b>Identity &amp; bank</b><span>Aadhaar, PAN, driving licence, bank a/c, IFSC, bank name, UPI</span></div>
+          <div class="wf-cell"><b>Photo &amp; documents</b><span>Profile photo + attached files (edit mode only)</span></div>
+          <div class="wf-cell"><b>Cancel / Save</b><span>Sticky footer buttons</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the four-section form; when editing, it opens pre-filled with the employee code in the title</div></div>
+
+      <p>The form checks five required fields before it will save: <b>Full name, Mobile number, Department, Designation and Date of joining</b>. If any is blank, an inline message names the missing field and jumps you to it. Everything else is optional.</p>
+
+      <h4>Section A — Basic information</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Full name</b></td><td>The person's display name across DOODLY; saved to their user account.</td><td>Text, up to 80 characters.</td><td class="t-req">Yes</td><td>Cannot be blank. Stored on <code>User.name</code>.</td><td>Ravi Teja</td></tr>
+        <tr><td><b>Mobile number</b></td><td>Primary contact and a unique identity for the account.</td><td>Phone number, up to 20 characters (7–15 digits, may start with +).</td><td class="t-req">Yes</td><td>Validated by pattern; must be <b>unique</b> — a duplicate phone is rejected ("A user with this phone already exists."). Stored on <code>User.phone</code>.</td><td>+91 98765 43210</td></tr>
+        <tr><td><b>Email</b></td><td>Optional login identity and contact address.</td><td>A valid email, up to 120 characters.</td><td class="t-opt">Opt.</td><td>Lower-cased on save; must be <b>unique</b> — a duplicate email is rejected ("A user with this email already exists."). Stored on <code>User.email</code>.</td><td>ravi.delivery@doodly.in</td></tr>
+        <tr><td><b>Alternate mobile</b></td><td>A backup contact number.</td><td>Phone number, up to 20 characters.</td><td class="t-opt">Opt.</td><td>Stored on the profile as <code>altPhone</code>.</td><td>+91 90000 11111</td></tr>
+        <tr><td><b>Date of birth</b></td><td>The person's birthday (for records / HR).</td><td>Date picker.</td><td class="t-opt">Opt.</td><td>Stored as <code>dob</code>.</td><td>1996-04-18</td></tr>
+        <tr><td><b>Gender</b></td><td>Records the person's gender.</td><td>— · Male · Female · Other.</td><td class="t-opt">Opt.</td><td>Free choice from the dropdown.</td><td>Male</td></tr>
+        <tr><td><b>Blood group</b></td><td>Useful for emergencies.</td><td>Short text, up to 5 characters.</td><td class="t-opt">Opt.</td><td>Placeholder shows "O+".</td><td>O+</td></tr>
+        <tr><td><b>Emergency contact name</b></td><td>Who to call if something happens to the employee.</td><td>Text, up to 80 characters.</td><td class="t-opt">Opt.</td><td>Stored as <code>emergencyName</code>.</td><td>Lakshmi Teja</td></tr>
+        <tr><td><b>Emergency contact number</b></td><td>Phone number for the emergency contact.</td><td>Phone number, up to 20 characters.</td><td class="t-opt">Opt.</td><td>Stored as <code>emergencyPhone</code>.</td><td>+91 98888 22222</td></tr>
+      </tbody></table></div>
+
+      <h4>Section B — Employment details</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Department</b></td><td>Which team the person belongs to.</td><td>One of: Delivery, Procurement, Production, Quality, Inventory, Customer Support, Finance, Marketing, Operations, Administration.</td><td class="t-req">Yes</td><td>Required; stored as <code>department</code>. Feeds the department filter and headcount.</td><td>Delivery</td></tr>
+        <tr><td><b>Designation</b></td><td>The person's job title.</td><td>Free text, up to 80 characters.</td><td class="t-req">Yes</td><td>Required; stored as <code>designation</code>. Shown under the name everywhere.</td><td>Senior Delivery Executive</td></tr>
+        <tr><td><b>Employment type</b></td><td>The nature of the engagement.</td><td>Full Time · Part Time · Contract · Internship.</td><td class="t-opt">Opt.</td><td>Defaults to <b>Full Time</b>. Stored as <code>employmentType</code>.</td><td>Full Time</td></tr>
+        <tr><td><b>Date of joining</b></td><td>When they started (or will start).</td><td>Date picker.</td><td class="t-req">Yes</td><td>Required; stored as <code>dateOfJoining</code>. Shown in the "Joined" column.</td><td>2026-02-01</td></tr>
+        <tr><td><b>Login role (access)</b></td><td>What the person can see and do when they sign in — this is the access decision.</td><td>Delivery Executive · Support · Operations · Procurement · Inventory · Quality · Marketing · Accountant · Admin · Super Admin.</td><td class="t-opt">Opt.</td><td>Defaults to <b>Support</b>. Sets the backing <code>User.role</code>. An unrecognised value falls back to Support on the server.</td><td>Delivery Executive</td></tr>
+        <tr><td><b>Reporting manager</b></td><td>Who this person reports to.</td><td>— None — or any <b>active</b> employee (shown as "CODE · Name").</td><td class="t-opt">Opt.</td><td>List comes from active employees; a person cannot be their own manager. Stored as <code>reportingManagerId</code>.</td><td>EMP-0002 · Priya Nair</td></tr>
+        <tr><td><b>Work location</b></td><td>Where they are based.</td><td>Free text, up to 120 characters.</td><td class="t-opt">Opt.</td><td>Placeholder shows "Vijayawada". Stored as <code>workLocation</code>.</td><td>Vijayawada</td></tr>
+        <tr><td><b>Status</b></td><td>Their current employment status.</td><td>Active · On Leave · Resigned · Terminated.</td><td class="t-opt">Opt.</td><td>Defaults to <b>Active</b>. Setting Resigned/Terminated disables the sign-in account; Active re-enables it.</td><td>Active</td></tr>
+      </tbody></table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">"Login role" grants real power</div><p>The Login role decides what the person can do once they sign in — pick the <b>lowest role that lets them do their job</b>. A Delivery Executive should not be given Admin. Choosing <b>Admin</b> or <b>Super Admin</b> here creates a high-privilege account, so use those sparingly and only for people who genuinely need them.</p></div></div>
+
+      <h4>Section C — Identity &amp; bank</h4>
+      <p>These are the sensitive fields used for payroll and compliance. They are <b>masked</b> for anyone who only has view access (they see "•••• 1234" instead of the full number), and shown in full only to roles that can edit employees (Admin / Super Admin).</p>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Aadhaar number</b></td><td>Government identity number.</td><td>Up to 20 characters.</td><td class="t-opt">Opt.</td><td>Stored as <code>aadhaar</code>. <b>Masked</b> when the viewer lacks edit rights.</td><td>1234 5678 9012</td></tr>
+        <tr><td><b>PAN number</b></td><td>Tax identity number.</td><td>Up to 12 characters.</td><td class="t-opt">Opt.</td><td>Stored as <code>pan</code>. <b>Masked</b> for view-only roles.</td><td>ABCDE1234F</td></tr>
+        <tr><td><b>Driving licence</b></td><td>Needed for delivery staff who ride/drive.</td><td>Up to 30 characters.</td><td class="t-opt">Opt.</td><td>Stored as <code>drivingLicence</code>. <b>Masked</b> for view-only roles.</td><td>AP0920210012345</td></tr>
+        <tr><td><b>Bank account number</b></td><td>Where salary is paid.</td><td>Up to 30 characters.</td><td class="t-opt">Opt.</td><td>Stored as <code>bankAccount</code>. <b>Masked</b> for view-only roles.</td><td>50100123456789</td></tr>
+        <tr><td><b>IFSC code</b></td><td>Identifies the bank branch for transfers.</td><td>Up to 20 characters.</td><td class="t-opt">Opt.</td><td>Stored as <code>ifsc</code>. Shown in full (not treated as secret).</td><td>HDFC0001234</td></tr>
+        <tr><td><b>Bank name</b></td><td>The employee's bank.</td><td>Up to 60 characters.</td><td class="t-opt">Opt.</td><td>Stored as <code>bankName</code>. Shown in full.</td><td>HDFC Bank</td></tr>
+        <tr><td><b>UPI ID (optional)</b></td><td>Alternative payout handle.</td><td>Up to 60 characters.</td><td class="t-opt">Opt.</td><td>Stored as <code>upiId</code>. Shown in full.</td><td>ravi@okhdfcbank</td></tr>
+      </tbody></table></div>
+
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — do not overwrite masked numbers</div><p>When you <b>edit</b> an employee and a number shows as masked ("•••• 1234"), the form deliberately <b>clears that box</b> so you do not accidentally save the mask over the real value. Leaving it blank keeps the stored number safe. Only type into these boxes if you actually want to <b>replace</b> the number. If you have view-only access you cannot type a real value in anyway.</p></div></div>
+
+      <h4>Form buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td><b>Add employee</b> <span class="sm">(create mode)</span></td><td>Validates the five required fields, creates the employee and their staff sign-in account, and closes the form.</td><td><code>POST /api/admin/employees</code> — generates the next <code>EMP-####</code> code, creates the backing <code>User</code> with the chosen login role (status Active), then the <code>EmployeeProfile</code>. Returns HTTP 201. Logged as <code>employee.create</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (Employees → Create)</td></tr>
+        <tr><td><b>Save changes</b> <span class="sm">(edit mode)</span></td><td>Saves every changed field back to the record.</td><td><code>PATCH /api/admin/employees/{id}</code> with the fields. Splits updates across the user (name/email/phone/role) and the profile; records exactly <b>which fields changed</b>. Logged as <code>employee.update</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (Employees → Edit)</td></tr>
+        <tr><td><b>Cancel</b> / <b>✕</b></td><td>Closes the form without saving. Clicking the dark backdrop also closes it.</td><td>No backend call.</td><td>—</td></tr>
+        <tr><td><b>Upload photo</b></td><td>Adds/replaces the profile photo (edit mode only — see next screen).</td><td><code>POST /api/admin/employees/{id}/photo</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (Employees → Edit)</td></tr>
+        <tr><td><b>Choose file + Upload</b></td><td>Attaches a labelled document (edit mode only — see next screen).</td><td><code>POST /api/admin/employees/{id}/documents</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (Employees → Edit)</td></tr>
+      </tbody></table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — onboarding a new employee</div>
+        <div class="wf-flow"><span>Click Add employee</span><span>Fill name, mobile, department, designation, joining date</span><span>Pick employment type + login role</span><span>Add personal + emergency details</span><span>Add employee (account + code created)</span><span>Reopen the record</span><span>Upload photo + documents</span></div>
+      </div><div class="wire-cap">Figure — end-to-end flow; identity/bank and files can be added on the first save or later</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Why photos &amp; documents wait until after the first save</div><p>Files are stored against the employee's ID, which only exists once the record is created. So when you first add someone, the Photo &amp; documents area says "Save the employee first, then reopen this record to add a photo and documents." Save, click View, then Edit, and the upload controls appear.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- SCREEN 4 — EMPLOYEE DETAIL VIEW -->
+  <!-- ============================================================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Employee detail view</p><p class="sm">The read-only record that the View button opens, with all the action buttons.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> See a full, tidy summary of one employee — their employment, personal, and identity/bank details — and act on them (edit, salary, mark on leave / active, remove) without leaving the page.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (all actions) · <span class="pill role">Accountant</span> (view, with masked numbers; sees the Salary structure button). Action buttons appear only for the permissions you hold.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → Employees → View</span> (any row)</span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Modal — <b>Ravi Teja · EMP-0007</b> · Senior Delivery Executive — Delivery · [Active]</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Header</b><span>Name · code · designation — department · status badge</span></div>
+          <div class="wf-cell"><b>Employment list</b><span>Phone, Email, Type, Joined, Reporting manager, Work location, Login role</span></div>
+          <div class="wf-cell"><b>Personal list</b><span>Date of birth, Gender, Blood group, Emergency contact</span></div>
+          <div class="wf-cell"><b>Identity &amp; bank list</b><span>Aadhaar, PAN, Driving licence, Bank a/c, IFSC, Bank, UPI (masked for view-only)</span></div>
+          <div class="wf-cell"><b>Action bar</b><span>Edit · Salary structure · Mark on leave · Mark active · Remove</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the detail pop-up; only fields that have a value are shown in each list</div></div>
+
+      <h4>What each section shows</h4>
+      <div class="twrap"><table><thead><tr><th>Section</th><th>Fields displayed (only if filled)</th></tr></thead><tbody>
+        <tr><td><b>Header</b></td><td>Full name, employee code, designation — department, and the coloured status badge.</td></tr>
+        <tr><td><b>Employment</b></td><td>Phone, Email, Employment type, Date of joining, Reporting manager (name), Work location, Login role.</td></tr>
+        <tr><td><b>Personal</b></td><td>Date of birth, Gender, Blood group, Emergency (name · number).</td></tr>
+        <tr><td><b>Identity &amp; bank</b></td><td>Aadhaar, PAN, Driving licence, Bank account, IFSC, Bank, UPI. A "(masked)" note appears next to the heading when your role only has view access.</td></tr>
+      </tbody></table></div>
+
+      <h4>Action buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td><b>Edit</b></td><td>Closes the detail view and reopens the full Add/Edit form, pre-filled, so you can change any field.</td><td>Opens the form → <code>PATCH /api/admin/employees/{id}</code> on save.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (Employees → Edit)</td></tr>
+        <tr><td><b>Salary structure</b></td><td>Opens this employee's salary structure (basic pay, allowances, deductions) — the payroll side of the record.</td><td>Opens the salary-structure editor for the employee.</td><td>Needs <b>Payroll → Edit</b> — held by <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span></td></tr>
+        <tr><td><b>Mark on leave</b></td><td>Sets the employee's status to <b>On Leave</b> in one click (their login stays enabled).</td><td><code>PATCH /api/admin/employees/{id}</code> with <code>action:"status", status:"ON_LEAVE"</code>. Logged as <code>employee.status</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (Employees → Edit)</td></tr>
+        <tr><td><b>Mark active</b></td><td>Sets the status back to <b>Active</b> and re-enables the sign-in account.</td><td><code>PATCH /api/admin/employees/{id}</code> with <code>action:"status", status:"ACTIVE"</code> → also flips the user back to Active. Logged as <code>employee.status</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (Employees → Edit)</td></tr>
+        <tr><td><b>Remove</b></td><td>After a confirm prompt ("Remove {name}? Their staff account is disabled."), soft-deletes the employee.</td><td><code>DELETE /api/admin/employees/{id}</code> → stamps <code>deletedAt</code>, sets status <b>Terminated</b>, and disables the sign-in account. The row drops out of the list. Logged as <code>employee.delete</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (Employees → Delete)</td></tr>
+      </tbody></table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Remove is a soft-delete — but there is no Restore button here</div><p>"Remove" does not erase anything: it hides the record, marks it Terminated, and stamps a deletion time so history (attendance, payslips, audit) stays intact. However, the Employees page does <b>not</b> offer an in-page "Restore". If you removed the wrong person, the record still exists in the database — recovering it needs a Super Admin / engineering step, not a button on this screen. So confirm carefully before removing.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- SCREEN 5 — PHOTO & DOCUMENTS -->
+  <!-- ============================================================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Photo &amp; documents</p><p class="sm">Private, secure storage for the profile photo and identity proofs, inside the edit form.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Keep the person's photo and their supporting documents (Aadhaar card, PAN card, bank proof, licence) attached to their record — stored privately and shown only to HR / Admin.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (Employees → Edit). Only appears when editing an <b>already-saved</b> employee and when file storage is configured.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → Employees → View → Edit → Photo &amp; documents</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Section — <b>Photo &amp; documents</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Avatar + Upload photo</b><span>Round photo (or initials) with an "Upload photo" button</span></div>
+          <div class="wf-cell"><b>Document list</b><span>Each doc: label, file name, size, View link, Remove</span></div>
+          <div class="wf-cell"><b>Add document</b><span>Label box + "Choose file" + "Upload" button</span></div>
+          <div class="wf-cell"><b>Limits note</b><span>"PNG, JPG, WEBP or PDF · up to 5 MB · stored privately"</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the upload area shown only in edit mode of a saved record</div></div>
+
+      <h4>Upload rules (enforced by the server)</h4>
+      <div class="twrap"><table><thead><tr><th>Item</th><th>Allowed types</th><th>Max size</th><th>Notes</th></tr></thead><tbody>
+        <tr><td><b>Profile photo</b></td><td>PNG, JPG, WEBP (images only — a PDF is rejected for the photo).</td><td>5 MB</td><td>Replaces the previous photo (the old file is deleted). Shown as a round avatar; if none, the person's initials show instead.</td></tr>
+        <tr><td><b>Document</b></td><td>PNG, JPG, WEBP or PDF.</td><td>5 MB</td><td>Needs a short <b>label</b> (e.g. "Aadhaar card", up to 60 characters). Stored in a <b>private</b> bucket; opened via a temporary signed "View" link, visible to HR/Admin only.</td></tr>
+      </tbody></table></div>
+
+      <h4>Buttons in this area</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td><b>Upload photo</b></td><td>Pick an image; it uploads immediately and the avatar updates.</td><td><code>POST /api/admin/employees/{id}/photo</code> (multipart). Logged as <code>employee.photo.set</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (Edit)</td></tr>
+        <tr><td><b>Choose file</b> → <b>Upload</b></td><td>Pick a file, type a label, then Upload to attach it to the list.</td><td><code>POST /api/admin/employees/{id}/documents</code> (multipart, with label). Logged as <code>employee.document.add</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (Edit)</td></tr>
+        <tr><td><b>View</b> <span class="sm">(on a doc)</span></td><td>Opens the file in a new tab via a short-lived secure link.</td><td>Signed URL minted on read; no permanent public link exists.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (Edit)</td></tr>
+        <tr><td><b>Remove</b> <span class="sm">(on a doc)</span></td><td>After a confirm ("Remove this document?"), deletes the file and its list entry.</td><td><code>DELETE /api/admin/employees/{id}/documents?path=…</code>. Logged as <code>employee.document.remove</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (Edit)</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">If uploads are switched off</div><p>When file storage (Supabase Storage) has not been configured on the environment, the section shows "Photo &amp; document uploads (Aadhaar/PAN/bank proof) turn on once Supabase Storage is configured. All other fields save now." — the rest of the employee record still saves normally; only the file uploads wait.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- STATUS & ACCOUNT SIDE-EFFECTS -->
+  <!-- ============================================================= -->
+  <h3>How status changes affect the sign-in account</h3>
+  <p>Because an employee and their login account are one and the same, changing an employee's status can enable or disable their access. This table is the full set of rules.</p>
+  <div class="twrap"><table><thead><tr><th>You set the employee to…</th><th>Employee status becomes</th><th>Their sign-in account</th><th>How</th></tr></thead><tbody>
+    <tr><td><b>Active</b> (Mark active, or on create)</td><td>Active</td><td>Enabled — can sign in</td><td>Backing user set to Active.</td></tr>
+    <tr><td><b>On Leave</b> (Mark on leave)</td><td>On Leave</td><td>Left enabled — can still sign in</td><td>Only the profile status changes.</td></tr>
+    <tr><td><b>Resigned</b> (via the form)</td><td>Resigned</td><td>Disabled — cannot sign in</td><td>Backing user set to Disabled automatically.</td></tr>
+    <tr><td><b>Terminated</b> (via the form)</td><td>Terminated</td><td>Disabled — cannot sign in</td><td>Backing user set to Disabled automatically.</td></tr>
+    <tr><td><b>Remove</b> (soft-delete)</td><td>Terminated + hidden</td><td>Disabled — cannot sign in</td><td>Record stamped <code>deletedAt</code>; user disabled.</td></tr>
+  </tbody></table></div>
+
+  <!-- ============================================================= -->
+  <!-- PERMISSION MATRIX -->
+  <!-- ============================================================= -->
+  <h3>Who can do what on this page</h3>
+  <p>Access to the Employees module is decided by your role. The server enforces these rules on every request; the buttons only reflect them.</p>
+  <div class="twrap"><table><thead><tr><th>Role</th><th>View list &amp; details</th><th>See full identity/bank</th><th>Add / Edit</th><th>Remove</th></tr></thead><tbody>
+    <tr><td><b>Super Admin</b></td><td class="t-req">Yes</td><td class="t-req">Yes</td><td class="t-req">Yes</td><td class="t-req">Yes</td></tr>
+    <tr><td><b>Admin</b></td><td class="t-req">Yes</td><td class="t-req">Yes</td><td class="t-req">Yes</td><td class="t-req">Yes</td></tr>
+    <tr><td><b>Accountant</b></td><td class="t-req">Yes</td><td>No — <b>masked</b> (•••• 1234)</td><td>No</td><td>No</td></tr>
+    <tr><td><b>All other roles</b> (Operations, Procurement, Inventory, Quality, Marketing, Support, Delivery Executive, Customer)</td><td>No access to the module</td><td>—</td><td>—</td><td>—</td></tr>
+  </tbody></table></div>
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Masking, precisely</div><p>Only the four most sensitive numbers are masked for view-only roles: <b>Aadhaar, PAN, Driving licence and Bank account</b> (shown as "•••• " plus the last four digits). <b>IFSC, Bank name and UPI</b> are shown in full to any viewer. Uploaded document files are only openable by roles that can edit employees.</p></div></div>
+
+  <!-- ============================================================= -->
+  <!-- BEST PRACTICE -->
+  <!-- ============================================================= -->
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Add every real team member here rather than only in User Management — this way their department, joining date, documents and payroll all hang off one record and their <code>EMP-####</code> code flows into Attendance, Leave, Advances and Payroll. Give each person the <b>lowest login role</b> that fits their job. Set the <b>reporting manager</b> so the org chart and leave approvals make sense. Keep Aadhaar/PAN/bank details accurate for payroll, and upload the matching proof documents. When someone goes on extended absence use <b>Mark on leave</b> (keeps their login); when they leave the company set <b>Resigned/Terminated</b> or <b>Remove</b> to cut access immediately — and double-check before removing, since there is no one-click restore on this page.</p></div></div>
+
+  <!-- ============================================================= -->
+  <!-- TROUBLESHOOTING -->
+  <!-- ============================================================= -->
+  <h3>Troubleshooting</h3>
+  <div class="twrap"><table><thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead><tbody>
+    <tr><td>"A user with this phone already exists." / "…email already exists."</td><td>The mobile number or email is already used by another account (customer or staff).</td><td>Search for the existing person and edit them instead of creating a duplicate, or use a different number/email that is genuinely unique.</td></tr>
+    <tr><td>"Please fill in the …" appears and the form won't save.</td><td>One of the five required fields (name, mobile, department, designation, joining date) is blank.</td><td>Fill the named field — the form jumps you straight to it — then save again.</td></tr>
+    <tr><td>The Photo &amp; documents area says "Save the employee first…".</td><td>You are still creating the record — there is no ID to attach files to yet.</td><td>Save with <b>Add employee</b>, then reopen via View → Edit; the upload controls will now appear.</td></tr>
+    <tr><td>"Photo &amp; document uploads turn on once Supabase Storage is configured."</td><td>File storage isn't set up on this environment.</td><td>All other fields still save. Ask an admin/engineer to add the Supabase Storage keys to enable uploads.</td></tr>
+    <tr><td>Upload rejected: "File is too large (max 5 MB)." or "Only PNG, JPG, WEBP or PDF…".</td><td>The file is over 5 MB or in a type that isn't allowed (photos must be images, not PDF).</td><td>Compress or re-scan the file under 5 MB and use PNG/JPG/WEBP (or PDF for documents).</td></tr>
+    <tr><td>Aadhaar/PAN/bank show as "•••• 1234" and the edit box is empty.</td><td>You have view-only access, or the form blanked the masked value on purpose so you don't overwrite it.</td><td>This is intended. Leave the box empty to keep the stored number. To reveal or change full numbers you need Edit rights (Admin / Super Admin).</td></tr>
+    <tr><td>A former employee can still be found by search.</td><td>Their status is Resigned/Terminated but they were not removed.</td><td>Their login is already disabled. Use the Status filter, or <b>Remove</b> them to drop them from the default list — history is preserved.</td></tr>
+  </tbody></table></div>
+
+  <!-- ============================================================= -->
+  <!-- FAQ -->
+  <!-- ============================================================= -->
+  <h3>Frequently asked questions</h3>
+
+  <h4>Does adding an employee also create their login account?</h4>
+  <p>Yes. Each employee is joined one-to-one to a staff user account. When you click <b>Add employee</b>, DOODLY creates the backing account with the <b>Login role</b> you chose and sets it Active. That is why the phone and email must be unique across all accounts.</p>
+
+  <h4>How is the employee code decided?</h4>
+  <p>Automatically. DOODLY takes the current employee count, forms the next <code>EMP-####</code> (four digits, zero-padded), and checks it isn't already taken before assigning it. You never type it — it appears once the record is saved, e.g. EMP-0007.</p>
+
+  <h4>Why can the Accountant see employees but not the full Aadhaar or bank number?</h4>
+  <p>The Accountant role has <b>view-only</b> access so it can reference the roster for payroll, but the four most sensitive numbers (Aadhaar, PAN, driving licence, bank account) are <b>masked</b> to the last four digits. Full numbers and the ability to edit are limited to Admin and Super Admin.</p>
+
+  <h4>What's the difference between "Mark on leave" and "Resigned/Terminated"?</h4>
+  <p><b>Mark on leave</b> is for a temporary absence — the person stays employed and their login keeps working. <b>Resigned/Terminated</b> means they have left; DOODLY disables their sign-in account automatically. Use On Leave for people coming back, and Resigned/Terminated for people who aren't.</p>
+
+  <h4>If I "Remove" someone by mistake, is their data gone?</h4>
+  <p>No — Remove is a <b>soft-delete</b>. The record is hidden, marked Terminated and time-stamped, and their login is disabled, but nothing (attendance, payslips, audit) is erased. There is no one-click restore on this page, so recovering the record needs a Super Admin / backend step — which is exactly why the button asks you to confirm first.</p>
+
+  <h4>Where do I set someone's salary or mark their attendance?</h4>
+  <p>The employee's <b>Salary structure</b> is reachable from the detail view (needs Payroll rights). Day-to-day <b>attendance</b>, <b>leave</b>, <b>salary advances</b> and <b>payroll runs</b> each have their own screens under <span class="navpath">Admin → Human Resources</span>, all keyed to the same employee code.</p>
+
+</section>

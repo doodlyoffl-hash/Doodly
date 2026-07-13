@@ -1,0 +1,215 @@
+<section class="sheet" id="admin-users">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>System · User Management</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">System</span></div>
+  <h2 class="section-title">User Management</h2>
+  <p class="lead">Create staff accounts, assign each person a role, lock or disable access, reset passwords, and soft-delete people who leave — every change is saved to the DOODLY database and written to the audit log.</p>
+
+  <p>The User Management page is where you decide <b>who can sign in to DOODLY and what they are</b>. You do not set individual permissions here — those come from the person's <b>role</b> (managed on <span class="navpath">Admin → System → Roles &amp; Permissions</span>). This page is about the accounts themselves: adding a new team member, changing someone's role, temporarily locking an account, disabling a leaver, forcing a password reset, and removing an account safely. Deletes are always <b>soft</b> — the record is hidden and the account is disabled, but nothing is truly erased, so mistakes can be undone.</p>
+
+  <p>The screen is made of two stacked parts that load together: a <b>statistics strip</b> across the top (live counts of your team), and the <b>user directory table</b> below it (one row per account, with all the action buttons). We document each part, then the <b>Create / Edit user</b> form that both the "Create user" button and every row's pencil button open.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where the data lives</div><p>When the DOODLY backend is running, this page reads and writes real accounts through <code>/api/users</code> (Postgres). You will see a green <b>"● Live — N user(s) from the DOODLY database"</b> banner. If the backend is offline you get an amber warning and the page falls back to a local sample list — changes then only affect your browser, not the real system.</p></div></div>
+
+  <!-- ============================================================= -->
+  <!-- SCREEN 1 — STATISTICS STRIP -->
+  <!-- ============================================================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">User statistics strip</p><p class="sm">Five live counters summarising your whole team at a glance.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give a one-look health check of the account base — how many people you have, how many can actually log in, and how much sign-in activity happened today — before you drill into the table.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> and any role granted the <b>User Management → View</b> permission. If your role cannot view Users, the whole strip stays hidden.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → User Management</span> (top of page)</span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>User Management</b> · "Create staff, assign roles, lock or disable accounts. Deletes are soft."</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Total Users</b><span>Count of all non-deleted accounts</span></div>
+          <div class="wf-cell"><b>Active</b><span>Accounts with status = active</span></div>
+          <div class="wf-cell"><b>Disabled / Locked</b><span>Accounts that cannot sign in right now</span></div>
+          <div class="wf-cell"><b>Roles</b><span>How many distinct roles are in use · click → Roles &amp; Permissions</span></div>
+          <div class="wf-cell"><b>Logins Today</b><span>Sign-ins recorded today · click → Audit Logs</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the five KPI tiles that sit above the user table</div></div>
+
+      <div class="twrap"><table><thead><tr><th>Tile</th><th>What it counts</th><th>Clickable?</th><th>Where it comes from</th></tr></thead><tbody>
+        <tr><td><b>Total Users</b></td><td>Every account that has not been soft-deleted.</td><td>No</td><td>Non-deleted rows from the user list.</td></tr>
+        <tr><td><b>Active</b></td><td>Accounts whose status is <b>active</b> (can sign in normally).</td><td>No</td><td>status = active.</td></tr>
+        <tr><td><b>Disabled / Locked</b></td><td>Accounts that are either disabled or locked — i.e. currently blocked from signing in.</td><td>No</td><td>status = disabled or locked.</td></tr>
+        <tr><td><b>Roles</b></td><td>Number of different roles currently assigned across the team.</td><td>Yes → <span class="navpath">Admin → System → Roles &amp; Permissions</span></td><td>Distinct roles among non-deleted users.</td></tr>
+        <tr><td><b>Logins Today</b></td><td>How many successful sign-ins were recorded so far today.</td><td>Yes → <span class="navpath">Admin → System → Audit Logs</span></td><td>Today's <code>auth.login</code> audit events.</td></tr>
+      </tbody></table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip</div><p>The strip refreshes automatically after every action you take in the table below (create, lock, disable, reset, delete, restore). You never need to reload the page to see the counters update.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- SCREEN 2 — USER DIRECTORY TABLE -->
+  <!-- ============================================================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">User directory</p><p class="sm">The full list of accounts, with per-row buttons to edit, lock, disable, reset and delete.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> The working list of every staff and customer account. From here you open the create form, and act on any single account without leaving the page.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> — view needs <b>Users → View</b>; the row buttons need <b>Edit</b> / <b>Delete</b>. <b>Super Admin accounts can only be managed by another Super Admin.</b></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → User Management</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Toolbar — <b>+ Create user</b> · "N users · roles assignable · soft-delete"</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>User</b><span>Full name (bold) + email underneath</span></div>
+          <div class="wf-cell"><b>Role</b><span>Colour-coded role badge</span></div>
+          <div class="wf-cell"><b>Status</b><span>Green = active · Red = locked · Amber = disabled</span></div>
+          <div class="wf-cell"><b>Last login</b><span>Date of the person's last sign-in (or —)</span></div>
+          <div class="wf-cell"><b>Actions</b><span>Edit · Lock/Unlock · Disable/Enable · Reset pw · Delete</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — one row per account; the toolbar's Create user button opens the form covered below</div></div>
+
+      <h4>Table specification</h4>
+      <div class="twrap"><table><thead><tr><th>Aspect</th><th>Behaviour in this table</th></tr></thead><tbody>
+        <tr><td><b>Columns</b></td><td>User (name + email), Role, Status, Last login, Actions.</td></tr>
+        <tr><td><b>Rows shown</b></td><td>All accounts that are <b>not</b> soft-deleted. Deleted accounts drop out of the list once removed.</td></tr>
+        <tr><td><b>Search</b></td><td>Server-side search is available on the backend (<code>?q=</code> matches name, email or phone); the on-page table itself shows the loaded set (up to 500 accounts) without a separate search box.</td></tr>
+        <tr><td><b>Filter</b></td><td>The backend supports a <code>?role=</code> filter and an <code>includeDeleted=1</code> flag; the page loads with deleted accounts included so it can offer <b>Restore</b>.</td></tr>
+        <tr><td><b>Sorting</b></td><td>Newest accounts first (by creation date) as returned by the database.</td></tr>
+        <tr><td><b>Pagination</b></td><td>Loads up to 500 users in one go (the standard team size fits easily).</td></tr>
+        <tr><td><b>Row actions</b></td><td>Edit, Lock / Unlock, Disable / Enable, Reset pw, Delete (soft) / Restore.</td></tr>
+        <tr><td><b>Exports</b></td><td>None on this screen — user data is sensitive. Use <span class="navpath">Admin → System → Audit Logs</span> for a change history.</td></tr>
+      </tbody></table></div>
+
+      <h4>Status badges</h4>
+      <div class="twrap"><table><thead><tr><th>Badge</th><th>Colour</th><th>Meaning</th><th>Can the person sign in?</th></tr></thead><tbody>
+        <tr><td><b>active</b></td><td>Green</td><td>Normal, working account.</td><td class="t-req">Yes</td></tr>
+        <tr><td><b>locked</b></td><td>Red</td><td>Temporarily blocked — usually after suspicious activity or on request. Meant to be reversed.</td><td>No</td></tr>
+        <tr><td><b>disabled</b></td><td>Amber</td><td>Switched off — e.g. a leaver, or an account not yet in use. Also set automatically when an account is deleted.</td><td>No</td></tr>
+      </tbody></table></div>
+
+      <h4>Row action buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td><b>✎ Edit</b></td><td>Opens the user form pre-filled so you can change the name, role or status.</td><td><code>PATCH /api/users/{id}</code> with the changed fields.</td><td><span class="pill role">Super Admin</span>+ (Users → Edit)</td></tr>
+        <tr><td><b>Lock / Unlock</b></td><td>Toggles the account between <b>active</b> and <b>locked</b>. Use to freeze access fast without deleting anything.</td><td><code>PATCH /api/users/{id}</code> → <code>status: LOCKED</code> or <code>ACTIVE</code>.</td><td><span class="pill role">Super Admin</span>+ (Users → Edit)</td></tr>
+        <tr><td><b>Disable / Enable</b></td><td>Toggles the account between <b>active</b> and <b>disabled</b>. Use for leavers or accounts to switch off longer-term.</td><td><code>PATCH /api/users/{id}</code> → <code>status: DISABLED</code> or <code>ACTIVE</code>.</td><td><span class="pill role">Super Admin</span>+ (Users → Edit)</td></tr>
+        <tr><td><b>Reset pw</b></td><td>Forces a password reset — the person must set a new password at their next sign-in. No password is shown to you.</td><td><code>POST /api/users/{id}/reset-password</code> with <code>force:true</code> → flips <code>forcePwReset</code> on. Logged as <code>auth.password_reset</code>.</td><td><span class="pill role">Super Admin</span>+ (Users → Edit)</td></tr>
+        <tr><td><b>🗑 Delete</b></td><td>Soft-deletes the account after a confirm prompt. The row disappears from the list; the account is disabled but not erased.</td><td><code>DELETE /api/users/{id}</code> → sets <code>status: DISABLED</code> and stamps <code>deletedAt</code>.</td><td><span class="pill role">Super Admin</span>+ (Users → Delete)</td></tr>
+        <tr><td><b>Restore</b></td><td>For an already-deleted account, brings it back to active. (The Delete button becomes Restore for soft-deleted accounts.)</td><td><code>PATCH /api/users/{id}</code> → <code>restore:true</code> (clears <code>deletedAt</code>, sets status active). Logged as <code>user.restore</code>.</td><td><span class="pill role">Super Admin</span>+ (Users → Edit)</td></tr>
+      </tbody></table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Super Admin accounts are protected</div><p>Only a Super Admin can edit, change the role of, reset the password for, or delete a <b>Super Admin</b> account. If you are an Admin (not Super Admin) and try, the backend returns "Only a Super Admin can manage Super Admin accounts." (403). This stops a lower-privileged admin from tampering with the top account.</p></div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Lock vs Disable vs Delete</div><p><b>Lock</b> = quick, reversible freeze (e.g. security concern). <b>Disable</b> = switch off a leaver or dormant account. <b>Delete</b> = remove from the list (still recoverable via Restore, since deletes are soft). Only the person's <b>role</b> — not these status buttons — controls what they can do once signed in.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- SCREEN 3 — CREATE / EDIT USER FORM -->
+  <!-- ============================================================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Create / Edit user form</p><p class="sm">The pop-up that adds a new account or changes an existing one.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Add a new team member with a role, or update an existing person's name, role and status. On create, DOODLY generates a secure temporary password and requires the person to change it at first login.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span>+ — creating needs <b>Users → Create</b>; editing needs <b>Users → Edit</b>. Only a Super Admin may create or set the <b>Super Admin</b> role.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → User Management → Create user</span> (or the ✎ Edit button on a row)</span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Modal — <b>Create user</b> / <b>Edit user</b> · ✕ close</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Full name</b><span>Free-text field</span></div>
+          <div class="wf-cell"><b>Email</b><span>Login identity (unique)</span></div>
+          <div class="wf-cell"><b>Role</b><span>Dropdown of all roles</span></div>
+          <div class="wf-cell"><b>Status</b><span>active · disabled · locked</span></div>
+          <div class="wf-cell"><b>Force password reset</b><span>Checkbox — create only, ticked by default</span></div>
+          <div class="wf-cell"><b>Create user / Save changes</b><span>Primary button that saves to the database</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the create form; when editing, the same form opens pre-filled and the email is fixed</div></div>
+
+      <h4>Field reference</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Full name</b></td><td>The person's display name across DOODLY.</td><td>Text, 1–80 characters.</td><td class="t-req">Yes</td><td>Cannot be blank (the form focuses this field if empty). Saved to <code>User.name</code>.</td><td>Priya Nair</td></tr>
+        <tr><td><b>Email</b></td><td>The account's unique login identity; also where a reset link would go.</td><td>A valid email address.</td><td class="t-req">Yes</td><td>Must be a valid, unique email. Lower-cased on the server; duplicate email is rejected with a conflict message. <b>Cannot be changed after creation</b> (read-only when editing).</td><td>priya.support@doodly.in</td></tr>
+        <tr><td><b>Phone</b></td><td>Optional contact / secondary unique identity (backend-supported).</td><td>7–15 digits, may start with +.</td><td class="t-opt">Opt.</td><td>Validated by pattern; duplicate phone is rejected. Stored on <code>User.phone</code>.</td><td>+91 98765 43210</td></tr>
+        <tr><td><b>Role</b></td><td>Sets everything the person can see and do — this is the security decision.</td><td>One of the 11 DOODLY roles (see the role list below).</td><td class="t-req">Yes</td><td>Must be a known role. Choosing <b>Super Admin</b> is allowed <b>only if you are a Super Admin</b>. Stored on <code>User.role</code>.</td><td>Customer Support</td></tr>
+        <tr><td><b>Status</b></td><td>Whether the account can sign in from the moment it is created / saved.</td><td>active, disabled or locked.</td><td class="t-req">Yes</td><td>Maps to <code>ACTIVE</code> / <code>DISABLED</code> / <code>LOCKED</code> on the server.</td><td>active</td></tr>
+        <tr><td><b>Force password reset on first login</b></td><td>Makes the new person choose their own password before they can use the account.</td><td>Checkbox — <b>ticked by default</b>, create only.</td><td class="t-opt">Opt.</td><td>New accounts always get <code>forcePwReset = true</code> on the server, so the person must set a new password at first sign-in regardless.</td><td>Ticked</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">You never type the new user's password</div><p>On <b>Create</b>, DOODLY generates a strong random temporary password automatically and shows it to you once in a pop-up (for example <code>DyKp7mNq2rX7</code>). Copy it and share it with the new person <b>securely</b> — they will be forced to replace it at first login. The password never appears again.</p></div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Password policy (enforced by the server)</div><p>Any password DOODLY sets or a user chooses must be <b>at least 8 characters</b> (max 72) and include <b>an uppercase letter, a lowercase letter, a number, and a special character</b>. The auto-generated temporary password already meets this.</p></div></div>
+
+      <h4>Form buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td><b>Create user</b></td><td>Validates the form, creates the account, and shows the one-time temporary password.</td><td><code>POST /api/users</code> with name, email, role and a generated password; sets <code>forcePwReset</code>. Returns the new account (HTTP 201). Logged as <code>user.create</code>.</td><td><span class="pill role">Super Admin</span>+ (Users → Create)</td></tr>
+        <tr><td><b>Save changes</b> <span class="sm">(edit mode)</span></td><td>Saves the edited name, role and status. Email stays as-is.</td><td><code>PATCH /api/users/{id}</code> with the changed fields. Logged as <code>user.update</code>.</td><td><span class="pill role">Super Admin</span>+ (Users → Edit)</td></tr>
+        <tr><td><b>✕ Close</b></td><td>Dismisses the form without saving. Clicking the dark backdrop also closes it.</td><td>No backend call.</td><td>—</td></tr>
+      </tbody></table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — onboarding a new team member</div>
+        <div class="wf-flow"><span>Click Create user</span><span>Enter name + email</span><span>Pick role + status</span><span>Create user</span><span>Copy temp password</span><span>Share securely</span><span>User sets own password at first login</span></div>
+      </div><div class="wire-cap">Figure — end-to-end flow from creating the account to the new person signing in</div></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — offboarding a leaver</div>
+        <div class="wf-flow"><span>Find the person in the table</span><span>Disable (or Lock) to block access now</span><span>Delete when confirmed → soft-delete</span><span>Account hidden + disabled</span><span>Restore later if it was a mistake</span></div>
+      </div><div class="wire-cap">Figure — safe removal that can always be reversed</div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- ROLE REFERENCE -->
+  <!-- ============================================================= -->
+  <h3>The 11 DOODLY roles you can assign</h3>
+  <p>The Role dropdown offers these roles. The role is what actually grants access — fine-grained permissions per role live on the Roles &amp; Permissions and Permissions pages.</p>
+  <div class="twrap"><table><thead><tr><th>Role (as shown)</th><th>Typical use</th><th>Signs in to</th></tr></thead><tbody>
+    <tr><td><b>Super Admin</b></td><td>Full, unrestricted access to everything; can manage other Super Admins. Assignable only by a Super Admin.</td><td>Admin</td></tr>
+    <tr><td><b>Admin</b></td><td>Broad administrative access across the business (short of the Super-Admin-only guards).</td><td>Admin</td></tr>
+    <tr><td><b>Customer Support</b></td><td>Handles tickets, chats and customer queries.</td><td>Admin (lands on Support Tickets)</td></tr>
+    <tr><td><b>Operations Manager</b></td><td>Runs deliveries and day-to-day operations.</td><td>Admin (lands on Delivery Mgmt)</td></tr>
+    <tr><td><b>Procurement Manager</b></td><td>Manages farmers and milk procurement.</td><td>Admin (lands on Procurement)</td></tr>
+    <tr><td><b>Accountant</b></td><td>Finance, revenue and billing.</td><td>Admin (lands on Revenue)</td></tr>
+    <tr><td><b>Inventory Manager</b></td><td>Stock and bottle inventory.</td><td>Admin (lands on Inventory)</td></tr>
+    <tr><td><b>Quality Control</b></td><td>Milk quality testing and approvals.</td><td>Admin (lands on Quality)</td></tr>
+    <tr><td><b>Marketing Manager</b></td><td>Coupons, offers and growth content.</td><td>Admin (lands on Coupons)</td></tr>
+    <tr><td><b>Delivery Executive</b></td><td>Field delivery staff using the driver app.</td><td>Driver app</td></tr>
+    <tr><td><b>Customer</b></td><td>An end customer of DOODLY (not staff).</td><td>Customer account area</td></tr>
+  </tbody></table></div>
+
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Give every person the <b>lowest role that lets them do their job</b> (least privilege). Reserve <b>Admin</b> and <b>Super Admin</b> for the few who genuinely need them. When someone leaves, <b>Disable or Lock immediately</b> to cut access, then Delete once you have confirmed nothing else depends on the account — because deletes are soft, you can always Restore if you acted too soon. Share temporary passwords over a secure channel, never in a public chat or email thread.</p></div></div>
+
+  <!-- ============================================================= -->
+  <!-- TROUBLESHOOTING -->
+  <!-- ============================================================= -->
+  <h3>Troubleshooting</h3>
+  <div class="twrap"><table><thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead><tbody>
+    <tr><td>Amber banner: "Backend offline — start next-app" and changes don't stick.</td><td>The DOODLY backend isn't running, so the page is using a local sample list.</td><td>Start the backend (next-app). Once the green "● Live" banner appears, your create/edit/lock/delete actions save to the real database.</td></tr>
+    <tr><td>"An account with this email already exists."</td><td>The email (or phone) is already used by another account, including a soft-deleted one.</td><td>Search for the existing account and edit or restore it instead of creating a duplicate. Use a different email if it is genuinely a new person.</td></tr>
+    <tr><td>"Only a Super Admin can manage Super Admin accounts." (403)</td><td>You are an Admin trying to edit, delete, reset or re-role a Super Admin account.</td><td>Ask a Super Admin to make the change. This guard is intentional.</td></tr>
+    <tr><td>"Not allowed for your role (403)."</td><td>Your role lacks the Users create/edit/delete permission.</td><td>Have a Super Admin grant your role the relevant User Management permission on the Roles &amp; Permissions page.</td></tr>
+    <tr><td>New user can't sign in with the password I gave them.</td><td>New accounts are forced to reset the password at first login.</td><td>Have them use the temporary password to start, then set their own when prompted. If they lost it, use <b>Reset pw</b> on their row.</td></tr>
+    <tr><td>I deleted the wrong person.</td><td>Delete is a soft-delete, not a permanent one.</td><td>The account still exists as disabled with a deletion timestamp — use <b>Restore</b> to bring it back active.</td></tr>
+  </tbody></table></div>
+
+  <!-- ============================================================= -->
+  <!-- FAQ -->
+  <!-- ============================================================= -->
+  <h3>Frequently asked questions</h3>
+
+  <h4>Does deleting a user permanently erase their data?</h4>
+  <p>No. Delete is a <b>soft-delete</b>: the account is set to disabled and stamped with a deletion time, then hidden from the list. Nothing is truly removed, and you can bring it back with <b>Restore</b>. This protects order history and audit trails tied to the account.</p>
+
+  <h4>What is the difference between locking and disabling an account?</h4>
+  <p>Both stop the person signing in. <b>Lock</b> is meant as a quick, reversible freeze (for example after a security scare) and toggles straight back to active with one click. <b>Disable</b> is for switching an account off more deliberately, such as for a leaver. Choose whichever matches your intent — neither erases anything.</p>
+
+  <h4>Can I set a user's password myself?</h4>
+  <p>Not from this screen. On <b>Create</b>, DOODLY generates a strong temporary password and shows it once. To change an existing user's password, use <b>Reset pw</b>, which forces them to choose a new password at their next sign-in. You never see or store their real password — that keeps DOODLY secure.</p>
+
+  <h4>Why can't I change someone's email after creating them?</h4>
+  <p>The email is the account's login identity and must stay unique and stable. When you edit a user, the email field is fixed — you can change the name, role and status, but not the email. If an email is genuinely wrong, create a fresh account and delete the old one.</p>
+
+  <h4>Who can assign the Super Admin role?</h4>
+  <p>Only an existing <b>Super Admin</b>. An Admin can create and manage most accounts, but any action that grants, changes, resets or removes a Super Admin is blocked with a 403 for anyone below Super Admin.</p>
+
+  <h4>Where do I actually change what a role can do?</h4>
+  <p>Not here — this page only assigns a role to a person. To change the permissions attached to a role, go to <span class="navpath">Admin → System → Roles &amp; Permissions</span> (and the Permissions matrix). Every account with that role then inherits the updated access.</p>
+
+  <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution</div><p>Never remove or delete the <b>last</b> active Super Admin account — that role is the only one that can manage other Super Admins and unlock the highest-level settings. Always confirm at least one working Super Admin remains before locking, disabling or deleting one.</p></div></div>
+
+</section>

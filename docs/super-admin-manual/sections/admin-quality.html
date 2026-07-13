@@ -2,197 +2,148 @@
   <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Supply · Quality Testing</span></div>
   <div class="secnum"><span class="n">§</span><span class="k">Admin · Supply</span></div>
   <h2 class="section-title">Quality Testing</h2>
-  <p class="lead">The lab screen for milk quality — record a fat / SNF / density / temperature test on each collected batch, auto-grade it A/B/C against configurable acceptance rules, and approve or reject the batch so that only passing milk stays in raw-milk inventory.</p>
+  <p class="lead">Test every raw-milk batch for fat, SNF, temperature and adulteration before it is trusted — pass or fail it, approve or reject it, and keep raw-milk inventory perfectly in step with those decisions.</p>
 
-  <div class="call note">
-    <span class="ci">ℹ️</span>
-    <div class="cbody">
-      <div class="ctitle">How this screen is built (from the route manifest)</div>
-      <p>The <code>admin/quality</code> route (URL <code>/admin/quality.html</code>) stacks three blocks: a <b>heading</b> ("Quality Testing — Batch test results and cold-chain logs.") with two header buttons — <b>Record test</b> (primary) and <b>Quality rules</b> (ghost); a <b>KPI row</b>; and a data <b>table</b> bound to the <code>quality</code> dataset with its toolbar and pager switched off. On open, <code>layout.js → wireQualityBackend()</code> replaces the placeholder KPIs and the sample rows with live data from the DOODLY database. A "quality record" is not a separate table — it is a <b>Procurement</b> (the collected batch) plus an optional <b>QualityTest</b>. Grading thresholds live on a single <b>QualityConfig</b> row.</p>
-    </div>
-  </div>
+  <p>The Quality Testing screen is the lab desk of the Supply team. Each day, farmers' milk arrives as procurement <b>batches</b>; each batch has to be screened before it can become part of the milk DOODLY bottles and sells. This screen is where a quality officer records those lab readings — fat percentage, SNF (Solids-Not-Fat) percentage, lactometer/density and temperature — and where the system decides whether the batch <b>passes</b> or <b>fails</b> against the configurable acceptance rules. It also gives supervisors a batch-approval workflow that adds accepted milk to, or pulls rejected milk out of, the raw-milk inventory count.</p>
 
-  <div class="call note">
-    <span class="ci">ℹ️</span>
-    <div class="cbody">
-      <div class="ctitle">Who can open and change things here (real RBAC matrix)</div>
-      <p>Every action checks a <code>quality</code> permission on the server. In the authoritative matrix (<code>lib/rbac.ts</code>): <b>Super Admin</b> and <b>Admin</b> have <code>quality: full</code>; the dedicated <b>Quality</b> staff role has <code>quality: full</code>; the <b>Procurement</b> role has <code>quality: view</code> (can see records but cannot record tests, approve, reject or edit rules). "full" grants view + create + edit + export + delete; "view" grants read only. So <b>viewing</b> the list, stats, a batch detail and the rules needs <code>quality:view</code>; <b>recording a test</b> needs <code>quality:create</code>; <b>approving / rejecting a batch</b> and <b>saving rules</b> need <code>quality:edit</code>. A role without the right level gets a clear 403 message in the dialog.</p>
-    </div>
-  </div>
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — one shared record, three screens</div><p>A "quality record" is <b>not</b> a separate table. It is a procurement batch (the same <code>Procurement</code> row you see under <span class="navpath">Admin → Supply → Procurement</span> and in that farmer's history under <span class="navpath">Admin → Supply → Farmers</span>) with an <em>optional</em> lab test (<code>QualityTest</code>) attached. Recording a test here writes to that shared batch; approving or rejecting it flips the same <code>accepted</code> flag the Procurement desk uses. There is no duplicate data to reconcile.</p></div></div>
 
-  <!-- ============================================================ SCREEN 1 -->
+  <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — quality decisions move real inventory</div><p>Failing a test, or rejecting a batch, does more than change a label. If the batch had already been counted into raw-milk stock, the system automatically <b>removes those litres</b> from the <code>MILK_RAW</code> inventory item. Approving a batch adds its litres back. Treat every pass/fail and approve/reject as a stock movement, not just a note.</p></div></div>
+
+  <!-- ============================ SCREEN 1 ============================ -->
   <div class="spec">
-    <div class="spec-h">
-      <p class="st">Quality Testing dashboard</p>
-      <p class="sm">Live KPI strips over a batch-test table — one row per collected batch, with its result badge and a Manage action.</p>
-    </div>
+    <div class="spec-h"><p class="st">Quality Testing — batch queue &amp; dashboard</p><p class="sm">Live KPI bands plus the list of batches waiting for, or holding, a quality result.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> See every batch's test status at a glance, watch daily pass/fail and compliance figures, and open any batch to test, approve or reject it.</span></div>
     <div class="spec-meta">
-      <span class="m"><b>Purpose</b> See every collected batch and its test result at a glance, and open a batch to record, approve or reject it.</span>
-    </div>
-    <div class="spec-meta">
-      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Quality</span> (full) · <span class="pill role">Procurement</span> (view only) — needs <code>quality:view</code></span>
+      <span class="m"><b>Access</b>
+        <span class="pill role">Super Admin</span>
+        <span class="pill role">Admin</span>
+        <span class="pill role">Quality Control</span>
+        <span class="pill role">Procurement</span> <span class="muted-sm">(view only)</span></span>
       <span class="m"><b>Path</b> <span class="navpath">Admin → Supply → Quality Testing</span></span>
     </div>
+    <div class="spec-meta"><span class="m"><b>URL</b> <code>/admin/quality.html</code></span><span class="m"><b>Data source</b> <code>GET /api/admin/quality</code> · <code>/api/admin/quality/stats</code> (RBAC <code>quality:view</code>)</span></div>
+
     <div class="spec-body">
-
       <div class="wire"><div class="wf">
-        <div class="wf-topbar">Quality Testing — <b>Record test</b> · Quality rules</div>
+        <div class="wf-topbar">Header — <b>Quality Testing</b> · "Batch test results and cold-chain logs." · [Record test] [Quality rules]</div>
         <div class="wf-grid">
-          <div class="wf-cell"><b>Live banner</b><span>Green "● Live — N quality record(s) from the DOODLY database (&lt;api base&gt;)." or a red offline / 403 / error line</span></div>
-          <div class="wf-cell"><b>Header KPI row</b><span>4 tiles rewritten from stats: Batches tested (approved batches) · Flagged (rejected batches) · Avg temp (°C) · Avg SNF</span></div>
-          <div class="wf-cell"><b>Secondary KPI strip (#ql-stats)</b><span>6 tiles: Tested Today · Passed · Failed · Pending · Avg Fat (%) · Compliance (%)</span></div>
-          <div class="wf-cell"><b>Batch table</b><span>Columns Batch · Farm · Fat · SNF · Temp · Result (colour badge) · Manage; newest collection first</span></div>
-          <div class="wf-cell"><b>Row → Manage</b><span>Opens the batch record dialog (results, farmer quality history, inventory impact, Approve / Reject)</span></div>
+          <div class="wf-cell"><b>Headline KPI row (4)</b><span>Batches tested · Flagged · Avg temp · Avg SNF — placeholder numbers overwritten with live figures on load.</span></div>
+          <div class="wf-cell"><b>Second stat strip (6)</b><span>Tested Today · Passed · Failed · Pending · Avg Fat · Compliance — inserted above the table from <code>/quality/stats</code>.</span></div>
+          <div class="wf-cell"><b>Live status banner</b><span>Green "● Live — N quality record(s) from the DOODLY database"; red if the backend is offline or your role is denied (403).</span></div>
+          <div class="wf-cell"><b>Batch table</b><span>Batch · Farm · Fat · SNF · Temp · Result · Manage — newest first, no toolbar, no pager.</span></div>
+          <div class="wf-cell"><b>Row "Manage" link</b><span>Opens the batch drawer: readings, grade, farmer quality history, inventory impact, Approve / Reject.</span></div>
+          <div class="wf-cell"><b>Header buttons</b><span>"Record test" opens the test-entry modal; "Quality rules" opens the acceptance-threshold editor.</span></div>
         </div>
-      </div><div class="wire-cap">Figure — labelled layout of the Quality Testing dashboard, top to bottom.</div></div>
+      </div><div class="wire-cap">Figure — labelled layout of the Quality Testing screen</div></div>
 
-      <h4>What the screen loads</h4>
-      <p>On open the screen calls <code>GET /api/admin/quality</code>, which returns <code>quality</code> (the enriched batch records, including untested/pending ones), <code>stats</code> and <code>rules</code> (the current acceptance thresholds). It then calls <code>GET /api/admin/quality/stats</code> for the dashboard numbers. The table shows the most recent 300 batches, newest collection first. Rows are built from the records — <code>Batch</code> = batch number, <code>Farm</code> = farmer name, <code>Fat</code> and <code>SNF</code> = the tested values (or the collection values before a test), <code>Temp</code> = temperature in °C (or "—"), and <code>Result</code> = a coloured status badge.</p>
+      <h4>The two KPI bands</h4>
+      <p>Two rows of live numbers sit above the batch table. The top row (four large tiles) is the headline strip that ships with the page and is overwritten live via <code>bkKpis</code>. The second strip (six smaller tiles, id <code>ql-stats</code>) is inserted just above the table by the page script. Every value is pulled from <code>GET /api/admin/quality/stats</code>; the placeholder numbers baked into the page ("100% batches tested", "1 flagged", "4.0°C avg temp", "9.1 avg SNF") are replaced the moment live data arrives.</p>
 
-      <h5>Header KPI tiles (rewritten live by <code>bkKpis</code>)</h5>
       <div class="twrap"><table>
-        <thead><tr><th>Tile</th><th>Meaning</th><th>Backend field</th></tr></thead>
+        <thead><tr><th>Tile</th><th>Band</th><th>What it shows</th><th>How it is calculated (backend field)</th></tr></thead>
         <tbody>
-          <tr><td>Batches tested</td><td>Count of batches currently accepted (in inventory)</td><td><code>approvedBatches</code> = <code>Procurement.accepted = true</code></td></tr>
-          <tr><td>Flagged</td><td>Count of batches currently rejected (excluded)</td><td><code>rejectedBatches</code> = <code>Procurement.accepted = false</code></td></tr>
-          <tr><td>Avg temp</td><td>Average test temperature over the last 30 days</td><td><code>avgTempC</code> (°C, 1 decimal)</td></tr>
-          <tr><td>Avg SNF</td><td>Average solids-not-fat over the last 30 days</td><td><code>avgSnfPct</code></td></tr>
+          <tr><td><b>Batches tested</b></td><td>Top row</td><td>Count of batches currently accepted (in inventory).</td><td><code>approvedBatches</code> — <code>Procurement</code> rows where <code>accepted = true</code>.</td></tr>
+          <tr><td><b>Flagged</b></td><td>Top row</td><td>Count of batches not accepted (rejected / excluded).</td><td><code>rejectedBatches</code> — <code>Procurement</code> rows where <code>accepted = false</code>.</td></tr>
+          <tr><td><b>Avg temp</b></td><td>Top row</td><td>Average recorded temperature (°C) over the last 30 days of tests.</td><td><code>avgTempC</code> — average <code>temperatureC</code> across 30-day tests.</td></tr>
+          <tr><td><b>Avg SNF</b></td><td>Top row</td><td>Average SNF % over the last 30 days of tests.</td><td><code>avgSnfPct</code> — average <code>snfPct</code> across 30-day tests.</td></tr>
+          <tr><td><b>Tested Today</b></td><td>Strip</td><td>How many tests were recorded since midnight today.</td><td><code>testedToday</code> — <code>QualityTest</code> rows with today's <code>testedAt</code>.</td></tr>
+          <tr><td><b>Passed</b></td><td>Strip</td><td>Of today's tests, how many passed.</td><td><code>passedToday</code> — today's tests where <code>passed = true</code>.</td></tr>
+          <tr><td><b>Failed</b></td><td>Strip</td><td>Of today's tests, how many failed.</td><td><code>failedToday</code> — today's tested minus passed.</td></tr>
+          <tr><td><b>Pending</b></td><td>Strip</td><td>Accepted batches still waiting for a test.</td><td><code>pendingTests</code> — accepted batches with no linked <code>QualityTest</code>.</td></tr>
+          <tr><td><b>Avg Fat</b></td><td>Strip</td><td>Average fat % over the last 30 days of tests.</td><td><code>avgFatPct</code> — average <code>fatPct</code> across 30-day tests.</td></tr>
+          <tr><td><b>Compliance</b></td><td>Strip</td><td>Share of the last 30 days' tests that passed (100% if none yet).</td><td><code>complianceRate</code> — passed ÷ total × 100 over 30 days.</td></tr>
         </tbody>
       </table></div>
 
-      <h5>Secondary KPI strip (<code>#ql-stats</code>, six tiles)</h5>
+      <h4>The batch table</h4>
+      <p>Below the KPIs is the queue of batches, newest first. The backend returns up to the 300 most recent batches ordered by collection time. This table is deliberately compact — the manifest sets <code>toolbar:false</code> and <code>pager:false</code>, so there is <em>no</em> in-page search box, filter chips, export button or pagination bar on this screen; you read the batches and act on each through its <b>Manage</b> link.</p>
+
       <div class="twrap"><table>
-        <thead><tr><th>Tile</th><th>Meaning</th><th>Backend field</th></tr></thead>
+        <thead><tr><th>Aspect</th><th>Detail (from the live <code>quality</code> dataset)</th></tr></thead>
         <tbody>
-          <tr><td>Tested Today</td><td>Tests recorded since midnight</td><td><code>testedToday</code></td></tr>
-          <tr><td>Passed</td><td>Of today's tests, how many passed</td><td><code>passedToday</code></td></tr>
-          <tr><td>Failed</td><td>Of today's tests, how many failed</td><td><code>failedToday</code></td></tr>
-          <tr><td>Pending</td><td>Accepted batches with no test yet</td><td><code>pendingTests</code> = <code>accepted = true, qualityTest = null</code></td></tr>
-          <tr><td>Avg Fat</td><td>Average fat % over the last 30 days</td><td><code>avgFatPct</code></td></tr>
-          <tr><td>Compliance</td><td>% of last-30-day tests that passed (100% if none)</td><td><code>complianceRate</code></td></tr>
+          <tr><td><b>Columns</b></td><td>Batch · Farm · Fat · SNF · Temp · Result · Manage</td></tr>
+          <tr><td><b>Batch</b></td><td>Batch number (e.g. "B-2026-0627"), shown as a monospaced ID.</td></tr>
+          <tr><td><b>Farm</b></td><td>Supplying farmer's name (falls back to "—" if unlinked).</td></tr>
+          <tr><td><b>Fat</b></td><td>Fat % — the test reading if a test exists, otherwise the collection reading.</td></tr>
+          <tr><td><b>SNF</b></td><td>Solids-Not-Fat % — test reading, else collection reading.</td></tr>
+          <tr><td><b>Temp</b></td><td>Recorded temperature in °C (cold-chain reading); "—" if none.</td></tr>
+          <tr><td><b>Result</b></td><td>Colour badge — see the Status table below.</td></tr>
+          <tr><td><b>Manage</b></td><td>Link that opens the batch drawer (approve / reject / view history).</td></tr>
+          <tr><td><b>Default sort</b></td><td>Newest collection first (<code>collectedAt</code> descending); the query caps at 300 rows.</td></tr>
+          <tr><td><b>Search</b></td><td>Not shown on-screen (toolbar off), but the API supports <code>?search=</code> across batch no, farmer, centre and the internal ids.</td></tr>
+          <tr><td><b>Filters</b></td><td>Not shown on-screen; the API supports <code>?status=passed|failed|pending</code>, <code>?farmerId=</code>, <code>?center=</code>, <code>?from=</code>, <code>?to=</code>.</td></tr>
+          <tr><td><b>Pagination / export</b></td><td>None on this screen (<code>pager:false</code>, no toolbar).</td></tr>
+          <tr><td><b>Row action</b></td><td>Manage → opens the Quality record drawer (Screen 3).</td></tr>
         </tbody>
       </table></div>
 
-      <h5>Batch table (<code>quality</code> dataset)</h5>
+      <h4>What the Result badge means</h4>
+      <p>The badge is derived from the batch — whether it has a lab test yet, whether that test passed, and whether the batch is accepted. There are four possible states:</p>
       <div class="twrap"><table>
-        <thead><tr><th>Property</th><th>Detail (from the real table config)</th></tr></thead>
+        <thead><tr><th>Badge</th><th>Colour</th><th>Meaning</th><th>Underlying condition</th></tr></thead>
         <tbody>
-          <tr><td>Title</td><td>"Quality tests"</td></tr>
-          <tr><td>Columns</td><td>Batch · Farm · Fat · SNF · Temp · Result · Manage (7 columns)</td></tr>
-          <tr><td>Result column</td><td>A coloured badge — Passed (green) · Failed (red) · Pending (amber) · Rejected (grey)</td></tr>
-          <tr><td>Sorting</td><td>Server-ordered by collection date, newest first (no in-table sort control)</td></tr>
-          <tr><td>Search / Filters</td><td>Not shown on this screen — the block is configured with <code>toolbar:false</code></td></tr>
-          <tr><td>Pagination</td><td>None — <code>pager:false</code>; the list shows up to the most recent 300 batches</td></tr>
-          <tr><td>Row action</td><td>"Manage" link in each row (only when the batch has an id) → opens the batch record dialog</td></tr>
-          <tr><td>Exports</td><td>Not exposed on this screen</td></tr>
+          <tr><td><b>Passed</b></td><td>Green</td><td>A test was recorded and it met the standard.</td><td>Test exists and <code>passed = true</code>.</td></tr>
+          <tr><td><b>Failed</b></td><td>Red</td><td>A test was recorded and it fell short.</td><td>Test exists and <code>passed = false</code>.</td></tr>
+          <tr><td><b>Pending</b></td><td>Amber</td><td>Accepted into the day's collection but not yet tested.</td><td>No test and <code>accepted = true</code>.</td></tr>
+          <tr><td><b>Rejected</b></td><td>Grey</td><td>Not accepted, and never tested.</td><td>No test and <code>accepted = false</code>.</td></tr>
         </tbody>
       </table></div>
 
-      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">The backend can filter — the screen just doesn't expose it</div><p>The list endpoint <code>GET /api/admin/quality</code> accepts <code>search</code>, <code>status</code> (<code>passed</code> / <code>failed</code> / <code>pending</code>), <code>farmerId</code>, <code>center</code>, <code>from</code> and <code>to</code> query parameters. The Quality Testing screen calls it without any of these (so you always see the full recent list), but reports and integrations can pass them. A bulk approve/reject endpoint (<code>POST /api/admin/quality/bulk</code>) also exists on the server; it is not wired to a button on this screen today.</p></div></div>
-
-      <h5>Header buttons and the row action</h5>
+      <h4>Grade (A / B / C)</h4>
+      <p>Alongside the pass/fail status, every batch is given a letter grade calculated on the fly from the current acceptance rules (Screen 4). You see this grade inside the Manage drawer.</p>
       <div class="twrap"><table>
-        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <thead><tr><th>Grade</th><th>When it is awarded</th></tr></thead>
         <tbody>
-          <tr><td>Record test</td><td>Opens the "Record quality test" dialog for an untested batch (Screen 2)</td><td>Reads the untested batches already loaded; submits to <code>POST /api/admin/quality</code></td><td><span class="pill role">Quality</span>+ <code>quality:create</code></td></tr>
-          <tr><td>Quality rules</td><td>Opens the "Quality acceptance rules" dialog (Screen 4)</td><td><code>GET /api/admin/quality/rules</code>; save via <code>PATCH</code></td><td><span class="pill role">Quality</span>+ (view to open, <code>quality:edit</code> to save)</td></tr>
-          <tr><td>Manage (row)</td><td>Opens the batch record dialog to approve or reject (Screen 3)</td><td><code>GET /api/admin/quality/{id}</code>; decision via <code>POST</code></td><td><span class="pill role">Quality</span>+ (view to open, <code>quality:edit</code> to decide)</td></tr>
+          <tr><td><b>C</b></td><td>Fat is below <b>Minimum Fat %</b> <em>or</em> SNF is below <b>Minimum SNF %</b> — i.e. it fails the standard.</td></tr>
+          <tr><td><b>A</b></td><td>Fat is at least <b>Minimum Fat % + 1.5</b> <em>and</em> SNF is at least <b>Minimum SNF % + 0.5</b> — comfortably above standard.</td></tr>
+          <tr><td><b>B</b></td><td>Meets the minimum but not the "A" margin — everything in between.</td></tr>
         </tbody>
       </table></div>
 
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — read the banner first</div><p>The green "● Live" banner tells you the numbers came straight from the DOODLY database and how many records loaded. A red banner means you are looking at stale or empty data — either the backend is offline or your role lacks <code>quality:view</code>. Never make a pass/fail call off a red banner.</p></div></div>
     </div>
   </div>
 
-  <!-- ============================================================ SCREEN 2 -->
+  <!-- ============================ SCREEN 2 ============================ -->
   <div class="spec">
-    <div class="spec-h">
-      <p class="st">Record quality test (dialog)</p>
-      <p class="sm">Enter fat, SNF, density and temperature for one untested batch; the rules auto-suggest Pass or Fail before you save.</p>
-    </div>
+    <div class="spec-h"><p class="st">Record quality test</p><p class="sm">Enter lab readings for an untested batch and mark it Passed or Failed.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Attach a lab test to a batch that has none yet — fat, SNF, density and temperature — and record the pass/fail decision, which the rules engine pre-fills for you.</span></div>
     <div class="spec-meta">
-      <span class="m"><b>Purpose</b> Attach a lab test to a collected batch and, if it fails, pull the milk out of raw-milk inventory.</span>
-    </div>
-    <div class="spec-meta">
-      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Quality</span> — needs <code>quality:create</code></span>
+      <span class="m"><b>Access</b>
+        <span class="pill role">Super Admin</span>
+        <span class="pill role">Admin</span>
+        <span class="pill role">Quality Control</span></span>
       <span class="m"><b>Path</b> <span class="navpath">Admin → Supply → Quality Testing → Record test</span></span>
     </div>
-    <div class="spec-body">
+    <div class="spec-meta"><span class="m"><b>Opens from</b> the header <b>Record test</b> button.</span><span class="m"><b>Writes to</b> <code>POST /api/admin/quality</code> (RBAC <code>quality:create</code>)</span></div>
 
+    <div class="spec-body">
       <div class="wire"><div class="wf">
-        <div class="wf-topbar">Dialog — <b>Record quality test</b></div>
+        <div class="wf-topbar">Modal — <b>Record quality test</b> · [Cancel] [Record test]</div>
         <div class="wf-grid">
-          <div class="wf-cell"><b>Batch selector</b><span>Dropdown of untested batches only — "&lt;batch no&gt; · &lt;farmer&gt; · &lt;litres&gt; L"; choosing one auto-fills the fields from the collection</span></div>
-          <div class="wf-cell"><b>Fat % / SNF %</b><span>Two required decimal inputs; typing recomputes the suggested result live</span></div>
-          <div class="wf-cell"><b>Density / lactometer · Temperature</b><span>Two required decimal inputs (default 27 and 4 if the batch has none)</span></div>
-          <div class="wf-cell"><b>Result</b><span>Passed / Failed select — auto-set by the rules, but you can override it</span></div>
-          <div class="wf-cell"><b>Reject reason</b><span>Optional text, used when the result is Failed (e.g. "low SNF, added water")</span></div>
-          <div class="wf-cell"><b>Rule hint / error line</b><span>"Rule: fat ≥ X%, SNF ≥ Y% → meets / below standard"; validation errors show in red</span></div>
-          <div class="wf-cell"><b>Footer</b><span>Cancel · Record test</span></div>
+          <div class="wf-cell"><b>Batch selector</b><span>Drop-down of untested batches only — each shows batch no · farmer · litres.</span></div>
+          <div class="wf-cell"><b>Reading fields</b><span>Fat % · SNF % · Density/lactometer · Temperature °C — pre-filled from the collection readings.</span></div>
+          <div class="wf-cell"><b>Result select</b><span>Passed / Failed — auto-set from the rules as you type, still overridable.</span></div>
+          <div class="wf-cell"><b>Reject reason</b><span>Free text, only relevant on a Failed result (e.g. "low SNF, added water").</span></div>
+          <div class="wf-cell"><b>Rule hint line</b><span>"Rule: fat ≥ X%, SNF ≥ Y% → meets / below standard".</span></div>
+          <div class="wf-cell"><b>Error line</b><span>Shows validation and permission (403) or conflict (already tested) messages.</span></div>
         </div>
-      </div><div class="wire-cap">Figure — the Record quality test dialog.</div></div>
+      </div><div class="wire-cap">Figure — the Record quality test modal</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — only untested batches appear</div><p>The Batch drop-down is built from batches that do <b>not</b> already have a test. If every collected batch has been tested, clicking <b>Record test</b> simply shows a message ("No untested batches — all collections have quality results") and the modal does not open. To change an existing result you cannot re-test; the batch is instead accepted or rejected from its Manage drawer (Screen 3).</p></div></div>
 
       <h4>Fields</h4>
       <div class="twrap"><table>
         <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
         <tbody>
-          <tr><td>Batch</td><td>Which collected batch to test</td><td>One untested batch from the dropdown</td><td class="t-req">Yes</td><td>Only batches with no existing test appear; must be selected. Server rejects an unknown batch (400) or an already-tested one (409).</td><td>PB-20260712-0003 · Narsimha Farm · 120 L</td></tr>
-          <tr><td>Fat %</td><td>Butterfat content</td><td>Number 0–100</td><td class="t-req">Yes</td><td><code>fatPct</code> ≥ 0 required in the form; server bounds 0–100. Drives the auto Pass/Fail vs the rule's minimum fat.</td><td>7.5</td></tr>
-          <tr><td>SNF %</td><td>Solids-not-fat content</td><td>Number 0–100</td><td class="t-req">Yes</td><td><code>snfPct</code> ≥ 0 required; server bounds 0–100. Drives the auto Pass/Fail vs the rule's minimum SNF.</td><td>9.1</td></tr>
-          <tr><td>Density / lactometer</td><td>Lactometer reading (adulteration check)</td><td>Number</td><td class="t-req">Yes</td><td><code>lactometer</code>; defaults to 27 if left blank. Stored on the test.</td><td>28.5</td></tr>
-          <tr><td>Temperature (°C)</td><td>Cold-chain temperature at test</td><td>Number</td><td class="t-req">Yes</td><td><code>temperatureC</code>; defaults to 4 if left blank. Feeds the Avg temp KPI.</td><td>4.0</td></tr>
-          <tr><td>Result</td><td>Pass or fail decision</td><td>Passed / Failed</td><td class="t-req">Yes</td><td><code>passed</code> boolean. Auto-set from the rules (fat ≥ min &amp;&amp; SNF ≥ min) but editable before save.</td><td>Passed</td></tr>
-          <tr><td>Reject reason</td><td>Why the batch failed</td><td>Free text, up to 160 chars</td><td class="t-opt">Opt.</td><td>Only sent when the result is Failed; if omitted on a fail, the server stores "Did not meet quality standards".</td><td>low SNF, suspected added water</td></tr>
-        </tbody>
-      </table></div>
-
-      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — let the rules do the grading</div><p>When you pick a batch or edit Fat / SNF, the dialog compares them to the current acceptance rules and flips the Result select for you, showing "Rule: fat ≥ X%, SNF ≥ Y% → meets / below standard". Only override this if you have a lab reason to.</p></div></div>
-
-      <div class="diagram"><div class="wf">
-        <div class="wf-topbar">Workflow — recording a test</div>
-        <div class="wf-flow"><span>Click Record test</span><span>Pick untested batch</span><span>Fields auto-fill</span><span>Enter Fat / SNF / density / temp</span><span>Rules suggest Pass / Fail</span><span>Record test</span><span>POST /api/admin/quality</span><span>Fail → batch rejected + raw-milk inventory reduced</span><span>List &amp; KPIs refresh</span></div>
-      </div><div class="wire-cap">Figure — from opening the dialog to a saved, audited test.</div></div>
-
-      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">A failed test removes milk from inventory</div><p>Saving a <b>Failed</b> result sets <code>Procurement.accepted = false</code>, and if that batch had already been accepted into stock it <b>decrements the raw-milk (<code>MILK_RAW</code>) inventory by the batch litres</b> in the same transaction. A <b>Passed</b> result records the test but does not change acceptance on its own — use Approve on the batch (Screen 3) to add it to inventory. The action is written to the audit log as <code>quality.pass</code> or <code>quality.fail</code>.</p></div></div>
-
-    </div>
-  </div>
-
-  <!-- ============================================================ SCREEN 3 -->
-  <div class="spec">
-    <div class="spec-h">
-      <p class="st">Batch record — Manage (dialog)</p>
-      <p class="sm">Full results for one batch, the farmer's recent quality history, its inventory impact, and Approve / Reject buttons.</p>
-    </div>
-    <div class="spec-meta">
-      <span class="m"><b>Purpose</b> Decide whether a batch stays in raw-milk inventory, with the farmer's track record in view.</span>
-    </div>
-    <div class="spec-meta">
-      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Quality</span> — open with <code>quality:view</code>, decide with <code>quality:edit</code></span>
-      <span class="m"><b>Path</b> <span class="navpath">Admin → Supply → Quality Testing → (row) Manage</span></span>
-    </div>
-    <div class="spec-body">
-
-      <div class="wire"><div class="wf">
-        <div class="wf-topbar">Dialog — <b>&lt;batch number&gt;</b></div>
-        <div class="wf-grid">
-          <div class="wf-cell"><b>Header line</b><span>Farmer · collection center · "collected &lt;date&gt;" and "tested &lt;date&gt;" when a test exists</span></div>
-          <div class="wf-cell"><b>Results block</b><span>Litres · fat % · SNF % · density · temperature; then Grade (A/B/C) · Status badge; plus reject reason if failed</span></div>
-          <div class="wf-cell"><b>History &amp; inventory panel</b><span>"Inventory: In raw-milk inventory / Excluded from inventory" + the farmer's last tested batches (date · batch · fat% · Pass/Fail)</span></div>
-          <div class="wf-cell"><b>Footer actions</b><span>Reject batch · Close · Approve batch</span></div>
-        </div>
-      </div><div class="wire-cap">Figure — the batch Manage dialog.</div></div>
-
-      <h4>What it shows (from <code>GET /api/admin/quality/{id}</code>)</h4>
-      <p>The dialog first paints the batch summary already in memory, then fetches the detail. <b>Grade</b> is computed from the values against the current rules: <b>C</b> if fat is below the minimum fat <i>or</i> SNF is below the minimum SNF; <b>A</b> if fat ≥ (min fat + 1.5) and SNF ≥ (min SNF + 0.5); otherwise <b>B</b>. <b>Inventory impact</b> reads "In raw-milk inventory" when the batch is accepted, or "Excluded from inventory" when rejected. The <b>history</b> lists up to the farmer's 10 most recent <i>tested</i> batches so you can spot a pattern before deciding.</p>
-
-      <h4>Status badges</h4>
-      <div class="twrap"><table>
-        <thead><tr><th>Badge</th><th>Colour</th><th>When it shows</th></tr></thead>
-        <tbody>
-          <tr><td>Passed</td><td>Green</td><td>A test exists and it passed</td></tr>
-          <tr><td>Failed</td><td>Red</td><td>A test exists and it failed</td></tr>
-          <tr><td>Pending</td><td>Amber</td><td>No test yet, but the batch is accepted</td></tr>
-          <tr><td>Rejected</td><td>Grey</td><td>No passing test and the batch is not accepted</td></tr>
+          <tr><td><b>Batch</b></td><td>Which collection batch this test belongs to.</td><td>One of the untested batches in the list.</td><td class="t-req">Yes</td><td>Maps to <code>procurementId</code>. Must exist (else <code>400 "That batch does not exist."</code>) and have no prior test (else <code>409 "This batch has already been tested."</code>).</td><td>B-2026-0627 · Lakshmi Dairy · 45 L</td></tr>
+          <tr><td><b>Fat %</b></td><td>Butterfat content measured in the lab.</td><td>Number 0–100 (decimal keypad).</td><td class="t-req">Yes</td><td><code>fatPct</code>, zod <code>min(0).max(100)</code>. Pre-filled from the collection reading; drives auto pass/fail.</td><td>7.8</td></tr>
+          <tr><td><b>SNF %</b></td><td>Solids-Not-Fat content.</td><td>Number 0–100 (decimal keypad).</td><td class="t-req">Yes</td><td><code>snfPct</code>, zod <code>min(0).max(100)</code>. Pre-filled; drives auto pass/fail.</td><td>9.1</td></tr>
+          <tr><td><b>Density / lactometer</b></td><td>Lactometer reading used to screen for dilution/adulteration.</td><td>Number (decimal keypad).</td><td class="t-req">Yes</td><td><code>lactometer</code>, zod <code>number</code>. Defaults to <b>27</b> if left blank on submit.</td><td>28</td></tr>
+          <tr><td><b>Temperature (°C)</b></td><td>Cold-chain temperature at testing.</td><td>Number (decimal keypad).</td><td class="t-req">Yes</td><td><code>temperatureC</code>, zod <code>number</code>. Defaults to <b>4</b> if left blank on submit.</td><td>4.0</td></tr>
+          <tr><td><b>Result</b></td><td>Whether the batch passes the standard.</td><td>Passed / Failed.</td><td class="t-req">Yes</td><td><code>passed</code> (boolean). Auto-set from the rules as you type fat/SNF, but you can override before saving.</td><td>Passed</td></tr>
+          <tr><td><b>Reject reason (if failed)</b></td><td>Why the batch failed — for the record and the farmer's history.</td><td>Short free text, up to 160 characters.</td><td class="t-opt">Opt.</td><td><code>rejectReason</code>, zod <code>max(160)</code>. Ignored on a Passed result; on a Failed result with no reason the backend stores "Did not meet quality standards".</td><td>Low SNF, added water</td></tr>
         </tbody>
       </table></div>
 
@@ -200,90 +151,178 @@
       <div class="twrap"><table>
         <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
         <tbody>
-          <tr><td>Approve batch</td><td>Marks the batch accepted and adds its litres to raw-milk stock</td><td><code>POST /api/admin/quality/{id}</code> <code>{action:"approve"}</code> → sets <code>accepted = true</code>, <code>MILK_RAW</code> quantity +litres (only if it was not already accepted). Audited <code>quality.approve</code>.</td><td><span class="pill role">Quality</span>+ <code>quality:edit</code></td></tr>
-          <tr><td>Reject batch</td><td>Marks the batch rejected and removes its litres from raw-milk stock</td><td><code>POST /api/admin/quality/{id}</code> <code>{action:"reject"}</code> → sets <code>accepted = false</code>, <code>MILK_RAW</code> quantity −litres (only if it was accepted). Audited <code>quality.reject</code>.</td><td><span class="pill role">Quality</span>+ <code>quality:edit</code></td></tr>
-          <tr><td>Close / ✕ / Esc</td><td>Closes the dialog without changing anything</td><td>None</td><td>Any viewer</td></tr>
+          <tr><td><b>Record test</b></td><td>Validates that fat and SNF are present, then saves the test and closes on success with a toast.</td><td><code>POST /api/admin/quality</code> — creates the <code>QualityTest</code>. A <b>Failed</b> result also sets the batch <code>accepted = false</code>, and if it had been accepted, <b>decrements</b> the <code>MILK_RAW</code> inventory by the batch litres. Audited as <code>quality.pass</code> or <code>quality.fail</code>.</td><td><span class="pill role">Super Admin</span>+ <span class="muted-sm"><code>quality:create</code></span></td></tr>
+          <tr><td><b>Cancel</b> / <b>×</b> / <b>Esc</b></td><td>Closes the modal without saving.</td><td>None.</td><td>—</td></tr>
         </tbody>
       </table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — let the rules decide, then verify</div><p>As you type the fat and SNF, the <b>Result</b> field flips itself to Passed or Failed and a hint line spells out the exact threshold it used ("Rule: fat ≥ 6.5%, SNF ≥ 8.5% → meets standard"). This keeps decisions consistent across officers. Only override it if the lab sheet clearly disagrees — and if so, record why in the reject reason.</p></div></div>
 
       <div class="diagram"><div class="wf">
-        <div class="wf-topbar">Workflow — batch approval</div>
-        <div class="wf-flow"><span>Open Manage</span><span>Read results + farmer history</span><span>Approve or Reject</span><span>POST decision</span><span>Procurement.accepted flips</span><span>MILK_RAW inventory ±litres</span><span>Audited</span><span>List &amp; KPIs refresh</span></div>
-      </div><div class="wire-cap">Figure — the approve/reject decision and its inventory effect.</div></div>
-
-      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Idempotent by design</div><p>Approving a batch that is already accepted (or rejecting one already rejected) makes no change and no inventory movement — the server only adjusts stock when the accepted flag actually flips. So a double-click can't double-count the litres.</p></div></div>
-
+        <div class="wf-topbar">Workflow — recording a test</div>
+        <div class="wf-flow"><span>Pick untested batch</span><span>Readings auto-fill</span><span>Enter fat / SNF / density / temp</span><span>Result auto-set by rules</span><span>(if failed) add reason</span><span>Record test</span><span>Batch shows Passed / Failed · inventory synced on fail</span></div>
+      </div><div class="wire-cap">Figure — from batch to recorded result</div></div>
     </div>
   </div>
 
-  <!-- ============================================================ SCREEN 4 -->
+  <!-- ============================ SCREEN 3 ============================ -->
   <div class="spec">
-    <div class="spec-h">
-      <p class="st">Quality acceptance rules (dialog)</p>
-      <p class="sm">The six thresholds that auto-grade and pass/fail every new test — one shared setting for the whole operation.</p>
-    </div>
+    <div class="spec-h"><p class="st">Quality record — Manage drawer</p><p class="sm">Full readings, grade, farmer history and inventory impact, with Approve / Reject.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Inspect one batch in depth and make the accept/exclude decision that controls whether its milk counts toward raw-milk stock.</span></div>
     <div class="spec-meta">
-      <span class="m"><b>Purpose</b> Set the fat, SNF, temperature and density standards milk must meet to pass.</span>
+      <span class="m"><b>Access</b>
+        <span class="pill role">Super Admin</span>
+        <span class="pill role">Admin</span>
+        <span class="pill role">Quality Control</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Supply → Quality Testing → (row) Manage</span></span>
     </div>
-    <div class="spec-meta">
-      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Quality</span> — open with <code>quality:view</code>, save with <code>quality:edit</code></span>
-      <span class="m"><b>Path</b> <span class="navpath">Admin → Supply → Quality Testing → Quality rules</span></span>
-    </div>
+    <div class="spec-meta"><span class="m"><b>Reads</b> <code>GET /api/admin/quality/{id}</code> (<code>quality:view</code>)</span><span class="m"><b>Writes</b> <code>POST /api/admin/quality/{id}</code> (<code>quality:edit</code>)</span></div>
+
     <div class="spec-body">
-
       <div class="wire"><div class="wf">
-        <div class="wf-topbar">Dialog — <b>Quality acceptance rules</b></div>
+        <div class="wf-topbar">Drawer — <b>{Batch number}</b> · [Reject batch] … [Close] [Approve batch]</div>
         <div class="wf-grid">
-          <div class="wf-cell"><b>Intro line</b><span>"Thresholds used to auto-grade and pass/fail batches. Applies to new tests immediately."</span></div>
-          <div class="wf-cell"><b>Minimum Fat % · Minimum SNF %</b><span>Two number inputs — the pass floors</span></div>
-          <div class="wf-cell"><b>Temp min · Temp max (°C)</b><span>Accepted cold-chain temperature band</span></div>
-          <div class="wf-cell"><b>Density min · Density max</b><span>Accepted lactometer band</span></div>
-          <div class="wf-cell"><b>Footer</b><span>Cancel · Save rules</span></div>
+          <div class="wf-cell"><b>Batch header line</b><span>Farmer · centre · collected date · tested date (if tested).</span></div>
+          <div class="wf-cell"><b>Readings line</b><span>Litres · fat % · SNF % · density · temperature °C.</span></div>
+          <div class="wf-cell"><b>Grade &amp; status</b><span>Letter grade (A/B/C) · status label · reject reason if any.</span></div>
+          <div class="wf-cell"><b>Inventory impact</b><span>"In raw-milk inventory" or "Excluded from inventory".</span></div>
+          <div class="wf-cell"><b>Farmer quality history</b><span>That farmer's last 10 tested batches — date · batch · fat % · Pass/Fail.</span></div>
+          <div class="wf-cell"><b>Action buttons</b><span>Reject batch · Approve batch (plus Close).</span></div>
         </div>
-      </div><div class="wire-cap">Figure — the Quality acceptance rules dialog.</div></div>
+      </div><div class="wire-cap">Figure — the Quality record Manage drawer</div></div>
 
-      <h4>Fields (with defaults and server clamps)</h4>
+      <h4>What the drawer shows</h4>
       <div class="twrap"><table>
-        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Default</th></tr></thead>
+        <thead><tr><th>Region</th><th>Content</th><th>Source</th></tr></thead>
         <tbody>
-          <tr><td>Minimum Fat %</td><td>Lowest fat that still passes / grade floor</td><td>Number 0–20</td><td class="t-req">Yes</td><td><code>minFatPct</code>; clamped 0–20. A test below this auto-fails and grades C.</td><td>6.0</td></tr>
-          <tr><td>Minimum SNF %</td><td>Lowest SNF that still passes / grade floor</td><td>Number 0–20</td><td class="t-req">Yes</td><td><code>minSnfPct</code>; clamped 0–20.</td><td>8.5</td></tr>
-          <tr><td>Temp min (°C)</td><td>Coldest acceptable temperature</td><td>Number −5–30</td><td class="t-req">Yes</td><td><code>tempMinC</code>; clamped −5–30.</td><td>2.0</td></tr>
-          <tr><td>Temp max (°C)</td><td>Warmest acceptable temperature</td><td>Number −5–40</td><td class="t-req">Yes</td><td><code>tempMaxC</code>; clamped −5–40.</td><td>6.0</td></tr>
-          <tr><td>Density min</td><td>Lowest acceptable lactometer reading</td><td>Number 0–50</td><td class="t-req">Yes</td><td><code>densityMin</code>; clamped 0–50.</td><td>26.0</td></tr>
-          <tr><td>Density max</td><td>Highest acceptable lactometer reading</td><td>Number 0–50</td><td class="t-req">Yes</td><td><code>densityMax</code>; clamped 0–50.</td><td>32.0</td></tr>
+          <tr><td><b>Header</b></td><td>Batch number as the title.</td><td><code>batchNo</code></td></tr>
+          <tr><td><b>Context line</b></td><td>Farmer name · collection centre · "collected {date}" · "tested {date}" (only if a test exists).</td><td><code>farmer</code>, <code>center</code>, <code>collectionDate</code>, <code>testDate</code></td></tr>
+          <tr><td><b>Readings</b></td><td>Litres · fat % · SNF % · density · temperature (°C).</td><td><code>litres</code>, <code>fatPct</code>, <code>snfPct</code>, <code>density</code>, <code>temperatureC</code></td></tr>
+          <tr><td><b>Grade &amp; status</b></td><td>Grade letter and the status label; the reject reason is appended when present.</td><td><code>grade</code>, <code>status</code>, <code>rejectReason</code></td></tr>
+          <tr><td><b>Inventory impact</b></td><td>"In raw-milk inventory" when accepted, "Excluded from inventory" when not.</td><td><code>inventoryImpact</code></td></tr>
+          <tr><td><b>Farmer quality history</b></td><td>Up to the farmer's 10 most recent <em>tested</em> batches — date, batch number, fat %, and Pass/Fail — so you can spot a farmer trending down.</td><td><code>history[]</code> from the detail API</td></tr>
         </tbody>
       </table></div>
 
-      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Saving is audited field-by-field</div><p>Save sends <code>PATCH /api/admin/quality/rules</code>. The server records which thresholds changed and writes a <code>quality.rules.update</code> audit entry listing the changed field names (prev → new). Changes apply to the <i>next</i> test immediately; already-recorded tests keep their original pass/fail. The rules live on a single shared <code>QualityConfig</code> row — there is one standard for the whole operation, not one per farmer.</p></div></div>
+      <h4>Buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Approve batch</b></td><td>Marks the batch accepted and closes with a toast ("approved (in inventory)").</td><td><code>POST /api/admin/quality/{id}</code> with <code>{action:"approve"}</code> → sets <code>accepted = true</code> and, in one transaction, <b>increments</b> <code>MILK_RAW</code> stock by the batch litres (no change if it was already accepted). Audited <code>quality.approve</code>.</td><td><span class="pill role">Super Admin</span>+ <span class="muted-sm"><code>quality:edit</code></span></td></tr>
+          <tr><td><b>Reject batch</b></td><td>Marks the batch not accepted and closes with a toast ("rejected (excluded)").</td><td><code>POST /api/admin/quality/{id}</code> with <code>{action:"reject"}</code> → sets <code>accepted = false</code> and <b>decrements</b> <code>MILK_RAW</code> stock by the batch litres (no change if it was already rejected). Audited <code>quality.reject</code>.</td><td><span class="pill role">Super Admin</span>+ <span class="muted-sm"><code>quality:edit</code></span></td></tr>
+          <tr><td><b>Close</b> / <b>×</b> / <b>Esc</b></td><td>Closes the drawer without changing anything.</td><td>None.</td><td>—</td></tr>
+        </tbody>
+      </table></div>
 
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — approve/reject is idempotent on inventory</div><p>The stock movement only fires when the accepted state actually changes. Approving an already-approved batch, or rejecting an already-rejected one, is a safe no-op (inventory delta 0). You cannot double-count or double-subtract by clicking twice.</p></div></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — batch approval and raw-milk stock</div>
+        <div class="wf-flow"><span>Open Manage</span><span>Review readings + grade + farmer history</span><span>Approve → accepted, +litres to MILK_RAW</span><span>Reject → excluded, −litres from MILK_RAW</span><span>Audit log records the decision</span></div>
+      </div><div class="wire-cap">Figure — how the accept/reject decision keeps inventory in step</div></div>
     </div>
   </div>
 
-  <!-- ============================================================ CLOSING -->
-  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Test every batch the same day it is collected: record Fat / SNF / density / temperature while the batch is still Pending, let the rules suggest the result, and only override with a written reject reason. Approve passing batches promptly so raw-milk inventory reflects real stock, and review a farmer's history in the Manage dialog before accepting a borderline (grade C) batch. Change the acceptance rules rarely and deliberately — every save is audited and instantly re-grades all new tests.</p></div></div>
+  <!-- ============================ SCREEN 4 ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Quality acceptance rules</p><p class="sm">The configurable thresholds that auto-grade every batch and set pass/fail.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Define the fat, SNF, temperature and density limits DOODLY accepts milk against. These apply to new tests immediately and drive the automatic grade and Result.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b>
+        <span class="pill role">Super Admin</span>
+        <span class="pill role">Admin</span>
+        <span class="pill role">Quality Control</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Supply → Quality Testing → Quality rules</span></span>
+    </div>
+    <div class="spec-meta"><span class="m"><b>Reads</b> <code>GET /api/admin/quality/rules</code> (<code>quality:view</code>)</span><span class="m"><b>Writes</b> <code>PATCH /api/admin/quality/rules</code> (<code>quality:edit</code>)</span></div>
 
-  <h4>Troubleshooting</h4>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Modal — <b>Quality acceptance rules</b> · [Cancel] [Save rules]</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Minimums row</b><span>Minimum Fat % · Minimum SNF %.</span></div>
+          <div class="wf-cell"><b>Temperature row</b><span>Temp min (°C) · Temp max (°C).</span></div>
+          <div class="wf-cell"><b>Density row</b><span>Density min · Density max.</span></div>
+          <div class="wf-cell"><b>Note</b><span>"Thresholds used to auto-grade and pass/fail batches. Applies to new tests immediately."</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Quality acceptance rules editor</div></div>
+
+      <p>These six values live on a single settings record (the <code>QualityConfig</code> singleton). The <b>Minimum Fat %</b> and <b>Minimum SNF %</b> are the two thresholds that actually decide pass/fail and the A/B/C grade; the temperature and density bounds are the cold-chain and adulteration limits the lab checks against.</p>
+
+      <h4>Fields</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Minimum Fat %</b></td><td>Lowest fat % a batch may have and still pass.</td><td>Number 0–20.</td><td class="t-req">Yes</td><td><code>minFatPct</code>, clamped 0–20. Drives auto pass/fail and grade.</td><td>6.5</td></tr>
+          <tr><td><b>Minimum SNF %</b></td><td>Lowest SNF % a batch may have and still pass.</td><td>Number 0–20.</td><td class="t-req">Yes</td><td><code>minSnfPct</code>, clamped 0–20. Drives auto pass/fail and grade.</td><td>8.5</td></tr>
+          <tr><td><b>Temp min (°C)</b></td><td>Coldest acceptable temperature.</td><td>Number −5 to 30.</td><td class="t-req">Yes</td><td><code>tempMinC</code>, clamped −5–30.</td><td>2</td></tr>
+          <tr><td><b>Temp max (°C)</b></td><td>Warmest acceptable temperature (cold-chain ceiling).</td><td>Number −5 to 40.</td><td class="t-req">Yes</td><td><code>tempMaxC</code>, clamped −5–40.</td><td>6</td></tr>
+          <tr><td><b>Density min</b></td><td>Lowest acceptable lactometer/density.</td><td>Number 0–50.</td><td class="t-req">Yes</td><td><code>densityMin</code>, clamped 0–50.</td><td>26</td></tr>
+          <tr><td><b>Density max</b></td><td>Highest acceptable lactometer/density.</td><td>Number 0–50.</td><td class="t-req">Yes</td><td><code>densityMax</code>, clamped 0–50.</td><td>32</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Save rules</b></td><td>Saves the six thresholds and closes with a toast ("Quality rules saved — live for new tests").</td><td><code>PATCH /api/admin/quality/rules</code> — each value is clamped to its allowed range; the change set (each field's previous → new value) is written to the audit log as <code>quality.rules.update</code>, stamped with who changed it.</td><td><span class="pill role">Super Admin</span>+ <span class="muted-sm"><code>quality:edit</code></span></td></tr>
+          <tr><td><b>Cancel</b> / <b>×</b> / <b>Esc</b></td><td>Closes without saving.</td><td>None.</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — rules change the grade of the whole queue, live</div><p>Because the A/B/C grade and the pass/fail hint are computed from these thresholds each time the list loads, raising the Minimum Fat % or Minimum SNF % can instantly re-grade batches you are about to test — and can turn an "A" into a "B" or a borderline batch into a fail. Change them deliberately, ideally between shifts, not mid-testing.</p></div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Set the acceptance rules once with your dairy technologist to match your FSSAI and internal standards, then leave them alone. Record every test through the modal so the <b>Result</b> is decided by the rules, not by opinion — that consistency is what makes the Compliance KPI and the farmer quality history trustworthy. Reserve manual overrides for genuine lab-sheet discrepancies, and always add a reject reason when you fail a batch so the farmer's history explains itself.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================ BULK NOTE ============================ -->
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — bulk approve / reject exists behind the scenes</div><p>The backend also exposes <code>POST /api/admin/quality/bulk</code>, which approves or rejects many batches at once (up to 1000 ids), syncing raw-milk inventory per batch and writing one audit entry (<code>quality.bulk.approve</code> / <code>quality.bulk.reject</code>). It also needs <code>quality:edit</code>. The current Quality Testing screen has its toolbar turned off, so there is no on-screen "select many → approve" control; this route is available for scripted or future bulk operations rather than a button you click today.</p></div></div>
+
+  <!-- ============================ ACCESS SUMMARY ============================ -->
+  <h3>Who can do what</h3>
+  <p>Quality Testing is governed by the <code>quality</code> permission. Levels map to actions as follows: <b>view</b> = read only; <b>manage</b> = view + create + edit; <b>full</b> = everything. In the default role matrix:</p>
   <div class="twrap"><table>
-    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <thead><tr><th>Role</th><th>Quality level</th><th>View queue &amp; stats</th><th>Record tests</th><th>Approve / reject / edit rules</th></tr></thead>
     <tbody>
-      <tr><td>"No untested batches" when clicking Record test</td><td>Every loaded batch already has a test</td><td>Collect/record procurement first (Admin → Supply → Procurement); tested batches only appear for approve/reject, not for a new test.</td></tr>
-      <tr><td>Red banner "Your role can't view quality (403)."</td><td>Signed-in role lacks <code>quality:view</code></td><td>Use a Super Admin / Admin / Quality (or Procurement view-only) account; ask a Super Admin to grant the quality module.</td></tr>
-      <tr><td>"This batch has already been tested." on save</td><td>A QualityTest already exists for that Procurement (409 conflict)</td><td>Open the batch with Manage to see the existing result; each batch can hold only one test.</td></tr>
-      <tr><td>Recording a Fail didn't reduce inventory</td><td>The batch had not been accepted into stock yet</td><td>Expected — inventory only drops when a previously-accepted batch is failed/rejected. Pending batches were never in stock.</td></tr>
-      <tr><td>"Your role can't approve/reject (403)."</td><td>Role has <code>quality:view</code> only (e.g. Procurement)</td><td>Approve/reject and rule edits need <code>quality:edit</code> (Quality / Admin / Super Admin).</td></tr>
-      <tr><td>Red banner "Backend offline …"</td><td>The DOODLY API base is unreachable</td><td>Confirm the backend is running and reachable at the shown API base; the table falls back to sample data until it reconnects.</td></tr>
+      <tr><td><b>Super Admin</b></td><td><code>*</code> (all)</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+      <tr><td><b>Admin</b></td><td><code>full</code></td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+      <tr><td><b>Quality Control</b></td><td><code>full</code></td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+      <tr><td><b>Procurement</b></td><td><code>view</code></td><td>Yes</td><td>No (403)</td><td>No (403)</td></tr>
+      <tr><td>All other roles</td><td>none</td><td>No</td><td>No</td><td>No</td></tr>
     </tbody>
   </table></div>
 
-  <h4>Frequently asked questions</h4>
-  <h4>Q. Is a "quality record" a separate database table?</h4>
-  <p>No. Each record is a <b>Procurement</b> (the collected batch) plus at most one <b>QualityTest</b>. There is no duplicate quality table — grading rules live on the single <code>QualityConfig</code> row, and acceptance is stored as <code>Procurement.accepted</code>.</p>
-  <h4>Q. Does passing a test automatically put the milk into inventory?</h4>
-  <p>No. Recording a <b>Pass</b> only saves the test. Adding the milk to raw-milk (<code>MILK_RAW</code>) inventory happens when you <b>Approve</b> the batch in the Manage dialog. A <b>Fail</b>, however, immediately rejects the batch and removes its litres if it had already been accepted.</p>
-  <h4>Q. Can I change how strict the standard is per farmer?</h4>
-  <p>No. The acceptance rules are one shared setting (<code>QualityConfig</code>) for the whole operation. You can view a farmer's individual history in the Manage dialog, but the pass/fail thresholds are global.</p>
-  <h4>Q. Where do the dashboard numbers come from?</h4>
-  <p>The header KPIs and the six-tile strip are computed live by <code>GET /api/admin/quality/stats</code> from the real <code>QualityTest</code> and <code>Procurement</code> tables — today's tests, 30-day averages, pending count, accepted/rejected counts and the compliance rate.</p>
+  <!-- ============================ TROUBLESHOOTING ============================ -->
+  <h3>Troubleshooting</h3>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>Red banner "Couldn't load live quality" / empty table.</td><td>Backend offline, or your role lacks <code>quality:view</code> (403).</td><td>Confirm the backend is running; if it is a 403, ask a Super Admin to grant your role the <code>quality</code> module (at least <code>view</code>).</td></tr>
+      <tr><td>"Record test" shows "No untested batches" and won't open.</td><td>Every collected batch already has a test.</td><td>Nothing to test. To change a result, open the batch's Manage drawer and Approve / Reject instead.</td></tr>
+      <tr><td>Saving a test fails with "This batch has already been tested."</td><td>A test was recorded for that batch (a <code>409</code> conflict).</td><td>Close the modal, refresh, and use the Manage drawer to approve/reject; a batch can only be tested once.</td></tr>
+      <tr><td>Saving a test fails with "That batch does not exist."</td><td>The batch was removed or the list is stale (a <code>400</code>).</td><td>Refresh the screen to reload the current batch list, then retry.</td></tr>
+      <tr><td>"Your role can't record quality (403)."</td><td>You have <code>quality:view</code> only (e.g. the Procurement role).</td><td>Recording needs <code>quality:create</code>. Have a Quality Control, Admin or Super Admin user record it.</td></tr>
+      <tr><td>Failing / rejecting a batch changed the raw-milk stock number.</td><td>Expected — a fail or reject on an accepted batch removes its litres from <code>MILK_RAW</code>.</td><td>No action needed; this is the inventory staying honest. Approve it back if the reject was a mistake.</td></tr>
+      <tr><td>Grades shifted across the whole list unexpectedly.</td><td>The acceptance rules were changed; grades recompute live.</td><td>Open Quality rules to review the thresholds; check the audit log entry <code>quality.rules.update</code> to see who changed what.</td></tr>
+    </tbody>
+  </table></div>
 
+  <!-- ============================ FAQ ============================ -->
+  <h3>Frequently asked questions</h3>
+  <h4>Can I edit a test after I have saved it?</h4>
+  <p>No — a batch can hold only one <code>QualityTest</code>, and trying to test it again returns a conflict. What you <em>can</em> still change is whether the batch is accepted: open its Manage drawer and use Approve or Reject. That is the lever that controls inventory, and it can be flipped as many times as needed.</p>
+
+  <h4>What is the difference between "Failed" and "Rejected"?</h4>
+  <p><b>Failed</b> means a lab test was recorded and the milk did not meet the standard (a test exists, <code>passed = false</code>). <b>Rejected</b> means the batch was simply never accepted and has no test at all. A fail automatically un-accepts the batch, so a failed batch is also excluded from inventory — but the badge shows "Failed" because there is a test behind it.</p>
+
+  <h4>Why does the Result flip by itself when I type the readings?</h4>
+  <p>The modal reads the live acceptance rules and compares your fat and SNF against the Minimum Fat % and Minimum SNF %. If both meet the minimum it pre-selects Passed; otherwise Failed. It is a guide to keep officers consistent — you can still override the selection before saving.</p>
+
+  <h4>Does approving a batch here change anything on the Procurement screen?</h4>
+  <p>Yes. Approve/Reject flips the very same <code>accepted</code> flag the Procurement desk sees, and the batch's QC badge updates on both screens. There is one shared record, so the two teams never disagree about a batch's status.</p>
+
+  <h4>Where do the temperature and density limits actually get enforced?</h4>
+  <p>They are stored on the acceptance rules and shown to the tester, and temperature feeds the "Avg temp" KPI. The automatic pass/fail decision, however, is driven specifically by the <b>fat</b> and <b>SNF</b> minimums; temperature and density are the reference bounds your lab checks against and records, with the final call made by the tester and the Approve/Reject decision.</p>
 </section>

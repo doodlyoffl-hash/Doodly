@@ -1,0 +1,183 @@
+<section class="sheet" id="admin-reports">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Growth · Reports</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Growth</span></div>
+  <h2 class="section-title">Reports</h2>
+  <p class="lead">One live business-intelligence screen that computes every headline number, trend chart and drill-down table straight from the DOODLY database — sales, customers, subscriptions, finance, operations, procurement and marketing — for any date range, ready to export to CSV, Excel, PDF or print.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — this is a read-only analytics page</div><p>Reports never changes an order, payment, subscription or any other record. It <b>reads</b> the authoritative source tables (orders, subscriptions, payments, wallet, procurement, quality tests, deliveries, referrals, trial cashback, products and expenses) and re-computes the figures on demand. There are no separate "analytics" tables to keep in sync — every number you see is the true, current state of the business for the range you picked.</p></div></div>
+
+  <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">How the data reaches this screen</div><p>Opening <span class="navpath">Admin → Growth → Reports</span> calls the backend endpoint <b>GET /api/admin/reports?preset=…</b>. The server resolves the preset to a date range, aggregates the source tables live, and returns the KPIs, chart series and category tables in one payload. A green "● Live — analytics computed from the DOODLY database" banner confirms the source and the exact range. Every filter change re-fetches; nothing is cached client-side.</p></div></div>
+
+  <!-- ============================================================ SCREEN 1: REPORTS BOARD -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Screen 1 — Reports Board (live analytics)</p><p class="sm">The single-page dashboard: date-range toolbar, 17 KPI cards, seven trend/breakdown charts, seven report tiles and a sales-by-day table.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give leadership a one-look, always-current answer to "how is the whole business doing right now?" and let them slice it by any period and export it for a meeting.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span><span class="pill role">Admin</span> plus any role granted <b>reports:view</b> — Accountant, Operations, Procurement, Inventory, Quality and Marketing. Support, Delivery Executive and Customer cannot open it.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Reports</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Reports — <b>Live business intelligence</b> · date presets · Export CSV · Excel · Export PDF · Print</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Range toolbar</b><span>Nine preset chips (Today → All time) + four export buttons</span></div>
+          <div class="wf-cell"><b>KPI strip (17 cards)</b><span>Revenue, orders, customers, subscriptions, finance headline numbers</span></div>
+          <div class="wf-cell"><b>Report tiles (7)</b><span>Sales · Customers · Subscriptions · Financial · Operations · Procurement · Marketing — each clickable to drill down</span></div>
+          <div class="wf-cell"><b>Charts (4 bar trends)</b><span>Revenue trend · Orders trend · Customer growth (6 mo) · Subscription growth (6 mo)</span></div>
+          <div class="wf-cell"><b>Breakdowns (2)</b><span>Orders by status · Subscriptions by status</span></div>
+          <div class="wf-cell"><b>Sales-by-day table</b><span>Date · Orders · Revenue, with the active range badge</span></div>
+          <div class="wf-cell"><b>Live banner</b><span>Green "● Live" line naming the database and the resolved range</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 1 — The Reports board: a range toolbar over the KPI strip, report tiles, charts and the daily sales table.</div></div>
+
+      <h4>The date-range toolbar</h4>
+      <p>A single row of <b>preset chips</b> on the left and four <b>export buttons</b> on the right. Clicking a chip highlights it, re-fetches the whole board for that range, and logs a <b>"filtered"</b> audit event. The board opens on <b>Last 30d</b> by default.</p>
+      <div class="twrap"><table><thead><tr><th>Preset chip</th><th>Range it selects</th><th>Trend granularity</th></tr></thead><tbody>
+        <tr><td>Today</td><td>Midnight today → now</td><td>Daily bars</td></tr>
+        <tr><td>Yesterday</td><td>The previous full calendar day</td><td>Daily bars</td></tr>
+        <tr><td>Last 7d</td><td>The last seven days including today</td><td>Daily bars</td></tr>
+        <tr><td>Last 30d <span class="pill role">default</span></td><td>The last thirty days including today</td><td>Daily bars</td></tr>
+        <tr><td>This month</td><td>1st of this month → end of this month</td><td>Daily bars</td></tr>
+        <tr><td>Last month</td><td>The whole previous calendar month</td><td>Daily bars</td></tr>
+        <tr><td>Quarter</td><td>The current calendar quarter</td><td>Monthly bars</td></tr>
+        <tr><td>Financial yr</td><td>Indian financial year — 1 April to 31 March</td><td>Monthly bars</td></tr>
+        <tr><td>All time</td><td>No date bound — the entire history</td><td>Monthly bars</td></tr>
+      </tbody></table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — daily vs. monthly charts switch automatically</div><p>The trend charts adapt to the range you pick. If the span is <b>45 days or shorter</b> the bars are drawn one-per-day; anything longer (Quarter, Financial yr, All time) is bucketed into the last <b>six months</b> of monthly bars. The customer-growth and subscription-growth charts are <b>always</b> the last six months, regardless of the selected range.</p></div></div>
+
+      <h4>KPI strip — the 17 headline cards</h4>
+      <p>Across the top sits a strip of seventeen number cards. Money figures are shown in whole rupees (the database stores paise and the screen divides by 100). Every card reflects the values described below.</p>
+      <div class="twrap"><table><thead><tr><th>KPI card</th><th>What it shows</th><th>How it is computed (source)</th></tr></thead><tbody>
+        <tr><td>Total Revenue</td><td>Lifetime revenue from paid orders</td><td>Sum of <b>totalPaise</b> across all orders with status PAID</td></tr>
+        <tr><td>Today's Revenue</td><td>Revenue booked since midnight today</td><td>PAID orders created today</td></tr>
+        <tr><td>This Month</td><td>Revenue this calendar month to date</td><td>PAID orders since the 1st of the month</td></tr>
+        <tr><td>Total Orders</td><td>All orders in every status</td><td>Order count grouped by status, summed</td></tr>
+        <tr><td>Completed Orders</td><td>Orders that reached PAID</td><td>Count of orders with status PAID</td></tr>
+        <tr><td>Active Customers</td><td>Distinct customers who paid in the last 30 days</td><td>Distinct userId on PAID orders in the last 30 days</td></tr>
+        <tr><td>New Customers</td><td>Customers who signed up inside the selected range</td><td>CUSTOMER users created between from → to</td></tr>
+        <tr><td>Active Subscriptions</td><td>Currently running subscriptions</td><td>Subscriptions with status ACTIVE</td></tr>
+        <tr><td>Renewal Rate</td><td>Share of ended subscriptions that completed vs. cancelled</td><td>completed ÷ (completed + cancelled) × 100</td></tr>
+        <tr><td>Retention Rate</td><td>The inverse of churn</td><td>100 − churn rate</td></tr>
+        <tr><td>Avg Order Value</td><td>Mean value of a paid order</td><td>Total revenue ÷ paid-order count</td></tr>
+        <tr><td>Wallet Usage</td><td>Wallet money spent by customers</td><td>Sum of wallet DEBIT transactions of kind "usage"</td></tr>
+        <tr><td>Referral Growth</td><td>Number of credited referral rewards</td><td>Count of ReferralReward rows with status CREDITED</td></tr>
+        <tr><td>Procurement Cost</td><td>Total amount payable to farms for milk</td><td>Sum of Procurement amountPaise (all batches)</td></tr>
+        <tr><td>GST Collected</td><td>Tax collected on paid orders</td><td>Sum of order taxPaise across PAID orders</td></tr>
+        <tr><td>Gross Profit</td><td>Revenue after milk cost</td><td>Total revenue − procurement cost (COGS proxy)</td></tr>
+        <tr><td>Net Profit</td><td>Revenue after milk cost and operating expenses</td><td>Total revenue − procurement cost − operating expenses</td></tr>
+      </tbody></table></div>
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — several KPIs are lifetime, not range-scoped</div><p>Read the labels carefully. <b>Total Revenue, Total Orders, Completed Orders, Active Subscriptions, Renewal/Retention Rate, Avg Order Value, Wallet Usage, Referral Growth, Procurement Cost, GST Collected, Gross Profit</b> and <b>Net Profit</b> are computed over the <b>whole business history</b>, not the chip you selected. Only <b>New Customers</b> and the trend charts / sales table follow the chosen range. This is by design — the KPI strip is a "state of the business" summary; use the charts, the daily table and the drill-downs for range-specific analysis.</p></div></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — "Gross Profit" and "Net Profit" are proxies</div><p>Gross profit currently treats <b>milk procurement cost</b> as the only cost of goods sold, and net profit additionally subtracts <b>approved operating expenses</b> (expenses that are not REJECTED or CANCELLED and not soft-deleted). These are honest, useful directional figures but not a full P&amp;L; treat them as management indicators, not audited accounts.</p></div></div>
+
+      <h4>Report tiles — seven clickable categories</h4>
+      <p>Below the KPI strip sits a three-column grid of seven tiles. Each tile shows a headline summary and a "View report →" link; clicking any tile opens its detailed drill-down card (Screen 2).</p>
+      <div class="twrap"><table><thead><tr><th>Tile</th><th>Summary shown on the tile</th></tr></thead><tbody>
+        <tr><td>Sales report</td><td>Revenue and the number of paid orders</td></tr>
+        <tr><td>Customer report</td><td>Active · repeat · retention %</td></tr>
+        <tr><td>Subscription report</td><td>Active · churn % · renewal %</td></tr>
+        <tr><td>Financial report</td><td>Net profit · GST collected</td></tr>
+        <tr><td>Operations report</td><td>On-time % · bottle-return %</td></tr>
+        <tr><td>Procurement report</td><td>Litres · cost · quality pass %</td></tr>
+        <tr><td>Marketing report</td><td>Referral count · trial conversions</td></tr>
+      </tbody></table></div>
+
+      <h4>Charts and status breakdowns</h4>
+      <p>A two-column grid holds six visual panels. Four are <b>bar-trend</b> charts (each bar is captioned and shows its value on hover); two are horizontal <b>breakdown</b> bars.</p>
+      <div class="twrap"><table><thead><tr><th>Panel</th><th>What it plots</th><th>Notes</th></tr></thead><tbody>
+        <tr><td>Revenue trend</td><td>Revenue per day (or per month) across the range</td><td>Money bars; hover shows the rupee value</td></tr>
+        <tr><td>Orders trend</td><td>Number of paid orders per day/month</td><td>Count bars</td></tr>
+        <tr><td>Customer growth (6 mo)</td><td>New customers per month, last six months</td><td>Always six months</td></tr>
+        <tr><td>Subscription growth (6 mo)</td><td>New subscriptions per month, last six months</td><td>Always six months</td></tr>
+        <tr><td>Orders by status</td><td>Order count per status (e.g. PAID, PENDING, …)</td><td>Horizontal bars, largest first</td></tr>
+        <tr><td>Subscriptions by status</td><td>Subscription count per status</td><td>Horizontal bars, largest first</td></tr>
+      </tbody></table></div>
+
+      <h4>Sales-by-day table</h4>
+      <p>At the foot of the board is a plain three-column table titled "Sales — by day" (or "by month" for long ranges), with a badge showing the resolved <b>from → to</b> dates.</p>
+      <div class="twrap"><table><thead><tr><th>Property</th><th>Detail</th></tr></thead><tbody>
+        <tr><td>Columns</td><td>Date · Orders · Revenue</td></tr>
+        <tr><td>Rows</td><td>One per day (ranges ≤ 45 days) or one per month (longer ranges)</td></tr>
+        <tr><td>Sorting</td><td>Fixed — chronological, oldest to newest</td></tr>
+        <tr><td>Search / filter</td><td>None on this table; use the range chips to change what it covers</td></tr>
+        <tr><td>Empty state</td><td>"No sales in this range." spanning the table</td></tr>
+      </tbody></table></div>
+
+      <h4>Buttons on the board</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td>Preset chip (Today … All time)</td><td>Re-runs the whole board for that range</td><td>GET /api/admin/reports?preset=… ; POST logs a <b>reports.filtered</b> audit event</td><td><span class="pill role">Super Admin</span>+ reports:view</td></tr>
+        <tr><td>Export CSV</td><td>Downloads a .csv with KPIs, Daily Sales and Product Sales sections</td><td>Built client-side from the loaded data; POST logs <b>reports.exported [csv]</b></td><td><span class="pill role">Super Admin</span>+ reports:view</td></tr>
+        <tr><td>Excel</td><td>Same content downloaded as a .xls (Excel-openable) file</td><td>Client-side; POST logs <b>reports.exported [xls]</b></td><td><span class="pill role">Super Admin</span>+ reports:view</td></tr>
+        <tr><td>Export PDF</td><td>Opens a formatted print window (KPIs + Daily Sales + Product Sales) ready to "Save as PDF"</td><td>Client-side print window; POST logs <b>reports.exported [pdf]</b></td><td><span class="pill role">Super Admin</span>+ reports:view</td></tr>
+        <tr><td>Print</td><td>Opens the same formatted window and triggers the browser print dialog</td><td>Client-side; POST logs <b>reports.printed</b></td><td><span class="pill role">Super Admin</span>+ reports:view</td></tr>
+        <tr><td>Report tile (any of 7)</td><td>Opens the category drill-down card (Screen 2)</td><td>No fetch — renders from loaded data; POST logs <b>reports.generated</b></td><td><span class="pill role">Super Admin</span>+ reports:view</td></tr>
+      </tbody></table></div>
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — allow pop-ups for PDF / Print</div><p>Export PDF and Print open a new browser window. If your browser blocks pop-ups the screen shows "Allow pop-ups to pdf/print" and nothing downloads. Allow pop-ups for the admin site once and both work every time. CSV and Excel download directly and are never blocked.</p></div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — pick the range before you export</div><p>The exports and the daily table always reflect the currently selected chip, so choose your period <b>first</b> (for example "Financial yr" for a year-end pack), let the board reload, then click Export. For a board-meeting summary, "This month" or "Quarter" gives clean monthly bars; for finance reconciliation, "Financial yr" aligns with the April–March books.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2: DRILL-DOWN CARD -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Screen 2 — Category drill-down card</p><p class="sm">The detail modal opened by clicking any report tile — full tables for that category plus a per-report CSV export.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Go from the headline tile into the underlying detail — product-by-product sales, customer cohorts, subscription health, the financial breakdown, driver/farmer performance and marketing outcomes.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span><span class="pill role">Admin</span> plus any reports:view role</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Reports → (click a tile)</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Drill-down — <b>&lt;Report name&gt; · from → to</b> · × close</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Header</b><span>Report title and the resolved date range; × to close</span></div>
+          <div class="wf-cell"><b>Detail tables</b><span>One or more tables specific to the category (see below)</span></div>
+          <div class="wf-cell"><b>Footer</b><span>Export CSV (this report) · Close</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 2 — The drill-down card overlays the board; press Esc, click the backdrop, × or Close to dismiss it.</div></div>
+
+      <p>The card that opens depends on which tile you clicked. Each shows the range in its title and carries its own <b>Export CSV</b> button in the footer.</p>
+      <div class="twrap"><table><thead><tr><th>Tile → card</th><th>Tables inside the card</th></tr></thead><tbody>
+        <tr><td>Sales report</td><td><b>By product</b> (Product · Category · Qty · Revenue, top 20) · <b>By category</b> (Category · Qty · Revenue) · <b>By order type</b> (Type · Orders · Revenue)</td></tr>
+        <tr><td>Customer report</td><td>Metrics (Total · Active 30d · Inactive · Repeat buyers · New in range · Retention rate) · <b>Customer growth (6 mo)</b> by month</td></tr>
+        <tr><td>Subscription report</td><td>Count by status · <b>Health</b> (Active · Cancelled · Completed · Renewal rate · Churn rate)</td></tr>
+        <tr><td>Financial report</td><td>Revenue (PAID) · Procurement cost · Operating expenses · Gross profit · Net profit · GST collected · Refunds (count + amount) · Wallet credited · Wallet used · Cashback issued · Referral rewards</td></tr>
+        <tr><td>Operations report</td><td>Total deliveries · Delivered · Failed/late · Pending · On-time rate · Bottles out · Bottles in · Bottle return rate · <b>Driver performance</b> (Driver · Delivered · Bottles in, top 10)</td></tr>
+        <tr><td>Procurement report</td><td>Total litres · Total cost · Batches · Range litres · Quality pass rate · Tests passed · Tests failed · <b>Farmer performance</b> (Farmer · Batches · Litres · Payable, top 10)</td></tr>
+        <tr><td>Marketing report</td><td>Referral rewards issued · Referral amount · Trial-pack conversions · Trial cashback paid · note that campaign &amp; coupon performance are future-ready</td></tr>
+      </tbody></table></div>
+
+      <h4>Drill-down buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td>Export CSV (in card)</td><td>Downloads the standard KPI + Daily Sales + Product Sales CSV, tagged with this report's name</td><td>Client-side; POST logs <b>reports.exported [csv]</b> for the named report</td><td><span class="pill role">Super Admin</span>+ reports:view</td></tr>
+        <tr><td>Close / × / Esc / backdrop</td><td>Dismisses the card and returns to the board</td><td>None</td><td>—</td></tr>
+      </tbody></table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — driver and farmer names, top 10 only</div><p>Operations and Procurement drill-downs list the <b>top 10</b> performers — drivers ranked by deliveries completed, farmers ranked by litres supplied. A driver or farmer with no name resolves to "—". Bottle-return and quality-pass percentages are rounded to one decimal.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ WORKFLOW -->
+  <div class="diagram"><div class="wf">
+    <div class="wf-topbar">Workflow — from open to exported report</div>
+    <div class="wf-flow"><span>Open Reports</span><span>Board fetches live analytics</span><span>Pick a date preset</span><span>Read KPIs &amp; charts</span><span>Click a tile to drill down</span><span>Export CSV / Excel / PDF / Print</span><span>Action audit-logged</span></div>
+  </div><div class="wire-cap">Figure 3 — Every open, filter, drill-down and export is recorded in the audit trail.</div></div>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — everything is audit-logged</div><p>Filtering, generating a drill-down, exporting and printing each send a POST to <b>/api/admin/reports</b> that writes a row to the audit trail (actions <b>reports.filtered</b>, <b>reports.generated</b>, <b>reports.exported</b>, <b>reports.printed</b>). The log captures the report name, the chosen filter/preset and, for exports, the format. You can review who pulled which report and when under <span class="navpath">Admin → System → Audit Logs</span>.</p></div></div>
+
+  <!-- ============================================================ TROUBLESHOOTING -->
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table><thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead><tbody>
+    <tr><td>Board stays on "Loading live analytics…" then shows "⚠ Backend offline"</td><td>The next-app backend is not running / not reachable</td><td>Start or restart the backend; the banner names the exact base URL it tried</td></tr>
+    <tr><td>"⚠ Your role can't view Reports (403)"</td><td>Your role lacks <b>reports:view</b></td><td>Ask a Super Admin to grant the reports permission, or sign in with a role that has it</td></tr>
+    <tr><td>Export PDF or Print does nothing</td><td>The browser blocked the pop-up window</td><td>Allow pop-ups for the admin site, then click again (CSV/Excel are unaffected)</td></tr>
+    <tr><td>KPI numbers don't change when I switch presets</td><td>Expected — most KPI cards are lifetime totals, not range-scoped</td><td>Use the charts, the daily/monthly table and the drill-downs for range-specific figures</td></tr>
+    <tr><td>Trend chart flips from daily bars to monthly bars</td><td>The chosen range is longer than 45 days</td><td>Pick a shorter preset (Last 30d or shorter) to see per-day bars again</td></tr>
+    <tr><td>A panel reads "No data in this range."</td><td>There are genuinely no matching records for that period</td><td>Widen the range, or confirm the underlying activity happened (orders, subscriptions, procurement, etc.)</td></tr>
+  </tbody></table></div>
+
+  <!-- ============================================================ FAQ -->
+  <h4>Frequently asked questions</h4>
+  <h4>Q. Do these numbers match the Revenue and Finance screens exactly?</h4>
+  <p>They are computed from the same source tables, so revenue, GST and order counts line up. Reports is the cross-functional summary; the dedicated <span class="navpath">Admin → Growth → Revenue</span> screen adds a full transaction ledger and revenue-recognition breakdowns for accountants.</p>
+  <h4>Q. Can I choose a custom start and end date?</h4>
+  <p>The screen offers the nine preset chips. The backend endpoint itself accepts explicit <b>from</b> and <b>to</b> parameters, but the standard board UI drives it through the presets — pick the closest preset for on-screen analysis, and export if you need to reshape the period offline.</p>
+  <h4>Q. Why is "Net Profit" different from our accountant's figure?</h4>
+  <p>Net profit here is a management proxy: revenue minus milk procurement cost minus approved operating expenses. It does not include payroll, depreciation, taxes beyond GST collected, or other book adjustments. Use it to watch the trend, not to close the books.</p>
+  <h4>Q. Are cancelled or pending orders counted in revenue?</h4>
+  <p>No. Revenue, GST, average order value and the sales tables count only orders with status <b>PAID</b>. Pending and other statuses still appear in the "Orders by status" breakdown and the "Total Orders" count, but they contribute no revenue.</p>
+</section>

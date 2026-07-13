@@ -1,0 +1,308 @@
+<section class="sheet" id="admin-wallet">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Finance · Wallet Management</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Finance</span></div>
+  <h2 class="section-title">Wallet Management</h2>
+  <p class="lead">See every customer's DOODLY Wallet balance, post manual credits, debits and bottle-deposit refunds, reverse any entry, run wallet reports, and set the Trial-Pack cashback and Add-Money rules — all backed by the live database.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">What a wallet is</div><p>Every customer has one DOODLY Wallet. Its balance is a single running total (stored in <b>paise</b> on the customer's <code>User</code> record) and every change writes an immutable <code>WalletTxn</code> row with the balance <i>after</i> the change and a unique reference. Money reaches a wallet from Trial-Pack cashback, referral rewards, promo credits, bottle-deposit refunds, customer "Add Money" recharges, and manual admin adjustments. It leaves the wallet only when a customer applies it at checkout, or an admin debits or reverses it. Because the balance is a real ledger, nothing here can be edited or deleted — you can only post a new opposite entry.</p></div></div>
+
+  <!-- ============================================================ SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Wallet Management workspace</p><p class="sm">The page you land on: a live KPI strip, three tabs, and a live-data banner.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give Finance a single command centre for all customer wallet money — balances, adjustments, reports and rules.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> — the backend gates viewing on <code>payments.view</code> or <code>billing.view</code>; any other role gets a 403 and the banner reads "Finance, Admin &amp; Super Admin only".</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Finance → Wallet Management</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Wallet Management</b> · live wallet + trial-cashback control centre</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Live KPI strip (wal-stats)</b><span>Eight database-derived cards above the tabs: Total Wallet Balance · Active Wallets · Credits Today · Debits Today · Trial Cashback · Referral Rewards · Refund Credits · Wallet Used</span></div>
+          <div class="wf-cell"><b>Tab bar</b><span>Three tabs: Wallets · Reports · Settings</span></div>
+          <div class="wf-cell"><b>Tab body</b><span>Renders the active tab (the customer list, the reports cards, or the two settings panels)</span></div>
+          <div class="wf-cell"><b>Live banner</b><span>Green "● Live — N wallet(s) · M transaction(s) from the DOODLY database" or an amber/red warning if the backend is offline or your role is blocked</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Wallet Management page frame. The KPI strip and banner come straight from the backend; the tabs render on top of a locally-cached mirror of that data.</div></div>
+
+      <p class="lead" style="font-size:1rem">Live KPI strip — eight cards (from <code>/api/wallet/admin?view=reports</code>)</p>
+      <div class="twrap"><table>
+        <thead><tr><th>KPI card</th><th>What it shows</th><th>Backend field</th></tr></thead>
+        <tbody>
+          <tr><td><b>Total Wallet Balance</b></td><td>Sum of every customer's wallet balance still on the books</td><td><code>totalBalancePaise</code> (sum of <code>User.walletPaise</code>)</td></tr>
+          <tr><td><b>Active Wallets</b></td><td>Count of customers whose balance is greater than zero</td><td><code>activeWallets</code></td></tr>
+          <tr><td><b>Credits Today</b></td><td>Total credited to all wallets since midnight</td><td><code>creditsTodayPaise</code></td></tr>
+          <tr><td><b>Debits Today</b></td><td>Total debited from all wallets since midnight</td><td><code>debitsTodayPaise</code></td></tr>
+          <tr><td><b>Trial Cashback</b></td><td>Lifetime Trial-Pack cashback issued</td><td><code>totalCashbackIssuedPaise</code></td></tr>
+          <tr><td><b>Referral Rewards</b></td><td>Lifetime referral reward credits</td><td><code>referralRewardsIssuedPaise</code></td></tr>
+          <tr><td><b>Refund Credits</b></td><td>Lifetime refund credits (incl. bottle deposits)</td><td><code>refundCreditsPaise</code></td></tr>
+          <tr><td><b>Wallet Used</b></td><td>Lifetime wallet spend applied to orders</td><td><code>walletUsedPaise</code></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Live vs. cached</div><p>The <b>KPI strip</b> and <b>banner</b> are computed fresh in the database on every page load. The <b>Wallets</b> and <b>Reports</b> tabs render from a local mirror of the same data (the page fetches the wallet list, up to 2,000 transactions, and the cashback config, then caches them) so the tabs are instant. Every money action you take is sent to the backend first, and the whole page reloads from the database the moment it succeeds — so what you see always matches the ledger.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Wallets tab</p><p class="sm">The searchable list of every customer with a balance or any wallet history, with per-row money actions.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Find a customer's wallet and act on it — credit, debit, refund a deposit, freeze, or open its full history.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> — viewing needs <code>payments.view</code>/<code>billing.view</code>; posting money needs <code>payments.refund</code>, <code>payments.edit</code> or <code>billing.edit</code>.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Finance → Wallet Management → Wallets</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Wallets</b> · search + Export CSV</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Search + export row</b><span>Free-text search box and an "Export CSV" button</span></div>
+          <div class="wf-cell"><b>Wallet table</b><span>Columns: Customer · Balance · Cashback · Txns · Trial · (actions)</span></div>
+          <div class="wf-cell"><b>Row action links</b><span>Credit · Debit · Refund deposit · Freeze/Unfreeze · View</span></div>
+          <div class="wf-cell"><b>Detail panel (on View)</b><span>Slides in below the table with the customer's full transaction ledger</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Wallets tab. Each row is one customer's wallet; the action links post to the live backend.</div></div>
+
+      <p class="lead" style="font-size:1rem">Table specification</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Detail (from the real render)</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td><b>Customer</b> (name in bold + mobile below; a red "frozen" badge if frozen) · <b>Balance</b> (current wallet balance) · <b>Cashback</b> (lifetime Trial-Pack cashback on this wallet) · <b>Txns</b> (number of transactions) · <b>Trial</b> (status badge: green "redeemed", amber "eligible", or grey "—") · an unlabelled <b>actions</b> column.</td></tr>
+          <tr><td><b>Search</b></td><td>One box, placeholder "Search customer, mobile, order or reference…". It matches the customer name, mobile, id, and any transaction description or reference. The box keeps focus and cursor position while you type. (On the server, the same query also matches name, phone and email.)</td></tr>
+          <tr><td><b>Sorting</b></td><td>Fixed — the list arrives ordered by balance, highest first.</td></tr>
+          <tr><td><b>Filters</b></td><td>None beyond the search box on this tab.</td></tr>
+          <tr><td><b>Pagination</b></td><td>None on-screen; the server returns up to 300 wallets and the whole matching set is shown.</td></tr>
+          <tr><td><b>Row actions</b></td><td>Credit, Debit, Refund deposit, Freeze/Unfreeze, View (detailed in the button table below).</td></tr>
+          <tr><td><b>Empty state</b></td><td>"No wallets found." when the search matches nothing.</td></tr>
+          <tr><td><b>Export</b></td><td>"Export CSV" downloads <code>doodly-wallet-report.csv</code> — one row per transaction across all loaded wallets, with columns: Customer, Mobile, Date, Description, Type, Credit/Debit, Amount, Balance After, Reference.</td></tr>
+        </tbody>
+      </table></div>
+
+      <p class="lead" style="font-size:1rem">Row actions &amp; buttons</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Credit</b></td><td>Prompts for an amount (₹) then a reason, and adds money to the wallet.</td><td><code>POST /api/wallet/admin</code> <code>{action:"credit"}</code> → <code>adminCredit</code> posts a <code>CREDIT</code>/<code>adjustment</code> <code>WalletTxn</code> and increments the balance. Amount must be positive.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span></td></tr>
+          <tr><td><b>Debit</b></td><td>Prompts for an amount (₹) then a reason (required), and removes money from the wallet.</td><td><code>{action:"debit"}</code> → <code>adminDebit</code> posts a <code>DEBIT</code>/<code>adjustment</code> txn. <b>Blocks with 409 "Insufficient wallet balance"</b> if the wallet can't cover it.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span></td></tr>
+          <tr><td><b>Refund deposit</b></td><td>Prompts for a deposit amount (₹), then bottles returned (optional qty), then a note (optional). Refunds a glass-bottle deposit into the wallet.</td><td><code>{action:"bottleRefund"}</code> → <code>refundBottleDeposit</code> writes a <code>BottleLedger</code> "DEPOSIT_REFUNDED" row and a <code>CREDIT</code>/<code>refund</code> txn atomically, and notifies the customer. <b>Cannot exceed the deposit still held</b> (deposits charged on paid orders minus deposits already refunded).</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span></td></tr>
+          <tr><td><b>Freeze / Unfreeze</b></td><td>Marks the wallet frozen (shows a red badge) so recharges and usage are blocked, or lifts it. Asks for confirmation first.</td><td>Applied to the on-screen wallet only (a local flag) — it is <b>not</b> posted to the backend by this screen. Use it for a quick visual hold; it does not survive a hard refresh from the database.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span></td></tr>
+          <tr><td><b>View</b></td><td>Toggles the customer's full transaction ledger open (or shut) below the table.</td><td>Reads the already-loaded transactions; opens the detail panel (Screen 3).</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span></td></tr>
+          <tr><td><b>Export CSV</b></td><td>Downloads a full transaction report of the loaded wallets as a CSV file.</td><td>Generated in the browser from the loaded data; no server call.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <p class="lead" style="font-size:1rem">Fields you enter for each action</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Credit amount (₹)</td><td>How much to add</td><td>Number greater than 0</td><td class="t-req">Yes</td><td>Multiplied by 100 to paise; server rejects amounts ≤ 0</td><td>200</td></tr>
+          <tr><td>Credit reason</td><td>Why the credit is posted (stored on the txn)</td><td>Free text</td><td class="t-opt">Opt.</td><td>Defaults to "Manual credit" if left blank</td><td>Goodwill for late delivery</td></tr>
+          <tr><td>Debit amount (₹)</td><td>How much to remove</td><td>Number greater than 0</td><td class="t-req">Yes</td><td>Rejected if it exceeds the balance (409)</td><td>50</td></tr>
+          <tr><td>Debit reason</td><td>Why the debit is posted</td><td>Free text</td><td class="t-req">Yes</td><td>Marked "(required)" in the prompt; defaults to "Manual debit" if skipped</td><td>Duplicate credit clawback</td></tr>
+          <tr><td>Refund deposit amount (₹)</td><td>Deposit to return to wallet</td><td>Number greater than 0</td><td class="t-req">Yes</td><td>Cannot exceed the deposit still held on file</td><td>150</td></tr>
+          <tr><td>Bottles returned (qty)</td><td>How many bottles came back</td><td>Whole number ≥ 0</td><td class="t-opt">Opt.</td><td>Recorded on the BottleLedger row and the txn description</td><td>3</td></tr>
+          <tr><td>Refund note</td><td>Extra context on the refund</td><td>Free text, up to 200 chars</td><td class="t-opt">Opt.</td><td>Defaults to "Bottle deposit refund"</td><td>Returned at doorstep, 2 Aug</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — money moves the moment you confirm</div><p>Credit, Debit and Refund deposit all post a real ledger entry against a live customer wallet the instant you finish the prompts. There is no "undo" button — the only way to cancel a mistake is to open the wallet's history and <b>Reverse</b> the entry, which posts a matching opposite entry (both stay visible forever). Read the amount back before confirming.</p></div></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — posting a manual credit</div>
+        <div class="wf-flow"><span>Find the customer (search)</span><span>Click Credit</span><span>Enter amount (₹)</span><span>Enter reason</span><span>Server posts CREDIT txn</span><span>Balance updates, page reloads live</span></div>
+      </div><div class="wire-cap">Figure — every manual money action follows this shape; Debit and Refund deposit add their own validation (balance / deposit-held checks).</div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Customer wallet detail (transaction ledger)</p><p class="sm">The full history for one wallet, with a Reverse control on each live entry.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Audit exactly what happened to a wallet and reverse any single entry if it was posted in error.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Finance → Wallet Management → Wallets → View</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Customer name · balance</b> · Close</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Panel head</b><span>Customer name and current balance, plus a "Close" link</span></div>
+          <div class="wf-cell"><b>Ledger table</b><span>Columns: Date · Description · Type · Amount · Balance after · Ref · (action)</span></div>
+          <div class="wf-cell"><b>Reverse control</b><span>A "Reverse" link on every entry that has not already been reversed; reversed rows show faded with a "reversed" tag</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the per-customer ledger. Nothing here is editable — you can only reverse an entry, which posts a new opposite entry.</div></div>
+
+      <p class="lead" style="font-size:1rem">Ledger columns</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>What it shows</th></tr></thead>
+        <tbody>
+          <tr><td><b>Date</b></td><td>When the entry was posted.</td></tr>
+          <tr><td><b>Description</b></td><td>The free-text description on the transaction (e.g. "Trial Pack cashback", "Applied on order #DZ284913", your manual reason).</td></tr>
+          <tr><td><b>Type</b></td><td>The human label for the transaction kind: Trial cashback · Referral reward · Promo credit · Wallet top-up · Used on order · Refund · Adjustment · Reversal.</td></tr>
+          <tr><td><b>Amount</b></td><td>A green "+₹" badge for credits or a grey "−₹" badge for debits.</td></tr>
+          <tr><td><b>Balance after</b></td><td>The wallet balance immediately after this entry (stored on the row, never recomputed).</td></tr>
+          <tr><td><b>Ref</b></td><td>The unique transaction reference (e.g. <code>WTX-4F9K2A</code>).</td></tr>
+          <tr><td><b>(action)</b></td><td>"Reverse" for a live entry, or a grey "reversed" tag once it has been reversed.</td></tr>
+        </tbody>
+      </table></div>
+
+      <p class="lead" style="font-size:1rem">Reverse — button behaviour</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Reverse</b></td><td>Asks "Reverse this transaction? An opposite entry will be posted." then reverses the entry.</td><td><code>{action:"reverse", txnId}</code> → <code>reverseTxn</code> posts the opposite entry (kind "reversal") for the same amount. If the original was a Trial-Pack cashback, its cashback record is voided so the customer could become eligible again. Blocked with 409 "Transaction already reversed" if it was reversed before.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span></td></tr>
+          <tr><td><b>Close</b></td><td>Collapses the detail panel.</td><td>Local — no server call.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Reversal never deletes</div><p>Reversing does not remove the original entry. Both the original and the new "Reversal of WTX-…" entry stay in the ledger for good, and the balance nets out. This is by design — the wallet is an audit-grade ledger, so every correction is itself recorded.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 4 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Reports tab</p><p class="sm">Programme-level wallet analytics with quick date presets.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Track how much wallet money you are issuing, how much customers are spending, and how well Trial-Pack cashback converts.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Finance → Wallet Management → Reports</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Reports</b> · date presets</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Preset chips</b><span>All time · Today · Last 7d · Last 30d</span></div>
+          <div class="wf-cell"><b>Report cards</b><span>Six metric cards for the chosen range</span></div>
+          <div class="wf-cell"><b>Footnote</b><span>Explains how the conversion rate is calculated</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Reports tab. Cards recompute when you switch the date preset.</div></div>
+
+      <p class="lead" style="font-size:1rem">Report cards</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Card</th><th>What it measures</th></tr></thead>
+        <tbody>
+          <tr><td><b>Total cashback issued</b></td><td>All wallet credits posted in the range.</td></tr>
+          <tr><td><b>Trial cashback redeemed</b></td><td>Count of Trial-Pack cashbacks and their total value.</td></tr>
+          <tr><td><b>Wallet usage</b></td><td>Amount customers applied to orders (debits of type "usage").</td></tr>
+          <tr><td><b>Outstanding balance</b></td><td>Total wallet money still held across all customers.</td></tr>
+          <tr><td><b>Cashback conversion</b></td><td>Trial-Pack buyers who redeemed cashback, as a percentage of all Trial-Pack buyers.</td></tr>
+          <tr><td><b>Wallets</b></td><td>How many wallets exist.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Date presets</div><p>The four chips set the "from" date: <b>All time</b> (no filter), <b>Today</b> (since midnight), <b>Last 7d</b> and <b>Last 30d</b>. Amount cards respect the range; the "Outstanding balance" and "Wallets" cards are point-in-time totals. The footnote states: "Conversion rate = trial-pack buyers who redeemed cashback ÷ total trial-pack buyers."</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 5 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Settings tab</p><p class="sm">Two panels: the Trial-Pack cashback rules, and the customer "Add Money" recharge rules.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Turn the Trial-Pack cashback promotion on or off and set its amount, window and eligible plans; and control whether and how customers can top up their own wallets.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> — saving cashback settings needs a manage permission (<code>payments.edit</code>/<code>billing.edit</code>).</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Finance → Wallet Management → Settings</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Settings</b> · two configuration panels</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Trial cashback configuration</b><span>Enabled toggle · Cashback amount · Expiry days · Promotion start/end · Eligible plans · Save settings</span></div>
+          <div class="wf-cell"><b>Wallet recharge (Add Money)</b><span>Allow toggle · Minimum · Maximum · Preset amounts · Save recharge settings</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Settings tab, showing both configuration panels stacked.</div></div>
+
+      <p class="lead" style="font-size:1rem">Panel 1 — Trial cashback configuration</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Trial cashback enabled</td><td>Master switch for the whole promotion</td><td>On / Off checkbox</td><td class="t-req">Yes</td><td>Saved to <code>CashbackConfig.enabled</code>; when off, no cashback is credited</td><td>On</td></tr>
+          <tr><td>Cashback amount (₹)</td><td>How much a customer gets back</td><td>Number</td><td class="t-req">Yes</td><td>Stored as paise in <code>amountPaise</code>; default ₹200</td><td>200</td></tr>
+          <tr><td>Expiry (days, blank = never)</td><td>How long the credit stays valid</td><td>Number, or blank</td><td class="t-opt">Opt.</td><td>Saved to <code>expiryDays</code>; blank = never expires (expiry enforcement is future-ready)</td><td>90</td></tr>
+          <tr><td>Promotion start (blank = now)</td><td>First day the promo is live</td><td>Date, or blank</td><td class="t-opt">Opt.</td><td>Applied on the storefront to open the promo window; enforced client-side (not part of the backed config record)</td><td>2026-08-01</td></tr>
+          <tr><td>Promotion end (blank = never)</td><td>Last day the promo is live</td><td>Date, or blank</td><td class="t-opt">Opt.</td><td>Closes the promo window on the storefront; enforced client-side</td><td>2026-08-31</td></tr>
+          <tr><td>Eligible plans</td><td>Which subscription plans trigger the cashback</td><td>Any of: Single Pour · 7-Day Fresh Start · 30-Day Morning Ritual · 90-Day Nourish Plan</td><td class="t-req">Yes</td><td>Saved to <code>eligiblePlanSlugs</code> (<code>single</code>/<code>p7</code>/<code>p30</code>/<code>p90</code>); default is 30-Day + 90-Day</td><td>30-Day + 90-Day</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Save settings</b></td><td>Saves the cashback rules; shows "✓ Saved — live instantly".</td><td><code>{action:"config"}</code> → <code>setCashbackConfig</code> upserts the single <code>CashbackConfig</code> record (enabled, amountPaise, eligiblePlanSlugs, expiryDays). Applies to the whole storefront immediately.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — the cashback is one-time by design</div><p>You never need to guard against paying a customer twice. The Trial-Pack cashback is protected in the database by a unique key on the customer id (<code>TrialCashback.userId</code>), so a customer can only ever be credited once — even under simultaneous payments. The panel's own note says so: "Benefit is one-time per customer (enforced by the backend)."</p></div></div>
+
+      <p class="lead" style="font-size:1rem">Panel 2 — Wallet recharge (Add Money)</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Allow customers to add money</td><td>Master switch for self-service wallet recharge</td><td>On / Off checkbox</td><td class="t-req">Yes</td><td>When off, the customer "Add Money" flow shows "recharge is currently unavailable"</td><td>On</td></tr>
+          <tr><td>Minimum recharge (₹)</td><td>Smallest top-up a customer may make</td><td>Number</td><td class="t-req">Yes</td><td>The customer flow refuses amounts below this; default ₹100</td><td>100</td></tr>
+          <tr><td>Maximum recharge (₹)</td><td>Largest top-up per transaction</td><td>Number</td><td class="t-req">Yes</td><td>The customer flow refuses amounts above this; default ₹100,000</td><td>100000</td></tr>
+          <tr><td>Preset amounts (comma-separated ₹)</td><td>The quick-pick chips shown to customers</td><td>Comma-separated numbers</td><td class="t-opt">Opt.</td><td>Non-positive values are dropped; falls back to 100, 250, 500, 1000, 2000, 5000 if empty</td><td>100, 250, 500, 1000</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Save recharge settings</b></td><td>Saves the Add-Money rules; shows "✓ Saved — live instantly".</td><td>Stored for the storefront recharge flow so the customer "Add Money" dialog reads the new toggle, limits and presets. The recharge itself is credited only after a signature-verified Razorpay payment (the backend refuses unverified credits in production).</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">How a customer recharge actually credits the wallet</div><p>When a customer taps <b>Add Money</b> they pick an amount, then pay on Razorpay's secure screen. Only after the payment is signature-verified does the backend post the top-up — and it is idempotent on the gateway payment id, so a retried or duplicated callback never double-credits. Frozen wallets and disabled recharge are refused up front.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ WHERE MONEY COMES FROM -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Reference — transaction kinds</p><p class="sm">Every credit and debit you will see, and where it comes from.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Read any ledger row at a glance and know which system created it.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Finance → Wallet Management</span></span></div>
+    <div class="spec-body">
+      <div class="twrap"><table>
+        <thead><tr><th>Kind</th><th>Direction</th><th>Created by</th></tr></thead>
+        <tbody>
+          <tr><td><b>cashback</b> (Trial cashback)</td><td>Credit</td><td>System, once per customer, after an eligible plan is paid.</td></tr>
+          <tr><td><b>referral</b> (Referral reward)</td><td>Credit</td><td>System, once per referred customer, when the friend subscribes (default ₹100).</td></tr>
+          <tr><td><b>promo</b> (Promo credit)</td><td>Credit</td><td>Promotions.</td></tr>
+          <tr><td><b>topup</b> (Wallet top-up)</td><td>Credit</td><td>Customer "Add Money" recharge (Razorpay-verified).</td></tr>
+          <tr><td><b>refund</b> (Refund)</td><td>Credit</td><td>Bottle-deposit refund (this screen) or other refunds.</td></tr>
+          <tr><td><b>adjustment</b> (Adjustment)</td><td>Credit or Debit</td><td>Your manual Credit / Debit on this screen.</td></tr>
+          <tr><td><b>usage</b> (Used on order)</td><td>Debit</td><td>Customer applying wallet balance at checkout.</td></tr>
+          <tr><td><b>reversal</b> (Reversal)</td><td>Credit or Debit</td><td>A Reverse action — the opposite of the entry it undoes.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — always write a real reason</div><p>Debit already forces a reason; do the same for Credit and Refund. The reason is stored on the ledger row and is the only explanation an auditor (or your future self) will have. Prefer specifics — "Goodwill: spoilt delivery order #DZ284913" beats "Manual credit".</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOTING -->
+  <h3>Troubleshooting</h3>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>Banner reads "Your role can't access Wallet Management … (403)".</td><td>Your role lacks <code>payments.view</code>/<code>billing.view</code>.</td><td>Ask a Super Admin to grant a Finance/payments view permission, or use an Admin, Accountant or Super Admin account.</td></tr>
+      <tr><td>A Debit is refused with "Insufficient balance".</td><td>The wallet balance is smaller than the debit amount.</td><td>Debit only up to the available balance, or split it. The backend never lets a wallet go negative from this screen.</td></tr>
+      <tr><td>Refund deposit fails with "Refund exceeds the deposit on file".</td><td>You tried to refund more than the customer still has on deposit (paid-order deposits minus deposits already refunded).</td><td>Check the deposit held and refund at or below it.</td></tr>
+      <tr><td>"Transaction already reversed" when reversing.</td><td>The entry was reversed once already; it can't be reversed twice.</td><td>Look for the existing "Reversal of WTX-…" row — the correction is already in place.</td></tr>
+      <tr><td>Banner reads "Backend offline … couldn't load live wallets".</td><td>The backend (next-app) isn't reachable.</td><td>Start / restore the backend; the page auto-loads live data once it responds.</td></tr>
+      <tr><td>A wallet you froze is unfrozen again after refresh.</td><td>Freeze/Unfreeze on this screen is a local visual hold, not a backend state.</td><td>For a durable block, handle it through the customer/account controls rather than relying on the freeze toggle here.</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- ============================================================ FAQ -->
+  <h3>Frequently asked questions</h3>
+  <h4>Can I edit or delete a wrong transaction?</h4>
+  <p>No. The wallet is an append-only ledger. To correct a mistake, open the wallet's history and <b>Reverse</b> the entry — a matching opposite entry is posted and both remain visible.</p>
+
+  <h4>If I reverse a Trial-Pack cashback, can the customer earn it again?</h4>
+  <p>Yes. Reversing a cashback voids the one-time cashback record, so the customer becomes eligible again the next time they pay for an eligible plan.</p>
+
+  <h4>Why is a customer missing from the Wallets list?</h4>
+  <p>The list only includes customers who have a balance above zero <i>or</i> at least one wallet transaction. A brand-new customer who has never earned, spent or been credited won't appear until their first wallet activity.</p>
+
+  <h4>Does turning off "Trial cashback enabled" claw back credits already given?</h4>
+  <p>No. It only stops future cashbacks from being issued. Balances already credited stay with customers until spent; to remove one you must Debit or Reverse it deliberately.</p>
+
+  <h4>What's the difference between the KPI strip and the Reports tab?</h4>
+  <p>The KPI strip is computed live in the database on every load (whole-programme totals and today's activity). The Reports tab lets you pick a date range and focuses on cashback issuance, usage, outstanding balance and Trial-Pack conversion.</p>
+</section>

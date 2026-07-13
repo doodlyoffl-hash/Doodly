@@ -1,0 +1,144 @@
+<section class="sheet" id="admin-settings">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · System · Settings</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · System</span></div>
+  <h2 class="section-title">Settings</h2>
+  <p class="lead">The single place to set DOODLY's brand identity, notification channels and login-security policy — saved to the DOODLY database and applied wherever the platform reads them.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note</div><p>Settings is a general-purpose configuration store for the handful of platform values that have no dedicated screen of their own. It is organised into three groups — <b>General</b>, <b>Notifications</b> and <b>Security</b>. Everything else (delivery timings, pincodes, GST rates, referral rules, roles) lives on its own page and is only <i>linked</i> from here, never edited here.</p></div></div>
+
+  <div class="spec">
+    <div class="spec-h"><p class="st">Settings</p><p class="sm">One long form of three configuration panels, a &ldquo;managed elsewhere&rdquo; link list, and a single Save action.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Hold platform-wide configuration — brand name, support contacts, currency/timezone/date format, GSTIN, notification-channel switches and the login-security policy — in one auditable place.</span></div>
+
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> View: <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> · Edit &amp; Save: <span class="pill role">Super Admin</span> only (Admin sees the same form, read-only). No other role can open this screen.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Settings</span></span>
+    </div>
+
+    <div class="spec-meta"><span class="m"><b>Data source</b> Live from <span class="navpath">GET /api/admin/app-settings</span>; saves go to <span class="navpath">POST /api/admin/app-settings</span>. General/notify/security keys are stored in the <b>AppSetting</b> key/value table; <b>Legal company name</b> and <b>GSTIN</b> are routed to the shared <b>BillingConfig</b> record so invoices stay consistent.</span></div>
+
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Settings</b> · &ldquo;Platform configuration — general, notifications and security&rdquo; (no header buttons)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Live status banner</b><span>Green &ldquo;● Live — platform settings from the DOODLY database&rdquo; with the API base URL, plus &ldquo;Edits persist to Postgres + are audited&rdquo; (Super Admin) or &ldquo;View-only for your role&rdquo; (Admin). Turns red if the backend is offline or your role is forbidden.</span></div>
+          <div class="wf-cell"><b>Panel — General</b><span>Brand name, Legal company name, Support phone, Support email, Business hours, GSTIN, Currency, Time zone, Date format (nine text fields laid out two/three per row).</span></div>
+          <div class="wf-cell"><b>Panel — Notifications</b><span>Four platform-wide channel toggles: Email, SMS, Push, WhatsApp. Helper line reminds you sending still needs provider credentials.</span></div>
+          <div class="wf-cell"><b>Panel — Security</b><span>Password min length, Session timeout (min), Max login attempts (three number fields) + &ldquo;Require two-factor authentication (future-ready)&rdquo; toggle.</span></div>
+          <div class="wf-cell"><b>Panel — Managed on their own pages</b><span>Five read-only links out to Delivery, Serviceable areas, GST rates, Referral &amp; rewards and Roles &amp; permissions.</span></div>
+          <div class="wf-cell"><b>Save bar</b><span>Right-aligned <b>Save settings</b> button (Super Admin). For everyone else this becomes an amber &ldquo;Read-only&rdquo; badge instead.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Settings screen (top-to-bottom: banner, General, Notifications, Security, Managed-elsewhere, Save).</div></div>
+
+      <h3>General</h3>
+      <p>Brand identity, contact details and formatting defaults. All nine fields are free-text. Two of them — <b>Legal company name</b> and <b>GSTIN</b> — are read from and written back to the shared <b>BillingConfig</b> record, so a change here is the same value your business invoices print.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Brand name</b></td><td>Public-facing brand shown across the app.</td><td>Text</td><td class="t-opt">Opt.</td><td>Key <code>general.brandName</code>; trimmed; stored in AppSetting. Default <code>DOODLY</code>.</td><td>DOODLY</td></tr>
+          <tr><td><b>Legal company name</b></td><td>Registered entity name used on invoices &amp; statements.</td><td>Text</td><td class="t-opt">Opt.</td><td>Routed to <code>BillingConfig.companyName</code> (not AppSetting). Blank input is ignored — the existing name is kept.</td><td>Doodly Foods Pvt Ltd</td></tr>
+          <tr><td><b>Support phone</b></td><td>Customer-care phone number.</td><td>Text (phone)</td><td class="t-opt">Opt.</td><td>Key <code>general.supportPhone</code>; trimmed. Default <code>+91 90000 00000</code>.</td><td>+91 90000 00000</td></tr>
+          <tr><td><b>Support email</b></td><td>Customer-care e-mail address.</td><td>Text (email)</td><td class="t-opt">Opt.</td><td>Key <code>general.supportEmail</code>; trimmed. Default <code>care@doodly.app</code>.</td><td>care@doodly.app</td></tr>
+          <tr><td><b>Business hours</b></td><td>Operating hours shown to customers.</td><td>Text</td><td class="t-opt">Opt.</td><td>Key <code>general.businessHours</code>; trimmed. Default <code>6:00 AM – 9:00 PM</code>.</td><td>6:00 AM – 9:00 PM</td></tr>
+          <tr><td><b>GSTIN</b></td><td>Company GST identification number for tax documents.</td><td>Text (15-char GSTIN)</td><td class="t-opt">Opt.</td><td>Routed to <code>BillingConfig.gstin</code>. Empty input clears it (stored as null). Placeholder shows the format.</td><td>36ABCDE1234F1Z5</td></tr>
+          <tr><td><b>Currency</b></td><td>Display currency code for money values.</td><td>Text (ISO code)</td><td class="t-opt">Opt.</td><td>Key <code>general.currency</code>; trimmed. Default <code>INR</code>.</td><td>INR</td></tr>
+          <tr><td><b>Time zone</b></td><td>Platform time zone for schedules &amp; timestamps.</td><td>Text (IANA zone)</td><td class="t-opt">Opt.</td><td>Key <code>general.timezone</code>; trimmed. Default <code>Asia/Kolkata</code>.</td><td>Asia/Kolkata</td></tr>
+          <tr><td><b>Date format</b></td><td>Preferred date display pattern.</td><td>Text (pattern)</td><td class="t-opt">Opt.</td><td>Key <code>general.dateFormat</code>; trimmed. Default <code>DD/MM/YYYY</code>.</td><td>DD/MM/YYYY</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning</div><p><b>Currency</b>, <b>Time zone</b> and <b>Date format</b> are stored as free text — the backend does not validate them against a list. Type an exact, standard value (for example <code>INR</code>, <code>Asia/Kolkata</code>, <code>DD/MM/YYYY</code>). A typo is saved as-is and could show wrong labels elsewhere.</p></div></div>
+
+      <h3>Notifications</h3>
+      <p>Four platform-wide switches that turn each messaging channel on or off. The panel carries a standing reminder: <i>&ldquo;Enable channels platform-wide. Actual sending still needs provider credentials (see remaining config).&rdquo;</i> — i.e. flipping a toggle on here does not by itself send anything; SMS/WhatsApp/Email/Push still require the provider keys to be configured.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Email notifications</b></td><td>Master switch for the e-mail channel.</td><td>On / Off (checkbox)</td><td class="t-opt">Opt.</td><td>Key <code>notify.email</code>; coerced to boolean. Default <b>On</b>.</td><td>On</td></tr>
+          <tr><td><b>SMS notifications</b></td><td>Master switch for the SMS channel.</td><td>On / Off (checkbox)</td><td class="t-opt">Opt.</td><td>Key <code>notify.sms</code>; coerced to boolean. Default <b>Off</b>.</td><td>Off</td></tr>
+          <tr><td><b>Push notifications</b></td><td>Master switch for push notifications.</td><td>On / Off (checkbox)</td><td class="t-opt">Opt.</td><td>Key <code>notify.push</code>; coerced to boolean. Default <b>Off</b>.</td><td>Off</td></tr>
+          <tr><td><b>WhatsApp notifications</b></td><td>Master switch for the WhatsApp channel.</td><td>On / Off (checkbox)</td><td class="t-opt">Opt.</td><td>Key <code>notify.whatsapp</code>; coerced to boolean. Default <b>Off</b>.</td><td>Off</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>Security</h3>
+      <p>The login-security policy — password strength floor, how long an idle session survives, how many failed logins are allowed, and a future-ready two-factor flag.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Password min length</b></td><td>Minimum characters a password must have.</td><td>Whole number ≥ 0</td><td class="t-opt">Opt.</td><td>Key <code>security.passwordMinLength</code>. Field is <code>type=number, min=0</code>; server rounds and clamps to ≥ 0. Default <b>8</b>.</td><td>8</td></tr>
+          <tr><td><b>Session timeout (min)</b></td><td>Idle minutes before a session expires.</td><td>Whole number ≥ 0</td><td class="t-opt">Opt.</td><td>Key <code>security.sessionTimeoutMin</code>; rounded, clamped ≥ 0. Default <b>30</b>.</td><td>30</td></tr>
+          <tr><td><b>Max login attempts</b></td><td>Failed logins allowed before lock-out.</td><td>Whole number ≥ 0</td><td class="t-opt">Opt.</td><td>Key <code>security.maxLoginAttempts</code>; rounded, clamped ≥ 0. Default <b>5</b>.</td><td>5</td></tr>
+          <tr><td><b>Require two-factor authentication</b></td><td>Enforce a second login factor (labelled &ldquo;future-ready&rdquo;).</td><td>On / Off (checkbox)</td><td class="t-opt">Opt.</td><td>Key <code>security.require2FA</code>; boolean. Default <b>Off</b>. Reserved for a future 2FA rollout.</td><td>Off</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note</div><p>Every field defaults to a sensible value even before anyone saves, because the backend seeds defaults (brand <code>DOODLY</code>, email on, password length 8, session 30&nbsp;min, 5 attempts). A field only stops using its default once you save an explicit value over it.</p></div></div>
+
+      <h3>Managed on their own pages</h3>
+      <p>The bottom panel is a set of five read-only shortcuts. These settings deliberately do <b>not</b> live in this form — they each have a richer dedicated screen — so Settings simply points you to them.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Link</th><th>What it configures</th><th>Where it goes</th></tr></thead>
+        <tbody>
+          <tr><td><b>Delivery (cut-off, slots, auto-assign)</b></td><td>Order cut-off time, delivery window and auto-assignment.</td><td><span class="navpath">Admin → Catalogue → Delivery Settings</span></td></tr>
+          <tr><td><b>Serviceable areas / pincodes</b></td><td>Which pincodes DOODLY delivers to, plus the waitlist.</td><td><span class="navpath">Admin → Operations → Serviceable Areas</span></td></tr>
+          <tr><td><b>GST rates (default + per-product)</b></td><td>Central tax rates and product tax assignment.</td><td><span class="navpath">Admin → System → GST Management</span></td></tr>
+          <tr><td><b>Referral &amp; rewards rules</b></td><td>Referral reward amounts and eligibility.</td><td><span class="navpath">Admin → Growth → Referrals</span></td></tr>
+          <tr><td><b>Roles &amp; permissions</b></td><td>Per-role and per-module access control.</td><td><span class="navpath">Admin → System → Permissions</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>Buttons &amp; actions</h3>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Save settings</b></td><td>Collects every field on the form and writes the changes. Button shows &ldquo;Saving…&rdquo; while it works, then a toast &ldquo;Settings saved to the DOODLY database&rdquo; and the form reloads with the stored values.</td><td><code>POST /api/admin/app-settings</code> with a <code>patch</code> of key→value. General/notify/security keys upsert into <b>AppSetting</b>; company name + GSTIN upsert into <b>BillingConfig</b>; the change is written to the audit trail as <code>settings.update</code>.</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Managed-elsewhere links</b></td><td>Navigate to the dedicated page that owns that setting.</td><td>Plain in-app navigation; no write.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning</div><p>There is <b>no per-field Save and no Cancel/Reset</b>. <b>Save settings</b> submits the <i>whole</i> form at once — every field currently on screen is included in the patch. Check every panel before you save, and if you change your mind before saving, simply reload the page to discard edits.</p></div></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — editing a platform setting</div>
+        <div class="wf-flow"><span>Open Settings</span><span>Banner confirms Live + your edit rights</span><span>Change fields across General / Notifications / Security</span><span>Click Save settings</span><span>Keys upsert to AppSetting; company/GSTIN to BillingConfig</span><span>Audit logged as settings.update</span><span>Toast + form reloads with saved values</span></div>
+      </div><div class="wire-cap">Figure — the end-to-end save flow, server-authoritative and audited.</div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Treat the notification toggles as intent, not delivery. Turn a channel <b>On</b> here <i>and</i> confirm the provider credentials are configured before you rely on it — otherwise customers will silently receive nothing. When rolling out a new channel, enable it, send one test campaign from <span class="navpath">Admin → Content → Notifications</span>, verify delivery, then announce it.</p></div></div>
+
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution</div><p>Lowering <b>Password min length</b> or raising <b>Max login attempts</b> weakens account security for every user. Only relax these deliberately, and prefer stricter values. Keep <b>Legal company name</b> and <b>GSTIN</b> exactly matching your registration — they feed straight into invoices, and a wrong value is reflected on tax documents.</p></div></div>
+
+      <h3>Troubleshooting</h3>
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>Banner is red: &ldquo;Backend offline&rdquo;.</td><td>The next-app API isn't running / unreachable at the shown base URL.</td><td>Start the backend (next-app). The page reloads settings automatically once it responds.</td></tr>
+          <tr><td>Form is read-only with an amber &ldquo;Read-only&rdquo; badge and no Save button.</td><td>You are signed in as Admin (or another role), not Super Admin — only Super Admin can edit.</td><td>Have a Super Admin make the change, or get your role elevated.</td></tr>
+          <tr><td>Save fails with &ldquo;Only Super Admin can change settings (403).&rdquo;</td><td>The save was attempted without Super Admin edit rights (server rejected it).</td><td>Sign in as Super Admin; the API enforces this regardless of what the screen shows.</td></tr>
+          <tr><td>&ldquo;Your role can't view Settings (403).&rdquo;</td><td>Your role has no <code>settings:view</code> permission at all.</td><td>Only Super Admin and Admin can open this screen — request access.</td></tr>
+          <tr><td>Legal company name / GSTIN saved but a general field reverted.</td><td>You left a general field blank — the server keeps the previous value for company name and stores it as-is for other keys.</td><td>Re-enter the value and Save again; blank company-name input is intentionally ignored to avoid wiping it.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>FAQ</h3>
+      <h4>Why can Admins see Settings but not change anything?</h4>
+      <p>By design. The permission matrix grants Admin <code>settings:view</code> only; the edit action (<code>settings:edit</code>) is reserved for Super Admin. Admins get full visibility for reference, but platform-level configuration is a single-owner responsibility.</p>
+
+      <h4>I switched on WhatsApp but customers get no messages — why?</h4>
+      <p>The toggles are master enable-flags only. Actual sending needs the provider (Twilio/Resend/etc.) credentials configured. Enable the channel here, then confirm the provider keys are set before relying on it.</p>
+
+      <h4>Where do currency, GST rate and delivery times really come from?</h4>
+      <p>Currency, time zone and date format live in Settings. The <b>default GST rate</b> and product tax live on GST Management; delivery cut-off/slots live on Delivery Settings. The bottom &ldquo;Managed on their own pages&rdquo; panel links straight to each of them.</p>
+
+      <h4>Is every change tracked?</h4>
+      <p>Yes. Each save writes an audit entry with action <code>settings.update</code> and the changed keys, viewable under <span class="navpath">Admin → System → Audit Logs</span>.</p>
+
+    </div>
+  </div>
+</section>

@@ -1,0 +1,472 @@
+<section class="sheet" id="admin-expenses">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Finance · Daily Expenses</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Finance</span></div>
+  <h2 class="section-title">Daily Expenses</h2>
+  <p class="lead">The books-of-account for everything DOODLY spends — milk procurement, farmer payments, fuel, salaries, bottles, rent, bills and more — recorded with a supplier and bill number, sent through an approve → pay workflow, backed by attachments and a full audit trail, and rolled up into dashboards and exportable reports.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">One module, two implementations, identical rules</div>
+      <p>The <b>Daily Expenses</b> item under <span class="navpath">Admin → Finance</span> is served by the storefront admin page (<code>/admin/expenses.html</code>), which mounts the <code>DOODLY_EXPENSES</code> module into <code>#expensesMount</code>. It presents five working tabs — <b>Dashboard, Expenses, Add Expense, Categories, Reports</b> — that record and manage every business expense. The same feature set is mirrored by a production-grade Next.js API (<code>/api/expenses</code>) whose engine, validation, statuses, categories and workflow match the screen exactly. This manual documents the complete capability set. Money is entered and shown in <b>₹</b>; the backend stores every amount as integer <b>paise</b> (₹1 = 100 paise). Every action — create, edit, approve, reject, pay, cancel, delete — appends an immutable line to the expense's audit trail.</p>
+    </div>
+  </div>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Finance-only, with separation of duties</div>
+      <p>Only three roles can open this module at all: <b>Accountant</b>, <b>Admin</b> and <b>Super Admin</b>. An Accountant may <b>view, create, edit, record payments and run reports</b> — but may <b>not</b> approve, reject, cancel, delete or manage categories. Those are reserved for Admin and Super Admin. This is a deliberate <b>separation of duties</b>: the accountant who records an expense is not the person who approves it. Server-side role checks (<code>canUseExpenses</code>, <code>canApproveExpenses</code>, <code>canManageExpenseSettings</code>) are the real security boundary; the on-screen hiding of buttons is convenience only.</p>
+    </div>
+  </div>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">How an expense is numbered</div>
+      <p>Every expense gets a human-readable, never-reused code of the form <code>EXP-YYYYMMDD-NNNN</code> — the expense date, then a four-digit per-day sequence. The first expense dated 1 Jul 2026 is <code>EXP-20260701-0001</code>, the next that day <code>EXP-20260701-0002</code>, and so on. The backend allocates the sequence atomically from a <code>Counter</code> so two people saving at the same moment never collide on a number.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 1 : DASHBOARD -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Expenses Dashboard</p>
+      <p class="sm">Six live spend KPIs and four trend/breakdown charts — the finance pulse of the business at a glance.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Tell staff in one glance how much has been spent today, this week and this month, how many expenses are waiting for approval, how much has been paid, and how much is still owed — plus where the money is going by day, month, category and payment mode.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> — anyone who can open the module</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Finance → Daily Expenses → Dashboard</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Daily Expenses — <b>Dashboard</b> · KPI cards + four chart panels</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Tab bar</b><span>Dashboard · Expenses · Add Expense · Categories · Reports</span></div>
+          <div class="wf-cell"><b>KPI cards (6)</b><span>Today's Expenses · This Week · This Month · Pending Approvals · Paid · Outstanding</span></div>
+          <div class="wf-cell"><b>Daily expense trend</b><span>14-day bar chart of daily spend</span></div>
+          <div class="wf-cell"><b>Monthly trend</b><span>6-month bar chart of monthly spend</span></div>
+          <div class="wf-cell"><b>Category-wise spending</b><span>Top categories this month, as ranked bars</span></div>
+          <div class="wf-cell"><b>Payment mode</b><span>This month's spend split by mode, as ranked bars</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Dashboard tab: six KPI cards over four analytics panels.</div></div>
+
+      <h4>Every KPI and where the number comes from</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>KPI card</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Today's Expenses</td><td>Total spent today</td><td>₹ amount</td><td class="t-opt">Read-only</td><td>Sum of the <b>total</b> of every non-rejected, non-cancelled expense dated today (<code>cards.todayPaise</code>).</td><td>₹21,600</td></tr>
+          <tr><td>This Week</td><td>Spend over the last 7 days</td><td>₹ amount</td><td class="t-opt">Read-only</td><td>Sum of totals for the trailing 7-day window (<code>cards.weekPaise</code>).</td><td>₹1,04,300</td></tr>
+          <tr><td>This Month</td><td>Spend so far this calendar month</td><td>₹ amount</td><td class="t-opt">Read-only</td><td>Sum of totals from the 1st to today (<code>cards.monthPaise</code>).</td><td>₹4,86,200</td></tr>
+          <tr><td>Pending Approvals</td><td>How many expenses await sign-off</td><td>Count (card highlights when &gt; 0)</td><td class="t-opt">Read-only</td><td>Count of non-deleted expenses with status <b>Pending Approval</b> (<code>cards.pendingApprovals</code>).</td><td>3</td></tr>
+          <tr><td>Paid</td><td>Money actually paid out</td><td>₹ amount</td><td class="t-opt">Read-only</td><td>Sum of the <b>paid</b> amount across all live expenses (<code>cards.paidPaise</code>).</td><td>₹3,90,000</td></tr>
+          <tr><td>Outstanding</td><td>Approved spend not yet fully paid</td><td>₹ amount (card highlights when &gt; 0)</td><td class="t-opt">Read-only</td><td>Sum of <i>total − paid</i> for expenses that are <b>Approved</b> or <b>Partially Paid</b> (<code>cards.outstandingPaise</code>).</td><td>₹96,200</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The four analytics panels</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Panel</th><th>What it shows</th><th>Backend</th></tr></thead>
+        <tbody>
+          <tr><td>Daily expense trend (14 days)</td><td>A bar per day for the last 14 days; hovering a bar shows the day and its total. "No spending in this period." when the window is empty.</td><td><code>dailyTrend[]</code> — 14 date buckets of summed totals (excludes rejected/cancelled)</td></tr>
+          <tr><td>Monthly trend (6 months)</td><td>A bar per month for the last 6 months, labelled by short month name.</td><td><code>monthlyTrend[]</code> — 6 month buckets of summed totals</td></tr>
+          <tr><td>Category-wise spending (this month)</td><td>The top categories this month as ranked horizontal bars with the ₹ value, largest first (top 8).</td><td><code>categoryBreakdown[]</code> — grouped by category, this month, ordered by total desc</td></tr>
+          <tr><td>Payment mode (this month)</td><td>This month's spend split by payment mode, as ranked bars.</td><td><code>paymentModeBreakdown[]</code> — grouped by payment mode, this month</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Rejected and cancelled spend never counts</div>
+          <p>Every dashboard number is computed over "live" spend only — expenses whose status is <b>Rejected</b> or <b>Cancelled</b> are excluded from all totals and charts, and soft-deleted expenses disappear entirely. This keeps the KPIs honest: a rejected bill never inflates "This Month".</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 : EXPENSES LIST + DETAIL -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Expenses (list, filters &amp; detail)</p>
+      <p class="sm">The searchable, filterable table of every expense, with an expanding in-line detail panel that carries the approve / pay / edit / print / delete controls.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Find any expense fast, narrow the list to a date range / category / mode / status / amount band, and open a row to see its full breakdown, act on its workflow and read its audit trail.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> — view/edit/pay for all three; approve/reject/cancel/delete need <span class="pill role">Admin</span>+</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Finance → Daily Expenses → Expenses</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Daily Expenses — <b>Expenses</b> · preset chips · filter row · totals bar · table · detail</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Preset chips</b><span>All · Today · Yesterday · Last 7d · Last 30d · This month (default) · Last month</span></div>
+          <div class="wf-cell"><b>Filter row</b><span>All categories · All modes · All statuses · Min ₹ · Max ₹ · Search box</span></div>
+          <div class="wf-cell"><b>List meta</b><span>"N expenses" on the left, "Total: ₹X" on the right</span></div>
+          <div class="wf-cell"><b>Table</b><span>Expense ID · Date · Name · Category · Vendor · Amount · Mode · Status · View</span></div>
+          <div class="wf-cell"><b>Detail panel</b><span>Opens under the clicked row: breakdown + workflow + record payment + audit trail</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Expenses list with its preset chips, filters, totals bar and expandable detail.</div></div>
+
+      <h4>Table columns</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>Shows</th><th>Backend field</th></tr></thead>
+        <tbody>
+          <tr><td>Expense ID</td><td>The <code>EXP-YYYYMMDD-NNNN</code> code (bold)</td><td><code>code</code></td></tr>
+          <tr><td>Date</td><td>Expense date, formatted "01 Jul 2026"</td><td><code>date</code></td></tr>
+          <tr><td>Name</td><td>The expense title; a "📎N" badge appears when it has N attachments</td><td><code>title</code>, <code>_count.attachments</code></td></tr>
+          <tr><td>Category</td><td>The spend category</td><td><code>category.name</code></td></tr>
+          <tr><td>Vendor</td><td>Supplier / payee, or "—" if blank</td><td><code>vendor</code></td></tr>
+          <tr><td>Amount</td><td>The grand total (base amount + GST when added), bold</td><td><code>totalPaise</code></td></tr>
+          <tr><td>Mode</td><td>Payment mode (Cash, UPI, Bank Transfer, …)</td><td><code>paymentMode</code></td></tr>
+          <tr><td>Status</td><td>Coloured badge: Pending Approval / Approved / Paid / Partially Paid / Rejected / Cancelled</td><td><code>status</code></td></tr>
+          <tr><td>View</td><td>Opens / closes ("Close") the in-line detail panel for that row</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Filters, search &amp; sorting</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Control</th><th>Purpose</th><th>Accepted values</th><th>Backend param</th></tr></thead>
+        <tbody>
+          <tr><td>Preset chips</td><td>Jump the date range</td><td>All · Today · Yesterday · Last 7d · Last 30d · This month (default) · Last month</td><td><code>preset</code> → resolves to <code>from</code>/<code>to</code></td></tr>
+          <tr><td>Category</td><td>Show one category</td><td>"All categories" or any live category</td><td><code>categoryId</code></td></tr>
+          <tr><td>Mode</td><td>Show one payment mode</td><td>All modes / Cash / UPI / Bank Transfer / Credit Card / Debit Card / Cheque / Wallet / Other</td><td><code>paymentMode</code></td></tr>
+          <tr><td>Status</td><td>Show one status</td><td>All / Pending Approval / Approved / Paid / Partially Paid / Rejected / Cancelled</td><td><code>status</code></td></tr>
+          <tr><td>Min ₹ / Max ₹</td><td>Amount band on the total</td><td>Rupees (converted to paise)</td><td><code>min</code> / <code>max</code></td></tr>
+          <tr><td>Search</td><td>Free-text match</td><td>Text — matches ID, name, vendor, category and description</td><td><code>q</code></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Behaviour</th></tr></thead>
+        <tbody>
+          <tr><td>Search</td><td>Case-insensitive, live as you type, across Expense&nbsp;ID / name / vendor / category / description.</td></tr>
+          <tr><td>Filters</td><td>Date preset, category, mode, status and amount band all combine (AND).</td></tr>
+          <tr><td>Sorting</td><td>Fixed newest-first — sorted by date then Expense ID, descending. There is no user-selectable sort.</td></tr>
+          <tr><td>Totals bar</td><td>Above the table: the count of matching rows and their combined <b>Total</b>, both react to the filters.</td></tr>
+          <tr><td>Pagination</td><td>The list shows the filtered set in one scroll; the backend caps a query at 300 rows (adjustable via <code>limit</code>).</td></tr>
+          <tr><td>Row action</td><td>"View" expands the detail &amp; workflow panel (below); clicking again closes it.</td></tr>
+          <tr><td>Empty state</td><td>"No expenses match these filters." when nothing matches.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The detail &amp; workflow panel</h4>
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Expense <b>EXP-20260701-0003</b> · two-column detail</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Left — breakdown</b><span>Purpose · Invoice/Bill · Amount (base) · GST (incl./added) · Total · Paid / Outstanding · Requested / Approved / Paid by · Created by &amp; when · Notes · Documents list</span></div>
+          <div class="wf-cell"><b>Right — Workflow</b><span>Approve → / Reject · Mark fully paid · Cancel · Edit · Print · Delete (shown by status &amp; role)</span></div>
+          <div class="wf-cell"><b>Right — Record payment</b><span>Amount ₹ · Mode · Add — for Approved / Partially Paid, with the outstanding shown</span></div>
+          <div class="wf-cell"><b>Right — Audit trail</b><span>Every action, who did it and when, newest first</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the expanded per-expense detail, workflow buttons, payment box and audit trail.</div></div>
+
+      <h4>Workflow &amp; action buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Approve →</td><td>Signs off a <b>Pending Approval</b> expense so it can be paid. Stamps the approver and time.</td><td><code>PATCH /api/expenses/{id}</code> action <code>approve</code> → status <b>Approved</b>, sets <code>approvedAt</code>/<code>approvedBy</code>, logs an "approved" audit line. Only shown while Pending Approval.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+          <tr><td>Reject</td><td>Turns down a pending expense; prompts for a reason that is stored on the audit line.</td><td>action <code>reject</code> → status <b>Rejected</b> (terminal), logs "Rejected: {reason}". Only shown while Pending Approval.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+          <tr><td>Mark fully paid</td><td>Settles the whole outstanding balance in one click.</td><td>action <code>markPaid</code> → records a payment for the outstanding amount using the expense's own mode; status becomes <b>Paid</b>, stamps <code>paidAt</code>. Shown for Approved / Partially Paid.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span></td></tr>
+          <tr><td>Cancel</td><td>Voids an expense that should not proceed; asks for confirmation.</td><td>action <code>cancel</code> → status <b>Cancelled</b> (terminal), logs "cancelled". Shown while Pending Approval / Approved / Partially Paid.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+          <tr><td>Edit</td><td>Reopens the expense in the Add/Edit form (Screen 3) to correct its details.</td><td>action <code>update</code> → validates and patches; recomputes the total when amount/GST change; logs "updated". <b>Hidden</b> for Paid / Cancelled / Rejected — those can no longer be edited.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span></td></tr>
+          <tr><td>Print</td><td>Opens a clean "DOODLY — Expense Voucher" in a new window, ready to print or save as PDF.</td><td>Rendered in the browser from the loaded expense — no server call. Available to any viewer.</td><td>Any viewer</td></tr>
+          <tr><td>Delete</td><td>Soft-deletes the expense — it is hidden from lists and totals but kept in records; asks for confirmation.</td><td>action <code>delete</code> → sets <code>deletedAt</code>, logs "deleted". The row never truly leaves the database.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Record payment (partial payments)</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field / action</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Amount ₹</td><td>How much of the outstanding to pay now</td><td>&gt; 0, up to the outstanding balance</td><td class="t-req">Yes</td><td>Capped at the outstanding; a positive amount is required. Adds an <code>ExpensePayment</code> line.</td><td>₹2,000</td></tr>
+          <tr><td>Mode</td><td>How this instalment was paid</td><td>Cash / UPI / Bank Transfer / Credit Card / Debit Card / Cheque / Wallet / Other (defaults to the expense's mode)</td><td class="t-req">Yes</td><td>Saved with the payment line.</td><td>Cash</td></tr>
+          <tr><td>Add</td><td>Records the instalment</td><td>Button</td><td>—</td><td>Increases <code>paidPaise</code>; if <i>paid ≥ total</i> the status flips to <b>Paid</b> (and stamps <code>paidAt</code>), otherwise to <b>Partially Paid</b>. Requires the expense to be Approved or Partially Paid first.</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Approve before you pay</div>
+          <p>A payment can only be recorded against an <b>Approved</b> or <b>Partially Paid</b> expense — the server rejects "Expense must be approved before recording a payment." on anything still Pending Approval. The workflow is intentional: request → approve → pay. Likewise a <b>Paid</b>, <b>Rejected</b> or <b>Cancelled</b> expense is terminal and can no longer be edited.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3 : ADD / EDIT -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Add / Edit Expense</p>
+      <p class="sm">A four-section form — basic details, payment details (with a live total), approval workflow and supporting documents — to record a new expense or correct an existing one.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Capture a spend with its category, supplier, bill number, amount and GST; attach the invoice/receipt; and set who requested, approved and paid it. New expenses always start at <b>Pending Approval</b>.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> — the "Add Expense" tab only appears for roles that can create</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Finance → Daily Expenses → Add Expense</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Add Expense — <b>4-section form</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>1 · Basic details</b><span>Expense date · Name/title · Category · Vendor/payee · Invoice/bill no. · Description/purpose</span></div>
+          <div class="wf-cell"><b>2 · Payment details</b><span>Payment mode · Amount ₹ · GST included? toggle · GST amount ₹ · live Total box</span></div>
+          <div class="wf-cell"><b>3 · Approval workflow</b><span>Requested by · Approved by · Paid by (staff pickers)</span></div>
+          <div class="wf-cell"><b>4 · Supporting documents</b><span>Drag &amp; drop / Browse — invoices, receipts, bills, screenshots, PDFs, images; file list with Remove</span></div>
+          <div class="wf-cell"><b>Notes + footer</b><span>Internal remarks textarea · "Create expense" / "Save changes" · Cancel</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Add/Edit form with its four sections and the live total box.</div></div>
+
+      <h4>Form fields</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Expense date</td><td>The date the spend belongs to</td><td>Date (defaults to today)</td><td class="t-req">Yes</td><td>Drives the <code>EXP-YYYYMMDD-NNNN</code> code. Backend requires a date.</td><td>2026-07-01</td></tr>
+          <tr><td>Expense name / title</td><td>Short description of the spend</td><td>Text</td><td class="t-req">Yes</td><td>Frontend requires a title; backend requires 2–160 characters.</td><td>Morning milk collection — Kanuru</td></tr>
+          <tr><td>Category</td><td>Which spend bucket it belongs to</td><td>Any live category (21 defaults, editable)</td><td class="t-req">Yes</td><td>Must be a real category; the backend rejects an unknown or deleted category.</td><td>Milk Procurement</td></tr>
+          <tr><td>Vendor / payee</td><td>Who was paid</td><td>Text, up to 160 chars</td><td class="t-opt">Opt.</td><td>Stored as <code>vendor</code>; used by the vendor-wise report.</td><td>Ravi Dairy Farm</td></tr>
+          <tr><td>Invoice / bill number</td><td>The supplier's bill reference</td><td>Text, up to 80 chars</td><td class="t-opt">Opt.</td><td>Stored as <code>invoiceNo</code> for audit.</td><td>SG/2026/418</td></tr>
+          <tr><td>Description / purpose</td><td>Longer note on what it was for</td><td>Text, up to 1000 chars</td><td class="t-opt">Opt.</td><td>Stored as <code>description</code>; searchable.</td><td>Weekly bottle top-up for the plant</td></tr>
+          <tr><td>Payment mode</td><td>How it was / will be paid</td><td>Cash / UPI / Bank Transfer / Credit Card / Debit Card / Cheque / Wallet / Other</td><td class="t-req">Yes</td><td>Enum; defaults to Cash.</td><td>UPI</td></tr>
+          <tr><td>Amount (₹)</td><td>The base amount (before any added GST)</td><td>Number &gt; 0 (2 decimals)</td><td class="t-req">Yes</td><td>Frontend requires &gt; 0; backend stores positive integer paise.</td><td>18400.00</td></tr>
+          <tr><td>GST included?</td><td>Whether GST is already inside the amount</td><td>Checkbox — "Amount already includes GST" vs "GST added on top"</td><td class="t-opt">Opt.</td><td>When on, Total = Amount (GST is informational); when off, Total = Amount + GST.</td><td>off</td></tr>
+          <tr><td>GST amount (₹)</td><td>The tax portion</td><td>Number ≥ 0 (2 decimals)</td><td class="t-opt">Opt.</td><td>Added on top when "GST included?" is off; shown as "(incl.)" when on.</td><td>4320.00</td></tr>
+          <tr><td>Requested by</td><td>Who raised the expense</td><td>Staff picker (defaults to the current user)</td><td class="t-opt">Opt.</td><td>Options are active non-customer, non-delivery staff. Stored as <code>requestedBy</code>.</td><td>Rohan Mehta</td></tr>
+          <tr><td>Approved by</td><td>Who approved it</td><td>Staff picker</td><td class="t-opt">Opt.</td><td>Stored as <code>approvedBy</code>; the Approve action stamps the actual approver anyway.</td><td>Aarav Sharma</td></tr>
+          <tr><td>Paid by</td><td>Who paid it</td><td>Staff picker</td><td class="t-opt">Opt.</td><td>Stored as <code>paidBy</code>; also stamped when a payment is recorded.</td><td>Rohan Mehta</td></tr>
+          <tr><td>Supporting documents</td><td>Attach the invoice/receipt/bill</td><td>Drag &amp; drop or Browse — PDFs / images / files</td><td class="t-opt">Opt.</td><td>Each file is stored with a <b>kind</b> (invoice / receipt / bill / screenshot / pdf / image / other), name and size; up to 20 per expense.</td><td>invoice.pdf · 214&nbsp;KB</td></tr>
+          <tr><td>Notes</td><td>Internal remark</td><td>Text, up to 1000 chars</td><td class="t-opt">Opt.</td><td>Stored as <code>notes</code>; visible in the detail panel.</td><td>Reimburse from petty cash</td></tr>
+        </tbody>
+      </table></div>
+
+      <p>As you type the <b>Amount</b> and <b>GST</b> (and flip the GST toggle), a live <b>Total box</b> under the payment section recomputes and shows <b>Amount</b>, <b>GST (incl./added)</b> and the grand <b>Total</b>. Saving a new expense creates it at <b>Pending Approval</b> with a fresh <code>EXP-</code> code and paid = 0, and logs a "created" audit line; saving an edit patches the record, recomputes the total when amount/GST changed, and logs "updated".</p>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — record a new expense end-to-end</div>
+        <div class="wf-flow"><span>Add Expense</span><span>Fill basic + payment details</span><span>Attach invoice</span><span>Set requested / approved / paid by</span><span>Create expense (Pending Approval)</span><span>Admin approves</span><span>Record payment(s)</span><span>Paid</span></div>
+      </div><div class="wire-cap">Figure — request → approve → pay, the full expense lifecycle.</div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 4 : CATEGORIES -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Categories</p>
+      <p class="sm">Manage the list of spend categories used everywhere in the module — add, rename and (when unused) delete.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Keep the category list clean and relevant to how DOODLY actually spends, so the Add form, filters and category-wise reports stay meaningful.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> — Accountants see the list read-only</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Finance → Daily Expenses → Categories</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Daily Expenses — <b>Categories</b> · add row + list</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Add row</b><span>"New category name" input + Add button</span></div>
+          <div class="wf-cell"><b>Category list</b><span>One row per category, each with Rename and Delete</span></div>
+          <div class="wf-cell"><b>Read-only view</b><span>For Accountants: a sentence listing the current categories, no controls</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Categories tab (Admin view) with add, rename and delete.</div></div>
+
+      <h4>The 21 default categories</h4>
+      <p>The module seeds these once (they are then fully editable): Milk Procurement · Farmer Payment · Transportation · Fuel · Vehicle Maintenance · Staff Salary · Delivery Expenses · Office Rent · Electricity Bill · Water Bill · Internet &amp; Mobile · Packaging Materials · Glass Bottle Purchase · Bottle Replacement · Cleaning &amp; Sanitation · Equipment Maintenance · Marketing &amp; Advertising · Printing &amp; Stationery · Software &amp; Subscriptions · Bank Charges · Miscellaneous.</p>
+
+      <h4>Category actions</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Action</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Add</td><td>Adds a new category to the list.</td><td><code>POST /api/expenses/categories</code> — name 2–80 chars; a duplicate name is refused ("Category already exists"). A URL-safe <code>slug</code> and a sort order are set automatically.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+          <tr><td>Rename</td><td>Prompts for a new name and updates the category.</td><td><code>PATCH /api/expenses/categories/{id}</code> — updates the name and regenerates its slug.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+          <tr><td>Delete</td><td>Removes a category — but only when no live expense uses it.</td><td><code>DELETE …/{id}</code> — blocked while any non-deleted expense references it ("Category is in use — reassign those expenses first."). On the backend a delete is a soft delete (marked deleted + inactive), so history is preserved.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">You can't delete a category that's in use</div>
+          <p>If a category still has expenses filed under it, deletion is refused. Reassign those expenses to another category first (edit each one and change its category), or simply leave the category in place — an unused category does no harm.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 5 : REPORTS -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Reports</p>
+      <p class="sm">Date-ranged expense analytics — entries, total, paid, outstanding and GST, broken down by category, vendor and payment mode, plus an outstanding list — with CSV, Excel and PDF export.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Give the accounts team the numbers to close a period and reconcile: what was spent, how it split by category / vendor / mode, what's still owed, and how much GST rode along — exportable for the books.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Finance → Daily Expenses → Reports</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Daily Expenses — <b>Reports</b> · range chips · export buttons · KPI cards · breakdown tables</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Range chips</b><span>Today · Weekly · This month (default) · Last month · Last 30d</span></div>
+          <div class="wf-cell"><b>Export</b><span>Export CSV · Export Excel · Export PDF</span></div>
+          <div class="wf-cell"><b>Summary KPIs</b><span>Entries · Total · Paid · Outstanding · GST</span></div>
+          <div class="wf-cell"><b>Breakdown tables</b><span>Category-wise · Vendor-wise · Payment mode · Outstanding payments</span></div>
+          <div class="wf-cell"><b>GST footer</b><span>"N GST-bearing expense(s), GST ₹X on ₹Y total"</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Reports tab: range picker, exports, KPI cards and breakdown tables.</div></div>
+
+      <h4>Summary KPIs (over the chosen range, excluding rejected/cancelled)</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>KPI</th><th>What it shows</th><th>Backend</th></tr></thead>
+        <tbody>
+          <tr><td>Entries</td><td>Number of expenses in range</td><td><code>totals.count</code></td></tr>
+          <tr><td>Total</td><td>Sum of their totals</td><td><code>totals.totalPaise</code></td></tr>
+          <tr><td>Paid</td><td>How much has been paid across them</td><td><code>totals.paidPaise</code></td></tr>
+          <tr><td>Outstanding</td><td>Total − Paid</td><td><code>totals.outstandingPaise</code></td></tr>
+          <tr><td>GST</td><td>GST portion across them</td><td><code>totals.gstPaise</code></td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Breakdown tables</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Table</th><th>Columns</th><th>Backend</th></tr></thead>
+        <tbody>
+          <tr><td>Category-wise</td><td>Category · Count · Total</td><td><code>byCategory[]</code>, ordered by total desc</td></tr>
+          <tr><td>Vendor-wise</td><td>Vendor · Count · Total</td><td><code>byVendor[]</code> (top 20)</td></tr>
+          <tr><td>Payment mode</td><td>Mode · Count · Total</td><td><code>byPaymentMode[]</code></td></tr>
+          <tr><td>Outstanding payments</td><td>Expense · Vendor · Outstanding</td><td><code>outstanding[]</code> — Approved / Partially Paid with a balance</td></tr>
+          <tr><td>GST report (footer)</td><td>Count of GST-bearing expenses, GST value and the total they sit on</td><td><code>gst.count / gstPaise / totalPaise</code></td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Exports</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Format / columns</th></tr></thead>
+        <tbody>
+          <tr><td>Export CSV</td><td>Downloads the in-range expenses as a spreadsheet file.</td><td>CSV: Expense ID · Date · Name · Category · Vendor · Mode · Amount · GST · Total · Paid · Outstanding · Status</td></tr>
+          <tr><td>Export Excel</td><td>Same columns as an <code>.xls</code> workbook.</td><td>Excel (HTML-table workbook), same 12 columns</td></tr>
+          <tr><td>Export PDF</td><td>Opens a branded "DOODLY — Expense Report" in a new window, ready to print or save as PDF.</td><td>Printable HTML table, same 12 columns</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Reports exclude rejected and cancelled expenses</div>
+          <p>Like the dashboard, reports count only real spend — <b>Rejected</b> and <b>Cancelled</b> expenses are filtered out of every KPI, breakdown and export, so a rejected bill never distorts a period's numbers.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ STATUS MODEL -->
+  <h4>The status model</h4>
+  <p>Every expense sits in exactly one of six statuses. The allowed moves are strict — the server refuses any transition that isn't in this table.</p>
+  <div class="twrap"><table>
+    <thead><tr><th>Status</th><th>Meaning</th><th>Badge</th><th>Can move to</th></tr></thead>
+    <tbody>
+      <tr><td>Pending Approval</td><td>Just created, awaiting sign-off</td><td>Amber</td><td>Approved · Rejected · Cancelled</td></tr>
+      <tr><td>Approved</td><td>Signed off, ready to pay</td><td>Green</td><td>Paid · Partially Paid · Cancelled</td></tr>
+      <tr><td>Partially Paid</td><td>Some but not all of it paid</td><td>Amber</td><td>Paid · Cancelled</td></tr>
+      <tr><td>Paid</td><td>Fully settled</td><td>Green</td><td>— (terminal)</td></tr>
+      <tr><td>Rejected</td><td>Turned down at approval (with a reason)</td><td>Red</td><td>— (terminal)</td></tr>
+      <tr><td>Cancelled</td><td>Voided before completion</td><td>Grey</td><td>— (terminal)</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="diagram"><div class="wf">
+    <div class="wf-topbar">Workflow — expense status lifecycle</div>
+    <div class="wf-flow"><span>Pending Approval</span><span>Approved</span><span>Partially Paid</span><span>Paid</span></div>
+  </div><div class="wire-cap">Figure — the happy path; Reject (from Pending) and Cancel (from Pending/Approved/Partially Paid) branch off to terminal states.</div></div>
+
+  <!-- ============================================================ ROLE ACCESS -->
+  <h4>Who can do what</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Capability</th><th>Super Admin</th><th>Admin</th><th>Accountant</th><th>Other roles</th></tr></thead>
+    <tbody>
+      <tr><td>Open the module (dashboard, list, reports)</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+      <tr><td>Create &amp; edit expenses</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+      <tr><td>Record payments (partial / full)</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+      <tr><td>Approve / Reject</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td></tr>
+      <tr><td>Cancel</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td></tr>
+      <tr><td>Manage categories</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td></tr>
+      <tr><td>Delete (soft)</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td></tr>
+    </tbody>
+  </table></div>
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Separation of duties is enforced server-side</div>
+      <p>The split is not just a UI nicety — the API checks <code>canUseExpenses</code> to open the module, then <code>canApproveExpenses</code> (Admin / Super Admin only) before approve, reject, cancel or delete, and <code>canManageExpenseSettings</code> before category changes. An Accountant who tries an approver-only action gets "Only an Admin or Super Admin can perform this action." Support, operations, procurement, quality, delivery and marketing roles have no expense access at all.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ BEST PRACTICE -->
+  <div class="call best">
+    <span class="ci">✅</span>
+    <div class="cbody">
+      <div class="ctitle">Best Practice — file the bill with the expense, and let approval gate payment</div>
+      <p>When you record an expense, attach the actual invoice or receipt in the <b>Supporting documents</b> section and fill in the <b>Vendor</b> and <b>Invoice/bill number</b> — those three make the vendor-wise report and any later audit trivial. Let the workflow do its job: create as <b>Pending Approval</b>, have a different person (an Admin) <b>Approve</b>, and only then <b>Record payment</b>. Use <b>Partially Paid</b> honestly when a supplier is paid in instalments; the outstanding figure on the dashboard and reports depends on it. When something is wrong, prefer <b>Reject</b> (with a reason) or <b>Cancel</b> over <b>Delete</b> — a soft-delete hides the row but a rejected/cancelled expense keeps a visible, reasoned trail.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOTING -->
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>"Add Expense" tab is missing</td><td>Signed in as a role without create rights (or outside Accountant / Admin / Super Admin)</td><td>Use an Accountant, Admin or Super Admin account — the tab only shows for roles that can create.</td></tr>
+      <tr><td>No Approve / Reject / Cancel / Delete buttons on a row</td><td>You're an Accountant — those are approver-only actions</td><td>Ask an Admin or Super Admin to approve, reject, cancel or delete; Accountants create, edit and pay.</td></tr>
+      <tr><td>"Expense must be approved before recording a payment."</td><td>You tried to pay something still Pending Approval</td><td>Approve the expense first (Admin), then record the payment.</td></tr>
+      <tr><td>Edit button doesn't appear</td><td>The expense is Paid, Rejected or Cancelled — a terminal state</td><td>Terminal expenses can't be edited by design; if it's genuinely wrong, cancel/record a correcting entry.</td></tr>
+      <tr><td>"Category is in use — reassign those expenses first."</td><td>You tried to delete a category that still has expenses</td><td>Edit those expenses to a different category (or leave the category as-is), then delete.</td></tr>
+      <tr><td>"Category already exists"</td><td>The new category name duplicates an existing one</td><td>Pick a distinct name, or reuse the existing category.</td></tr>
+      <tr><td>Total doesn't match the amount I typed</td><td>"GST added on top" is on, so GST is added to the base amount</td><td>Toggle "GST included?" if the amount already contains GST — the live total box shows the effect immediately.</td></tr>
+      <tr><td>Print / Export PDF window doesn't open</td><td>The browser blocked the pop-up</td><td>Allow pop-ups for the admin site, then click Print / Export PDF again.</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- ============================================================ FAQ -->
+  <h4>Frequently asked questions</h4>
+
+  <h4>Q. What's the difference between "Amount" and "Total"?</h4>
+  <p><b>Amount</b> is the base you type. <b>Total</b> is what the expense actually costs: when "GST included?" is off, Total = Amount + GST; when it's on, the GST is already inside so Total = Amount (the GST figure is shown for information). The list, dashboard and reports all use the Total.</p>
+
+  <h4>Q. Can I pay a supplier in instalments?</h4>
+  <p>Yes. On an Approved expense, use the <b>Record payment</b> box to add each instalment with its amount and mode. The status becomes <b>Partially Paid</b> and the <b>Outstanding</b> figure drops with each payment; once the payments reach the total it flips to <b>Paid</b> automatically. Or use <b>Mark fully paid</b> to settle the whole balance at once.</p>
+
+  <h4>Q. I filed an expense against the wrong category — how do I fix it?</h4>
+  <p>Open the expense, click <b>Edit</b>, change the <b>Category</b> and save — as long as it isn't Paid/Rejected/Cancelled. The change is logged as an "updated" audit line. If you also want to remove the old category, you can only delete it once no expense uses it.</p>
+
+  <h4>Q. What happens when I delete an expense?</h4>
+  <p>It's a <b>soft delete</b> — the expense is hidden from every list, total and report, but it is never physically removed; the backend just stamps <code>deletedAt</code> and keeps the record (and its audit trail) for integrity. There is no hard delete in this module.</p>
+
+  <h4>Q. Who shows up in the "Requested / Approved / Paid by" pickers?</h4>
+  <p>Active staff only — the backend lists non-customer, non-delivery-executive users. Customers and delivery executives never appear, because they don't handle expenses.</p>
+
+  <h4>Q. Are the dashboard and report numbers "real time"?</h4>
+  <p>Yes — they recompute from the current expense data every time you open the tab, always excluding rejected, cancelled and soft-deleted rows. There's no cache to refresh.</p>
+
+</section>

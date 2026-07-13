@@ -1,0 +1,475 @@
+<section class="sheet" id="admin-roles">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · System · Roles &amp; Permissions</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · System</span></div>
+  <h2 class="section-title">Roles &amp; Permissions</h2>
+  <p class="lead">The single control room where the Super Admin decides who can see and do what across the whole platform — set the defaults for a whole job role, fine-tune one single action, or grant an exception to one individual person, and see every change logged.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">What this module does, in plain words</div>
+      <p>Every employee in DOODLY belongs to a <b>role</b> (Admin, Accountant, Operations Manager, Delivery Executive, and so on). A role is simply a saved bundle of permissions. This screen lets you (a) manage the list of roles, (b) tune exactly which actions each role is allowed on each part of the system, and (c) give one specific person a little extra — or a little less — than their role normally gets. The golden formula the platform follows is: <b>Effective permission = the role's default &nbsp;⊕&nbsp; any explicit grant on the role &nbsp;⊕&nbsp; that person's individual override</b>. The most specific setting always wins, and the person's own override beats everything.</p>
+    </div>
+  </div>
+
+  <div class="call danger">
+    <span class="ci">⛔</span>
+    <div class="cbody">
+      <div class="ctitle">Caution — this is the master key to the building</div>
+      <p>This is one of the most powerful screens in DOODLY. A wrong setting here can lock a whole team out of the tools they need, or hand someone access to money, customer data or the audit trail that they should never see. Because of that, <b>only the Super Admin can open it</b>. Every other role that navigates here sees a locked message: <i>"Roles &amp; Permissions is restricted — only the Super Admin can manage roles and user-level permission overrides."</i> Read the screen carefully, change one thing at a time, and use the <b>Audit</b> tab and <b>Run tests</b> button to confirm the result.</p>
+    </div>
+  </div>
+
+  <div class="call best">
+    <span class="ci">✅</span>
+    <div class="cbody">
+      <div class="ctitle">The three layers of access — remember this order</div>
+      <p><b>1. Role level (broad).</b> A "level" for each module: <i>None → View → Manage → Full</i>. This is the everyday tool, edited mostly on the sibling <span class="navpath">Permissions</span> page. <b>2. Granular role grant (medium).</b> On the <b>Role Matrix</b> tab you can switch one exact action (say "Delete" on Reports) on or off for a whole role, overriding the level. These show in <span class="rb-explicit-key">amber</span>. <b>3. User override (narrow).</b> On the <b>User Permissions</b> tab you grant or revoke one action for one person only. A user override always wins over the role default.</p>
+    </div>
+  </div>
+
+  <!-- ======================================================= LAYOUT OVERVIEW -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Roles &amp; Permissions — the four tabs</p><p class="sm">One workspace split into Roles, Role Matrix, User Permissions and Audit, with a built-in test button.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the Super Admin one place to create and shape roles, tune permissions down to a single action, grant person-specific exceptions, and review the history of every change.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> only — everyone else sees a read-only locked notice</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Roles &amp; Permissions</span> (<span class="navpath">/admin/roles.html</span>)</span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Roles &amp; Permissions</b> · tab bar (Roles · Role Matrix · User Permissions · Audit) · <b>Run tests</b> button + result badge (far right)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Tab: Roles</b><span>The list of every role — create, duplicate, edit the matrix, assign users, delete custom roles.</span></div>
+          <div class="wf-cell"><b>Tab: Role Matrix</b><span>Per-action grid for one chosen role — toggle View / Create / Edit / Delete / Export / Approve / Print and the "special" actions on each module.</span></div>
+          <div class="wf-cell"><b>Tab: User Permissions</b><span>Pick one person and grant / revoke individual actions that beat their role default.</span></div>
+          <div class="wf-cell"><b>Tab: Audit</b><span>The history of every role and permission change — who, what, old → new, when.</span></div>
+          <div class="wf-cell"><b>Run tests</b><span>A safe self-check that runs 12 built-in access-control tests and reports "N/N tests passed".</span></div>
+          <div class="wf-cell"><b>Live database banner</b><span>A green "● Live — N role(s) in the DOODLY database" strip confirming create / clone / delete are saving to Postgres.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Roles &amp; Permissions workspace</div></div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Tip — how this page relates to its two neighbours</div>
+          <p>Three System screens work together. <b>User Management</b> (<span class="navpath">/admin/users.html</span>) is where you create staff accounts and pick their role. <b>Permissions</b> (<span class="navpath">/admin/permissions.html</span>) is a simpler grid for setting each role's broad <i>level</i> (None/View/Manage/Full) per module. <b>This screen (Roles &amp; Permissions)</b> is the advanced control — it manages the roles themselves and lets you go finer than a level, down to a single action or a single person. The green banner on this page even reminds you: edit the broad module levels on the Permissions page.</p>
+        </div>
+      </div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">The permission "vocabulary" — 16 action types</div>
+          <p>Under the hood, DOODLY recognises 16 distinct actions: <b>View, Create, Edit, Delete, Export, Import, Approve, Assign, Reassign, Cancel, Restore, Print, Download, Manage Settings, Manage Users, Manage Roles</b>. Not every action applies to every module — the grid only shows the ones that make sense (for example <i>Assign</i> and <i>Reassign</i> appear on Delivery Mgmt, Drivers and Routes; <i>Cancel</i> and <i>Restore</i> on Orders and Subscriptions; <i>Manage Roles</i> only on this screen and Permissions). Seven of them — <b>View, Create, Edit, Delete, Export, Approve, Print</b> — are the "core" columns; anything extra shows under the <b>Special</b> column.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= THE ELEVEN ROLES -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">The eleven built-in roles</p><p class="sm">Every DOODLY account belongs to exactly one role. Here is what each one is for, out of the box.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Understand the ready-made roles before you edit anything — most day-to-day needs are already covered by a default role.</span></div>
+    <div class="spec-meta"><span class="m"><b>Where defined</b> The code default matrix in <span class="navpath">assets/js/rbac.js</span> (client) and <span class="navpath">next-app/lib/rbac.ts</span> (server — the real security boundary)</span></div>
+    <div class="spec-body">
+
+      <div class="twrap"><table>
+        <thead><tr><th>Role</th><th>Surface (which app they land in)</th><th>Landing page after login</th><th>What they can do by default</th></tr></thead>
+        <tbody>
+          <tr><td><b>Super Admin</b> <span class="badge green">Full access</span></td><td>Admin</td><td><span class="navpath">/admin/dashboard.html</span></td><td><b>Everything, everywhere</b> — the matrix stores <code>*</code> for this role, so it can never be edited or reduced.</td></tr>
+          <tr><td><b>Admin</b></td><td>Admin</td><td><span class="navpath">/admin/dashboard.html</span></td><td>Full access to almost every module, but the four "critical reserved" ones are held back: <b>Permissions</b> (none), <b>Settings</b> (view), <b>Roles</b> (view), <b>Audit Logs</b> (view).</td></tr>
+          <tr><td><b>Customer Support</b> <small class="muted">(key: support)</small></td><td>Admin</td><td><span class="navpath">/admin/support.html</span></td><td>Full on Support Tickets; manage Orders; view Dashboard, Customers and Subscriptions.</td></tr>
+          <tr><td><b>Operations Manager</b> <small class="muted">(operations)</small></td><td>Admin</td><td><span class="navpath">/admin/deliveries.html</span></td><td>Full on Delivery Mgmt; manage Drivers, Routes, Serviceable Areas and Delivery Settings; view Inventory and Reports.</td></tr>
+          <tr><td><b>Procurement Manager</b> <small class="muted">(procurement)</small></td><td>Admin</td><td><span class="navpath">/admin/procurement.html</span></td><td>Full on Procurement; manage Farmers; view Quality Testing and Reports.</td></tr>
+          <tr><td><b>Accountant</b> <small class="muted">(accountant)</small></td><td>Admin</td><td><span class="navpath">/admin/revenue.html</span></td><td>Full on Payments, Wallet, Expenses, Payroll and Salary Advances; manage Billing and Reports; view Revenue, Coupons and several HR screens.</td></tr>
+          <tr><td><b>Inventory Manager</b> <small class="muted">(inventory)</small></td><td>Admin</td><td><span class="navpath">/admin/inventory.html</span></td><td>Full on Inventory and Bottle Inventory; view Reports.</td></tr>
+          <tr><td><b>Quality Control</b> <small class="muted">(quality)</small></td><td>Admin</td><td><span class="navpath">/admin/quality.html</span></td><td>Full on Quality Testing; view Procurement and Reports.</td></tr>
+          <tr><td><b>Marketing Manager</b> <small class="muted">(marketing)</small></td><td>Admin</td><td><span class="navpath">/admin/coupons.html</span></td><td>Full on Coupons, Offers and Blogs; manage CMS, Notifications and Pure Rewards; view Reports.</td></tr>
+          <tr><td><b>Delivery Executive</b> <small class="muted">(delivery_executive)</small></td><td>Delivery app</td><td><span class="navpath">/delivery/dashboard.html</span></td><td>Manage their Delivery Mgmt queue; view Routes. Never sees the admin console.</td></tr>
+          <tr><td><b>Customer</b></td><td>My-Account</td><td><span class="navpath">/account/dashboard.html</span></td><td>No admin modules at all — only their own account. Cannot reach any <span class="navpath">/admin</span> URL.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">The four "critical reserved" areas even Admin cannot fully touch</div>
+          <p>By design the ordinary <b>Admin</b> role is deliberately blocked from four sensitive areas so that no one but the Super Admin can quietly widen their own powers: <b>Permissions</b> (no access), and <b>Settings</b>, <b>Roles</b> and <b>Audit Logs</b> (view-only). This is baked into the default matrix and mirrored on the server. If you need someone to help manage roles, that person effectively needs to be a Super Admin — think hard before granting that.</p>
+        </div>
+      </div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">"Surface" decides which app a role even sees</div>
+          <p>Before any module permission is checked, DOODLY checks the role's <b>surface</b>. Only admin-surface roles ever get the admin navigation or reach <span class="navpath">/admin/*</span> pages. A Customer or Delivery Executive is denied every admin URL outright — no matter what the permission matrix says — and their admin navigation is empty. This is a hard rule in both the client (<code>canRoute</code>, <code>filterNav</code>) and the server (<code>canAccessPath</code>).</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= SCREEN 1 : ROLES -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Tab 1 — Roles</p><p class="sm">The master list of roles: create new ones, duplicate an existing one, jump to its matrix, assign people, or delete a custom role.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Manage the set of roles itself — this is where new job roles are born and where you pick which role's matrix to edit.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Roles &amp; Permissions → Roles</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Toolbar — <b>Search roles…</b> · <b>New role name…</b> box · <b>Copy from</b> dropdown · <b>Create role</b> button</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Search box</b><span>Type to filter the role list by name.</span></div>
+          <div class="wf-cell"><b>New role name</b><span>Free-text name for a brand-new role.</span></div>
+          <div class="wf-cell"><b>Copy-from select</b><span>"Blank" or "Copy: &lt;role&gt;" — start the new role empty or from an existing role's permissions.</span></div>
+          <div class="wf-cell"><b>Roles table</b><span>Role (with Default / Custom / Full-access badge) · Assigned (user count) · Manage (action links).</span></div>
+          <div class="wf-cell"><b>Row action links</b><span>Edit matrix · Duplicate · Assign users · Delete (custom roles only).</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Roles tab</div></div>
+
+      <h4>The roles table — columns explained</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>What it shows</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Role</td><td>The role's display name plus a badge.</td><td><span class="badge grey">Default</span> = built-in; <span class="badge blue">Custom</span> = one you created; <span class="badge green">Full access</span> = the Super Admin row.</td></tr>
+          <tr><td>Assigned</td><td>How many active users currently hold this role.</td><td>Reads "0 users", "1 user", "5 users" etc. In live mode this count comes from the database.</td></tr>
+          <tr><td>Manage</td><td>The action links for that role.</td><td>Super Admin shows only "All permissions" (nothing to edit). Default roles show Edit matrix / Duplicate / Assign users. Custom roles additionally show Delete.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Create-a-role form</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>New role name</td><td>Human name for the role.</td><td>Free text.</td><td class="t-req">Yes</td><td>Must not be empty ("Enter a role name"). Turned into a key like <code>role_&lt;slug&gt;</code>; if that key already exists you get "That role already exists". On the server the key is lower-cased, non-alphanumerics become underscores, and it must be at least 2 characters.</td><td>Night Shift Supervisor</td></tr>
+          <tr><td>Copy from</td><td>Seed the new role's permissions from an existing role, instead of starting blank.</td><td>"Blank" (default) or any non-Super-Admin role.</td><td class="t-opt">Opt.</td><td>When set, the source role's whole level matrix is copied as a starting point (the client clones it; the server clones each module level into <code>RolePermission</code>).</td><td>Copy: Operations Manager</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Buttons &amp; row actions on this tab</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Create role</b></td><td>Adds a new role using the name and copy-from selection.</td><td>Client <code>createRole()</code> makes a custom role; a write-through call posts <code>{action:"create"}</code> (or <code>{action:"clone", cloneFrom}</code>) to <code>/api/roles</code>, saving a <code>RoleDef</code> row in Postgres.</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Edit matrix</b></td><td>Jumps to the <b>Role Matrix</b> tab with this role pre-selected.</td><td>Client only — switches the active tab and role.</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Duplicate</b></td><td>Instantly makes a copy of the role (named "&lt;role&gt; Copy") with the same permissions.</td><td><code>duplicateRole()</code> → same as clone; posts <code>{action:"clone"}</code> to <code>/api/roles</code>.</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Assign users</b></td><td>Opens a modal to move people into this role (see below).</td><td><code>assignUsersToRole()</code> updates each selected user's role.</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Delete</b></td><td>Removes a <i>custom</i> role after a confirmation. Any users on it are moved to <b>Customer Support</b>.</td><td>Asks "Delete this custom role? Its users move to Customer Support." → <code>deleteRole()</code> + posts <code>{action:"delete"}</code>, removing the <code>RoleDef</code> and its permissions.</td><td><span class="pill role">Super Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="spec">
+        <div class="spec-h"><p class="st">Assign-users modal</p><p class="sm">Reached from the "Assign users" link on any role.</p></div>
+        <div class="spec-body">
+          <div class="wire"><div class="wf">
+            <div class="wf-topbar">Modal — <b>Assign users → &lt;Role&gt;</b> · ✕ close</div>
+            <div class="wf-grid">
+              <div class="wf-cell"><b>Checklist of all users</b><span>Every non-deleted user, each with a checkbox and their current role in small grey text. People already in this role are pre-checked.</span></div>
+              <div class="wf-cell"><b>Save assignments</b><span>Moves every ticked user into this role and shows "N user(s) assigned to &lt;Role&gt;".</span></div>
+            </div>
+          </div><div class="wire-cap">Figure — the Assign users modal</div></div>
+        </div>
+      </div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Important — custom roles are permission templates, not fully assignable job titles</div>
+          <p>In the live database a user's role is stored as a fixed list (an enum) of the eleven built-in roles. That means a brand-new custom role you invent here is a <b>reusable permission template</b> the platform reads, but it cannot be permanently written onto a user account on the backend the way a built-in role can. Treat custom roles as a way to design and preview a permission set; for a role people will actually be assigned to long-term, prefer duplicating and shaping one of the built-in roles. This limitation is documented in the server code.</p>
+        </div>
+      </div>
+
+      <p class="muted-sm">Screen note shown under the table: <i>"Default roles can be duplicated into editable custom roles. Deleting a custom role reassigns its users to Customer Support."</i></p>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= SCREEN 2 : ROLE MATRIX -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Tab 2 — Role Matrix</p><p class="sm">A big grid: one row per module, one column per action. Switch any single action on or off for the whole selected role.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Tune permissions finer than the broad level — flip one exact action (e.g. "Delete" on Reports) for everyone in a role.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Roles &amp; Permissions → Role Matrix</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Toolbar — <b>Role</b> selector · <b>Search modules…</b> · <b>Group</b> filter · <b>Reset role grants</b> button</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Role selector</b><span>Choose which role you are editing. Pick Super Admin and the grid is replaced by a note — it can't be edited.</span></div>
+          <div class="wf-cell"><b>Module search</b><span>Filter the rows by module name or group.</span></div>
+          <div class="wf-cell"><b>Group filter</b><span>All groups, or one group (Overview, Commerce, Finance, Operations, Supply, Catalogue, Inventory, Growth, Marketing, Content, System, People, HR).</span></div>
+          <div class="wf-cell"><b>The matrix</b><span>Rows = modules. Columns = View · Create · Edit · Delete · Export · Approve · Print, plus a Special column.</span></div>
+          <div class="wf-cell"><b>Toggle cells</b><span>Each cell is an on/off switch. Amber = explicitly set (overrides the level default).</span></div>
+          <div class="wf-cell"><b>Reset role grants</b><span>Clears every explicit toggle for this role, dropping it back to its plain level defaults.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Role Matrix tab</div></div>
+
+      <h4>Reading a matrix cell</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Appearance</th><th>Meaning</th><th>How it got there</th></tr></thead>
+        <tbody>
+          <tr><td>Switch <b>ON</b> (filled)</td><td>The role is allowed this action on this module.</td><td>Either the role's level already includes it, or you explicitly turned it on.</td></tr>
+          <tr><td>Switch <b>OFF</b> (empty)</td><td>The role is not allowed this action.</td><td>The level doesn't cover it, or you explicitly turned it off.</td></tr>
+          <tr><td><span class="rb-explicit-key">Amber</span> highlight</td><td>This action has been <b>explicitly overridden</b> for the role, beating the level default.</td><td>You clicked it — it now stores a hard "allow" or "deny" (<code>setRoleAction</code>) rather than inheriting from the level.</td></tr>
+          <tr><td><code>–</code> greyed cell</td><td>That action does not apply to this module.</td><td>The action isn't in the module's applicable set (for example "Print" on a background job).</td></tr>
+          <tr><td>Special column</td><td>Holds the module's extra actions when it has any.</td><td>Examples: Payments has Refund; Wallet has Reverse; Inventory has Adjust; Deliveries has Assign; GST has Manage Settings.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The seven core columns</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>Grants the ability to…</th></tr></thead>
+        <tbody>
+          <tr><td>View</td><td>Open and read the module.</td></tr>
+          <tr><td>Create</td><td>Add new records in it.</td></tr>
+          <tr><td>Edit</td><td>Change existing records.</td></tr>
+          <tr><td>Delete</td><td>Remove records (usually a soft-delete elsewhere in DOODLY).</td></tr>
+          <tr><td>Export</td><td>Download the data (CSV / Excel / PDF).</td></tr>
+          <tr><td>Approve</td><td>Sign off items that need approval (e.g. expenses, billing, referrals).</td></tr>
+          <tr><td>Print</td><td>Produce a printable copy (e.g. invoices).</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">How "level" and "explicit toggle" fit together</div>
+          <p>A role's baseline is its <b>level</b> per module (None / View / Manage / Full). View = just View. Manage = View + Create + Edit + Export. Full = all of those + Delete, plus that module's specials. On top of that baseline, a toggle you flip here writes an <b>explicit grant or deny for one action</b> that the system checks first. So you can, for instance, keep a role at "Manage" on Reports but explicitly add just the single "Delete" action — without promoting the whole module to Full. The amber highlight is your reminder that a cell is no longer simply inheriting.</p>
+        </div>
+      </div>
+
+      <h4>Buttons on this tab</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Toggle cell</td><td>Flips one action on/off for the whole role.</td><td><code>setRoleAction(role, module, action, on)</code> stores an explicit allow/deny and writes an audit entry. Enforced in the UI immediately; mirrored server-side in production.</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Reset role grants</b></td><td>Wipes all explicit toggles for the selected role, reverting to its level defaults.</td><td>Clears this role's entries from the granular-grant store and logs "reset explicit grants for &lt;role&gt;".</td><td><span class="pill role">Super Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <p class="muted-sm">Screen note: <i>"Toggling a cell sets an explicit grant/deny for &lt;role&gt; that overrides the role's level defaults. Amber = explicitly set."</i> Choosing <b>Super Admin</b> in the selector shows only: <i>"Super Admin has every permission on every module — not editable."</i></p>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= SCREEN 3 : USER PERMISSIONS -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Tab 3 — User Permissions</p><p class="sm">Give one specific person an exception — grant them something their role lacks, or revoke something their role grants.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Handle the "this one person is special" cases without inventing a whole new role.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Roles &amp; Permissions → User Permissions</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Toolbar — <b>Search users…</b> · <b>Group</b> filter · (then a two-panel layout below)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>User list (left)</b><span>Every person as a row: avatar initial, name, email · role, and a badge — "N override(s)" (amber) or "inherits role" (grey).</span></div>
+          <div class="wf-cell"><b>Selected-user header (right)</b><span>Their name, email and role, plus two counters: effective perms and overrides.</span></div>
+          <div class="wf-cell"><b>Preview as user</b><span>👁 button — opens the platform exactly as this person sees it (their nav, routes and buttons).</span></div>
+          <div class="wf-cell"><b>Reset overrides</b><span>Appears only when the person has overrides; wipes them all back to pure role inheritance.</span></div>
+          <div class="wf-cell"><b>Legend</b><span>Inherit (role default) · ✓ Granted (override) · ✗ Revoked (override).</span></div>
+          <div class="wf-cell"><b>Permission grid</b><span>Same module × action layout as the Role Matrix, but each cell cycles Inherit → Grant → Revoke.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the User Permissions tab</div></div>
+
+      <h4>The three states of a user cell — click to cycle</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>State</th><th>Symbol</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><b>Inherit</b> (default)</td><td>✓ or ✗ with no dot</td><td>Follows whatever the person's role allows — no personal exception. The ✓/✗ simply shows the role's answer.</td></tr>
+          <tr><td><b>Grant</b> (override)</td><td>✓ with an override dot</td><td>This person is <b>allowed</b> the action even if their role isn't.</td></tr>
+          <tr><td><b>Revoke</b> (override)</td><td>✗ with an override dot</td><td>This person is <b>denied</b> the action even if their role grants it.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">The precedence rule — a user override always wins</div>
+          <p>When DOODLY works out whether a person may do something, it checks: is there a <b>user Grant</b>? → yes, allow. A <b>user Revoke</b>? → yes, deny. Otherwise fall back to the <b>role default</b> (which itself already factors in any amber role toggle). That is why a single revoke on one person is the cleanest way to take one capability away from one employee without touching their whole team. The counters at the top-right — <b>effective perms</b> and <b>overrides</b> — update live so you can see the effect of what you just did.</p>
+        </div>
+      </div>
+
+      <h4>Buttons on this tab</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Cell click</td><td>Cycles that action for this person: Inherit → Grant → Revoke → Inherit.</td><td><code>setUserPerm(userId, module, action, state)</code> records the override and writes an audit line "old → new".</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>👁 Preview as user</b></td><td>Loads the whole platform as this person — their exact navigation, allowed routes and visible buttons.</td><td><code>viewAsUser()</code> starts a Super-Admin "view as" session and redirects to the person's role home page. Return to yourself from the impersonation banner.</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Reset overrides</b></td><td>Removes every personal exception for the selected user.</td><td>Confirms "Remove all permission overrides for this user…" → <code>clearUserPerms()</code> and audits the clear.</td><td><span class="pill role">Super Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Prefer roles over piles of personal overrides</div>
+          <p>Individual overrides are perfect for a genuine one-off, but if you find yourself giving five people the same three grants, that is a sign you should make (or duplicate) a role instead. Scattered per-person exceptions are hard to audit and easy to forget. Keep the "overrides" counter low for each person wherever you can.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= SCREEN 4 : AUDIT -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Tab 4 — Audit</p><p class="sm">A focused history of every role and permission change made from this screen.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Answer "who changed this permission, and from what to what?" without leaving the page.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Roles &amp; Permissions → Audit</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Panel — <b>Permission &amp; role change history</b> (most recent 60 events)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Who</b><span>The Super Admin who made the change.</span></div>
+          <div class="wf-cell"><b>Action</b><span>A short code — e.g. role.create, role.assign, permission.role, permission.user, permission.change.</span></div>
+          <div class="wf-cell"><b>Detail (old → new)</b><span>What changed, including the previous and new value.</span></div>
+          <div class="wf-cell"><b>When</b><span>Local date &amp; time (India).</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Audit tab</div></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">This is a filtered view of the wider audit trail</div>
+          <p>This tab shows only role, user and permission events (the most recent 60). The <b>full</b> platform log — logins, role switches, and every other sensitive action, with device, browser and IP — lives on the dedicated <span class="navpath">Admin → System → Audit Logs</span> screen. When it's empty you'll see: <i>"No permission/role/user events yet — make a change to generate an entry."</i></p>
+        </div>
+      </div>
+
+      <h4>What generates an audit entry</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Action code</th><th>Written when you…</th></tr></thead>
+        <tbody>
+          <tr><td><code>role.create</code></td><td>Create a role (notes if it was duplicated from another).</td></tr>
+          <tr><td><code>role.delete</code></td><td>Delete a custom role.</td></tr>
+          <tr><td><code>role.assign</code></td><td>Assign users into a role via the modal.</td></tr>
+          <tr><td><code>role.switch</code></td><td>Switch roles or "Preview as user".</td></tr>
+          <tr><td><code>permission.role</code></td><td>Toggle a single action for a role (or reset a role's grants).</td></tr>
+          <tr><td><code>permission.user</code></td><td>Grant / revoke / clear a person's individual override.</td></tr>
+          <tr><td><code>permission.change</code></td><td>Change a role's module level on the Permissions page.</td></tr>
+        </tbody>
+      </table></div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= RUN TESTS -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">The "Run tests" self-check</p><p class="sm">A safe, one-click diagnostic that proves the access-control engine is behaving.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Let a Super Admin confirm — without any risk to real data — that inheritance, overrides and precedence all still work.</span></div>
+    <div class="spec-meta"><span class="m"><b>Where</b> The <b>Run tests</b> button sits at the top-right of the tab bar; results appear next to it as a green (all passed) or red (some failed) badge.</span></div>
+    <div class="spec-body">
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">It never touches your live settings</div>
+          <p>When you click <b>Run tests</b>, the engine takes a snapshot of the relevant saved data, runs twelve checks on a copy, then restores everything exactly as it was. You'll see something like <b>12/12 tests passed</b>; hover the badge to read each check by name. Use it any time you doubt a permission is applying correctly.</p>
+        </div>
+      </div>
+      <h4>The twelve checks, in plain words</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>#</th><th>What it verifies</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>With no override, a user simply inherits their role's permission.</td></tr>
+          <tr><td>2</td><td>A Grant override adds a permission the role does not have.</td></tr>
+          <tr><td>3</td><td>A Revoke override removes a permission the role does have.</td></tr>
+          <tr><td>4</td><td>A user override takes precedence over the role default.</td></tr>
+          <tr><td>5</td><td>Setting a cell back to Inherit reverts to the role default.</td></tr>
+          <tr><td>6</td><td>The "overrides" counter matches the number of active overrides.</td></tr>
+          <tr><td>7</td><td>A granular role toggle enables an action for the whole role.</td></tr>
+          <tr><td>8</td><td>A granular role toggle can also disable an action.</td></tr>
+          <tr><td>9</td><td>Duplicating a role copies its permissions faithfully.</td></tr>
+          <tr><td>10</td><td>Permission changes are written to the audit log.</td></tr>
+          <tr><td>11</td><td>The "effective perms" count updates when an override is added.</td></tr>
+          <tr><td>12</td><td>Applying the same override twice is safe (idempotent).</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- ======================================================= HOW ENFORCEMENT WORKS -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">How the settings are actually enforced</p><p class="sm">Where the rules live, and why a bad edit can't lock everyone out.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Understand that this screen is configuration on top of a hard-coded safety net.</span></div>
+    <div class="spec-body">
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — how one permission decision is made</div>
+        <div class="wf-flow"><span>Is the role Super Admin? → allow all</span><span>User Grant / Revoke override?</span><span>Explicit role toggle (amber)?</span><span>Role's module level (None/View/Manage/Full)</span><span>Allow or Deny</span></div>
+      </div><div class="wire-cap">Figure — the order in which DOODLY resolves "can this person do X?"</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Layer</th><th>Where it lives</th><th>Role in the system</th></tr></thead>
+        <tbody>
+          <tr><td>Code default matrix</td><td><span class="navpath">next-app/lib/rbac.ts</span> (server) &amp; <span class="navpath">assets/js/rbac.js</span> (client)</td><td>The hard, edge-safe security boundary. Never database-dependent, so a bad override can never lock people out at the security layer.</td></tr>
+          <tr><td>Saved role overrides &amp; custom roles</td><td>Postgres tables <code>RoleDef</code> and <code>RolePermission</code>, via <code>/api/roles</code></td><td>Durable, auditable configuration layered on top of the code default. Create / clone / delete on the Roles tab and module levels on the Permissions page save here.</td></tr>
+          <tr><td>Granular role toggles &amp; user overrides</td><td>Enforced in the UI (this build) and mirrored server-side in production</td><td>The finest layers — a single action for a whole role, or for one person.</td></tr>
+          <tr><td>API permission gate</td><td>Every backend route calls <code>requirePermission(module, action)</code></td><td>e.g. viewing this data needs <code>roles:view</code>; creating / cloning / deleting a role needs <code>roles:edit</code>, which only the Super Admin holds. A denied call returns HTTP 403.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">Best Practice — a safe change routine</div>
+          <p>1) Make one change. 2) Open <b>User Permissions</b> and use <b>👁 Preview as user</b> to see the platform through an affected person's eyes. 3) Check the <b>Audit</b> tab shows your change with the right old → new value. 4) If in doubt, click <b>Run tests</b>. 5) Return to yourself. Small, verified steps beat a sweeping edit you can't easily undo.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= TROUBLESHOOTING -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting</p><p class="sm">Common situations and how to resolve them.</p></div>
+    <div class="spec-body">
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>The whole screen shows a padlock and "Roles &amp; Permissions is restricted".</td><td>You are not signed in as the Super Admin — every other role gets read-only.</td><td>Sign in as the Super Admin. This module is intentionally Super-Admin-only.</td></tr>
+          <tr><td>Banner reads "⚠ Roles are Super Admin only (403)."</td><td>The backend rejected the request because your role lacks <code>roles:edit</code>.</td><td>Only the Super Admin can create/clone/delete roles. Use a Super Admin account.</td></tr>
+          <tr><td>"That role already exists" when creating a role.</td><td>A role with the same generated key already exists (built-in or custom).</td><td>Choose a different name, or duplicate/edit the existing role instead.</td></tr>
+          <tr><td>A person still can't do something after you granted it.</td><td>A user <b>Revoke</b> override, or an amber role deny, is beating the grant; or their role's surface isn't admin.</td><td>Open User Permissions, check for a Revoke on that action, and confirm the role is an admin-surface role. Use Preview as user to verify.</td></tr>
+          <tr><td>Deleting a custom role — where did its people go?</td><td>By design, deleting a custom role reassigns its users to Customer Support.</td><td>Reassign them to the correct role from the Roles tab (Assign users) or from User Management.</td></tr>
+          <tr><td>An Admin says they can't open Permissions / edit Settings / Roles / Audit.</td><td>Those four are "critical reserved" — Admin gets none/view only.</td><td>This is intended. Only the Super Admin manages those areas.</td></tr>
+          <tr><td>A custom role you made isn't sticking on a user account.</td><td>User roles are a fixed enum on the backend; custom keys are templates, not permanently assignable.</td><td>Duplicate and shape a built-in role for long-term assignment; use custom roles for designing permission sets.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- ======================================================= FAQ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Frequently asked questions</p><p class="sm">Quick answers for new administrators.</p></div>
+    <div class="spec-body">
+      <h4>What is the difference between the "Permissions" page and this "Roles &amp; Permissions" page?</h4>
+      <p>The <b>Permissions</b> page is a simple grid for setting each role's broad <i>level</i> per module (None / View / Manage / Full) and saves those levels to the database. <b>This</b> page is the advanced control: it manages the roles themselves, lets you toggle a single action for a role, and lets you grant or revoke one action for one person. Use Permissions for the big strokes and this page for the fine detail.</p>
+
+      <h4>If I change a role's permission, does it affect people already in that role?</h4>
+      <p>Yes — a role is a shared bundle. Every person in the role immediately gets the new set of permissions (minus any personal overrides they have). That is exactly why roles are efficient, and why you should change them thoughtfully.</p>
+
+      <h4>Can I make a role that can do everything except manage roles?</h4>
+      <p>The built-in <b>Admin</b> role is already close to that — full access to nearly everything, but held out of Permissions, Roles, Settings-edit and Audit-Logs-edit. Those four areas are deliberately reserved for the Super Admin, so a role that manages roles is effectively a Super Admin.</p>
+
+      <h4>How do I temporarily see what a delivery executive or accountant sees?</h4>
+      <p>Go to <b>User Permissions</b>, pick that person, and click <b>👁 Preview as user</b>. You'll be dropped into the platform with their exact navigation, allowed pages and buttons. Use the banner to return to yourself when you're done.</p>
+
+      <h4>Is every change here recorded?</h4>
+      <p>Yes. Every role creation, deletion, assignment, toggle and override is written to the audit trail with who, when and the old → new value — visible on the Audit tab here and in full on the Audit Logs screen.</p>
+    </div>
+  </div>
+
+</section>

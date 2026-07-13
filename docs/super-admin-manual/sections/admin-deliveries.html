@@ -1,0 +1,361 @@
+<section class="sheet" id="admin-deliveries">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Operations · Delivery Management</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Operations</span></div>
+  <h2 class="section-title">Delivery Management</h2>
+  <p class="lead">The daily control room for milk deliveries — see who is delivering what, dispatch the day's route in one click, assign or reassign a delivery executive, move an order through its delivery stages, and log any problem in the field.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note</div><p>This screen reads and writes the live DOODLY database. Every number on the page is calculated from real <code>Delivery</code> records — it is not a demo sheet. When the backend is reachable, a green banner appears below the toolbar reading <em>"● Live — N delivery record(s) from the DOODLY database"</em>. If the backend is offline or your role lacks permission, a red banner explains why.</p></div></div>
+
+  <!-- ===================== SCREEN 1: OVERVIEW / COMMAND STRIP ===================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Delivery Management — command strip</p><p class="sm">Header, four live KPIs and the one-click dispatch button.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the operations team a one-glance status of the day and a single button that assigns every scheduled delivery to an executive.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations Manager</span> — anyone with <code>deliveries:view</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Delivery Mgmt</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Delivery Management</b> · sub-title "Tomorrow's deliveries, zones, dispatch and executive performance" · button <b>Generate deliveries</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>KPI · Scheduled</b><span>Deliveries still in <code>SCHEDULED</code> status (not yet assigned)</span></div>
+          <div class="wf-cell"><b>KPI · Zones</b><span>Count of delivery zones on record</span></div>
+          <div class="wf-cell"><b>KPI · Milk required</b><span>Total bottles across today's deliveries, shown in "L"</span></div>
+          <div class="wf-cell"><b>KPI · Drivers</b><span>Active executives (distinct drivers with deliveries)</span></div>
+          <div class="wf-cell"><b>Live banner</b><span>Green "● Live — N record(s)" or a red offline / 403 message</span></div>
+          <div class="wf-cell"><b>Generate deliveries</b><span>Runs auto-assignment for today's 06:00–08:00 slot</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the top command strip: four KPIs on the left, the Generate-deliveries action on the right.</div></div>
+
+      <p>The four headline KPIs are placeholders in the page markup (312 / 4 / 236&nbsp;L / 4) and are overwritten the instant the live data loads. They are computed by the backend endpoint <code>GET /api/admin/deliveries/stats</code> and mapped as follows.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>KPI</th><th>What it counts</th><th>Backend field</th></tr></thead>
+        <tbody>
+          <tr><td><b>Scheduled</b></td><td>Deliveries in status <code>SCHEDULED</code> — booked but not yet handed to an executive</td><td><code>kpis.scheduled</code></td></tr>
+          <tr><td><b>Zones</b></td><td>Number of <code>DeliveryZone</code> records configured</td><td><code>kpis.zones</code></td></tr>
+          <tr><td><b>Milk required</b></td><td>Sum of bottle counts across the loaded deliveries, printed as "&lt;n&gt; L"</td><td><code>kpis.milkLitres</code></td></tr>
+          <tr><td><b>Drivers</b></td><td>Distinct executives that have deliveries today (falls back to the active-driver count)</td><td><code>kpis.activeExecutives</code></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip</div><p>If the "Scheduled" number is high late in the morning, deliveries are booked but nobody is carrying them. Press <b>Generate deliveries</b> to dispatch them, or open the <a href="#admin-assignment">Auto Assignment</a> board for finer control.</p></div></div>
+
+      <h4>Button — Generate deliveries</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Generate deliveries</b></td>
+            <td>Auto-assigns every unassigned, scheduled delivery for today's morning slot to available executives; overflow goes to a pending queue. Shows a toast: <em>"Auto-assignment: N assigned, M queued."</em> then refreshes the whole screen.</td>
+            <td><code>POST /api/assignments/auto</code> with <code>{ date: today 00:00, slot: "06:00-08:00" }</code>. Runs the capacity-aware engine (45 bottles per executive) under the active strategy (Equal distribution by default).</td>
+            <td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations Manager</span></td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — Generate deliveries (auto-assignment)</div>
+        <div class="wf-flow"><span>Click Generate</span><span>POST /assignments/auto (today · 06:00–08:00)</span><span>Read the active strategy</span><span>Collect SCHEDULED, unassigned deliveries</span><span>Collect AVAILABLE executives (≤45 bottles each)</span><span>Plan trips + overflow queue</span><span>Write assignments · notify executives</span><span>Toast + refresh KPIs, list &amp; analytics</span></div>
+      </div><div class="wire-cap">Figure — one click walks the whole day's scheduled deliveries through the assignment engine.</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — fixed slot</div><p>From this screen the dispatch always targets <b>today</b> and the <b>06:00–08:00</b> morning slot (DOODLY's core delivery window). To dispatch a different date or slot, or to drag-and-drop individual stops, use the <a href="#admin-assignment">Auto Assignment</a> screen.</p></div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — Manual strategy</div><p>If the assignment strategy is set to <b>Manual</b>, pressing Generate does nothing automatic — the response says <em>"Manual mode — auto-assignment is switched off"</em> and reports 0 assigned. Switch the strategy on the Auto Assignment screen first, or assign each delivery by hand from the list below.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 2: DELIVERY PERFORMANCE ANALYTICS ===================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Delivery performance analytics</p><p class="sm">Eight operational KPIs plus a per-executive scoreboard.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Show how the day is going — completion, delays, bottle collection, ratings — and rank each executive on throughput and speed.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations Manager</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Delivery Mgmt</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Panel — <b>Delivery performance</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Analytics KPI band</b><span>Eight tiles: Today's deliveries · Completed · Pending · Delayed · Avg delivery time · Bottle collection · Customer rating · Distance covered</span></div>
+          <div class="wf-cell"><b>Deliveries per executive</b><span>Table: Executive · Zone · Assigned · Completed · Avg time · Rating</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the analytics block sits between the KPI strip and the deliveries list.</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Analytics tile</th><th>Meaning</th><th>How it's derived</th></tr></thead>
+        <tbody>
+          <tr><td><b>Today's deliveries</b></td><td>Total delivery rows in scope</td><td><code>kpis.total</code></td></tr>
+          <tr><td><b>Completed</b></td><td>Deliveries marked <code>DELIVERED</code></td><td><code>kpis.delivered</code></td></tr>
+          <tr><td><b>Pending</b></td><td>Still <code>SCHEDULED</code></td><td><code>kpis.pending</code></td></tr>
+          <tr><td><b>Delayed</b></td><td>Dated before today and still not closed (not delivered / failed / skipped)</td><td><code>kpis.delayed</code></td></tr>
+          <tr><td><b>Avg delivery time</b></td><td>Average minutes from the delivery's due time to when it was marked delivered</td><td><code>kpis.avgTimeMin</code> (shows "—" when no data)</td></tr>
+          <tr><td><b>Bottle collection</b></td><td>Share of delivered stops where at least one empty bottle came back</td><td><code>kpis.bottleCollectionPct</code></td></tr>
+          <tr><td><b>Customer rating</b></td><td>Average rating across executives</td><td><code>kpis.avgRating</code></td></tr>
+          <tr><td><b>Distance covered</b></td><td>Reserved — always shows "—" until route geodata is wired</td><td>Not yet computed</td></tr>
+        </tbody>
+      </table></div>
+
+      <p><b>Deliveries per executive</b> lists every executive who has at least one delivery assigned. Columns:</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>Executive</td><td>Driver's name</td></tr>
+          <tr><td>Zone</td><td>First zone seen on that executive's routed deliveries ("—" if none)</td></tr>
+          <tr><td>Assigned</td><td>Deliveries handed to them</td></tr>
+          <tr><td>Completed</td><td>Of those, how many are delivered</td></tr>
+          <tr><td>Avg time</td><td>Their average completion time in minutes ("—" if none finished)</td></tr>
+          <tr><td>Rating</td><td>Their driver rating, out of 5★</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Read the KPIs top-to-bottom each morning: <b>Delayed</b> and <b>Pending</b> tell you what to fix now; <b>Bottle collection</b> and <b>Customer rating</b> tell you how yesterday's service actually landed. A steadily falling bottle-collection % usually means executives are skipping the empties step, not that customers aren't returning bottles.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 3: DELIVERIES LIST ===================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Deliveries list</p><p class="sm">Every delivery record with filters, search and a Manage action per row.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> The working list — find a delivery, see who has it and its status, and open it to assign, progress or flag it.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations Manager</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Delivery Mgmt</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Table — <b>Deliveries</b> · search · status filter chips · export · pagination</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Toolbar</b><span>Free-text search, status facet chips, date range, saved views, export</span></div>
+          <div class="wf-cell"><b>Columns</b><span>Delivery · Customer · Zone / area · Driver · Slot · Bottles · Status · Manage</span></div>
+          <div class="wf-cell"><b>Row action</b><span><b>Manage</b> link opens the delivery panel</span></div>
+          <div class="wf-cell"><b>Pager</b><span>Page controls at the foot of the table</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the deliveries data table, driven by the unified DataTable engine.</div></div>
+
+      <h4>Table specification</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td>Delivery (short ID <code>#xxxxxx</code>), Customer, Zone / area, Driver, Slot, Bottles (collected/total), Status (colour badge), Manage</td></tr>
+          <tr><td><b>Filters</b></td><td>Status chips: <em>All · Scheduled · Assigned · Out for delivery · Delivered · Failed</em></td></tr>
+          <tr><td><b>Search</b></td><td>Free-text across the row (customer, area, driver, ID) via the DataTable engine</td></tr>
+          <tr><td><b>Sorting</b></td><td>Click any column header to sort; backend returns newest date first, then route sequence</td></tr>
+          <tr><td><b>Date range &amp; saved views</b></td><td>DataTable engine also offers a date-range picker, saved views and row favourites</td></tr>
+          <tr><td><b>Exports</b></td><td>Export the current view from the toolbar</td></tr>
+          <tr><td><b>Pagination</b></td><td>Enabled; the backend returns up to 150 records, newest first</td></tr>
+          <tr><td><b>Row action</b></td><td><b>Manage</b> → opens the Manage-delivery panel (Screen 4)</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The Bottles column</h4>
+      <p>Bottles reads as <b>collected / total</b> — for example <code>2/3</code> means the executive has recorded two empty bottles back out of three expected for that stop. It comes from the record's <code>bottlesIn</code> and <code>bottleCount</code>.</p>
+
+      <h4>Status badge — the delivery lifecycle</h4>
+      <p>The Status column shows a colour-coded badge. These are the ten real states a delivery can hold:</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Status</th><th>Badge label</th><th>Colour</th><th>Stage</th></tr></thead>
+        <tbody>
+          <tr><td><code>SCHEDULED</code></td><td>Scheduled</td><td>Grey</td><td>Booked, no executive yet</td></tr>
+          <tr><td><code>ASSIGNED</code></td><td>Assigned</td><td>Blue</td><td>Given to an executive</td></tr>
+          <tr><td><code>ACCEPTED</code></td><td>Accepted</td><td>Blue</td><td>Executive accepted the trip</td></tr>
+          <tr><td><code>PACKED</code></td><td>Packed</td><td>Blue</td><td>Bottles loaded</td></tr>
+          <tr><td><code>OUT_FOR_DELIVERY</code></td><td>Out for delivery</td><td>Amber</td><td>On the road</td></tr>
+          <tr><td><code>ON_THE_WAY</code></td><td>On the way</td><td>Amber</td><td>En route to this stop</td></tr>
+          <tr><td><code>REACHED</code></td><td>Near customer</td><td>Amber</td><td>At the doorstep</td></tr>
+          <tr><td><code>DELIVERED</code></td><td>Delivered</td><td>Green</td><td>Handed over — done</td></tr>
+          <tr><td><code>FAILED</code></td><td>Failed</td><td>Red</td><td>Could not deliver</td></tr>
+          <tr><td><code>SKIPPED</code></td><td>Skipped</td><td>Red</td><td>Intentionally skipped</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — a delivery's normal life</div>
+        <div class="wf-flow"><span>Scheduled</span><span>Assigned</span><span>Accepted</span><span>Packed</span><span>Out for delivery</span><span>On the way</span><span>Near customer</span><span>Delivered</span></div>
+      </div><div class="wire-cap">Figure — the happy path; a stop can branch to Failed or Skipped from any active stage.</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where the rows come from</div><p>Each row is a <code>Delivery</code> record. The <b>Customer</b> is taken from the linked subscription (or one-off order); <b>Zone / area</b> is the delivery address's city and pincode; <b>Driver</b> is the assigned executive's name, or "—" when unassigned. The executive updates status and bottle counts from their mobile delivery app; this admin list is the mirror.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 4: MANAGE DELIVERY PANEL ===================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Manage delivery (panel)</p><p class="sm">Assign an executive, set the status, and log a field issue.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> The single place to intervene on one delivery — reroute it to a different executive, force its status, or record a problem such as "customer not available".</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations Manager</span> — assigning a driver needs the full-level <code>deliveries:assign</code> right</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Delivery Mgmt → Manage</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Modal — <b>Delivery #xxxxxx</b> · customer · area · slot · bottles</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Assignment row</b><span>Delivery executive (dropdown) · Status (dropdown)</span></div>
+          <div class="wf-cell"><b>Save assignment &amp; status</b><span>Writes the driver and/or status</span></div>
+          <div class="wf-cell"><b>Report an issue</b><span>Type · Priority · Comments</span></div>
+          <div class="wf-cell"><b>Log issue</b><span>Records a DeliveryIssue against this stop</span></div>
+          <div class="wf-cell"><b>Error line + Close</b><span>Inline error text; Close dismisses the panel</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Manage-delivery panel; the top half reassigns/progresses, the bottom half reports a problem.</div></div>
+
+      <p>The panel header shows the short ID and a one-line summary: <em>customer · area · slot · bottles in/total</em>.</p>
+
+      <h4>Fields</h4>
+      <div class="twrap"><table>
+        <thead><tr>
+          <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Delivery executive</b></td>
+            <td>Who carries this delivery</td>
+            <td>Any active driver, or "— Unassigned —"</td>
+            <td class="t-opt">Opt.</td>
+            <td>List loaded from <code>GET /api/admin/drivers</code>; a chosen driver must exist server-side or the save is rejected ("That driver does not exist"). Setting a driver with no explicit status auto-sets the delivery to <code>ASSIGNED</code>.</td>
+            <td>Ramesh Kumar</td>
+          </tr>
+          <tr>
+            <td><b>Status</b></td>
+            <td>Force the delivery's stage</td>
+            <td>Any of the 10 states (Scheduled → Skipped)</td>
+            <td class="t-opt">Opt.</td>
+            <td>Must be one of the fixed enum values; sent as <code>status</code> on the PATCH.</td>
+            <td>Out for delivery</td>
+          </tr>
+          <tr>
+            <td><b>Issue · Type</b></td>
+            <td>Category of the field problem</td>
+            <td>Customer not available · Wrong address · Damaged bottle · Payment issue · Product damage · Delivery failed</td>
+            <td class="t-req">Yes</td>
+            <td>Fixed enum (<code>CUSTOMER_UNAVAILABLE</code>, <code>WRONG_ADDRESS</code>, <code>DAMAGED_BOTTLE</code>, <code>PAYMENT_ISSUE</code>, <code>PRODUCT_ISSUE</code>, <code>DELIVERY_FAILED</code>). The delivery must already have an executive assigned, else the server refuses: "Assign a delivery executive before logging an issue."</td>
+            <td>Customer not available</td>
+          </tr>
+          <tr>
+            <td><b>Issue · Priority</b></td>
+            <td>How urgent the issue is</td>
+            <td>Low · Medium · High</td>
+            <td class="t-opt">Opt.</td>
+            <td>Defaults to <b>Medium</b> if left as-is.</td>
+            <td>High</td>
+          </tr>
+          <tr>
+            <td><b>Issue · Comments</b></td>
+            <td>Free-text description of what happened</td>
+            <td>Short text</td>
+            <td class="t-opt">Opt.</td>
+            <td>Up to 500 characters; trimmed and stored on the <code>DeliveryIssue</code>.</td>
+            <td>Gate locked, guard off-duty</td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Save assignment &amp; status</b></td>
+            <td>Applies the chosen executive and/or status; refreshes the list and shows "Delivery #xxxxxx updated".</td>
+            <td><code>PATCH /api/admin/deliveries/[id]</code> with <code>{ driverId, status }</code>. A plain status change needs <code>deliveries:edit</code>; changing the driver additionally needs the full-level <code>deliveries:assign</code> right and is audited as <code>delivery.assign</code>.</td>
+            <td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations Manager</span></td>
+          </tr>
+          <tr>
+            <td><b>Log issue</b></td>
+            <td>Files a delivery issue with the selected type, priority and comments; clears the comment box so you can add another; shows "Issue logged for #xxxxxx".</td>
+            <td><code>POST /api/admin/deliveries/[id]/issue</code>. Needs <code>deliveries:edit</code>; creates a <code>DeliveryIssue</code> and writes an audit entry (<code>delivery.issue.&lt;type&gt;</code>).</td>
+            <td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations Manager</span></td>
+          </tr>
+          <tr>
+            <td><b>Close</b> / <b>×</b> / <kbd>Esc</kbd></td>
+            <td>Dismisses the panel without saving.</td>
+            <td>None</td>
+            <td><span class="pill role">Super Admin</span>+</td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — reassign &amp; progress a delivery</div>
+        <div class="wf-flow"><span>Open Manage</span><span>Pick executive</span><span>Pick status (optional)</span><span>Save assignment &amp; status</span><span>PATCH deliveries/[id]</span><span>Audit: delivery.assign / update</span><span>List refreshes</span></div>
+      </div><div class="wire-cap">Figure — the assign/progress path; the issue path is independent and can be used any time after an executive is assigned.</div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — assigning is a privileged action</div><p>Setting or changing the <b>Delivery executive</b> requires the full-level <code>deliveries:assign</code> special. If your role only has "manage" on deliveries you can still change the <b>Status</b>, but the save will return <em>"Your role can't assign/update deliveries (403)"</em> the moment it detects a driver change. Operations Managers, Admins and Super Admins hold the full level.</p></div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — issue needs an executive first</div><p>You cannot log an issue on an unassigned delivery. Assign an executive and save first; then the <b>Log issue</b> action will succeed. This keeps every issue attributed to a specific driver.</p></div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Use <b>Status</b> overrides sparingly — normally the executive drives status from their mobile app. Reach for the manual override only to correct a mistake (e.g. mark a wrongly-failed stop back to <em>Scheduled</em> for a re-attempt), and always add an issue note so the reason is on the record.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 5: ROUTES SNAPSHOT ===================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Routes snapshot</p><p class="sm">A read-only list of the day's routes beneath the deliveries table.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> A quick reference showing which routes exist, their zone, the executive on them and how many stops — without leaving Delivery Management.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations Manager</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Delivery Mgmt</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Table — <b>Routes</b> (no toolbar · no pager)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Columns</b><span>Route · Zone · Driver · Stops · Distance · Status</span></div>
+          <div class="wf-cell"><b>Read-only here</b><span>The Manage link is hidden on this screen</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the compact routes table; full route editing lives on the Routes screen.</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td>Route (code/name), Zone, Driver, Stops, Distance, Status</td></tr>
+          <tr><td><b>Source</b></td><td><code>GET /api/admin/routes</code></td></tr>
+          <tr><td><b>Toolbar / Pager</b></td><td>Both off — this is a static snapshot</td></tr>
+          <tr><td><b>Row action</b></td><td>None on this screen (Manage is only wired on the dedicated <a href="#admin-routes">Routes</a> page)</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip</div><p>To create, edit, optimise or delete a route, go to <span class="navpath">Admin → Operations → Routes</span>. This snapshot is for reading only.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ===================== TROUBLESHOOTING ===================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting</p><p class="sm">Common symptoms and how to clear them.</p></div>
+    <div class="spec-body">
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>Red banner "⚠ Backend offline — couldn't load live deliveries"</td><td>The next-app backend isn't reachable</td><td>Start / restore the backend service; the banner turns green once records load.</td></tr>
+          <tr><td>Red banner "Your role can't view deliveries (403)"</td><td>Your role lacks <code>deliveries:view</code></td><td>Ask a Super Admin to grant Operations access, or sign in with an operations/admin account.</td></tr>
+          <tr><td>Generate deliveries reports "0 assigned, 0 queued"</td><td>Nothing scheduled for today's 06:00–08:00 slot, or every stop is already assigned/queued</td><td>Check the Scheduled KPI; if it's non-zero, confirm the strategy isn't Manual and that executives are marked Available.</td></tr>
+          <tr><td>Generate returns "Manual mode — auto-assignment is switched off"</td><td>Assignment strategy is set to Manual</td><td>Switch to Equal/Capacity on the Auto Assignment screen, or assign each delivery by hand.</td></tr>
+          <tr><td>Save fails with "Your role can't assign/update deliveries (403)"</td><td>You changed the executive but only hold "manage" on deliveries</td><td>Have an Operations Manager / Admin (full level) make the assignment, or change only the status.</td></tr>
+          <tr><td>Log issue fails with "Assign a delivery executive before logging an issue"</td><td>The delivery has no driver</td><td>Assign an executive and Save first, then log the issue.</td></tr>
+          <tr><td>"Delivery not found — refresh the list"</td><td>The list is stale (the record changed since it loaded)</td><td>Reload the page or press Generate to re-pull; then reopen Manage.</td></tr>
+          <tr><td>Distance covered shows "—"</td><td>Route geodata isn't computed yet</td><td>Expected — this metric is reserved and not yet populated.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- ===================== FAQ ===================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Frequently asked questions</p><p class="sm">Delivery Management.</p></div>
+    <div class="spec-body">
+      <h4>Does "Generate deliveries" send anything to customers?</h4>
+      <p>No. It assigns deliveries to executives and notifies the <em>executives</em> of their new trips. Customer-facing messages are handled elsewhere (order and delivery notifications).</p>
+
+      <h4>What's the difference between this screen and Auto Assignment?</h4>
+      <p>Delivery Management is the day's dashboard and record list with a one-click dispatch for today's morning slot. <a href="#admin-assignment">Auto Assignment</a> is the full engine — pick any date/slot, change the strategy, watch live capacity, and drag stops between executives. Both write to the same records.</p>
+
+      <h4>Why can I change a delivery's status but not its executive?</h4>
+      <p>Changing status needs <code>deliveries:edit</code> (the "manage" level). Assigning or moving an executive is a higher-trust action that needs the full-level <code>deliveries:assign</code> special. Super Admin, Admin and Operations Manager have both.</p>
+
+      <h4>How many deliveries does the list show?</h4>
+      <p>Up to 150 records, newest date first then route sequence. Use search and the status filter chips to narrow down; the DataTable engine paginates the rest.</p>
+
+      <h4>What does 45 mean in the dispatch?</h4>
+      <p>Each executive can carry up to 45 glass bottles per trip. The engine packs trips up to that cap; anything that doesn't fit lands in the pending queue and is picked up when an executive returns to the dairy.</p>
+    </div>
+  </div>
+
+</section>

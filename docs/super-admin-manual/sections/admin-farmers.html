@@ -1,0 +1,297 @@
+<section class="sheet" id="admin-farmers">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Supply · Farmers</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Supply</span></div>
+  <h2 class="section-title">Farmers</h2>
+  <p class="lead">Register, monitor and pay the family-run buffalo farms that supply every bottle of DOODLY A2 milk.</p>
+
+  <p>The Farmers module is the master register of DOODLY's milk suppliers. Every row is a <b>Farmer</b> record — the farm's name, owner, village, collection route and, most importantly, its <b>procurement rate</b> in rupees per litre. The screen shows a live seven-card dashboard, a searchable and filterable list of farms, and two pop-up dialogs — <b>Register farmer</b> and <b>Manage farmer</b> — that together drive the whole supplier life-cycle: onboarding a farm, editing its details, viewing its collection and quality history, and settling its outstanding payments. Nothing on this page is invented on the client: it all reads and writes the production database through the <code>/api/admin/farmers*</code> endpoints, so what you see is the true state of the supply chain.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — one register, no duplicate tables</div><p>The Farmers module does not keep its own copy of collections, quality or payments. A farm's daily supply, average fat, quality result and money owed are all <b>derived live</b> from the shared <b>Procurement</b> and <b>Quality Test</b> records. That is why every farm here always agrees with the Procurement and Quality Testing screens — there is a single source of truth. The milk type is fixed platform-wide as <b>A2 Buffalo</b>.</p></div></div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 1 — Dashboard + list                                  -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Farmers — dashboard &amp; list</p><p class="sm">Live KPI strip plus the full farmer table with search, filters, export and per-row Manage.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> See supply health at a glance and open any farm to edit it, view its history or settle its dues.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Procurement Mgr</span> — view/edit for all three; permanent removal (soft-delete) is Super Admin &amp; Admin only.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Supply → Farmers</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Farmers</b> · "Partner farms and supply." · <b>+ Add farmer</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>KPI strip (7 cards)</b><span>Total Farmers · Active · New This Month · Milk Today · Avg Daily · Quality Pass · Pending Pay</span></div>
+          <div class="wf-cell"><b>Live status banner</b><span>Green "● Live — N farmer(s) from the DOODLY database" or a red offline / 403 warning</span></div>
+          <div class="wf-cell"><b>Toolbar</b><span>Search box · filter chips (All · Verified · Review) · Export</span></div>
+          <div class="wf-cell"><b>Farmer table</b><span>ID · Farm · Owner · Village · Supply · Fat · Status · Manage</span></div>
+          <div class="wf-cell"><b>Pager</b><span>Page-through controls at the foot of the table</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Farmers dashboard and list.</div></div>
+
+      <h4>The KPI strip</h4>
+      <p>Seven live cards sit above the table, refreshed from <code>GET /api/admin/farmers/stats</code> every time the page loads or a change is saved. All figures are computed from the real Farmer, Procurement and Quality-Test tables — money values are stored in paise and printed as rounded rupees.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Card</th><th>What it shows</th><th>How it is derived</th></tr></thead>
+        <tbody>
+          <tr><td><b>Total Farmers</b></td><td>Every farm on the register.</td><td>Count of Farmer records where <code>deletedAt</code> is empty.</td></tr>
+          <tr><td><b>Active</b></td><td>Farms currently supplying.</td><td>Farmers with <code>active = true</code>.</td></tr>
+          <tr><td><b>New This Month</b></td><td>Farms onboarded since the 1st.</td><td>Farmers whose <code>createdAt</code> falls in the current calendar month.</td></tr>
+          <tr><td><b>Milk Today</b></td><td>Litres collected across all farms today.</td><td>Sum of today's Procurement <code>litres</code>.</td></tr>
+          <tr><td><b>Avg Daily</b></td><td>Average litres per day over the last 30 days.</td><td>30-day Procurement litres ÷ 30.</td></tr>
+          <tr><td><b>Quality Pass</b></td><td>Share of quality tests that passed in the last 30 days.</td><td>Passed tests ÷ all tests (defaults to 100% when none tested).</td></tr>
+          <tr><td><b>Pending Pay</b></td><td>Total money still owed to farmers.</td><td>Sum of Procurement <code>amountPaise</code> where <code>paidAt</code> is empty.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip</div><p>The stats endpoint also returns two figures the cards do not print — <b>Inactive</b> farmer count and the 30-day <b>procurement cost</b> in paise. These feed reporting and can be surfaced later without any backend change.</p></div></div>
+
+      <h4>The farmer table</h4>
+      <p>The list is rendered by the shared DataTable engine, so it comes with search, column sorting, filter chips, export and pagination out of the box. Columns are fixed for this dataset:</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>Shows</th><th>Source field</th></tr></thead>
+        <tbody>
+          <tr><td><b>ID</b></td><td>A short reference built from the last 5 characters of the record ID, e.g. <code>#9f3ac</code>.</td><td><code>id</code> (last 5)</td></tr>
+          <tr><td><b>Farm</b></td><td>The farm name, shown in bold.</td><td><code>name</code></td></tr>
+          <tr><td><b>Owner</b></td><td>The owner / contact person, or "—" if none was entered.</td><td><code>owner</code></td></tr>
+          <tr><td><b>Village</b></td><td>The farm's village.</td><td><code>village</code></td></tr>
+          <tr><td><b>Supply</b></td><td>Average daily litres over the last 30 days, e.g. "48 L/day".</td><td><code>dailySupply</code> (30-day avg)</td></tr>
+          <tr><td><b>Fat</b></td><td>Average fat percentage across the farm's collections, e.g. "7.8%".</td><td><code>avgFat</code></td></tr>
+          <tr><td><b>Status</b></td><td>Colour-coded pill (see below).</td><td><code>status</code></td></tr>
+          <tr><td><b>Manage</b></td><td>A <b>Manage</b> link that opens the farmer dialog.</td><td>row action</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Element</th><th>Behaviour on this screen</th></tr></thead>
+        <tbody>
+          <tr><td><b>Search</b></td><td>Free-text box; the backend matches on ID, farm name, owner, phone, village, route and district.</td></tr>
+          <tr><td><b>Filters</b></td><td>Toolbar chips: <b>All · Verified · Review</b>. The API also accepts richer filters described in the note below.</td></tr>
+          <tr><td><b>Sorting</b></td><td>Click any column header to sort ascending / descending (the list arrives sorted by farm name).</td></tr>
+          <tr><td><b>Pagination</b></td><td>Enabled — the list pages when it grows long.</td></tr>
+          <tr><td><b>Export</b></td><td>Toolbar export downloads the current view as CSV.</td></tr>
+          <tr><td><b>Row action</b></td><td><b>Manage</b> per row (opens the Manage-farmer dialog).</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — server-side filters</div><p>Beyond the visible chips, the list endpoint accepts precise query filters: <code>status</code> (<code>active</code> / <code>inactive</code> / <code>deleted</code>), <code>route</code>, <code>district</code>, <code>payment</code> (<code>due</code> / <code>settled</code>) and <code>quality</code> (<code>pass</code> / <code>fail</code>). These let reporting and saved views slice the register by route, money owed or last quality result even though the header chips are simpler.</p></div></div>
+
+      <h4>Status pill reference</h4>
+      <p>The Status column combines the farm's active flag and whether it has been removed.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Pill</th><th>Colour</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><b>Active</b></td><td>Green</td><td>On the register and supplying (<code>active = true</code>, not deleted).</td></tr>
+          <tr><td><b>Inactive</b></td><td>Grey</td><td>On the register but switched off — not currently supplying.</td></tr>
+          <tr><td><b>Deleted</b></td><td>Grey</td><td>Soft-deleted; hidden from the default list but restorable.</td></tr>
+        </tbody>
+      </table></div>
+      <p>Two more status flags appear inside the Manage dialog and drive the server-side filters: a <b>quality</b> flag (<span class="pill">Pass</span> green / <span class="pill">Fail</span> red / — grey, from the farm's most recent quality test) and a <b>payment</b> flag (<span class="pill">Due</span> amber when money is owed / <span class="pill">Settled</span> green).</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>+ Add farmer</b></td><td>Opens the Register farmer dialog.</td><td>On submit: <code>POST /api/admin/farmers</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Procurement Mgr</span></td></tr>
+          <tr><td><b>Manage</b> (row)</td><td>Opens the Manage-farmer dialog for that farm.</td><td>Reads the loaded row, then fetches full history via <code>GET /api/admin/farmers/{id}</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Procurement Mgr</span></td></tr>
+          <tr><td><b>Export</b></td><td>Downloads the visible farmer rows as CSV.</td><td>Client-side, from the loaded table.</td><td>Any viewer.</td></tr>
+        </tbody>
+      </table></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 2 — Register farmer                                   -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Register farmer</p><p class="sm">Onboard a new supply farm and set its procurement rate.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Add a family farm to the supplier register so it can start supplying milk and being paid.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Procurement Mgr</span> — requires <code>farmers:create</code>.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Supply → Farmers → + Add farmer</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Dialog — <b>Register farmer</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Farm name &amp; Owner</b><span>Farm name required, owner optional (side by side)</span></div>
+          <div class="wf-cell"><b>Mobile &amp; Alt. contact</b><span>Mobile required, alternate optional (side by side)</span></div>
+          <div class="wf-cell"><b>Village &amp; Pincode</b><span>Village required, pincode optional (side by side)</span></div>
+          <div class="wf-cell"><b>Mandal &amp; District</b><span>Both optional (side by side)</span></div>
+          <div class="wf-cell"><b>Collection route &amp; Collection center</b><span>Both optional (side by side)</span></div>
+          <div class="wf-cell"><b>Procurement rate (₹/litre)</b><span>Required — the price paid per litre</span></div>
+          <div class="wf-cell"><b>Footer</b><span>Cancel · Register farmer</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Register farmer form.</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Farm name</b></td><td>The farm's name, shown across the register.</td><td>Free text, 2–80 chars.</td><td class="t-req">Yes</td><td>Form needs 2+ chars; backend trims and enforces min 2, max 80.</td><td>Lakshmi Dairy Farm</td></tr>
+          <tr><td><b>Owner</b></td><td>The owner / main contact person.</td><td>Text, up to 80 chars.</td><td class="t-opt">Opt.</td><td>Trimmed; stored as-is (shows "—" in the list if blank).</td><td>G. Lakshmaiah</td></tr>
+          <tr><td><b>Mobile</b></td><td>Primary contact number for the farm.</td><td>7–15 digits, may start with "+".</td><td class="t-req">Yes</td><td>Pattern <code>^[+]?[0-9\s-]{7,15}$</code>. Must be unique among non-deleted farms — a repeat returns a 409 conflict.</td><td>+91 98480 12345</td></tr>
+          <tr><td><b>Alt. contact</b></td><td>Second phone number.</td><td>Up to 20 chars.</td><td class="t-opt">Opt.</td><td>Stored as <code>altPhone</code>; trimmed.</td><td>+91 90000 11111</td></tr>
+          <tr><td><b>Village</b></td><td>Village the farm is in.</td><td>Text, 2–60 chars.</td><td class="t-req">Yes</td><td>Form needs 2+ chars; backend enforces min 2, max 60.</td><td>Kankipadu</td></tr>
+          <tr><td><b>Pincode</b></td><td>Postal code of the village.</td><td>Up to 10 chars.</td><td class="t-opt">Opt.</td><td>Trimmed; stored as text.</td><td>521151</td></tr>
+          <tr><td><b>Mandal</b></td><td>Sub-district (mandal) the farm falls under.</td><td>Up to 60 chars.</td><td class="t-opt">Opt.</td><td>Trimmed.</td><td>Penamaluru</td></tr>
+          <tr><td><b>District</b></td><td>District — also used as a list filter.</td><td>Up to 60 chars.</td><td class="t-opt">Opt.</td><td>Trimmed; shows "—" if blank.</td><td>Krishna</td></tr>
+          <tr><td><b>Collection route</b></td><td>The pickup route this farm sits on — used for routing and the route filter.</td><td>Up to 60 chars.</td><td class="t-opt">Opt.</td><td>Trimmed.</td><td>North Route</td></tr>
+          <tr><td><b>Collection center</b></td><td>The chilling / collection center the milk goes to.</td><td>Up to 60 chars.</td><td class="t-opt">Opt.</td><td>Trimmed.</td><td>Kankipadu BMC</td></tr>
+          <tr><td><b>Procurement rate (₹/litre)</b></td><td>The price DOODLY pays this farm per litre — drives every procurement's payable amount.</td><td>Positive decimal rupees.</td><td class="t-req">Yes</td><td>Form requires greater than 0; stored in <b>paise</b> (rupees × 100) as a non-negative whole number.</td><td>62.00</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — extra fields the API accepts</div><p>The create endpoint also accepts <b>state</b> and <b>notes</b> fields, and this dialog leaves them empty. You can fill in <b>State</b> and free-text <b>Notes</b> through the API or a later edit; they are not part of the quick-onboarding form to keep it short.</p></div></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — onboarding a farm</div>
+        <div class="wf-flow"><span>Fill the form</span><span>Register farmer</span><span>Server checks phone is unique</span><span>Create Farmer record (active, rate in paise)</span><span>Audit "farmer.create"</span><span>List &amp; KPIs refresh · toast confirms</span></div>
+      </div><div class="wire-cap">Figure — what happens when you register a farm.</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Register farmer</b></td><td>Validates the form, then creates the farm.</td><td><code>POST /api/admin/farmers</code> — creates a Farmer (<code>active = true</code>, rate stored in paise); rejects a duplicate phone with 409; writes a <code>farmer.create</code> audit entry.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Procurement Mgr</span></td></tr>
+          <tr><td><b>Cancel</b> / <b>✕</b></td><td>Closes the dialog with no changes.</td><td>None.</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — the rate is entered in rupees but stored in paise</div><p>Type the rate in ordinary rupees (for example <code>62.00</code> for ₹62 per litre). The system multiplies by 100 and stores it as paise. Do not type <code>6200</code> thinking in paise — that would set the price to ₹6,200 per litre and inflate every future payment. Every procurement's payable amount is <b>rate × litres</b>, so an incorrect rate silently over- or under-pays the farm.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 3 — Manage farmer                                     -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Manage farmer</p><p class="sm">Edit the farm, read its collection &amp; payment history, settle dues or remove it.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> The life-cycle control panel for one farm — every routine change and the payment settlement live here.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Procurement Mgr</span> for edits &amp; settlement (<code>farmers:edit</code>); <b>Soft-delete</b> needs <code>farmers:delete</code> — <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> only.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Supply → Farmers → Manage</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Dialog — <b>{Farm name}</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Summary line</b><span>Village, district · daily supply · A2 Buffalo · quality status · payment status</span></div>
+          <div class="wf-cell"><b>Farm name &amp; Owner</b><span>Editable text (side by side)</span></div>
+          <div class="wf-cell"><b>Mobile &amp; Village</b><span>Editable text (side by side)</span></div>
+          <div class="wf-cell"><b>Collection route &amp; Rate (₹/litre)</b><span>Editable text (side by side)</span></div>
+          <div class="wf-cell"><b>Active toggle</b><span>Checkbox — on/off the register</span></div>
+          <div class="wf-cell"><b>History panel</b><span>Avg fat · SNF · total litres · paid · due, then up to 8 recent collections</span></div>
+          <div class="wf-cell"><b>Footer actions</b><span>Settle payments · Soft-delete · Close · Save</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Manage-farmer control panel.</div></div>
+
+      <h4>Editable fields</h4>
+      <p>The dialog opens with the farm's details pre-filled and its history loading beneath. The fields you can change here are a focused subset of the full record:</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Farm name</b></td><td>The farm's display name.</td><td>Text, 2–80 chars.</td><td class="t-opt">Opt.</td><td>Cannot be saved blank; trimmed.</td><td>Lakshmi Dairy Farm</td></tr>
+          <tr><td><b>Owner</b></td><td>Owner / contact person.</td><td>Text, up to 80 chars (blank clears it).</td><td class="t-opt">Opt.</td><td>Sent as <code>null</code> when cleared.</td><td>G. Lakshmaiah</td></tr>
+          <tr><td><b>Mobile</b></td><td>Primary phone.</td><td>7–15 digits, may start with "+".</td><td class="t-opt">Opt.</td><td>Same phone pattern as onboarding.</td><td>+91 98480 12345</td></tr>
+          <tr><td><b>Village</b></td><td>Village of the farm.</td><td>Text, 2–60 chars.</td><td class="t-opt">Opt.</td><td>Trimmed.</td><td>Kankipadu</td></tr>
+          <tr><td><b>Collection route</b></td><td>Pickup route the farm sits on.</td><td>Text, up to 60 chars (blank clears it).</td><td class="t-opt">Opt.</td><td>A route change is logged as a <code>farmer.route</code> audit event.</td><td>North Route</td></tr>
+          <tr><td><b>Rate (₹/litre)</b></td><td>Price paid per litre.</td><td>Decimal rupees.</td><td class="t-opt">Opt.</td><td>Stored in paise; a change is logged as a <code>farmer.pricing</code> audit event.</td><td>64.00</td></tr>
+          <tr><td><b>Active</b></td><td>Whether the farm is on the working register.</td><td>Checkbox on / off.</td><td class="t-opt">Opt.</td><td>Sets Farmer <code>active</code>; a change is logged as a <code>farmer.status</code> event. Inactive farms show a grey pill.</td><td>On</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The history panel</h4>
+      <p>As the dialog opens it calls <code>GET /api/admin/farmers/{id}</code> for the farm's full profile and prints a live summary followed by its most recent collections. This is read-only.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Element</th><th>Shows</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td><b>Summary line</b></td><td>Average fat %, average SNF %, total litres, total <b>paid</b> and (in bold) total <b>due</b>.</td><td>Aggregated over the farm's procurements.</td></tr>
+          <tr><td><b>Recent collections</b></td><td>Up to 8 most recent rows: date, litres, fat %, quality result (Pass / Fail / —) and the amount, with a ✓ when already paid.</td><td>Latest Procurement records (up to 60 are fetched).</td></tr>
+          <tr><td><b>Empty state</b></td><td>"No collections yet." for a farm that has never supplied.</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip</div><p>The full profile behind this panel carries more per-collection detail than the eight rows print — including SNF %, lactometer reading, temperature, batch number and whether the batch was accepted. It is all available from the same endpoint for reporting or a future detail view.</p></div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Save</b></td><td>Writes the edited details and the Active toggle in one go.</td><td><code>PATCH /api/admin/farmers/{id}</code> with name, owner, phone, village, route, rate (paise) and active; audited.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Procurement Mgr</span></td></tr>
+          <tr><td><b>Settle payments</b></td><td>Marks all of this farm's unpaid collections as paid and reports how many and how much.</td><td><code>POST /api/admin/farmers/{id}/settle</code> — stamps <code>paidAt</code> on every due Procurement; returns settled count &amp; amount; audited as <code>farmer.settle</code>. Errors if nothing is due.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Procurement Mgr</span></td></tr>
+          <tr><td><b>Soft-delete</b></td><td>Removes the farm from the active register but keeps the record so it can be restored.</td><td><code>DELETE /api/admin/farmers/{id}</code> — stamps <code>deletedAt</code> and switches it inactive; audited as <code>farmer.delete</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+          <tr><td><b>Close</b> / <b>✕</b></td><td>Closes the dialog without saving.</td><td>None.</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — pay a farmer</div>
+        <div class="wf-flow"><span>Milk collected (Procurement, unpaid)</span><span>Payment flag shows "Due" (amber)</span><span>Open Manage</span><span>Settle payments</span><span>All due collections stamped paid</span><span>Flag flips to "Settled" · Pending Pay drops</span></div>
+      </div><div class="wire-cap">Figure — how outstanding milk payments are cleared from this screen.</div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — Settle is a money action</div><p><b>Settle payments</b> marks <b>every</b> unpaid collection for the farm as paid at once — it does not let you pick individual batches, and there is no "unsettle" button in this dialog. Only settle after the farmer has genuinely been paid (bank transfer / cash), because the paid stamp is what the Pending Pay KPI and the payment filter rely on.</p></div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — deactivate for a pause, soft-delete only when a farm truly leaves</div><p>If a farm stops supplying for a season, or is under review, clear the <b>Active</b> toggle rather than deleting it — this keeps its full history and payment record intact and is instantly reversible. Reserve <b>Soft-delete</b> for farms that have genuinely left the network. Because soft-delete only stamps a date, an admin can still restore the record later, and its past collections and quality history remain in the shared tables.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- Permissions & bulk                                           -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Permissions &amp; register-wide actions</p><p class="sm">Who can do what, and the bulk operations the backend supports.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Reference for role-based access and batch farmer management.</span></div>
+    <div class="spec-body">
+      <div class="twrap"><table>
+        <thead><tr><th>Capability</th><th>Permission key</th><th>Roles</th></tr></thead>
+        <tbody>
+          <tr><td>View farmers, KPIs, history, export</td><td><code>farmers:view</code></td><td>Super Admin, Admin, Procurement Mgr</td></tr>
+          <tr><td>Register a farmer</td><td><code>farmers:create</code></td><td>Super Admin, Admin, Procurement Mgr</td></tr>
+          <tr><td>Edit / route / rate / activate / settle payments</td><td><code>farmers:edit</code></td><td>Super Admin, Admin, Procurement Mgr</td></tr>
+          <tr><td>Soft-delete / restore</td><td><code>farmers:delete</code></td><td>Super Admin, Admin</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — the Procurement Manager role</div><p>The <b>Procurement</b> role is granted "manage" on farmers, which covers view, create, edit and export — but <b>not</b> delete. So a procurement manager can onboard farms, edit rates and settle payments, yet only a Super Admin or Admin can soft-delete or restore a farm. Every change is written to the audit log with the acting role.</p></div></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — bulk endpoint</div><p>The platform exposes <code>POST /api/admin/farmers/bulk</code> for register-wide moves — <b>activate</b>, <b>deactivate</b>, <b>assign route</b>, <b>delete</b> and <b>restore</b> across up to 2,000 farms at once (delete/restore require <code>farmers:delete</code>). Every bulk run is audited. Day-to-day work on this screen is done per-farm through the Manage dialog.</p></div></div>
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution</div><p>Client-side role hiding is only for tidiness — the real security boundary is enforced on every API call. Rates, settlements and deletions affect real money owed to real farmers, so treat every save on this screen as a production action, not a test.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- Troubleshooting & FAQ                                        -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common snags and quick answers.</p></div>
+    <div class="spec-body">
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>Red banner "Backend offline — couldn't load live farmers".</td><td>The API server is unreachable.</td><td>Confirm the backend is running and reachable, then reload. The page shows this instead of stale data on purpose.</td></tr>
+          <tr><td>"Your role can't view farmers (403)".</td><td>Signed-in role lacks <code>farmers:view</code>.</td><td>Use a Super Admin, Admin or Procurement account, or have an admin grant the permission.</td></tr>
+          <tr><td>"A farmer with this phone number already exists" on Register.</td><td>Another non-deleted farm already uses that mobile.</td><td>Search for the existing farm and edit it, or register with a different phone.</td></tr>
+          <tr><td>Payments won't settle — "No pending payments to settle."</td><td>The farm has no unpaid collections.</td><td>Nothing is owed; no action needed. Check the history panel's "due" figure to confirm.</td></tr>
+          <tr><td>A farm's Supply shows 0 L/day even though it delivers.</td><td>No procurements were recorded for it in the last 30 days.</td><td>Record collections on the Procurement screen; Supply is the 30-day average and fills in as data arrives.</td></tr>
+          <tr><td>Rate looks 100× too high after saving.</td><td>The rupee value was typed as if it were paise.</td><td>Open Manage and re-enter the rate in plain rupees (e.g. 62.00, not 6200).</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Where do a farm's litres, fat and money owed come from?</h4>
+      <p>All of them are derived live from the shared <b>Procurement</b> and <b>Quality Test</b> records — the Farmers module keeps no separate copy. Supply is the 30-day average daily litres, Fat is the average across the farm's collections, and money owed is the sum of unpaid procurement amounts.</p>
+
+      <h4>What does "Settle payments" actually do?</h4>
+      <p>It marks <b>every</b> unpaid collection for that farm as paid, in one step, and tells you how many collections and how much money were settled. Do it only after the farmer has really been paid outside the system.</p>
+
+      <h4>Can a Procurement Manager delete a farm?</h4>
+      <p>No. Procurement can view, register, edit and settle, but soft-delete and restore require <code>farmers:delete</code>, which only Super Admin and Admin hold.</p>
+
+      <h4>Is a soft-deleted farm gone for good?</h4>
+      <p>No — soft-delete only stamps a <code>deletedAt</code> date and hides the farm from the default list. Its collections and quality history stay in the shared tables, and an admin can restore it (the bulk endpoint offers a <b>restore</b> action).</p>
+
+      <h4>Why is the milk type always "A2 Buffalo"?</h4>
+      <p>DOODLY sources a single milk type, so it is fixed platform-wide as a constant rather than a per-farm field.</p>
+    </div>
+  </div>
+
+</section>

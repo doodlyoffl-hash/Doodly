@@ -1,0 +1,251 @@
+<section class="sheet" id="driver-route">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Delivery Executive · Route &amp; Maps</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Delivery Executive</span></div>
+  <h2 class="section-title">Route &amp; Maps</h2>
+  <p class="lead">The delivery executive's road-map for the day — the ordered list of stops to visit, a map of the route, and one-tap turn-by-turn navigation to each customer's exact doorstep.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">How this feature is built — two layers</div><p>"Route &amp; Maps" exists in two places that share the same purpose. First, the <b>Today's Route</b> page inside the driver portal (<code>/driver/route.html</code>) is a lightweight sheet that lists today's stops and shows a map area. Second — and this is what an executive actually drives with in the field — the <b>live executive portal</b> at <code>/delivery/</code> mounts the real map engine (<code>DOODLY_MAPS</code>) and the full route workflow (<code>DOODLY_DELIVERY</code>): an interactive route map, distance and ETA, and <em>real</em> Google Maps navigation links. This section documents both, and is honest about which parts are a placeholder and which are live.</p></div></div>
+
+  <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Not the admin Routes screen</div><p>Do not confuse this with <a href="#admin-routes">Routes</a> under Admin&nbsp;→&nbsp;Operations, where a manager <em>plans and optimises</em> route templates. This section is the <b>executive-facing</b> view: it only ever shows the signed-in executive their own assigned stops for the day.</p></div></div>
+
+  <!-- ===================== SCREEN 1: TODAY'S ROUTE PAGE ===================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Today's Route</p><p class="sm">The driver-portal page that lists the day's stops in delivery order with a map area.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the executive a single screen showing every stop they must deliver today, in the exact order to drive them, with a map at the top and a status for each stop.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Delivery Executive</span> <span class="pill role">Super Admin</span> — the live route data is scoped to the signed-in executive's own <code>Driver</code> record; a manager viewing the portal only sees demo rows.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Delivery Executive → Today → Today's Route</span> &nbsp;·&nbsp; <code>/driver/route.html</code></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Today's Route</b> · sub "RT-JH-01 · 42 stops · tap a stop to navigate" · button <b>Open in Maps</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Route map area</b><span>Full-width card with a 🗺️ map. On the demo sheet this reads "Route map placeholder — turn-by-turn in production"; in the live portal it becomes the real interactive route map</span></div>
+          <div class="wf-cell"><b>Today's stops table</b><span>One row per stop, in delivery order: # · Customer · Address · Item · Payment · Status</span></div>
+          <div class="wf-cell"><b>No toolbar</b><span>This table is rendered with the toolbar switched off — no search box, filters, date range or export</span></div>
+          <div class="wf-cell"><b>No pager</b><span>Paging is switched off — every stop for the day is shown at once so the executive can scroll the whole run</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — Today's Route: a page header with the <b>Open in Maps</b> action, a route-map card, then the day's stops as a single scrollable table.</div></div>
+
+      <p>The page is assembled from three blocks: a page header (title, sub-title and one action button), a map card, and the <code>driverStops</code> table. The header's sub-line shows the route code and the number of stops (for example <em>"RT-JH-01 · 42 stops"</em>).</p>
+
+      <h4>Button — page header</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Open in Maps</b> <span class="pill">primary</span></td>
+            <td>Meant to open the whole route in a maps app. On the driver-portal sheet this button carries no link, so tapping it shows a small confirmation toast rather than opening a map. The <em>real</em> map-open and navigation happen from the live executive portal (Screen&nbsp;2), where each stop produces a genuine Google Maps directions link.</td>
+            <td>No network call from this sheet. In the live portal, navigation links are built by <code>DOODLY_MAPS.navUrl(lat, lng, mode)</code>, which returns a <code>https://www.google.com/maps/dir/?api=1&amp;destination=…</code> URL.</td>
+            <td><span class="pill role">Delivery Executive</span> <span class="pill role">Super Admin</span></td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — placeholder becomes a live map</div><p>The grey card with the 🗺️ emoji and the words <em>"Route map placeholder — turn-by-turn in production"</em> is exactly that: a placeholder on the lightweight driver sheet. The identical route, drawn as a real map with a numbered line through every stop, appears the moment the executive signs into the field portal at <code>/delivery/</code> — see Screen&nbsp;2.</p></div></div>
+
+      <h4>Today's stops — table columns</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>What it shows</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>#</b></td><td>The stop's sequence number — the order to deliver in, shown in bold</td><td><code>3</code></td></tr>
+          <tr><td><b>Customer</b></td><td>The customer's name for that stop</td><td>Priya N.</td></tr>
+          <tr><td><b>Address</b></td><td>The delivery address, in muted text</td><td>Flat 304, My Home Avatar, Narsingi</td></tr>
+          <tr><td><b>Item</b></td><td>What to hand over at the door — the milk quantity/variant</td><td>500 ml</td></tr>
+          <tr><td><b>Payment</b></td><td>Whether the stop is already paid or is cash-on-delivery, with the amount to collect</td><td>Prepaid · ₹70 COD</td></tr>
+          <tr><td><b>Status</b></td><td>A coloured pill for the stop's progress</td><td>Delivered · Next stop · Pending</td></tr>
+        </tbody>
+      </table></div>
+
+      <p>The status pill is colour-coded so the executive can read the run at a glance:</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Pill</th><th>Colour</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><b>Delivered</b></td><td>Green</td><td>This stop is complete</td></tr>
+          <tr><td><b>Next stop</b></td><td>Amber</td><td>The stop the executive is heading to now</td></tr>
+          <tr><td><b>Pending</b></td><td>Grey</td><td>Not yet reached</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Table behaviour</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Capability</th><th>On this screen</th></tr></thead>
+        <tbody>
+          <tr><td>Columns</td><td>#, Customer, Address, Item, Payment, Status (six fixed columns)</td></tr>
+          <tr><td>Search</td><td class="t-opt">Off — the toolbar is disabled</td></tr>
+          <tr><td>Filters</td><td class="t-opt">Off on this page (the sibling <b>Deliveries</b> page adds All / Pending / Delivered filters)</td></tr>
+          <tr><td>Sorting</td><td class="t-opt">None — rows stay in delivery-sequence order</td></tr>
+          <tr><td>Pagination</td><td class="t-opt">Off — the full day is shown as one list</td></tr>
+          <tr><td>Export</td><td class="t-opt">Not offered on this screen</td></tr>
+          <tr><td>Row actions</td><td class="t-opt">None on the row itself — the executive taps a stop / uses navigation in the live portal</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — where the numbers come from</div><p>When a real executive is signed in, the list is the output of <code>GET /api/delivery/my-route</code> (Screen&nbsp;2). If nobody is signed in — for example a manager browsing the portal to learn it — the sheet shows a small set of sample rows so the layout is never blank.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 2: LIVE ROUTE MAP + NAVIGATION ===================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Live route map &amp; navigation</p><p class="sm">The field portal — an interactive route map, distance/ETA and real turn-by-turn links.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Show the executive their whole run as a map, tell them how far and how long is left, and open real Google Maps navigation to the next doorstep in one tap.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Delivery Executive</span> <span class="pill role">Super Admin</span> — <code>GET /api/delivery/my-route</code> rejects any other role with "Executive portal only"; each executive sees <em>only</em> deliveries assigned to their own <code>Driver</code> record.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Delivery Executive → My Route</span> &nbsp;·&nbsp; <code>/delivery/</code></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Good morning, {name} 👋</b> · route name/code · date · N stops · shift toggle · <b>Live</b> badge</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>KPI strip</b><span>Assigned · Completed · Pending · Remaining stops · Bottles to collect · Distance left (km)</span></div>
+          <div class="wf-cell"><b>Route map</b><span>Interactive map: current location, a line through every remaining stop, numbered pins (done stops dimmed)</span></div>
+          <div class="wf-cell"><b>Map meta bar</b><span>"📍 N stops · {distance} km · ~{eta} min"</span></div>
+          <div class="wf-cell"><b>Route buttons</b><span>Start route · Open navigation · Refresh route</span></div>
+          <div class="wf-cell"><b>Stop cards</b><span>Per stop: address, instructions, status steps, bottle counter, Call/WhatsApp/SMS, Navigate</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the live executive portal: a greeting hero, six live KPIs, the interactive route map with its distance/ETA bar, three route buttons, then a card per stop.</div></div>
+
+      <p>When a signed-in executive opens the portal, it first shows <em>"Loading your route…"</em>, calls the backend, and then draws the map and the stop list from real data. The map is provided by <code>DOODLY_MAPS.routeMap()</code>, which threads a line from the executive's current position through every stop that is not yet delivered and drops a numbered pin at each one; delivered stops are shown dimmed.</p>
+
+      <h4>Buttons — route card</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Start route</b> <span class="pill">primary</span></td>
+            <td>Marks every still-"Assigned" stop as <em>On the way</em>, begins live GPS reporting, and shows <em>"Route started — drive safe!"</em></td>
+            <td>Advances each stop's status locally; on the live route it posts each change to <code>POST /api/delivery/stop/:id</code>. Begins polling <code>POST /api/delivery/location</code> every 30&nbsp;seconds so customers and admins can track the executive on their own maps.</td>
+            <td><span class="pill role">Delivery Executive</span></td>
+          </tr>
+          <tr>
+            <td><b>Open navigation</b></td>
+            <td>Opens Google Maps directions to the <em>next</em> undelivered stop, in a new tab. This is the real "Open in Maps".</td>
+            <td>Link built by <code>DOODLY_MAPS.navUrl(next.lat, next.lng, "driving")</code> → <code>google.com/maps/dir/?api=1&amp;destination=lat,lng&amp;travelmode=driving</code>.</td>
+            <td><span class="pill role">Delivery Executive</span></td>
+          </tr>
+          <tr>
+            <td><b>Refresh route</b></td>
+            <td>Re-renders the map and stop list from the current data and shows <em>"Route refreshed"</em>.</td>
+            <td>Re-runs the on-page render; no server write.</td>
+            <td><span class="pill role">Delivery Executive</span></td>
+          </tr>
+          <tr>
+            <td><b>Shift toggle</b> (header pill)</td>
+            <td>Starts or ends the executive's shift — "🟢 Available for assignment" ↔ "⚪ Not available — start shift". Controls whether the assignment engine gives them new stops.</td>
+            <td><code>POST /api/driver/availability</code> with <code>{ available: true|false }</code>; the pill only appears if <code>GET /api/driver/availability</code> succeeds.</td>
+            <td><span class="pill role">Delivery Executive</span></td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <h4>Buttons — per stop (navigation)</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Navigate</b></td>
+            <td>Reveals a small row of travel-mode links for that stop — <b>Walking · Bike · Scooter · Car</b>.</td>
+            <td>Toggles the mode row; each mode is a pre-built <code>navUrl</code> link.</td>
+            <td><span class="pill role">Delivery Executive</span></td>
+          </tr>
+          <tr>
+            <td><b>Call · WhatsApp · SMS</b></td>
+            <td>Contact the customer at the door from the same card — <code>tel:</code>, <code>wa.me</code> and <code>sms:</code> links to the stop's mobile number.</td>
+            <td>Native device links; no DOODLY server call.</td>
+            <td><span class="pill role">Delivery Executive</span></td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <p>Each travel mode maps to a Google Maps travel type, so the ETA and route shown by Google match how the executive is actually travelling:</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Mode (button)</th><th>Google <code>travelmode</code></th></tr></thead>
+        <tbody>
+          <tr><td>Walking</td><td><code>walking</code></td></tr>
+          <tr><td>Bike</td><td><code>bicycling</code></td></tr>
+          <tr><td>Scooter</td><td><code>two-wheeler</code></td></tr>
+          <tr><td>Car <span class="pill">default</span></td><td><code>driving</code></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — driving the day's route</div>
+        <div class="wf-flow"><span>Open portal</span><span>Route loads (my-route)</span><span>Start route → all "On the way" + GPS on</span><span>Open navigation / tap Navigate on a stop</span><span>Pick mode (Walk/Bike/Scooter/Car)</span><span>Google Maps guides to doorstep</span><span>Deliver &amp; mark stop</span><span>Repeat to next pin</span></div>
+      </div><div class="wire-cap">Figure — how an executive uses Route &amp; Maps from sign-in to the last doorstep.</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — distance &amp; ETA are estimates</div><p>The <b>distance</b> on the meta bar is the straight-line (haversine) distance from the current position through the remaining stops. The <b>ETA</b> is a working estimate — roughly <em>city speed of ~18&nbsp;km/h plus about 3&nbsp;minutes per stop</em>. Actual turn-by-turn time comes from Google Maps once the executive taps a navigation link.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 3: HOW THE MAP IS POWERED ===================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">How the map is powered</p><p class="sm">Real Google Maps when a key is set; a built-in fallback map when it is not.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Make sure the route always draws — a proper Google map when the business has a Maps key, and a clean built-in map otherwise, with no broken tiles either way.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> configures the key; every executive benefits automatically.</span>
+      <span class="m"><b>Path</b> Environment key <code>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code>, surfaced through <code>GET /api/config</code></span></div>
+    <div class="spec-body">
+
+      <p>The map engine (<code>DOODLY_MAPS</code>) is written to mirror the Google Maps interface, so the same code runs with or without Google. It decides which map to show like this:</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Condition</th><th>What the executive sees</th></tr></thead>
+        <tbody>
+          <tr><td><b>Maps key is set</b> — <code>/api/config</code> returns a <code>mapsKey</code></td><td>The real Google map, with Google's own tiles, markers and route line; it fits the view to include every stop.</td></tr>
+          <tr><td><b>No key</b> — <code>mapsKey</code> is empty</td><td>A built-in, dependency-free map drawn as clean streets/parks with the same numbered pins and route line. Everything still works.</td></tr>
+          <tr><td><b>Key is rejected</b> — billing off, wrong referrer, invalid key</td><td>Google's failure hook fires and the engine quietly falls back to the built-in map instead of showing a broken Google canvas.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>For the sharpest field experience, set <code>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> in the production environment and enable billing on the Google project. The <b>navigation links open Google Maps regardless of the key</b>, so even without a key executives can still route to every doorstep — the key only upgrades the in-app map from the built-in view to Google's tiles.</p></div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — never see someone else's route</div><p>An executive only ever loads their <em>own</em> stops. The backend looks up the <code>Driver</code> record linked to the signed-in user and returns deliveries for that driver alone; any non-executive role is refused. If an executive reports seeing another person's stops, treat it as a data/linking error and check their <code>Driver</code>-to-user mapping — do not dismiss it.</p></div></div>
+
+      <h4>Data behind the route — <code>GET /api/delivery/my-route</code></h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>What it carries</th></tr></thead>
+        <tbody>
+          <tr><td><code>driver</code></td><td>The executive's name, employee ID, vehicle number and rating (used in the greeting hero)</td></tr>
+          <tr><td><code>route</code></td><td>The route's name and code, e.g. "RT-JH-01" (shown in the header)</td></tr>
+          <tr><td><code>date</code> · <code>isFallbackDate</code></td><td>The day being shown; if today has no stops it falls back to the most recent day that does, and flags it as "(latest assigned day)"</td></tr>
+          <tr><td><code>stops[]</code></td><td>Each stop in delivery order — sequence, customer name &amp; phone, full structured address (house/building/floor/street/landmark/block/wing/gate/door colour), plan, quantity, item label, delivery instructions, bottles expected/collected, payment (Paid or "COD ₹…"), and status</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — payment shown per stop</div><p>A stop is labelled <b>COD ₹{amount}</b> only when its order is still pending and the method is cash; everything else shows <b>Paid</b>. This tells the executive up front which doors to collect money at — reconciled later on the Cash Collection screen.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ===================== TROUBLESHOOTING & FAQ ===================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common Route &amp; Maps issues and quick answers.</p></div>
+    <div class="spec-body">
+
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>Map area shows the 🗺️ "placeholder — turn-by-turn in production" card</td><td>Looking at the lightweight <code>/driver/route.html</code> sheet, not the field portal</td><td>Sign in and open the field portal at <code>/delivery/</code>, where the real interactive route map loads.</td></tr>
+          <tr><td>"Open in Maps" just flashes a small message and no map opens</td><td>On the driver sheet that button has no link</td><td>Use <b>Open navigation</b> (or a stop's <b>Navigate</b>) in the field portal — those open real Google Maps directions.</td></tr>
+          <tr><td>The in-app map looks plain / not like Google</td><td>No Google Maps key configured, or the key was rejected</td><td>Set <code>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> and enable billing. The built-in map is fully usable in the meantime.</td></tr>
+          <tr><td>"No route assigned yet" / empty list</td><td>No deliveries are assigned to this executive for today</td><td>Assign the executive stops from Admin → Operations (Auto Assignment / Delivery Mgmt). The portal falls back to the latest day that <em>does</em> have stops.</td></tr>
+          <tr><td>"Executive portal only" error</td><td>The signed-in account is not a delivery executive</td><td>Only a <code>delivery_executive</code> (or Super Admin) may load a route. Check the account's role and linked <code>Driver</code> record.</td></tr>
+          <tr><td>Distance/ETA look off vs Google</td><td>The in-app figures are straight-line estimates</td><td>Trust Google's number after tapping Navigate; the in-app ETA is a quick planning estimate only.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Does the executive see other drivers' stops?</h4>
+      <p>No. The route is scoped to the signed-in executive's own <code>Driver</code> record, and any non-executive role is refused. Everyone sees only their own run.</p>
+
+      <h4>Do I need a Google Maps key for navigation to work?</h4>
+      <p>No. Navigation links open the Google Maps app/site directly with the destination and travel mode, so they work without a key. The key only upgrades the <em>in-app</em> map from the built-in view to Google's tiles.</p>
+
+      <h4>Which travel modes are supported?</h4>
+      <p>Walking, Bike (bicycling), Scooter (two-wheeler) and Car (driving). Tap <b>Navigate</b> on a stop and choose the one you're using so the ETA matches.</p>
+
+      <h4>What happens when I press "Start route"?</h4>
+      <p>Every still-assigned stop moves to "On the way", the app begins reporting your location every 30 seconds so customers and admins can track you, and it opens navigation to your next stop. Location reporting stops automatically once every stop is delivered.</p>
+
+    </div>
+  </div>
+
+</section>

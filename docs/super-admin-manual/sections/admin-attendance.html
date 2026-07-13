@@ -1,0 +1,248 @@
+<section class="sheet" id="admin-attendance">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · HR · Attendance</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · HR</span></div>
+  <h2 class="section-title">Attendance</h2>
+  <p class="lead">Mark, correct and review the daily attendance of every DOODLY employee — one status per person per day, with instant present/absent counts, bulk marking, and a per-employee monthly calendar that feeds payroll.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where this sits</div><p>Attendance is one screen in the Human Resources group (<span class="navpath">Admin → Human Resources → Attendance</span>). It reads the Employee Master (only <b>active</b> staff appear), and what you record here flows straight into the monthly <b>Payroll</b> (payable days and overtime) and is written back automatically when a <b>Leave</b> request is approved. Every record is one row keyed to a single employee and a single date, so re-marking the same day simply overwrites the previous status — it never creates duplicates.</p></div></div>
+
+  <!-- ============================== SCREEN 1 ============================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Daily Attendance Register</p><p class="sm">The main screen — every active employee for one date, with their status and one-click marking.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> See at a glance who is Present, Absent, on Leave or still Unmarked for a chosen day, and mark or correct each person inline.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> full · <span class="pill role">Accountant</span> view-only (cannot mark)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → Attendance</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Attendance</b> · Daily register, corrections, bulk marking and monthly calendar</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Filter bar</b><span>Date picker (defaults to today) · Department dropdown (All + 10 departments) · Search employee box · "Bulk mark…" button (edit only) · "Export CSV" button</span></div>
+          <div class="wf-cell"><b>KPI strip</b><span>Five live counts for the chosen date: Present (green) · Absent (red) · On leave (amber) · Off/Holiday · Unmarked</span></div>
+          <div class="wf-cell"><b>Register table</b><span>One row per active employee: Code · Employee (name + designation) · Dept · Status (inline "— mark —" dropdown) · OT · Calendar link</span></div>
+          <div class="wf-cell"><b>Inline status dropdown</b><span>Per row — pick a status to mark that person for the chosen date instantly (no separate save)</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Daily Attendance Register</div></div>
+
+      <h4>Filter &amp; toolbar fields</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Date</b></td><td>Which day's register you are viewing and marking.</td><td>Any calendar date</td><td class="t-req">Yes</td><td>Defaults to <b>today</b>. Sent as <code>date</code> to <code>GET /api/admin/attendance?view=register</code>; the whole screen reloads on change.</td><td>2026-07-12</td></tr>
+          <tr><td><b>Department</b></td><td>Narrow the register to one department.</td><td>All departments · Delivery · Procurement · Production · Quality · Inventory · Customer Support · Finance · Marketing · Operations · Administration</td><td class="t-opt">Opt.</td><td>Sent as <code>department</code>; server filters the Employee Master by exact department.</td><td>Delivery</td></tr>
+          <tr><td><b>Search employee</b></td><td>Find a person by code or name.</td><td>Free text</td><td class="t-opt">Opt.</td><td>Debounced 350&nbsp;ms, sent as <code>q</code>; matches <b>employee code</b> or <b>name</b> (case-insensitive, partial).</td><td>DL-014 / Anita</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Register table specification</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Detail (from the live table)</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td><b>Code</b> (employee code, bold) · <b>Employee</b> (name with designation beneath) · <b>Dept</b> · <b>Status</b> (inline dropdown for editors, or a coloured badge / "—" for view-only roles) · <b>OT</b> (overtime, shown as "Xh OT" when non-zero) · a <b>Calendar</b> link.</td></tr>
+          <tr><td><b>Rows shown</b></td><td>Every <b>active</b> employee (status ACTIVE or ON_LEAVE, not deleted). Ordered by employee code ascending. Up to 500 employees per load.</td></tr>
+          <tr><td><b>Filters</b></td><td>Date · Department · free-text search (see field table above).</td></tr>
+          <tr><td><b>Sorting</b></td><td>Fixed — employee code ascending. No column-header sorting.</td></tr>
+          <tr><td><b>Search</b></td><td>Yes — the search box (matches code or name).</td></tr>
+          <tr><td><b>Pagination</b></td><td>None — the filtered list renders in full (capped at 500).</td></tr>
+          <tr><td><b>Exports</b></td><td><b>Export CSV</b> — downloads <code>doodly-attendance-&lt;date&gt;.csv</code> with columns Code, Employee, Department, Status (or "Unmarked"), OT (min), for exactly the rows currently displayed.</td></tr>
+          <tr><td><b>Row actions</b></td><td>Inline <b>Status</b> dropdown (mark/correct); <b>Calendar</b> link (opens that person's monthly calendar).</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Toolbar buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Bulk mark…</b></td><td>Opens a dialog to apply one status to every employee currently listed.</td><td><code>POST /api/admin/attendance</code> with <code>action:"bulk"</code>.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+          <tr><td><b>Export CSV</b></td><td>Downloads the current register as a CSV file.</td><td>Client-side download of the loaded rows — no server call.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span></td></tr>
+          <tr><td><b>Calendar</b> (row link)</td><td>Opens the selected employee's monthly attendance calendar.</td><td><code>GET …?view=calendar&amp;employeeId=&amp;month=</code>.</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — the "Bulk mark…" button only appears for editors</div><p>Accountants (and any role granted only <i>view</i> on Attendance) see the register and can export it, but the inline status dropdown is replaced by a read-only badge and the "Bulk mark…" button is hidden. Marking and correcting require the <i>edit</i> permission, which Admin and Super Admin hold by default.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================== SCREEN 2 ============================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Mark / Correct One Day</p><p class="sm">The inline dropdown that records or overwrites a single person's status for the chosen date.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Set the exact status for one employee on one day. Re-marking the same day silently corrects the earlier entry and is logged as a correction.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (edit permission)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → HR → Attendance → Status dropdown on a row</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Row — <b>DL-014 · Anita</b> · Delivery</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Status dropdown</b><span>"— mark —" then the 8 statuses: Present · Absent · Half Day · Paid Leave · Sick Leave · Weekly Off · Holiday · WFH</span></div>
+          <div class="wf-cell"><b>Instant save</b><span>Choosing a value posts immediately and shows "Marked ✓"; the register reloads with fresh counts</span></div>
+          <div class="wf-cell"><b>OT column</b><span>Filled automatically only when check-in/check-out times exist for that day</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — inline marking on a register row</div></div>
+
+      <h4>The eight attendance statuses</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Status</th><th>Meaning</th><th>Calendar code</th><th>Counts toward</th></tr></thead>
+        <tbody>
+          <tr><td><b>Present</b></td><td>Full working day worked.</td><td>P</td><td>Present (green); payable</td></tr>
+          <tr><td><b>Absent</b></td><td>Did not report; unpaid.</td><td>A</td><td>Absent (red); not payable</td></tr>
+          <tr><td><b>Half Day</b></td><td>Half a working day.</td><td>½</td><td>Present-like; counts as 0.5 payable day</td></tr>
+          <tr><td><b>Paid Leave</b></td><td>Approved paid leave.</td><td>PL</td><td>On leave (amber); payable</td></tr>
+          <tr><td><b>Sick Leave</b></td><td>Approved sick leave.</td><td>SL</td><td>On leave (amber); payable</td></tr>
+          <tr><td><b>Weekly Off</b></td><td>Scheduled weekly rest day.</td><td>WO</td><td>Off/Holiday</td></tr>
+          <tr><td><b>Holiday</b></td><td>Company / public holiday.</td><td>H</td><td>Off/Holiday</td></tr>
+          <tr><td><b>WFH</b></td><td>Worked from home.</td><td>W</td><td>Present (green); payable</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Fields written by the mark endpoint</h4>
+      <p>The register's inline dropdown sends only <b>status</b> (the employee and date come from the row and the top date filter). The mark endpoint accepts the fuller record below — used for corrections, imports and future GPS/biometric/QR sources.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>employeeId</b></td><td>Whose attendance this is.</td><td>Employee id</td><td class="t-req">Yes</td><td>Must exist in the Employee Master, else "Employee not found." Taken from the row automatically.</td><td>ckyz…014</td></tr>
+          <tr><td><b>date</b></td><td>The day being marked.</td><td>Date string (min 4 chars)</td><td class="t-req">Yes</td><td>Normalised to midnight; combined with employeeId as the unique key (upsert).</td><td>2026-07-12</td></tr>
+          <tr><td><b>status</b></td><td>The attendance status.</td><td>One of the 8 statuses above</td><td class="t-req">Yes</td><td>Server rejects any value outside the enum.</td><td>PRESENT</td></tr>
+          <tr><td><b>checkIn</b></td><td>Time work started (for worked-hours &amp; OT).</td><td>Time / timestamp</td><td class="t-opt">Opt.</td><td>Used with checkOut to compute worked minutes.</td><td>2026-07-12T07:00</td></tr>
+          <tr><td><b>checkOut</b></td><td>Time work ended.</td><td>Time / timestamp</td><td class="t-opt">Opt.</td><td>Worked mins = checkOut − checkIn; overtime = worked − 8h, floored at 0. Invalid or checkOut ≤ checkIn ⇒ 0.</td><td>2026-07-12T16:30</td></tr>
+          <tr><td><b>note</b></td><td>Free-text reason / remark.</td><td>Text</td><td class="t-opt">Opt.</td><td>Trimmed; max <b>200</b> characters.</td><td>Late — traffic</td></tr>
+          <tr><td><b>source</b></td><td>How the record was captured.</td><td>MANUAL · GPS · BIOMETRIC · QR</td><td class="t-opt">Opt.</td><td>Max 20 chars; defaults to <b>MANUAL</b>. GPS/BIOMETRIC/QR are reserved for future capture methods.</td><td>MANUAL</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — mark or correct one day</div>
+        <div class="wf-flow"><span>Pick date</span><span>Find employee</span><span>Choose status</span><span>Server upserts [employee + date]</span><span>Worked/OT computed</span><span>Audit: mark or correct</span><span>"Marked ✓" · counts refresh</span></div>
+      </div><div class="wire-cap">Figure — end-to-end marking flow</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Marking twice = a correction, not a duplicate</div><p>Attendance is unique per employee per day. If a day already has a status and you choose a new one, the system overwrites it and records the change in the Audit Log as <code>attendance.correct</code> (showing the old and new status, e.g. "DL-014 2026-07-12 → ABSENT (was PRESENT)"). A first-time mark is logged as <code>attendance.mark</code>. Nothing is ever silently lost.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================== SCREEN 3 ============================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Bulk Mark Attendance</p><p class="sm">Apply one status to every employee currently listed for the chosen date.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Mark a whole department (or the whole company) in one action — ideal for a public holiday, a company-wide Weekly Off, or a full-attendance day.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (edit permission)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → HR → Attendance → Bulk mark…</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Dialog — <b>Bulk mark attendance</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Scope line</b><span>"Apply a status to all N listed employees for &lt;date&gt;." — N and the date come from the current filter</span></div>
+          <div class="wf-cell"><b>Status dropdown</b><span>The same 8 statuses (Present, Absent, Half Day, Paid/Sick Leave, Weekly Off, Holiday, WFH)</span></div>
+          <div class="wf-cell"><b>Buttons</b><span>Cancel · "Apply to N"</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — bulk-mark dialog</div></div>
+
+      <h4>Fields</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Date</b></td><td>The day to mark for everyone.</td><td>Inherited from the register's date filter</td><td class="t-req">Yes</td><td>Not editable in the dialog — set it on the register first.</td><td>2026-08-15</td></tr>
+          <tr><td><b>Employees</b></td><td>Who gets marked.</td><td>All rows currently listed</td><td class="t-req">Yes</td><td>The visible register (respecting your department / search filter). Server accepts 1–1000 ids per call.</td><td>All Delivery staff</td></tr>
+          <tr><td><b>Status</b></td><td>The status applied to everyone.</td><td>One of the 8 statuses</td><td class="t-req">Yes</td><td>Enum-validated; each employee is upserted for that date.</td><td>HOLIDAY</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Apply to N</b></td><td>Marks the chosen status for all listed employees on the date, then reports how many were marked.</td><td><code>POST …{action:"bulk"}</code>; upserts each employee/date, skips any bad id, audits <code>attendance.bulk</code>, returns the count. Toast: "Marked N ✓".</td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span></td></tr>
+          <tr><td><b>Cancel</b></td><td>Closes the dialog, changes nothing.</td><td>—</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Bulk mark respects your current filter</div><p>"Apply to N" targets exactly the employees on screen. If you filtered to <b>Delivery</b>, only Delivery staff are marked. To mark the whole company, clear the department filter and the search box first so all active employees are listed. Bulk marking also <b>overwrites</b> any status already set for that day — use it before you fine-tune individuals, not after.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================== SCREEN 4 ============================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Monthly Calendar (per employee)</p><p class="sm">A month-at-a-glance grid of one person's daily statuses, with a summary.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Review or audit an individual's whole month before payroll — spot patterns, count leave, verify overtime.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> (view)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → HR → Attendance → Calendar (row link)</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Dialog — <b>Monthly calendar</b> · Anita · DL-014 · 2026-07</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Header</b><span>Employee name · code · the month (YYYY-MM, taken from the register's date)</span></div>
+          <div class="wf-cell"><b>Day grid</b><span>One cell per day of the month; marked days show the short code (P, A, ½, PL, SL, WO, H, W) and are colour-tinted by status</span></div>
+          <div class="wf-cell"><b>Summary KPIs</b><span>Present · Absent · Leave (paid + sick) · Off (weekly off + holiday) · OT (hours)</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — per-employee monthly calendar</div></div>
+
+      <h4>Calendar summary — what each tile counts</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Tile</th><th>Counts</th></tr></thead>
+        <tbody>
+          <tr><td><b>Present</b></td><td>Days marked Present.</td></tr>
+          <tr><td><b>Absent</b></td><td>Days marked Absent.</td></tr>
+          <tr><td><b>Leave</b></td><td>Paid Leave + Sick Leave days combined.</td></tr>
+          <tr><td><b>Off</b></td><td>Weekly Off + Holiday days combined.</td></tr>
+          <tr><td><b>OT (h)</b></td><td>Total overtime for the month, in hours (summed from each day's computed overtime).</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">The month follows the register date</div><p>The calendar opens on the month of whatever date is selected in the register (for example, choosing 12 July shows all of July). To view a different month, change the register's date filter first, then reopen the calendar. The calendar is read-only — to change a day, close it and mark that day on the register.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================== PERMISSIONS ============================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Who can do what</p><p class="sm">Attendance permissions, enforced on the server for every call.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Define exactly which roles can view versus mark attendance.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> configures roles</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Roles &amp; Permissions</span></span></div>
+    <div class="spec-body">
+      <div class="twrap"><table>
+        <thead><tr><th>Role</th><th>View register &amp; calendar</th><th>Mark / correct</th><th>Bulk mark</th><th>Export CSV</th></tr></thead>
+        <tbody>
+          <tr><td><b>Super Admin</b></td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td><b>Admin</b></td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td><b>Accountant</b></td><td>Yes</td><td>No (view-only)</td><td>No</td><td>Yes</td></tr>
+          <tr><td><b>Manager / Operations / others</b></td><td>No (no Attendance module access by default)</td><td>No</td><td>No</td><td>No</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">The rule under the hood</div><p>Reading uses the <i>view</i> action; marking, correcting and bulk marking all use the <i>edit</i> action. A role granted only <i>view</i> (like Accountant) is blocked from every write, both in the interface and at the API. These defaults can be changed by a Super Admin in Roles &amp; Permissions; the server matrix — not the browser — is the real security boundary.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================== INTEGRATIONS ============================== -->
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best practice — mark daily, reconcile before payroll</div><p>Mark attendance every day (or use Bulk mark for the common case, then correct the exceptions), because Payroll counts <b>payable days</b> straight from these records: Present, WFH, Paid Leave and Sick Leave count in full, Half Day counts as 0.5, and overtime carries through in hours. Before running month-end payroll, open each employee's Monthly Calendar and clear any <b>Unmarked</b> days — an unmarked day is neither present nor absent and can distort the payslip. Remember that approving a <b>Leave</b> request automatically writes the matching status onto those days, so you usually only need to mark days leave doesn't cover.</p></div></div>
+
+  <!-- ============================== TROUBLESHOOTING ============================== -->
+  <h3>Troubleshooting</h3>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>An employee is missing from the register.</td><td>They are not <b>active</b> (inactive/exited or soft-deleted), or a department/search filter excludes them.</td><td>Clear the filters. If still missing, check the Employee Master — only ACTIVE and ON_LEAVE staff appear here.</td></tr>
+      <tr><td>The status dropdown is greyed out / shows only a badge.</td><td>Your role has view-only access to Attendance (e.g. Accountant).</td><td>Ask a Super Admin to grant <i>edit</i> on the Attendance module, or have an Admin mark it.</td></tr>
+      <tr><td>"Employee not found." when marking.</td><td>The employee record was removed or its id changed after the page loaded.</td><td>Reload the page so the register refreshes, then mark again.</td></tr>
+      <tr><td>OT column stays blank even though the person worked late.</td><td>No check-in / check-out times are recorded — the register's inline mark only sets a status.</td><td>OT is only computed when both check-in and check-out exist (via a correction or a future GPS/biometric source). A plain status mark shows no OT.</td></tr>
+      <tr><td>Bulk mark only marked part of the team.</td><td>A department or search filter was active, so only those rows were listed.</td><td>Clear the department dropdown and search box, confirm the "Apply to N" count matches your headcount, then bulk mark.</td></tr>
+      <tr><td>Calendar shows the wrong month.</td><td>The calendar follows the register's date filter.</td><td>Change the date at the top of the register to any day in the month you want, then reopen the calendar.</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- ============================== FAQ ============================== -->
+  <h3>Frequently asked questions</h3>
+  <h4>Can I mark attendance for a past date?</h4>
+  <p>Yes. Set the register's Date to any past day and mark as usual — the record is keyed to that date. Re-marking a day that already has a status is logged as a correction, so the change is fully traceable in the Audit Log.</p>
+  <h4>What is the difference between "Present" and "WFH"?</h4>
+  <p>Both count as a present, payable working day and both show green. WFH simply records that the person worked from home rather than on site; it is a separate status so reports can distinguish the two.</p>
+  <h4>How does Half Day affect pay?</h4>
+  <p>Half Day counts as 0.5 of a payable day in the payroll calculation, whereas Present, WFH, Paid Leave and Sick Leave each count as a full payable day and Absent counts as zero.</p>
+  <h4>Do I need to mark attendance for approved leave?</h4>
+  <p>No. When a Leave request is fully approved, the system automatically stamps the correct status (Paid Leave, Sick Leave, or Loss-of-Pay as Absent) on every day of the leave. You only mark days that leave does not cover.</p>
+  <h4>Is there an attendance report across a date range?</h4>
+  <p>Yes, at the data level: the attendance service can produce a per-employee summary (present, half-day, absent, paid/sick leave, weekly off, holiday, overtime and payable days) over any From–To range, and this is exactly what Payroll consumes for the month. In this screen you export the single-day register as CSV or review a full month per employee via the Calendar.</p>
+</section>

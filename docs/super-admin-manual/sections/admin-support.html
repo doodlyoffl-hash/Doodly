@@ -1,0 +1,248 @@
+<section class="sheet" id="admin-support">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · System · Support Tickets</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · System</span></div>
+  <h2 class="section-title">Support Tickets</h2>
+  <p class="lead">A full customer-service ticket desk — every complaint or query becomes a numbered ticket you can prioritise, assign to a teammate, reply to, keep internal notes on, track against an SLA due-date and drive through its whole lifecycle from Open to Closed, all recorded live in the DOODLY database.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">One page, three working surfaces</div><p>The whole desk lives at one screen (<span class="navpath">/admin/support.html</span>, route key <code>admin/support</code>, block type <code>supportBoard</code>, mount <code>#supportMount</code>). It is wired by <code>assets/js/layout.js</code> → <code>wireSupportBackend()</code> and talks to one endpoint, <code>/api/admin/support</code> (service: <code>next-app/lib/support/service.ts</code>). On load it paints a <b>KPI strip</b>, a <b>filter toolbar + tickets table</b>, and — when you click <b>Manage</b> on any row or the header's <b>New ticket</b> button — a <b>slide-over ticket drawer / new-ticket form</b>. Each of those is documented below as its own screen.</p></div></div>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where tickets come from</div><p>Tickets are created two ways, both landing in the same desk: (1) staff raise them here with <b>New ticket</b>; (2) a signed-in customer raises one from their account (<code>POST /api/account/support</code>), which sets the ticket's <code>customerId</code>, name, email and phone from their authenticated profile — never trusted from the browser. The customer only ever sees a safe subset of their own ticket (subject, category, status, priority, dates) — never the assignee, SLA, internal notes, resolution text or tags.</p></div></div>
+
+  <!-- ============================================================ SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Ticket desk — KPI strip</p><p class="sm">Eight live counters that read the pulse of the queue before you touch a single ticket.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the person on duty an instant read of the workload and health of support — how much is open, how much is overdue, how fast the team is responding, and how much is getting resolved — computed across every non-deleted ticket in the database.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Manager</span> — anyone whose role has <code>support:view</code> (or <code>customers:view</code>, which also grants read access to the desk)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Support Tickets</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Support Tickets</b> · "Customer issues and resolutions — full ticket desk with SLA, assignment, internal notes, customer replies and lifecycle." · <b>New ticket</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Open</b><span>Tickets in status Open</span></div>
+          <div class="wf-cell"><b>In Progress</b><span>Tickets being actively worked</span></div>
+          <div class="wf-cell"><b>Waiting</b><span>Waiting on the customer to reply</span></div>
+          <div class="wf-cell"><b>High Priority</b><span>Unresolved High + Urgent tickets</span></div>
+          <div class="wf-cell"><b>Overdue</b><span>Unresolved tickets past their SLA due-time</span></div>
+          <div class="wf-cell"><b>Resolved Today</b><span>Tickets resolved since midnight</span></div>
+          <div class="wf-cell"><b>Avg Response</b><span>Mean hours to first staff reply</span></div>
+          <div class="wf-cell"><b>Resolution Rate</b><span>% of all tickets resolved or closed</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the eight KPI cards, drawn from <code>GET /api/admin/support?view=dashboard</code></div></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>KPI card</th><th>What it counts</th><th>How it is calculated (backend)</th><th>Format</th>
+      </tr></thead><tbody>
+        <tr><td><b>Open</b></td><td>Tickets sitting in the Open status, not yet picked up</td><td>Count of tickets where <code>status = OPEN</code> (deleted excluded)</td><td>Whole number</td></tr>
+        <tr><td><b>In Progress</b></td><td>Tickets a teammate is actively working</td><td>Count where <code>status = IN_PROGRESS</code></td><td>Whole number</td></tr>
+        <tr><td><b>Waiting</b></td><td>Tickets parked because the ball is in the customer's court</td><td>Count where <code>status = WAITING_CUSTOMER</code></td><td>Whole number</td></tr>
+        <tr><td><b>High Priority</b></td><td>Urgent work still open — the fire list</td><td>Of the "open-ish" tickets (not Resolved / Closed), how many are <code>HIGH</code> or <code>URGENT</code></td><td>Whole number</td></tr>
+        <tr><td><b>Overdue</b></td><td>Open tickets that have blown their SLA deadline</td><td>Of the open-ish tickets, how many have a <code>slaDueAt</code> earlier than now</td><td>Whole number</td></tr>
+        <tr><td><b>Resolved Today</b></td><td>The team's output so far today</td><td>Count where <code>resolvedAt ≥ today 00:00</code></td><td>Whole number</td></tr>
+        <tr><td><b>Avg Response</b></td><td>How quickly the team gives customers a first human reply</td><td>Mean of (<code>firstResponseAt − createdAt</code>) over the last 500 responded tickets, in hours, one decimal</td><td>e.g. "3.4h"</td></tr>
+        <tr><td><b>Resolution Rate</b></td><td>Share of all tickets that reached a done state</td><td>(<code>RESOLVED + CLOSED</code>) ÷ total × 100, rounded</td><td>e.g. "82%"</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">The green live banner</div><p>Under the strip a status line reads, for example, "● Live — 128 ticket(s) · 14 unresolved · 3 overdue from the DOODLY database". <b>Unresolved</b> is every ticket that is not Resolved or Closed; <b>overdue</b> matches the Overdue KPI. If the backend is unreachable you get a red banner ("⚠ Backend offline…"); if your role lacks access you get "⚠ Your role can't view Support (403)."</p></div></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">The cards are read-only and self-refresh</div><p>There are no buttons on the KPI strip. It re-computes whenever the page loads and again after any ticket action (assign, reply, status change, close, delete) via <code>refreshSupportKpis()</code>, so the numbers you see always reflect the queue you're looking at.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Tickets table — search &amp; filter</p><p class="sm">The full queue in one list, searchable and filterable, one row per ticket.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Find and open the ticket you need. Narrow the queue by status or priority, or type to search across the ticket number, subject, customer and assignee, then click <b>Manage</b> to work it.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> Read: <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Manager</span> (<code>support:view</code> / <code>customers:view</code>). Acting on a ticket needs <code>support:edit</code>.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Support Tickets</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Toolbar — <b>Search box</b> · <b>Status</b> filter · <b>Priority</b> filter &nbsp;|&nbsp; Panel: <b>Tickets</b> · count badge</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Search</b><span>"Search ticket #, subject, customer…" — debounced 300 ms</span></div>
+          <div class="wf-cell"><b>Status filter</b><span>All statuses / Open / Assigned / In Progress / Waiting for Customer / Resolved / Closed</span></div>
+          <div class="wf-cell"><b>Priority filter</b><span>All priorities / Low / Medium / High / Urgent</span></div>
+          <div class="wf-cell"><b>Tickets table</b><span>Ticket · Subject · Category · Priority · Status · Assignee · SLA · Manage</span></div>
+          <div class="wf-cell"><b>Count badge</b><span>Total rows matching the current filters</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the toolbar (search + two dropdowns) above the tickets panel</div></div>
+
+      <h4>Table columns</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Column</th><th>What it shows</th><th>Backend source</th>
+      </tr></thead><tbody>
+        <tr><td><b>Ticket</b></td><td>The ticket number in bold, e.g. <code>TK-2042</code>.</td><td><code>number</code> (auto-generated, sequential from TK-2042)</td></tr>
+        <tr><td><b>Subject</b></td><td>The one-line subject, with the customer's name in small grey text underneath when known.</td><td><code>subject</code>, <code>customerName</code></td></tr>
+        <tr><td><b>Category</b></td><td>The issue type (Delivery, Billing, Quality, Bottle, Subscription, Other) or "—" if none.</td><td><code>category</code></td></tr>
+        <tr><td><b>Priority</b></td><td>A coloured badge — Urgent/High red, Medium amber, Low grey.</td><td><code>priorityLabel</code></td></tr>
+        <tr><td><b>Status</b></td><td>A coloured badge — Open/Waiting amber, Assigned/In Progress blue, Resolved green, Closed grey.</td><td><code>statusLabel</code></td></tr>
+        <tr><td><b>Assignee</b></td><td>Who owns the ticket, or "—" if unassigned.</td><td><code>assigneeName</code></td></tr>
+        <tr><td><b>SLA</b></td><td>The due date (YYYY-MM-DD). If the ticket is open and past due it shows <b>Overdue</b> in bold red. "—" when no due-date.</td><td><code>slaDueAt</code>, <code>overdue</code></td></tr>
+        <tr><td><b>Manage</b></td><td>A link that opens the ticket drawer (Screen 4).</td><td>Opens <code>GET …?view=detail&amp;id=…</code></td></tr>
+      </tbody></table></div>
+
+      <h4>List behaviour</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Aspect</th><th>Behaviour in this screen</th>
+      </tr></thead><tbody>
+        <tr><td><b>Search</b></td><td>Server-side, case-insensitive, matches any of: ticket number, subject, customer name, customer email, category, assignee name. Fires 300 ms after you stop typing.</td></tr>
+        <tr><td><b>Filters</b></td><td>Status and Priority dropdowns. Selecting one reloads the table instantly. They combine with each other and with the search.</td></tr>
+        <tr><td><b>Sorting</b></td><td>Fixed to newest-first (<code>createdAt</code> descending) on this board. The API additionally supports <code>sort=priority</code>, <code>updated</code> and <code>sla</code>, but no sort control is exposed on the desk.</td></tr>
+        <tr><td><b>Pagination</b></td><td>The board loads up to <b>500</b> tickets in one page (<code>pageSize=500</code>) — no pager. The API itself supports paging (<code>page</code> / <code>pageSize</code>, capped at 500).</td></tr>
+        <tr><td><b>Deleted rows</b></td><td>Soft-deleted tickets are hidden by default. They return only when a request passes <code>includeDeleted=1</code> (not exposed on this board).</td></tr>
+        <tr><td><b>Row actions</b></td><td>A single <b>Manage</b> link per row → opens the ticket drawer. All work happens there.</td></tr>
+        <tr><td><b>Empty state</b></td><td>"No tickets match these filters." when nothing matches.</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Bulk &amp; merge exist in the API, not on this board</div><p>The endpoint supports bulk status change / delete / restore (<code>action:"bulk"</code>, up to 1000 IDs) and duplicate-merge (<code>action:"merge"</code>, closes one ticket into another). The desk UI does not surface checkboxes or a merge button yet — these are backend-ready capabilities, not buttons you'll see today.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">New ticket — raise a ticket by hand</p><p class="sm">A modal for logging a customer issue that came in by phone, WhatsApp or email.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Create a ticket for a customer who reached you off-platform. Capture the subject, category, priority and the customer's contact details, optionally tie it to an order or subscription, and (optionally) record their first message.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> — creating needs <code>support:edit</code>. A view-only role gets "Only Support / Admin can create tickets (403)."</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Support Tickets → New ticket</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Modal — <b>New ticket</b> · × close</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Subject *</b><span>Free-text summary of the issue</span></div>
+          <div class="wf-cell"><b>Category · Priority</b><span>Two dropdowns, side by side</span></div>
+          <div class="wf-cell"><b>Customer name · phone</b><span>Contact row 1</span></div>
+          <div class="wf-cell"><b>Customer email · Order/Sub ref</b><span>Contact row 2</span></div>
+          <div class="wf-cell"><b>Description</b><span>What the customer reported (multi-line)</span></div>
+          <div class="wf-cell"><b>Cancel · Create ticket</b><span>Footer actions</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the New-ticket modal layout</div></div>
+
+      <h4>Fields</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Subject</b></td><td>Short summary shown as the ticket title</td><td>Free text</td><td class="t-req">Yes</td><td>At least 3 characters (checked in the browser and again on the server, max 200)</td><td>Milk not delivered this morning</td></tr>
+        <tr><td><b>Category</b></td><td>Groups the ticket by issue type</td><td>— · Delivery · Billing · Quality · Bottle · Subscription · Other</td><td class="t-opt">Opt.</td><td>Stored as free text (max 40); blank saved as null</td><td>Delivery</td></tr>
+        <tr><td><b>Priority</b></td><td>Sets urgency and drives the SLA due-date</td><td>Low · Medium · High · Urgent</td><td class="t-opt">Opt.</td><td>Defaults to <b>Medium</b>; controls the SLA clock (see below)</td><td>High</td></tr>
+        <tr><td><b>Customer name</b></td><td>Who raised the issue</td><td>Free text</td><td class="t-opt">Opt.</td><td>Trimmed, max 120; shown under the subject in the list</td><td>Ananya Reddy</td></tr>
+        <tr><td><b>Customer phone</b></td><td>Callback number</td><td>Phone text</td><td class="t-opt">Opt.</td><td>Trimmed, max 30</td><td>+91 98xxxxxx10</td></tr>
+        <tr><td><b>Customer email</b></td><td>Email contact</td><td>Email text</td><td class="t-opt">Opt.</td><td>Trimmed, max 160</td><td>ananya@example.com</td></tr>
+        <tr><td><b>Order / Subscription ref</b></td><td>Links the ticket to an order or a subscription</td><td>ORD-… or SUB-…</td><td class="t-opt">Opt.</td><td>If the value starts with <code>ORD</code> it is saved as <code>orderId</code>; if it starts with <code>SUB</code> it is saved as <code>subscriptionId</code>; anything else is ignored</td><td>ORD-10233</td></tr>
+        <tr><td><b>Description</b></td><td>What the customer reported</td><td>Multi-line text</td><td class="t-opt">Opt.</td><td>Max 20,000 chars. If filled it is also stored as the ticket's first message (a customer "reply"), so it shows in the timeline</td><td>No delivery today and no call…</td></tr>
+      </tbody></table></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Create ticket</b></td><td>Validates the subject, then saves the ticket and closes the modal; the desk reloads with the new row on top.</td><td><code>POST /api/admin/support {action:"create", data}</code> → assigns the next <code>TK-</code> number, status <b>Open</b>, computes the SLA due-date from priority, writes a "Ticket … created" system entry (and a first customer message if a description was given). Audited as <code>support.create</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> (<code>support:edit</code>)</td></tr>
+        <tr><td><b>Cancel</b> / <b>×</b> / <b>Esc</b></td><td>Closes the modal without saving.</td><td>None</td><td>—</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">How the SLA due-date is set</div><p>When the ticket is created, DOODLY stamps a <b>first-resolution target</b> (<code>slaDueAt</code>) based on priority: <b>Urgent = 4 hours</b>, <b>High = 8 hours</b>, <b>Medium = 24 hours</b>, <b>Low = 48 hours</b> from now. That date drives the <b>SLA</b> column and the <b>Overdue</b> KPI. Changing priority later does <em>not</em> re-stamp the original due-date.</p></div></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Ticket numbers</div><p>Numbers are sequential and human-friendly — <code>TK-2042</code>, <code>TK-2043</code>, … generated from the current ticket count with a uniqueness check, so they never collide.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 4 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Ticket drawer — work a single ticket</p><p class="sm">The full conversation and every control for one ticket, in one slide-over.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Read the whole history, change status / priority / assignee, reply to the customer or leave an internal note, and close, reopen or delete the ticket — all in one place. Opens from the <b>Manage</b> link on any row.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> Viewing needs <code>support:view</code>; every action inside needs <code>support:edit</code> — a view-only role sees the drawer but gets "Only Support / Admin can manage tickets (403)." when acting.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → Support Tickets → Manage</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Drawer — <b>TK-2042 · Subject</b> · × close</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Badge row</b><span>Status · Priority · "SLA overdue" (if late) · Category</span></div>
+          <div class="wf-cell"><b>Contact / refs</b><span>👤 name · phone · email &nbsp; 🔗 Order / Subscription</span></div>
+          <div class="wf-cell"><b>Status · Priority · Assignee</b><span>Three dropdowns that act on change</span></div>
+          <div class="wf-cell"><b>Timeline</b><span>Every message: replies, internal notes, system events</span></div>
+          <div class="wf-cell"><b>Add a message</b><span>Text box feeding Reply or Note</span></div>
+          <div class="wf-cell"><b>Action bar</b><span>Internal note · Customer reply · Close/Reopen · Delete</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the ticket drawer: header badges, the three control dropdowns, the message timeline and the action bar</div></div>
+
+      <h4>Controls &amp; fields</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Control</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Status</b></td><td>Move the ticket along its lifecycle</td><td>Open · Assigned · In Progress · Waiting for Customer · Resolved · Closed</td><td class="t-opt">On change</td><td><code>action:"status"</code>. Choosing <b>Resolved</b> stamps <code>resolvedAt</code>; <b>Closed</b> stamps <code>closedAt</code>; <b>Open</b> clears both. A system line records the change.</td><td>In Progress</td></tr>
+        <tr><td><b>Priority</b></td><td>Re-rank the urgency</td><td>Low · Medium · High · Urgent</td><td class="t-opt">On change</td><td><code>action:"priority"</code>. Logged as a system entry. (Does not re-stamp the SLA due-date.)</td><td>Urgent</td></tr>
+        <tr><td><b>Assignee</b></td><td>Hand the ticket to a teammate</td><td>Unassigned + every staff user (non-customer, non-delivery roles)</td><td class="t-opt">On change</td><td><code>action:"assign"</code>. If the ticket was <b>Open</b> and you pick someone, it auto-moves to <b>Assigned</b>. Logged as a system entry.</td><td>Priya (Support)</td></tr>
+        <tr><td><b>Add a message</b></td><td>The text you'll send as a reply or keep as a note</td><td>Multi-line text</td><td class="t-req">Yes (to reply/note)</td><td>1–20,000 chars. Empty → toast "Write a message first."</td><td>We've re-scheduled your delivery for tomorrow 6 AM.</td></tr>
+      </tbody></table></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Add customer reply</b></td><td>Posts the text box as a message the customer can see (green in the timeline).</td><td><code>action:"reply"</code>. The <em>first</em> reply stamps <code>firstResponseAt</code> (this feeds the Avg Response KPI). A reply on a <b>Waiting for Customer</b> ticket moves it back to <b>In Progress</b>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+        <tr><td><b>Add internal note</b></td><td>Posts the text box as a staff-only note (amber, badged "internal note"). Never shown to the customer.</td><td><code>action:"note"</code>. Does not change status or the response clock.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+        <tr><td><b>Close ticket</b></td><td>Prompts for an optional resolution note, then closes the ticket. (Shown when the ticket is not already Resolved/Closed.)</td><td><code>action:"close"</code> → status <b>Closed</b>, stamps <code>closedAt</code> + <code>resolvedAt</code>, saves the resolution note, writes a system line.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+        <tr><td><b>Reopen</b></td><td>Brings a Resolved/Closed ticket back to life. (Shown only when the ticket is Resolved or Closed.)</td><td><code>action:"reopen"</code> → status <b>Open</b>, clears <code>closedAt</code> and <code>resolvedAt</code>, writes a system line.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+        <tr><td><b>Delete</b></td><td>Asks "Soft-delete ticket TK-…?" then removes it from the desk and closes the drawer.</td><td><code>action:"delete"</code> → sets <code>deletedAt</code> (soft delete — the row is hidden, not erased, and can be restored via the API).</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+        <tr><td><b>×</b> / <b>Esc</b> / backdrop</td><td>Closes the drawer.</td><td>None</td><td>—</td></tr>
+      </tbody></table></div>
+
+      <h4>The timeline</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Entry type</th><th>Looks like</th><th>Meaning</th>
+      </tr></thead><tbody>
+        <tr><td><b>Customer reply</b></td><td>Green left-border card with the author's name and time.</td><td>A message visible to the customer (staff reply, or the customer's own words).</td></tr>
+        <tr><td><b>Internal note</b></td><td>Amber card badged "internal note".</td><td>Staff-only working note; never leaves the desk.</td></tr>
+        <tr><td><b>System event</b></td><td>Plain grey one-liner.</td><td>Auto-logged lifecycle events: created, assigned, priority changed, status changed, closed, reopened, merged.</td></tr>
+      </tbody></table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">The three dropdowns act the moment you change them</div><p>Status, Priority and Assignee save on <em>change</em> — there is no separate "Save" button for them. Each one fires its own API call and re-renders the drawer with a toast. Be deliberate: picking a value is the action.</p></div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Reply vs. note — get this right</div><p><b>Add customer reply</b> is customer-facing and starts/affects the SLA response clock; <b>Add internal note</b> is staff-only and invisible to the customer. Never put an internal comment ("customer is being difficult", pricing you can offer, teammate handover details) in a reply. When in doubt, use a note.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ WORKFLOW -->
+  <div class="diagram"><div class="wf">
+    <div class="wf-topbar">Workflow — a ticket's lifecycle</div>
+    <div class="wf-flow"><span>Open</span><span>Assigned</span><span>In Progress</span><span>Waiting for Customer</span><span>Resolved</span><span>Closed</span></div>
+  </div><div class="wire-cap">Figure — the six statuses. Assigning an Open ticket auto-advances it to Assigned; a customer reply on a Waiting ticket pulls it back to In Progress; a Closed/Resolved ticket can be Reopened to Open.</div></div>
+
+  <div class="diagram"><div class="wf">
+    <div class="wf-topbar">Workflow — handling an incoming issue</div>
+    <div class="wf-flow"><span>Ticket arrives (customer or New ticket)</span><span>Set priority</span><span>Assign to a teammate</span><span>Reply to the customer</span><span>Resolve / Close with a note</span></div>
+  </div><div class="wire-cap">Figure — the everyday path from a new issue to a closed, documented resolution</div></div>
+
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best practice — triage by SLA and priority every shift</div><p>Start each shift on the <b>Overdue</b> and <b>High Priority</b> KPIs, then filter the table to <b>Urgent</b> and <b>High</b>. Assign every unowned ticket so nothing sits in Open, give the customer a first reply quickly (it stamps <code>firstResponseAt</code> and improves your Avg Response), and always close with a short resolution note so the next person can see how it was solved. Use <b>Waiting for Customer</b> honestly — it keeps genuinely-blocked tickets out of your "needs action" view.</p></div></div>
+
+  <!-- ============================================================ TROUBLESHOOTING -->
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table><thead><tr>
+    <th>Symptom</th><th>Likely cause</th><th>Fix</th>
+  </tr></thead><tbody>
+    <tr><td>Red banner "⚠ Backend offline… — start next-app."</td><td>The DOODLY backend (next-app) isn't running / reachable.</td><td>Start the backend, then reload the page. The desk needs the live API to load tickets.</td></tr>
+    <tr><td>"⚠ Your role can't view Support (403)."</td><td>Your role lacks <code>support:view</code> and <code>customers:view</code>.</td><td>Ask a Super Admin to grant the Support module on <span class="navpath">Admin → System → Permissions</span>.</td></tr>
+    <tr><td>Actions toast "Only Support / Admin can manage tickets (403)."</td><td>You can view but don't have <code>support:edit</code>.</td><td>Request the edit level for the Support module; view-only roles can read but not change tickets.</td></tr>
+    <tr><td>Create fails: "Enter a subject (at least 3 characters)."</td><td>Subject is blank or too short.</td><td>Type a subject of 3+ characters and try again.</td></tr>
+    <tr><td>Order/Subscription ref didn't attach</td><td>The value didn't start with <code>ORD</code> or <code>SUB</code>.</td><td>Enter the reference beginning with <code>ORD-</code> or <code>SUB-</code>; other text is ignored.</td></tr>
+    <tr><td>Ticket vanished from the list</td><td>It was soft-deleted, resolved/closed and filtered out, or doesn't match the current filters.</td><td>Clear the status/priority filters and search. Deleted tickets are hidden on this board (restore is available via the API).</td></tr>
+    <tr><td>SLA still shows Overdue after changing priority</td><td>The due-date is stamped once at creation and isn't re-computed on priority change.</td><td>This is expected. Treat the due-date as the original commitment; resolve or close to clear it from the Overdue count.</td></tr>
+  </tbody></table></div>
+
+  <!-- ============================================================ FAQ -->
+  <h4>Frequently asked questions</h4>
+  <h4>Does the customer see my internal notes?</h4>
+  <p>No. Internal notes (amber, badged "internal note") are staff-only. Only <b>customer replies</b> are meant for the customer, and the customer's own account view is further limited to the subject, category, status, priority and dates — never notes, assignee, SLA or resolution text.</p>
+
+  <h4>Where does "Resolved Today" come from, and does closing count?</h4>
+  <p>It counts tickets whose <code>resolvedAt</code> is on or after midnight today. Because <b>Close ticket</b> stamps both <code>closedAt</code> and <code>resolvedAt</code>, closing a ticket today also counts it as resolved today.</p>
+
+  <h4>What decides whether a ticket is "Overdue"?</h4>
+  <p>An open ticket (anything not Resolved or Closed) whose <code>slaDueAt</code> is earlier than the current time. The due-date is set at creation from the priority: Urgent 4h, High 8h, Medium 24h, Low 48h.</p>
+
+  <h4>Can I delete a ticket permanently?</h4>
+  <p>Not from this desk. <b>Delete</b> is a <em>soft</em> delete — it sets <code>deletedAt</code> and hides the ticket, but the record and its history are preserved and can be restored through the API. Every delete is also written to the audit trail.</p>
+
+  <h4>Who can be an assignee?</h4>
+  <p>Any staff user — the assignee dropdown lists all users whose role is not <em>customer</em> or <em>delivery executive</em>, plus an <b>Unassigned</b> option. Assigning an Open ticket automatically moves it to <b>Assigned</b>.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Everything here is audited</div><p>Every mutation — create, assign, priority, status, reply, note, close, reopen, merge, delete, restore, bulk — writes an audit record (<code>support.&lt;action&gt;</code>) with the actor and target. You can review the full trail on <span class="navpath">Admin → System → Audit Logs</span>.</p></div></div>
+</section>

@@ -1,0 +1,284 @@
+<section class="sheet" id="admin-leave">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · HR · Leave</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · HR</span></div>
+  <h2 class="section-title">Leave</h2>
+  <p class="lead">Raise, review and approve staff leave in one queue — with per-employee yearly balances, a two-step (manager then HR) approval path, and automatic marking of the approved days on the attendance register.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">What this screen is for</div>
+      <p>Leave Management is the single place where all staff leave lives. A request can start two ways: HR raises it on an employee's behalf from this screen (<b>New request</b>), or an employee raises it themselves from <span class="navpath">Account → My HR → Leave</span> (<b>Apply for leave</b>). Either way the request lands in the same queue here. From here you approve or reject it. On <b>final approval</b> DOODLY does three things automatically: it records the approval, deducts the days from that employee's yearly balance for the leave type, and marks each leave day on the <span class="navpath">Admin → HR → Attendance</span> register. Everything runs against the live database through <code>/api/admin/leave</code> — there is no demo data.</p>
+    </div>
+  </div>
+
+  <div class="call warn">
+    <span class="ci">⚠️</span>
+    <div class="cbody">
+      <div class="ctitle">Who can do what</div>
+      <p><b>Viewing</b> the queue is open to <span class="pill role">Super Admin</span>, <span class="pill role">Admin</span> and <span class="pill role">Accountant</span> (Accountant is view-only). <b>Creating</b> a request and <b>approving / rejecting</b> require the <code>leave</code> module's <b>edit</b> right, which by default only <span class="pill role">Super Admin</span> and <span class="pill role">Admin</span> hold. The server backs this up: <code>GET</code> needs <code>leave:view</code> and <code>POST</code> needs <code>leave:edit</code>, otherwise it answers <code>403 Forbidden</code>. When an approver who is Admin, Super Admin or Accountant approves, the server treats it as the <b>final HR approval</b>; a plain manager (granted <code>leave:edit</code> by a custom role/override) only performs the <b>first</b> step, moving the request to <em>Manager approved</em> for HR to finish.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Leave Queue</p><p class="sm">The filterable list of every leave request, with inline approve / reject and CSV export.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> See all leave requests in one place, filter and search them, act on the ones awaiting a decision, and export the list.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> full · <span class="pill role">Admin</span> full · <span class="pill role">Accountant</span> view-only</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → Leave</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Leave Management — <b>Apply, approve and track staff leave and balances</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Status filter</b><span>Dropdown: All status · Pending · Manager approved · Approved · Rejected · Cancelled</span></div>
+          <div class="wf-cell"><b>Search box</b><span>"Search code / employee…" — matches leave code, employee code or name (350&nbsp;ms debounce)</span></div>
+          <div class="wf-cell"><b>New request</b><span>Green + button (only if you have edit rights) — opens the New leave request form</span></div>
+          <div class="wf-cell"><b>Export CSV</b><span>Downloads the currently listed rows as <code>doodly-leave.csv</code></span></div>
+          <div class="wf-cell"><b>Pending banner</b><span>"N requests awaiting approval." shows above the table when any are pending</span></div>
+          <div class="wf-cell"><b>Requests table</b><span>Code · Employee · Type · Dates · Status · Approve/Reject actions</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Leave Queue screen</div></div>
+
+      <p>The list is fetched with <code>GET /api/admin/leave?view=list</code>, newest first. The status dropdown and search box each re-query the server, so the table always reflects the live queue. Below is the exact make-up of the table.</p>
+
+      <h4>Table specification — Requests table</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Detail (from the live code)</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td><b>Code</b> (e.g. <code>LV-0001</code>) · <b>Employee</b> (name, with employee code · department underneath) · <b>Type</b> (Casual / Sick / Earned / Maternity / Emergency / Loss of Pay) · <b>Dates</b> (start → end, with the day count underneath, e.g. "3 days") · <b>Status</b> (colour badge) · a final actions column.</td></tr>
+          <tr><td><b>Filters</b></td><td><b>Status</b> dropdown (All / Pending / Manager approved / Approved / Rejected / Cancelled). The backend also accepts <code>type</code>, <code>from</code> and <code>to</code> date filters, though this screen only surfaces the status filter and search.</td></tr>
+          <tr><td><b>Search</b></td><td>Single box, case-insensitive, matches leave <b>code</b>, employee <b>code</b>, or employee <b>name</b>. Typing waits 350&nbsp;ms before querying.</td></tr>
+          <tr><td><b>Sorting</b></td><td>Fixed — most recently created request first (<code>createdAt</code> descending). No column sorting.</td></tr>
+          <tr><td><b>Pagination</b></td><td>Server paginates (default 50 per page, hard cap 200). This screen requests the default page.</td></tr>
+          <tr><td><b>Row actions</b></td><td><b>Approve</b> and <b>Reject</b> buttons appear only when the row is <em>Pending</em> or <em>Manager approved</em> <b>and</b> you hold edit rights. For decided rows the reason text (if any) shows instead.</td></tr>
+          <tr><td><b>Export</b></td><td><b>Export CSV</b> writes <code>doodly-leave.csv</code> with columns: Leave, Employee, Emp Code, Department, Type, From, To, Days, Status.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Status badges</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Status</th><th>Colour</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><b>Pending</b></td><td>Amber</td><td>Just raised; awaiting the first approval.</td></tr>
+          <tr><td><b>Manager approved</b></td><td>Blue</td><td>A manager cleared step 1; awaiting final HR approval.</td></tr>
+          <tr><td><b>Approved</b></td><td>Green</td><td>Fully approved — balance deducted and attendance marked.</td></tr>
+          <tr><td><b>Rejected</b></td><td>Red</td><td>Declined; a rejection reason may be recorded.</td></tr>
+          <tr><td><b>Cancelled</b></td><td>Red</td><td>Withdrawn (status exists in the system for cancelled requests).</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Buttons on this screen</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>New request</b></td><td>Opens the New leave request form (Screen 2).</td><td>None until you submit; then <code>POST /api/admin/leave</code> with <code>action:"create"</code>.</td><td><span class="pill role">Super Admin</span>+<span class="pill role">Admin</span></td></tr>
+          <tr><td><b>Export CSV</b></td><td>Downloads the rows currently on screen as a spreadsheet.</td><td>Client-side only — builds the file from data already loaded.</td><td>Any viewer</td></tr>
+          <tr><td><b>Approve</b></td><td>Advances the request one step (manager approve) or finalises it (HR approve). On final approval, balance and attendance update.</td><td><code>POST /api/admin/leave</code> with <code>action:"approve"</code>.</td><td><span class="pill role">Super Admin</span>+<span class="pill role">Admin</span></td></tr>
+          <tr><td><b>Reject</b></td><td>Prompts for a reason, then declines the request and notifies the employee.</td><td><code>POST /api/admin/leave</code> with <code>action:"reject"</code> and the reason.</td><td><span class="pill role">Super Admin</span>+<span class="pill role">Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Tip — approve without hunting</div>
+          <p>Set the status filter to <b>Pending</b> (or <b>Manager approved</b>) to isolate exactly the requests that need a decision. The blue "N requests awaiting approval" banner at the top of the table counts <em>Pending + Manager approved</em> together, so it is your quick daily to-do figure.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">New Leave Request</p><p class="sm">The form HR uses to raise leave on an employee's behalf, with a live balance preview.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Record a leave request for any employee — for example when someone phones in — and see their remaining balance before you submit.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> (needs <code>leave:edit</code>)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → HR → Leave → New request</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Modal — <b>New leave request</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Employee *</b><span>Dropdown of all staff (loads up to 500), shown as "empCode · Name"</span></div>
+          <div class="wf-cell"><b>Leave type * / Balance</b><span>Type dropdown next to a read-only balance chip that updates live</span></div>
+          <div class="wf-cell"><b>Start date * / End date *</b><span>Two date pickers</span></div>
+          <div class="wf-cell"><b>Reason</b><span>Optional free text, up to 500 characters</span></div>
+          <div class="wf-cell"><b>Cancel / Submit request</b><span>Footer buttons</span></div>
+          <div class="wf-cell"><b>Inline error line</b><span>Red text if validation or the server rejects the request</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the New leave request form</div></div>
+
+      <h4>Field table</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Employee</b></td><td>Whose leave this is.</td><td>Any active employee (dropdown).</td><td class="t-req">Yes</td><td>Must be chosen; server checks the employee exists (else "Employee not found.").</td><td>EMP-0007 · Ravi Kumar</td></tr>
+          <tr><td><b>Leave type</b></td><td>Category of leave, which decides the balance bucket and how the day is marked on attendance.</td><td>Casual · Sick · Earned · Maternity · Emergency · Loss of Pay.</td><td class="t-req">Yes</td><td>Server enum-validates the type. Defaults to Casual.</td><td>Sick</td></tr>
+          <tr><td><b>Balance</b></td><td>Read-only helper showing days left for the chosen employee + type this year.</td><td>Auto-filled, e.g. "9 of 12 days left".</td><td class="t-opt">Auto</td><td>Fetched live via <code>GET ?view=balances&amp;employeeId=…</code>; shows "—" if none.</td><td>9 of 12 days left</td></tr>
+          <tr><td><b>Start date</b></td><td>First day of leave.</td><td>Calendar date.</td><td class="t-req">Yes</td><td>Required; must not be after the end date.</td><td>2026-07-14</td></tr>
+          <tr><td><b>End date</b></td><td>Last day of leave (inclusive).</td><td>Calendar date.</td><td class="t-req">Yes</td><td>Required; server rejects "End date can't be before the start date." Day count = whole days inclusive (minimum 1).</td><td>2026-07-16</td></tr>
+          <tr><td><b>Reason</b></td><td>Why the leave is needed.</td><td>Free text.</td><td class="t-opt">Opt.</td><td>Trimmed; maximum 500 characters.</td><td>Family function</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">How the day count works</div>
+          <p>DOODLY counts <b>calendar days, inclusive of both ends</b> — a Monday-to-Wednesday request is 3 days. It does not currently skip weekends or holidays automatically, so for staff who work six days a week the count is straightforward; for others, check the range you enter. The count you see is what gets deducted from the balance and marked on attendance.</p>
+        </div>
+      </div>
+
+      <p>On <b>Submit request</b> the form calls <code>POST /api/admin/leave</code> with <code>action:"create"</code>. The server assigns the next code (<code>LV-0001</code>, <code>LV-0002</code>, …), stores the request as <b>Pending</b>, and — if the employee has a reporting manager on file — sends that manager a notification, <em>"Leave request to review"</em>. The request now appears at the top of the queue. Nothing is deducted from any balance yet; that happens only on final approval.</p>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Approve / Reject a Request</p><p class="sm">The decision step — a one- or two-stage approval that updates balances and attendance.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Clear a request from the queue: approve it (advancing or finalising it) or reject it with a reason.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> approve as HR (final); a manager with <code>leave:edit</code> does step 1 only</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → HR → Leave → (row) Approve / Reject</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — leave request lifecycle</div>
+        <div class="wf-flow">
+          <span>Raised (Pending)</span>
+          <span>Manager approves → Manager approved</span>
+          <span>HR approves → Approved</span>
+          <span>Balance deducted</span>
+          <span>Attendance auto-marked</span>
+          <span>Employee notified</span>
+        </div>
+      </div><div class="wire-cap">Figure — from request to approval; rejection at any open stage ends the flow with a notified employee</div></div>
+
+      <p><b>Two-step approval, explained.</b> When the approver is Admin, Super Admin or Accountant, the server treats the approval as the <b>final HR approval</b> — one click finishes it. Only when a plain <em>manager</em> (someone granted <code>leave:edit</code> through a custom role or per-user override, who is not Admin/Super&nbsp;Admin/Accountant) approves does the request move to <b>Manager approved</b> and wait for HR to finish it. In a default DOODLY setup, where only Admin and Super Admin can act, an approval finalises immediately. The on-screen toast tells you which happened: <em>"Leave approved ✓"</em> for a final approval, or <em>"Sent for HR approval"</em> for a first step.</p>
+
+      <h4>Actions</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Action</th><th>Precondition</th><th>What the server does</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Approve (final / HR)</b></td><td>Status is Pending or Manager approved; approver is Admin / Super Admin / Accountant.</td><td>Sets status <b>Approved</b>, stamps the HR approver and time, <b>deducts the days</b> from the employee's yearly balance for that type (creating the balance row on first use), and <b>marks each leave day on Attendance</b>. Then notifies the employee "Leave approved ✅" and writes an audit entry.</td><td><span class="pill role">Super Admin</span>+<span class="pill role">Admin</span></td></tr>
+          <tr><td><b>Approve (manager, step 1)</b></td><td>Status is Pending; approver is a manager with edit rights but not HR-level.</td><td>Sets status <b>Manager approved</b>, stamps the manager and time. No balance or attendance change yet. Audit entry written.</td><td>manager w/ <code>leave:edit</code></td></tr>
+          <tr><td><b>Reject</b></td><td>Status is Pending or Manager approved.</td><td>Prompts you for a reason, sets status <b>Rejected</b>, records the reason and rejecting HR, notifies the employee "Leave rejected" (with the reason), and writes an audit entry. No balance/attendance change.</td><td><span class="pill role">Super Admin</span>+<span class="pill role">Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>What "final approval" changes — the automatic effects</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Leave type</th><th>Default yearly allotment</th><th>Marked on attendance as</th></tr></thead>
+        <tbody>
+          <tr><td><b>Casual</b></td><td>12 days</td><td>Paid Leave</td></tr>
+          <tr><td><b>Sick</b></td><td>12 days</td><td>Sick Leave</td></tr>
+          <tr><td><b>Earned</b></td><td>15 days</td><td>Paid Leave</td></tr>
+          <tr><td><b>Maternity</b></td><td>180 days</td><td>Paid Leave</td></tr>
+          <tr><td><b>Emergency</b></td><td>6 days</td><td>Paid Leave</td></tr>
+          <tr><td><b>Loss of Pay</b></td><td>0 (no balance kept)</td><td>Absent</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Loss of Pay is different</div>
+          <p>A <b>Loss of Pay</b> leave keeps <b>no balance</b> (there is nothing to deduct) and each day is marked as <b>Absent</b> on attendance — which is what feeds unpaid-day handling in Payroll. Every other type is marked as Paid or Sick Leave and reduces its balance. Choose the type carefully: it is the single field that decides whether the day is paid.</p>
+        </div>
+      </div>
+
+      <div class="call danger">
+        <span class="ci">⛔</span>
+        <div class="cbody">
+          <div class="ctitle">Caution — an approved or rejected request can't be re-decided here</div>
+          <p>Once a request is <b>Approved</b> or <b>Rejected</b>, the server refuses another decision on it ("This request is already decided.") and the Approve / Reject buttons disappear from that row. Approval also writes the attendance days immediately. If you approved by mistake, you must correct the attendance entries on the <span class="navpath">Admin → HR → Attendance</span> register and adjust the balance separately — there is no one-click "un-approve".</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 4 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Leave Balances</p><p class="sm">The per-employee, per-year, per-type balance the form previews and approvals draw down.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Know, for any employee, how many days of each leave type remain this year before you approve more.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> · <span class="pill role">Admin</span> · <span class="pill role">Accountant</span> (view)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → HR → Leave → New request → Balance chip</span> · also <span class="navpath">Account → My HR → Leave</span> for staff</span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Balance preview — <b>inside the New request form</b> / My HR cards</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Casual</b><span>remaining · used of allotted</span></div>
+          <div class="wf-cell"><b>Sick</b><span>remaining · used of allotted</span></div>
+          <div class="wf-cell"><b>Earned</b><span>remaining · used of allotted</span></div>
+          <div class="wf-cell"><b>Maternity</b><span>remaining · used of allotted</span></div>
+          <div class="wf-cell"><b>Emergency</b><span>remaining · used of allotted</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the five balance buckets returned by the balances view (Loss of Pay is excluded)</div></div>
+
+      <p>Balances are read with <code>GET /api/admin/leave?view=balances&amp;employeeId=…</code> (optionally with a <code>year</code>). The server returns, for the year, one row per type — <b>allotted</b>, <b>used</b> and <b>remaining</b> (never below zero). If an employee has no balance row yet, DOODLY shows the <b>default allotment</b> for that type (Casual 12, Sick 12, Earned 15, Maternity 180, Emergency 6). The row is actually created in the database the first time a leave of that type is finally approved. The balances view covers the five paid types only — <b>Loss of Pay</b> is deliberately excluded because it has no balance.</p>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Where staff see their own balance</div>
+          <p>Employees see the same numbers on their <span class="navpath">Account → My HR → Leave</span> tab, alongside their own request history and an <b>Apply for leave</b> button (type, from/to dates with a live day count, and an optional reason). Those self-service requests submit to <code>/api/account/hr</code> with <code>action:"apply-leave"</code> and appear in this admin queue as <b>Pending</b>, exactly like ones you raise here.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ BEST PRACTICE -->
+  <div class="call best">
+    <span class="ci">✅</span>
+    <div class="cbody">
+      <div class="ctitle">Best Practice</div>
+      <p>Work the queue daily from the <b>Pending</b> filter, and <b>always check the balance chip before approving</b> — if someone is out of Casual balance, either approve knowingly or switch the type to Loss of Pay so the day is correctly unpaid. Give every rejection a clear reason: the employee receives it in their notification, and it is the only explanation stored. Because a final approval writes attendance and deducts balance in one irreversible step, confirm the dates and type are right before you click <b>Approve</b>.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOTING -->
+  <h3>Troubleshooting</h3>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>No <b>New request</b> button, and no Approve / Reject on rows.</td><td>Your role has only <code>leave:view</code> (e.g. Accountant), not <code>leave:edit</code>.</td><td>An Admin or Super Admin must act, or grant you <code>leave:edit</code> under <span class="navpath">Admin → System → Permissions</span>.</td></tr>
+      <tr><td>Approving shows "Sent for HR approval" instead of finishing.</td><td>You approved as a <em>manager</em> (edit rights but not HR-level), so it is only step 1.</td><td>An Admin, Super Admin or Accountant then approves the now <em>Manager approved</em> request to finalise it.</td></tr>
+      <tr><td>"End date can't be before the start date."</td><td>The end date is earlier than the start date.</td><td>Fix the dates; the end date must be the same day or later.</td></tr>
+      <tr><td>Balance chip shows "—".</td><td>No balance row exists yet and/or the balances call hasn't returned.</td><td>Normal for a fresh employee — the default allotment applies; the row is created on first approval. Re-select the employee/type to refetch.</td></tr>
+      <tr><td>"This request is already decided."</td><td>The request was already approved or rejected (possibly by someone else).</td><td>Refresh the queue; correct any mistake via Attendance and the balance, not by re-deciding here.</td></tr>
+      <tr><td>Manager didn't get a review notification.</td><td>The employee has no <b>reporting manager</b> set on their profile.</td><td>Set a reporting manager on the <span class="navpath">Admin → HR → Employees</span> record; HR still sees the request in this queue regardless.</td></tr>
+      <tr><td>"Couldn't load leave." banner.</td><td>Backend unreachable or you lack <code>leave:view</code>.</td><td>Check you are signed in with an HR-capable role and that the API is up; retry.</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- ============================================================ FAQ -->
+  <h3>Frequently asked questions</h3>
+  <h4>Does approving leave automatically update attendance?</h4>
+  <p>Yes. On final approval DOODLY marks every day of the range on the attendance register — as <b>Sick Leave</b> for Sick, <b>Absent</b> for Loss of Pay, and <b>Paid Leave</b> for all other types — with a note referencing the leave code. You do not mark those days by hand.</p>
+
+  <h4>How are the number of days calculated?</h4>
+  <p>It counts calendar days inclusive of both the start and end dates, with a minimum of one day. Weekends and holidays are not skipped automatically, so a request spanning a weekend counts those days too.</p>
+
+  <h4>Can an employee raise their own leave?</h4>
+  <p>Yes — from <span class="navpath">Account → My HR → Leave</span> using <b>Apply for leave</b>. It lands in this same queue as a Pending request for you to approve or reject.</p>
+
+  <h4>What happens to the balance when I reject or cancel a request?</h4>
+  <p>Nothing is deducted. Balances only change on <b>final approval</b>. A rejected request never touches the balance or attendance; it just records the reason and notifies the employee.</p>
+
+  <h4>Why can't I change an allotment on this screen?</h4>
+  <p>This module uses fixed default allotments (Casual 12, Sick 12, Earned 15, Maternity 180, Emergency 6; Loss of Pay has none). A balance row can carry a different <em>allotted</em> value once created, but there is no allotment editor on the Leave screen itself.</p>
+
+</section>

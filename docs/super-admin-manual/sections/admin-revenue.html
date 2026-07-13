@@ -1,0 +1,236 @@
+<section class="sheet" id="admin-revenue">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Growth · Revenue</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Growth</span></div>
+  <h2 class="section-title">Revenue</h2>
+  <p class="lead">One live revenue-analytics and revenue-recognition screen: eighteen headline KPI cards, a revenue-trend chart, three money breakdowns (by source, by payment method, by segment) and a full, searchable transaction ledger — every figure recognised on demand from the authoritative DOODLY database, ready to export to CSV, Excel or PDF.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — Revenue is read-only, and it has no tables of its own</div><p>The Revenue screen never edits an order, a payment or a wallet. It <b>recognises</b> revenue by reading the real source tables — <b>orders</b> and their <b>items</b>, <b>payments</b> and <b>payment records</b>, the <b>wallet ledger</b>, <b>B2B business orders</b>, <b>invoices</b> and <b>payment refunds</b> — and computes every total on the fly. A "revenue record" is simply a projection of an <b>Order</b>; there is no duplicate "revenue" table to keep in sync, so every number is the true, current state of the business.</p></div></div>
+
+  <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">How the data reaches this screen</div><p>Opening <span class="navpath">Admin → Growth → Revenue</span> calls <b>GET /api/admin/revenue?view=dashboard&amp;preset=…</b> for the KPIs and charts, and <b>GET /api/admin/revenue?view=records&amp;…</b> for the ledger. Clicking a row calls <b>GET /api/admin/revenue?view=detail&amp;id=…</b>. A green "● Live — revenue recognised from the DOODLY database" banner confirms the source URL and the resolved date range. Every filter change re-fetches; nothing is cached in the browser.</p></div></div>
+
+  <!-- ============================================================ SCREEN 1: REVENUE BOARD -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Screen 1 — Revenue Board (live analytics)</p><p class="sm">The top of the page: a date-range toolbar, eighteen KPI cards, a revenue-trend bar chart and three horizontal money breakdowns.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give finance and leadership a one-look, always-current picture of recognised revenue — how much, from where, by which payment method and from which customer segment — for any period.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span> — the roles granted <b>revenue:view</b>. Support, Operations, Procurement, Inventory, Quality, Marketing, Delivery Executive and Customer cannot open it (they get a 403).</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Revenue</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Revenue — <b>Live revenue analytics &amp; recognition</b> · date presets · Export CSV · Excel · Export PDF · ↻ Refresh</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Range toolbar</b><span>Nine preset chips (Today → All time) + Export CSV · Excel · Export PDF · ↻ Refresh</span></div>
+          <div class="wf-cell"><b>KPI strip (18 cards)</b><span>Today / week / month / year / total revenue, revenue by source, wallet, pending, refunds, gross, GST, net, AOV, MRR, ARR</span></div>
+          <div class="wf-cell"><b>Revenue trend chart</b><span>Bar chart of revenue per day (or per month); hover shows the rupee value</span></div>
+          <div class="wf-cell"><b>Revenue by source</b><span>Horizontal bars: Milk Subscription · One-Time · Add-on · Trial Pack · B2B</span></div>
+          <div class="wf-cell"><b>Payment method distribution</b><span>Horizontal bars: UPI · Card · Net Banking · Wallet · Cash</span></div>
+          <div class="wf-cell"><b>Revenue by segment</b><span>Horizontal bars: B2C — Consumers vs B2B — Businesses</span></div>
+          <div class="wf-cell"><b>Revenue records ledger</b><span>Searchable, filterable, paginated transaction table (Screen 2)</span></div>
+          <div class="wf-cell"><b>Live banner</b><span>Green "● Live" line naming the database URL and the resolved range</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 1 — The Revenue board: a range toolbar over the KPI strip, one trend chart, three money breakdowns and the transaction ledger.</div></div>
+
+      <h4>The date-range toolbar</h4>
+      <p>A single row of <b>preset chips</b> on the left and four <b>action buttons</b> on the right. Clicking a chip highlights it, re-loads the whole board (dashboard + ledger) for that range, and logs a <b>"filtered"</b> audit event. The board opens on <b>Last 30d</b> by default.</p>
+      <div class="twrap"><table><thead><tr><th>Preset chip</th><th>Range it selects</th><th>Trend granularity</th></tr></thead><tbody>
+        <tr><td>Today</td><td>Midnight today → now</td><td>Daily bars</td></tr>
+        <tr><td>Yesterday</td><td>The previous full calendar day</td><td>Daily bars</td></tr>
+        <tr><td>Last 7d</td><td>The last seven days including today</td><td>Daily bars</td></tr>
+        <tr><td>Last 30d <span class="pill role">default</span></td><td>The last thirty days including today</td><td>Daily bars</td></tr>
+        <tr><td>This month</td><td>1st of this month → end of this month</td><td>Daily bars</td></tr>
+        <tr><td>Last month</td><td>The whole previous calendar month</td><td>Daily bars</td></tr>
+        <tr><td>Quarter</td><td>The current calendar quarter</td><td>Monthly bars</td></tr>
+        <tr><td>Financial yr</td><td>Indian financial year — 1 April to 31 March</td><td>Monthly bars</td></tr>
+        <tr><td>All time</td><td>No date bound on the ledger — the entire history</td><td>See note below</td></tr>
+      </tbody></table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — daily vs. monthly bars, and how "All time" behaves</div><p>The revenue-trend chart switches automatically: if the resolved span is <b>45 days or shorter</b> the bars are drawn one per day; anything longer (Quarter, Financial yr) is bucketed into the last <b>six months</b> of monthly bars. Because <b>All time</b> sends no explicit start/end to the dashboard, the trend chart falls back to a <b>last-30-day</b> daily window even though the <b>ledger below shows the full history</b>. The KPI cards are lifetime regardless (see the warning under the KPI strip).</p></div></div>
+
+      <h4>KPI strip — the 18 headline cards</h4>
+      <p>Across the top sits a strip of eighteen number cards. Every money figure is shown in whole rupees — the database stores <b>paise</b> and the screen divides by 100 and formats with Indian digit grouping (for example ₹1,24,500).</p>
+      <div class="twrap"><table><thead><tr><th>KPI card</th><th>What it shows</th><th>How it is computed (source)</th></tr></thead><tbody>
+        <tr><td>Today's Revenue</td><td>Revenue booked since midnight today</td><td>Sum of <b>totalPaise</b> on PAID orders created today</td></tr>
+        <tr><td>This Week</td><td>Revenue over the last seven days</td><td>PAID orders created since the start of the day six days ago</td></tr>
+        <tr><td>This Month</td><td>Revenue this calendar month to date</td><td>PAID orders since the 1st of the month</td></tr>
+        <tr><td>This Year</td><td>Revenue this calendar year to date</td><td>PAID orders since 1 January</td></tr>
+        <tr><td>Total Revenue</td><td>Lifetime revenue from paid orders</td><td>Sum of <b>totalPaise</b> across all PAID orders</td></tr>
+        <tr><td>Subscription Rev</td><td>Lifetime revenue from milk subscriptions</td><td>PAID orders of type <b>SUBSCRIPTION</b></td></tr>
+        <tr><td>One-Time Rev</td><td>Lifetime revenue from one-time orders</td><td>PAID orders of type <b>ONE_TIME</b></td></tr>
+        <tr><td>Trial Pack Rev</td><td>Lifetime revenue from trial packs</td><td>PAID orders of type <b>SAMPLE</b></td></tr>
+        <tr><td>B2B Revenue</td><td>Money actually collected from business orders</td><td>Sum of <b>paidPaise</b> across all BusinessOrders</td></tr>
+        <tr><td>Wallet Revenue</td><td>Wallet money customers spent on orders</td><td>Sum of wallet <b>DEBIT</b> transactions of kind "usage"</td></tr>
+        <tr><td>Pending Payments</td><td>Value of orders still awaiting payment</td><td>Sum of totalPaise on orders with status <b>PENDING</b></td></tr>
+        <tr><td>Refunds</td><td>Total money refunded</td><td>Sum of <b>amountPaise</b> across all PaymentRefund rows</td></tr>
+        <tr><td>Gross Revenue</td><td>Order value before discount, tax and delivery</td><td>Sum of <b>subtotalPaise</b> across all PAID orders</td></tr>
+        <tr><td>GST Collected</td><td>Tax charged on paid orders</td><td>Sum of order <b>taxPaise</b> across PAID orders</td></tr>
+        <tr><td>Net Revenue</td><td>Collected revenue after refunds</td><td>Total revenue − total refunds</td></tr>
+        <tr><td>Avg Order Value</td><td>Mean value of a paid order</td><td>Total revenue ÷ count of PAID orders</td></tr>
+        <tr><td>MRR</td><td>Monthly recurring revenue (proxy)</td><td>This calendar month's <b>SUBSCRIPTION</b> revenue</td></tr>
+        <tr><td>ARR (est.)</td><td>Annual recurring revenue estimate</td><td>MRR × 12</td></tr>
+      </tbody></table></div>
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — the KPI cards are lifetime totals, not range-scoped</div><p>With the exception of the four period cards (Today / This Week / This Month / This Year), <b>every KPI card is computed over the whole business history</b> and does <b>not</b> change when you click a preset chip. The preset chip re-scopes only the <b>revenue-trend chart</b> and the <b>ledger table</b> below. This is by design — the strip is a "state of the business" summary. Use the trend chart, the ledger filters and the exports for period-specific analysis.</p></div></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — "B2B Revenue" is money collected, not money billed</div><p>The B2B Revenue card shows the total <b>paid</b> amount across business orders (<b>paidPaise</b>). What has been invoiced but not yet paid is tracked separately as outstanding B2B — you will find the billed-vs-collected picture under <span class="navpath">Admin → B2B → Invoices</span> and <span class="navpath">Admin → Finance</span>. MRR is a <b>proxy</b> (this month's subscription revenue) and ARR is simply that figure multiplied by twelve; treat both as directional indicators, not booked contract values.</p></div></div>
+
+      <h4>Charts and money breakdowns</h4>
+      <p>A two-column grid holds four panels: one vertical <b>bar-trend</b> chart and three horizontal <b>money-breakdown</b> panels. Every breakdown row is drawn as a labelled bar with the rupee value on the right, sorted largest first.</p>
+      <div class="twrap"><table><thead><tr><th>Panel</th><th>What it plots</th><th>Scope &amp; notes</th></tr></thead><tbody>
+        <tr><td>Revenue trend</td><td>Revenue per day (or per month) across the resolved range</td><td><b>Range-scoped.</b> Money bars; hover a bar to read its exact ₹ value</td></tr>
+        <tr><td>Revenue by source</td><td>Milk Subscription · One-Time Order · Add-on Product · Trial Pack, plus a <b>B2B Orders</b> row when B2B has been collected</td><td><b>Lifetime.</b> One bar per order type; B2B appended from collected business orders</td></tr>
+        <tr><td>Payment method distribution</td><td>Recognised revenue split by UPI · Card · Net Banking · Wallet · Cash</td><td><b>Lifetime.</b> Grouped from PaymentRecord by method (net amount)</td></tr>
+        <tr><td>Revenue by segment</td><td>B2C — Consumers vs B2B — Businesses</td><td><b>Lifetime.</b> Segments with zero revenue are hidden</td></tr>
+      </tbody></table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — a panel can read "No data in this range."</div><p>If there is genuinely nothing to plot, the panel shows a small "No data in this range." message instead of empty bars. For the three breakdowns this simply means no lifetime revenue exists in that dimension yet; for the trend chart it means no PAID orders fell inside the resolved window.</p></div></div>
+
+      <h4>Buttons on the board</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td>Preset chip (Today … All time)</td><td>Re-loads the board (dashboard + ledger) for that range</td><td>GET /api/admin/revenue?view=dashboard&amp;preset=… ; then reloads records; POST logs <b>revenue.filtered</b></td><td><span class="pill role">Super Admin</span>+ revenue:view</td></tr>
+        <tr><td>Export CSV</td><td>Downloads a .csv with a title line, the 18 KPIs and the currently-filtered ledger</td><td>Built client-side; fetches the ledger (server caps at 200 rows); POST logs <b>revenue.exported [csv]</b></td><td><span class="pill role">Super Admin</span>+ revenue:view</td></tr>
+        <tr><td>Excel</td><td>The same content downloaded as an Excel-openable .xls file</td><td>Client-side; POST logs <b>revenue.exported [xls]</b></td><td><span class="pill role">Super Admin</span>+ revenue:view</td></tr>
+        <tr><td>Export PDF</td><td>Opens a formatted print window (KPIs + Revenue Records) ready to "Save as PDF"</td><td>Client-side print window; POST logs <b>revenue.exported [pdf]</b></td><td><span class="pill role">Super Admin</span>+ revenue:view</td></tr>
+        <tr><td>↻ Refresh</td><td>Re-fetches the live dashboard and shows a "Analytics refreshed" toast</td><td>GET dashboard again; POST logs <b>revenue.refreshed</b></td><td><span class="pill role">Super Admin</span>+ revenue:view</td></tr>
+      </tbody></table></div>
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — allow pop-ups for Export PDF</div><p>Export PDF opens a new browser window. If your browser blocks pop-ups the screen shows "Allow pop-ups to export PDF" and nothing prints. Allow pop-ups for the admin site once and it works every time. CSV and Excel download directly and are never blocked.</p></div></div>
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — pick the range and filters before you export</div><p>The CSV/Excel/PDF exports include the ledger with the <b>currently applied</b> preset, source, status, sort and search. Choose your period and narrow the ledger <b>first</b> — for example "Financial yr" plus source "Milk Subscription" — let the board reload, then click Export. Because the server returns at most <b>200 ledger rows</b> per export, tighten the filters for a large period rather than exporting "All time" in one shot.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2: REVENUE RECORDS LEDGER -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Screen 2 — Revenue records ledger</p><p class="sm">The searchable, filterable, paginated transaction table at the foot of the board — one row per order, with a live record count.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Let an accountant audit revenue transaction by transaction — find a specific customer's order, filter to pending or refunded revenue, sort by value, and open any row for the full recognition breakdown.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span> — revenue:view</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Revenue → Revenue records</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Revenue records — <b>badge: N records</b> · search · source · status · sort</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Filter row</b><span>Search box + All sources · All statuses · Sort selects</span></div>
+          <div class="wf-cell"><b>Ledger table</b><span>11 columns: Revenue ID → Date; each row is clickable</span></div>
+          <div class="wf-cell"><b>Status badge</b><span>Colour-coded Paid / Pending / Refunded / Failed</span></div>
+          <div class="wf-cell"><b>Pager</b><span>"Page X of Y" with ← Prev / Next → (25 rows per page)</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 2 — The ledger sits below the charts; clicking any row opens the revenue record detail (Screen 3).</div></div>
+
+      <h4>Filters, search and sort</h4>
+      <p>A single filter row controls the ledger. The search box de-bounces (waits ~300 ms after you stop typing) and any change resets you to page 1 and re-fetches only the ledger. The <b>date range</b> comes from the preset chip at the very top of the board — the ledger always respects it.</p>
+      <div class="twrap"><table><thead><tr><th>Control</th><th>Options</th><th>What it does (backend)</th></tr></thead><tbody>
+        <tr><td>Search box</td><td>Free text — placeholder "Search REV ID, customer, invoice…"</td><td>Matches the order ID, the customer <b>name</b> or <b>phone</b>, or the <b>invoice number</b> (contains)</td></tr>
+        <tr><td>Source select</td><td>All sources · Milk Subscription · One-Time Order · Add-on Product · Trial Pack</td><td>Filters orders by <b>type</b> (SUBSCRIPTION / ONE_TIME / EXTRA / SAMPLE)</td></tr>
+        <tr><td>Status select</td><td>All statuses · Paid · Pending · Refunded · Failed</td><td>Filters orders by <b>status</b> (PAID / PENDING / REFUNDED / FAILED)</td></tr>
+        <tr><td>Sort select</td><td>Latest · Highest ₹ · Lowest ₹ · Customer A–Z</td><td>Orders by createdAt desc / totalPaise desc / totalPaise asc / customer name asc</td></tr>
+      </tbody></table></div>
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — the "Revenue ID" is a display code derived from the order</div><p>Each row's ID reads <b>REV-XXXXXXXX</b>, formed from the last eight characters of the underlying order ID (upper-cased). Search matches the customer name, phone, or invoice number most reliably. When you open a record its detail modal shows the same REV- code, so you can cross-reference it against an invoice or a payment.</p></div></div>
+
+      <h4>Ledger table columns</h4>
+      <div class="twrap"><table><thead><tr><th>Column</th><th>Shows</th><th>Source field</th></tr></thead><tbody>
+        <tr><td>Revenue ID</td><td>REV-XXXXXXXX display code (bold)</td><td>"REV-" + last 8 of order.id</td></tr>
+        <tr><td>Customer</td><td>The customer's name (or "—")</td><td>order.user.name</td></tr>
+        <tr><td>Source</td><td>Milk Subscription / One-Time Order / Add-on Product / Trial Pack</td><td>order.type (labelled)</td></tr>
+        <tr><td>Product</td><td>Up to three item names, then "+N" for the rest (or "—")</td><td>order.items.productName</td></tr>
+        <tr><td>Gross</td><td>Order value before discount / tax / delivery</td><td>order.subtotalPaise</td></tr>
+        <tr><td>GST</td><td>Tax charged on the order</td><td>order.taxPaise</td></tr>
+        <tr><td>Wallet</td><td>Wallet money applied to this order</td><td>Sum of wallet DEBIT "usage" for the order</td></tr>
+        <tr><td>Net</td><td>The order total (bold)</td><td>order.totalPaise</td></tr>
+        <tr><td>Method</td><td>UPI / Card / Net Banking / Wallet / Cash (or "—")</td><td>order.payment.method (labelled)</td></tr>
+        <tr><td>Status</td><td>Colour-coded badge — see below</td><td>order.status</td></tr>
+        <tr><td>Date</td><td>Order date (dd Mon yy)</td><td>order.createdAt</td></tr>
+      </tbody></table></div>
+
+      <h4>Status badge colours</h4>
+      <div class="twrap"><table><thead><tr><th>Status</th><th>Badge tone</th><th>Meaning</th></tr></thead><tbody>
+        <tr><td>PAID</td><td>Green</td><td>Payment captured — this order is recognised revenue</td></tr>
+        <tr><td>PENDING</td><td>Amber</td><td>Awaiting payment — value shows under "Pending Payments", not revenue</td></tr>
+        <tr><td>REFUNDED</td><td>Grey</td><td>Refunded — subtracted from Net Revenue via the refund total</td></tr>
+        <tr><td>FAILED (or other)</td><td>Red</td><td>Payment failed or cancelled</td></tr>
+      </tbody></table></div>
+
+      <h4>Ledger behaviour at a glance</h4>
+      <div class="twrap"><table><thead><tr><th>Property</th><th>Detail</th></tr></thead><tbody>
+        <tr><td>Record count badge</td><td>Shows "N record(s)" — the total matching the current filters, next to the panel title</td></tr>
+        <tr><td>Pagination</td><td>25 rows per page; "Page X of Y" with ← Prev / Next → (disabled at the ends)</td></tr>
+        <tr><td>Sorting</td><td>Via the Sort select only — Latest (default), Highest ₹, Lowest ₹, Customer A–Z</td></tr>
+        <tr><td>Search</td><td>Order ID, customer name, customer phone, invoice number (de-bounced)</td></tr>
+        <tr><td>Row action</td><td>Click any row to open the revenue record detail modal (Screen 3)</td></tr>
+        <tr><td>Empty state</td><td>"No revenue records match these filters." across the table</td></tr>
+        <tr><td>Error state</td><td>"Your role can't view revenue records (403)." or "Couldn't load records."</td></tr>
+      </tbody></table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — the ledger lists all order statuses, not just PAID</div><p>Unlike the revenue KPIs (which count only PAID orders), the ledger is a full order projection and will list PENDING, REFUNDED and FAILED rows too, so you can audit them. Their value is still classified correctly in the KPI strip — pending value under "Pending Payments", refunds under "Refunds" — even though the row appears here.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3: REVENUE RECORD DETAIL -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Screen 3 — Revenue record detail</p><p class="sm">The modal opened by clicking a ledger row — the full revenue-recognition breakdown for one order.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Show, for a single order, exactly how its revenue was built up — customer, gross-to-net breakdown, line items, payment method, wallet usage, refunds and the order's audit history — so an accountant can reconcile the record end to end.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span> — revenue:view</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Revenue → (click a ledger row)</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Revenue record — <b>REV-XXXXXXXX · status badge</b> · × close</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Header</b><span>REV code + status badge; source · date · invoice number</span></div>
+          <div class="wf-cell"><b>Customer</b><span>Name · Phone · Wallet balance</span></div>
+          <div class="wf-cell"><b>Revenue breakdown</b><span>Gross · Discount · GST · Delivery · Deposit · Net revenue</span></div>
+          <div class="wf-cell"><b>Line items</b><span>Product (· variant) · Qty · Amount</span></div>
+          <div class="wf-cell"><b>Payment</b><span>Method · Wallet used</span></div>
+          <div class="wf-cell"><b>Wallet usage / Refunds</b><span>Wallet transactions and any refunds (→ wallet flagged)</span></div>
+          <div class="wf-cell"><b>Audit history</b><span>The order's recent events with timestamps</span></div>
+          <div class="wf-cell"><b>Footer</b><span>Close</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 3 — The detail modal overlays the board; press Esc, click the backdrop, × or Close to dismiss it.</div></div>
+
+      <p>Opening the modal calls <b>GET /api/admin/revenue?view=detail&amp;id=&lt;orderId&gt;</b> and logs a <b>revenue.generated</b> audit event. It shows the following sections, all read-only.</p>
+      <div class="twrap"><table><thead><tr><th>Section</th><th>Fields shown</th><th>Source</th></tr></thead><tbody>
+        <tr><td>Header</td><td>REV code, status badge, source label, order date, and "Invoice &lt;number&gt;" when an invoice exists</td><td>order + invoice</td></tr>
+        <tr><td>Customer</td><td>Name · Phone · Wallet balance</td><td>order.user (name, phone, walletPaise)</td></tr>
+        <tr><td>Revenue breakdown</td><td>Gross · Discount (shown as "− ₹…") · GST · Delivery · Deposit · Net revenue</td><td>order subtotal / discount / tax / delivery / deposit / total</td></tr>
+        <tr><td>Line items</td><td>Product name (with variant label if any) · Qty · line Amount</td><td>order.items</td></tr>
+        <tr><td>Payment</td><td>Method · Wallet used</td><td>PaymentRecord (falls back to order.payment)</td></tr>
+        <tr><td>Wallet usage</td><td>Each wallet transaction: kind · amount · reference (or "No wallet usage.")</td><td>walletTxn for the order</td></tr>
+        <tr><td>Refunds</td><td>Each refund: amount · reference, flagged "→ wallet" when refunded to wallet (or "No refunds.")</td><td>PaymentRecord.refunds</td></tr>
+        <tr><td>Audit history</td><td>The order's recent events — type + timestamp (or "No history.")</td><td>order.events (latest 30)</td></tr>
+      </tbody></table></div>
+
+      <h4>Buttons in the detail modal</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td>Close / × / Esc / backdrop</td><td>Dismisses the modal and returns to the board</td><td>None</td><td>—</td></tr>
+      </tbody></table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — the detail is view-only</div><p>This modal has no edit, refund or resend controls. Refunds are issued from <span class="navpath">Admin → Finance → Payments</span> and the invoice is managed under Billing / Invoices; Revenue only <b>reflects</b> what those screens have already done. If a refund is missing here, check that it was captured against the payment record for this order.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ WORKFLOW -->
+  <div class="diagram"><div class="wf">
+    <div class="wf-topbar">Workflow — from open to reconciled record</div>
+    <div class="wf-flow"><span>Open Revenue</span><span>Board loads live KPIs &amp; charts</span><span>Pick a date preset</span><span>Filter / search the ledger</span><span>Click a row</span><span>Read the recognition breakdown</span><span>Export CSV / Excel / PDF</span><span>Action audit-logged</span></div>
+  </div><div class="wire-cap">Figure 4 — Every open, filter, drill-down and export is recorded in the audit trail.</div></div>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — everything is audit-logged</div><p>Filtering, refreshing, opening a record and exporting each send a POST to <b>/api/admin/revenue</b> that writes to the audit trail — actions <b>revenue.filtered</b>, <b>revenue.refreshed</b>, <b>revenue.generated</b> and <b>revenue.exported</b> (with the format captured). The endpoint also recognises a <b>revenue.recalculated</b> event, which is the only one that needs <b>revenue:edit</b> (Super Admin / Admin) rather than <b>revenue:view</b>. Review who pulled which figures and when under <span class="navpath">Admin → System → Audit Logs</span>.</p></div></div>
+
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — reconcile Revenue against Payments and Reports monthly</div><p>Revenue, Payments and Reports all read the same source tables, so their headline figures line up. Once a month, cross-check <b>Net Revenue</b> here against the <span class="navpath">Admin → Finance → Payments</span> collected total and the <span class="navpath">Admin → Growth → Reports</span> financial drill-down. If they diverge, look for orders stuck in PENDING (in the ledger) or refunds captured against a payment but not reflected in an order status.</p></div></div>
+
+  <!-- ============================================================ TROUBLESHOOTING -->
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table><thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead><tbody>
+    <tr><td>Board stays on "Loading live revenue analytics…" then shows "⚠ Backend offline"</td><td>The next-app backend is not running / not reachable</td><td>Start or restart the backend; the banner names the exact base URL it tried</td></tr>
+    <tr><td>"⚠ Your role can't view Revenue — Finance / Accountant / Admin only (403)"</td><td>Your role lacks <b>revenue:view</b></td><td>Sign in as Super Admin, Admin or Accountant, or ask a Super Admin to grant the revenue permission</td></tr>
+    <tr><td>KPI cards don't change when I switch presets</td><td>Expected — all cards except Today / Week / Month / Year are lifetime totals</td><td>Use the revenue-trend chart, the ledger filters and the exports for period figures</td></tr>
+    <tr><td>"All time" trend chart looks like only the last month</td><td>All time sends no explicit range, so the trend falls back to a 30-day daily window</td><td>The ledger below still shows the full history; pick "Financial yr" for a longer trend</td></tr>
+    <tr><td>Trend chart flips from daily bars to monthly bars</td><td>The resolved range is longer than 45 days (Quarter, Financial yr)</td><td>Pick a shorter preset (Last 30d or shorter) to see per-day bars again</td></tr>
+    <tr><td>Searching "REV-…" finds nothing</td><td>Search matches the raw order ID, name, phone or invoice — not the display REV- code</td><td>Search by customer name, phone or invoice number instead</td></tr>
+    <tr><td>Export PDF does nothing</td><td>The browser blocked the pop-up window</td><td>Allow pop-ups for the admin site, then click again (CSV/Excel are unaffected)</td></tr>
+    <tr><td>A CSV export seems to miss rows for a big period</td><td>The server caps a ledger export at 200 rows</td><td>Narrow the range/source/status filters and export in slices</td></tr>
+    <tr><td>Ledger shows a PENDING or FAILED row inside "Revenue"</td><td>Expected — the ledger is a full order projection, not just PAID</td><td>Use the Status filter to show only Paid, or read the KPI strip for recognised revenue</td></tr>
+  </tbody></table></div>
+
+  <!-- ============================================================ FAQ -->
+  <h4>Frequently asked questions</h4>
+  <h4>Q. What exactly counts as "revenue" on this screen?</h4>
+  <p>Recognised revenue is the value of orders with status <b>PAID</b> (their <b>totalPaise</b>), plus collected B2B business orders. Pending orders are shown separately as "Pending Payments", and refunds are subtracted to give "Net Revenue". A pending or failed order can appear in the ledger for auditing, but it contributes no recognised revenue.</p>
+  <h4>Q. Why is B2B Revenue lower than what we invoiced this month?</h4>
+  <p>The B2B Revenue card shows money actually <b>collected</b> (paidPaise), not billed. The difference — billed but unpaid — is B2B outstanding, visible on the B2B Invoices and Finance screens. Revenue deliberately recognises cash collected, not credit extended.</p>
+  <h4>Q. Are MRR and ARR real contract figures?</h4>
+  <p>No. MRR is a proxy — the current calendar month's subscription revenue — and ARR is MRR × 12. They are useful trend indicators but are not derived from active-subscription contract values, so do not use them as booked recurring revenue.</p>
+  <h4>Q. Do the Revenue numbers match the Reports and Payments screens?</h4>
+  <p>Yes — all three read the same authoritative tables. Reports is the cross-functional summary, Payments is the gateway/settlement view, and Revenue adds the transaction ledger and the gross-to-net recognition breakdown that finance needs. Small wording differences aside, revenue, GST and order counts reconcile.</p>
+  <h4>Q. Can I choose a custom start and end date?</h4>
+  <p>The board is driven by the nine preset chips. The underlying endpoint also accepts explicit <b>from</b> and <b>to</b> parameters, but the standard UI uses presets — pick the closest one for on-screen analysis, then export if you need to reshape the exact period offline.</p>
+</section>

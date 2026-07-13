@@ -1,0 +1,474 @@
+<section class="sheet" id="admin-help-center">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Content · Help Centre</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Content</span></div>
+  <h2 class="section-title">Help Centre</h2>
+  <p class="lead">Manage the customer knowledge base — FAQs, categories, video guides, the platform-wide contextual tooltips, and help analytics — from one workspace, with every change publishing instantly to the storefront and no code change.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">What this module controls</div>
+      <p>The Help Centre workspace is a full content-management system (CMS) for everything a customer sees on the public <span class="navpath">/help.html</span> page: the searchable FAQ knowledge base, the category tabs, the "Video guides" grid, and the "Still need help?" contact block. It also edits the small <b>ⓘ</b> contextual-help tooltips that appear next to fields, buttons and metrics across the whole platform. Finally, it reports how customers use help — most-viewed FAQs, most-searched terms, unanswered searches and product-tour completion.</p>
+    </div>
+  </div>
+
+  <div class="call best">
+    <span class="ci">✅</span>
+    <div class="cbody">
+      <div class="ctitle">How it saves</div>
+      <p>Edits are mirrored to your browser first (so the screen stays instant) and then persisted to the DOODLY Postgres database through <span class="navpath">/api/help/admin</span>. A green <b>"● Live"</b> banner confirms the save reached the database and shows the current FAQ, category and video counts. The storefront Help Centre reads the same data live via <span class="navpath">/api/help/public</span>, so a published change is visible to customers immediately.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 0 — Workspace overview -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Help Centre workspace</p><p class="sm">The six-tab console that manages the entire knowledge base.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give one place to author FAQs, organise categories, attach video guides, edit contextual tooltips, control display settings and read help analytics.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Manager</span> (Marketing) — editing needs the <b>CMS · edit</b> permission</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Help Center</span></span>
+    </div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Help Center — <b>Content CMS</b> · tabs · "● Live" backend banner</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Tab bar</b><span>FAQs · Categories · Videos · Tooltips · Settings · Analytics</span></div>
+          <div class="wf-cell"><b>Live banner</b><span>Green "● Live — N FAQ(s) across M categories · V video guide(s)" or amber offline / 403 warning</span></div>
+          <div class="wf-cell"><b>Tab body</b><span>The editor for whichever tab is active (list rows, forms, toggles or analytics tables)</span></div>
+          <div class="wf-cell"><b>Row actions</b><span>Publish/Unpublish, Move up/down, Edit, Delete, inline URL fields</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Help Centre console: a six-tab workspace above a live database-status banner.</div></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Tab</th><th>What it manages</th><th>Backend it writes to</th>
+      </tr></thead><tbody>
+        <tr><td><b>FAQs</b></td><td>Questions &amp; answers, grouped by category; publish state and order.</td><td><span class="navpath">/api/help/admin</span> → HelpArticle</td></tr>
+        <tr><td><b>Categories</b></td><td>The topic groups (Getting Started, Delivery, Wallet, B2B…) and their order.</td><td>HelpCategory</td></tr>
+        <tr><td><b>Videos</b></td><td>Video-guide titles and their playable URLs.</td><td>HelpVideo</td></tr>
+        <tr><td><b>Tooltips</b></td><td>The platform-wide ⓘ contextual-help copy and per-module on/off switches.</td><td>Browser store (<code>doodly-help-tips</code>, <code>doodly-help-tip-modules</code>)</td></tr>
+        <tr><td><b>Settings</b></td><td>Background illustrations toggle, read-only contact details, reset-to-defaults.</td><td>Browser store (<code>doodly-help</code>)</td></tr>
+        <tr><td><b>Analytics</b></td><td>Views, searches, unanswered searches and product-tour completion.</td><td>HelpArticle views · HelpSearch · tour Counters</td></tr>
+      </tbody></table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Two things persist to the browser only</div>
+          <p>The <b>Tooltips</b> and <b>Settings</b> tabs store their overrides in the admin's own browser (local storage), not Postgres. They still take effect immediately for everyone who loads the page from that build, but they are not shared across devices the way FAQs, categories and videos are. Edit them from the machine you administer with.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 1 — FAQs tab -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">FAQs tab</p><p class="sm">Author, publish, reorder and delete the questions in each category.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Maintain the searchable question-and-answer knowledge base customers browse on the Help Centre and that the AI assistant and site search draw from.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Manager</span> (CMS · edit)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Help Center → FAQs</span></span>
+    </div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">FAQs — <b>category chips</b> · rows · "+ Add question"</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Category chips</b><span>One chip per category with its live question count; the active chip is highlighted</span></div>
+          <div class="wf-cell"><b>FAQ row</b><span>Question (bold) + Answer preview, a Published/Unpublished badge, and the row action buttons</span></div>
+          <div class="wf-cell"><b>Row actions</b><span>Publish/Unpublish · Move up · Move down · Edit · Delete</span></div>
+          <div class="wf-cell"><b>Add question</b><span>Reveals an inline Question + Answer form with Save / Cancel</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the FAQs editor: pick a category chip, then manage that category's questions row by row.</div></div>
+
+      <h4>Add / Edit question form</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Question</b></td><td>The question exactly as a customer would ask it.</td><td>Free text (single line)</td><td class="t-req">Yes</td><td>Client blocks empty ("Enter a question and answer"). Backend requires ≥ 3 characters.</td><td>How do I pause my subscription?</td></tr>
+        <tr><td><b>Answer</b></td><td>The plain-English answer shown when the row is expanded.</td><td>Free text (3-line box)</td><td class="t-req">Yes</td><td>Client blocks empty. Backend requires ≥ 3 characters. Stored and shown as plain text (HTML is escaped).</td><td>Open My Subscription and tap Pause. Your remaining days are preserved.</td></tr>
+      </tbody></table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Category is the chip you're on</div>
+          <p>A new question is added to whichever category chip is currently selected, so choose the right chip before pressing <b>+ Add question</b>. Newly created questions are <b>Published</b> by default. The backend also generates a URL-friendly id from the question text and gives it the next sort position in the category.</p>
+        </div>
+      </div>
+
+      <h4>Row action buttons</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Publish / Unpublish</b></td><td>Toggles whether the question appears on the public Help Centre. Unpublished rows stay in the admin list with a grey badge.</td><td><code>publish</code> action sets <code>HelpArticle.published</code>. Only published FAQs are returned by <span class="navpath">/api/help/public</span>.</td><td><span class="pill role">Manager</span>+</td></tr>
+        <tr><td><b>Move up ▲</b></td><td>Raises the question one place within its category.</td><td><code>reorder</code> writes new <code>sortOrder</code> values in a single transaction.</td><td><span class="pill role">Manager</span>+</td></tr>
+        <tr><td><b>Move down ▼</b></td><td>Lowers the question one place within its category.</td><td><code>reorder</code> (as above).</td><td><span class="pill role">Manager</span>+</td></tr>
+        <tr><td><b>Edit ✎</b></td><td>Opens the inline Question / Answer form pre-filled with the current text.</td><td><code>update</code> action patches the article.</td><td><span class="pill role">Manager</span>+</td></tr>
+        <tr><td><b>Delete 🗑</b></td><td>Removes the question after a confirm prompt ("Delete this question?").</td><td><code>delete</code> action removes the <code>HelpArticle</code> row.</td><td><span class="pill role">Manager</span>+</td></tr>
+        <tr><td><b>Save</b></td><td>Validates and stores the Question + Answer, then closes the form.</td><td><code>create</code> (new) or <code>update</code> (edit).</td><td><span class="pill role">Manager</span>+</td></tr>
+        <tr><td><b>Cancel</b></td><td>Closes the form without saving.</td><td>None — client only.</td><td>—</td></tr>
+      </tbody></table></div>
+
+      <div class="call danger">
+        <span class="ci">⛔</span>
+        <div class="cbody">
+          <div class="ctitle">Delete is permanent</div>
+          <p>Deleting an FAQ hard-deletes the row from the database — there is no trash or undo. If you only want to hide a question temporarily, use <b>Unpublish</b> instead; it keeps the content and lets you restore it with one click.</p>
+        </div>
+      </div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — publishing an FAQ</div>
+        <div class="wf-flow"><span>Pick category chip</span><span>+ Add question</span><span>Type Question + Answer</span><span>Save (Published by default)</span><span>Reorder if needed</span><span>Live on /help.html</span></div>
+      </div><div class="wire-cap">Figure — from draft to live customer-facing answer in one screen.</div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 2 — Categories tab -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Categories tab</p><p class="sm">Create, rename, reorder and remove the topic groups that organise FAQs.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Control the top-level topics (Getting Started, Products, Delivery, Subscription, Wallet, Payments, Bottle Returns, B2B Orders, Account…) into which every FAQ is filed and by which customers browse.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Manager</span> — <b>Delete</b> is Super Admin only</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Help Center → Categories</span></span>
+    </div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Categories — <b>category rows</b> · "New category name" + Add</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Category row</b><span>Icon + title, and "N question(s) · id: &lt;slug&gt;" underneath</span></div>
+          <div class="wf-cell"><b>Row actions</b><span>Move up · Move down · Rename · Delete (Super Admin)</span></div>
+          <div class="wf-cell"><b>Add row</b><span>"New category name" text box + "＋ Add category" button</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — categories listed in display order, with an add box at the bottom.</div></div>
+
+      <h4>Add category form</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>New category name</b></td><td>The display title of the topic group.</td><td>Free text</td><td class="t-req">Yes</td><td>Empty names are ignored. A URL-friendly <b>id</b> is auto-generated from the name (lower-case, dashes). A default "info" icon is applied and the category starts empty.</td><td>Festival Orders → id <code>festival-orders</code></td></tr>
+      </tbody></table></div>
+
+      <h4>Row action buttons</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Move up ▲ / down ▼</b></td><td>Changes the order categories appear in, both here and on the storefront.</td><td><code>catReorder</code> updates each <code>HelpCategory.sortOrder</code>.</td><td><span class="pill role">Manager</span>+</td></tr>
+        <tr><td><b>Rename ✎</b></td><td>Prompts for a new title ("Rename category") and updates it.</td><td><code>catRename</code> patches the title.</td><td><span class="pill role">Manager</span>+</td></tr>
+        <tr><td><b>Delete 🗑</b></td><td>Removes the category and its questions after a confirm prompt. <b>Shown only to Super Admin.</b></td><td><code>catDelete</code> soft-deletes the category (sets <code>deletedAt</code>).</td><td><span class="pill role">Super Admin</span></td></tr>
+        <tr><td><b>＋ Add category</b></td><td>Creates the new category from the name box.</td><td><code>catCreate</code> with title + default icon.</td><td><span class="pill role">Manager</span>+</td></tr>
+      </tbody></table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Deleting a category takes its questions with it</div>
+          <p>The confirm prompt reads "Delete this category and its questions?" for a reason — the FAQs filed under it disappear from the public knowledge base. Move any questions you want to keep into another category (via Edit on the FAQs tab) before deleting. On the storefront, an empty category is simply not shown.</p>
+        </div>
+      </div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Canonical categories get the right icon automatically</div>
+          <p>The storefront maps well-known category slugs (getting-started, products, delivery, subscription, wallet, payments, bottle-returns, b2b, account) to a matching dairy icon even though the database stores a generic "info" icon. Naming a new category to match one of these slugs makes it inherit the correct icon.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 3 — Videos tab -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Videos tab</p><p class="sm">Attach playable URLs to the "Video guides" grid on the Help Centre.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Manage the short how-to video guides ("How to place an order", "How subscriptions work"…) shown on the storefront Help Centre. A guide with no URL displays as a "Coming soon" placeholder.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Manager</span> (CMS · edit)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Help Center → Videos</span></span>
+    </div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Videos — <b>guide rows</b> · "New video title" + Add</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Guide row</b><span>Play icon + title, and either the URL or "No video yet — placeholder shown to customers"</span></div>
+          <div class="wf-cell"><b>Inline URL box</b><span>"Paste video URL…" — saves on change</span></div>
+          <div class="wf-cell"><b>Delete</b><span>Removes the guide</span></div>
+          <div class="wf-cell"><b>Add row</b><span>"New video title" box + "＋ Add video" button</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — each row is a video guide; paste a URL to turn a placeholder into a playable card.</div></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>New video title</b></td><td>The label of a brand-new guide card.</td><td>Free text</td><td class="t-req">Yes</td><td>Empty titles are ignored. Created with a blank URL, so it starts as "Coming soon".</td><td>How Auto Pay works</td></tr>
+        <tr><td><b>Video URL</b></td><td>The link the card plays / opens when clicked.</td><td>URL (e.g. YouTube link)</td><td class="t-opt">Opt.</td><td>Saves automatically when you leave the box ("Video updated"). Blank keeps the card as a "Coming soon" placeholder.</td><td>https://youtu.be/…</td></tr>
+      </tbody></table></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>＋ Add video</b></td><td>Creates a new guide from the title box (URL blank).</td><td><code>vidCreate</code> → HelpVideo, next sort position.</td><td><span class="pill role">Manager</span>+</td></tr>
+        <tr><td><b>(URL field)</b></td><td>Attaches or changes the playable link.</td><td><code>vidUpdate</code> patches the URL.</td><td><span class="pill role">Manager</span>+</td></tr>
+        <tr><td><b>Delete 🗑</b></td><td>Removes the guide card.</td><td><code>vidDelete</code> soft-deletes the row.</td><td><span class="pill role">Manager</span>+</td></tr>
+      </tbody></table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">The whole grid is labelled "Coming soon"</div>
+          <p>On the storefront the "Video guides" section carries a "Coming soon" tag until real URLs are added. Cards with a URL become clickable and open the video in a new tab; cards without one stay as inert placeholders.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 4 — Tooltips tab -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Tooltips tab</p><p class="sm">Edit the platform-wide ⓘ contextual-help copy and switch it on/off per module.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Author the small hover / focus / long-press help bubbles that explain fields, status badges, buttons, table columns and metrics across every DOODLY screen — and control which modules show them.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Manager</span> (CMS · edit)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Help Center → Tooltips</span></span>
+    </div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Tooltips — <b>per-module switches</b> · filter · reset · grouped editor</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Enable per module</b><span>A checkbox for every module — turn contextual help on or off for that screen</span></div>
+          <div class="wf-cell"><b>Filter box</b><span>"Filter tooltips…" narrows the list by key or text</span></div>
+          <div class="wf-cell"><b>Reset all tooltip text</b><span>Restores every tooltip to its built-in default copy</span></div>
+          <div class="wf-cell"><b>Grouped editor</b><span>Rows grouped into Features &amp; terms · Status badges · Action buttons · Table columns · Metrics &amp; charts</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — module switches and a searchable, grouped copy editor for the whole tooltip catalogue.</div></div>
+
+      <h4>Per-tooltip editor row</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Key</b> (read-only)</td><td>The catalogue id the tooltip is matched by, shown as a code chip; an "edited" badge appears once you override it.</td><td>—</td><td class="t-opt">—</td><td>System value, not editable. Examples: <code>wallet</code>, <code>status:pending</code>, <code>act:approve</code>, <code>col:amount</code>, <code>metric:revenue</code>.</td><td><code>autopay</code></td></tr>
+        <tr><td><b>Title</b></td><td>The bold heading of the help bubble.</td><td>Free text</td><td class="t-opt">Opt.</td><td>Saved to the override store on change ("Tooltip updated") and audited. Blank leaves the default.</td><td>Auto Pay</td></tr>
+        <tr><td><b>Description</b></td><td>The explanatory sentence in the bubble.</td><td>Free text (2-line box)</td><td class="t-opt">Opt.</td><td>Saved on change; audited.</td><td>Securely renews your plan so deliveries never pause.</td></tr>
+        <tr><td><b>Example</b></td><td>An optional "e.g. …" line under the description.</td><td>Free text</td><td class="t-opt">Opt.</td><td>Saved on change; shown only if filled.</td><td>₹100</td></tr>
+      </tbody></table></div>
+
+      <h4>Controls</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Control</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Module checkbox</b></td><td>Enables or disables all contextual help on that module's screens.</td><td>Writes <code>doodly-help-tip-modules</code>; every change is written to the audit trail (<code>help.tips</code>).</td><td><span class="pill role">Manager</span>+</td></tr>
+        <tr><td><b>Filter tooltips…</b></td><td>Live-filters the editor rows by key or copy.</td><td>Client only.</td><td>—</td></tr>
+        <tr><td><b>Reset all tooltip text</b></td><td>Clears every text override (module on/off settings are kept) after a confirm prompt.</td><td>Empties <code>doodly-help-tips</code>; falls back to built-in defaults.</td><td><span class="pill role">Manager</span>+</td></tr>
+      </tbody></table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Where these tooltips appear</div>
+          <p>DOODLY resolves the right help bubble for almost any element automatically — a status badge, a table heading, a button label, a KPI card or a known term — without needing markup on the page. Editing the copy here changes the bubble everywhere that element appears. The system is described as multi-language ready, and overrides are stored separately from defaults so a reset never loses the originals.</p>
+        </div>
+      </div>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">Best Practice</div>
+          <p>Keep tooltip copy short, factual and jargon-free — it is read at a glance while someone is mid-task. Use the <b>Example</b> line for concrete formats (a code like <code>DOODLY12345</code>, an amount like <code>₹100</code>) rather than stuffing them into the description. Disable tooltips on a module only when they clutter a densely labelled screen, not as a way to hide missing copy.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 5 — Settings tab -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Settings tab</p><p class="sm">Display options, the read-only contact block, and reset-to-defaults.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Toggle the decorative background on the Help Centre, review the contact details customers are shown, and reset the whole knowledge base to its shipped defaults.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Manager</span> (CMS · edit)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Help Center → Settings</span></span>
+    </div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Settings — <b>illustrations toggle</b> · contact panel · reset</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Illustrations toggle</b><span>"Show dairy-themed background illustrations on the Help Center"</span></div>
+          <div class="wf-cell"><b>Contact support panel</b><span>Phone · WhatsApp · Email · Hours — read-only, pulled from brand settings</span></div>
+          <div class="wf-cell"><b>Reset knowledge base</b><span>Restores FAQs, categories and videos to defaults</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — display options above a read-only contact panel and the reset control.</div></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td><b>Show background illustrations</b></td><td>Turns the animated dairy scene (sun, hills, buffalo, delivery van, milk drops) on the public Help Centre on or off.</td><td>On / Off checkbox</td><td class="t-opt">Opt.</td><td>Saves to the browser store ("Saved"). On by default.</td><td>On</td></tr>
+        <tr><td><b>Phone / WhatsApp / Email / Hours</b></td><td>The contact channels shown in the Help Centre's "Still need help?" block.</td><td>Read-only</td><td class="t-opt">—</td><td>Displayed from brand / CMS settings; edited there, not here. The Help Centre reads them live.</td><td>Mon–Sat, 8 AM – 8 PM</td></tr>
+      </tbody></table></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Reset knowledge base to defaults</b></td><td>Restores all FAQs, categories and videos to the shipped defaults after a confirm prompt ("Reset all FAQs, categories and videos to defaults?").</td><td>Overwrites the local knowledge-base store with the built-in defaults.</td><td><span class="pill role">Manager</span>+</td></tr>
+      </tbody></table></div>
+
+      <div class="call danger">
+        <span class="ci">⛔</span>
+        <div class="cbody">
+          <div class="ctitle">Reset discards your edits</div>
+          <p>"Reset knowledge base to defaults" replaces your current FAQs, categories and videos with the factory content. Anything you authored is lost. Use it only to recover a broken knowledge base or start fresh — never as a quick way to clear one bad entry (use Delete or Unpublish for that).</p>
+        </div>
+      </div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">To change the phone or email</div>
+          <p>The contact panel is intentionally read-only here so support details stay consistent everywhere. Update them once in Brand / CMS settings and every surface — the Help Centre, the floating help launcher, order emails — picks up the new values automatically.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 6 — Analytics tab -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Analytics tab</p><p class="sm">See what customers look for, what they can't find, and how the product tour performs.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Turn help usage into a content backlog — the most-viewed FAQs tell you what matters, the unanswered searches tell you what to write next, and tour completion shows how well onboarding lands.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Manager</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Help Center → Analytics</span></span>
+    </div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Analytics — <b>KPI cards</b> · four insight tables</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>KPI cards</b><span>Tour starts · Tour completions · Completion rate % · Searches</span></div>
+          <div class="wf-cell"><b>Most viewed FAQs</b><span>Question | Opens</span></div>
+          <div class="wf-cell"><b>Most searched keywords</b><span>Term | Searches</span></div>
+          <div class="wf-cell"><b>Unanswered searches</b><span>Term | Times (searches that returned no result)</span></div>
+          <div class="wf-cell"><b>Most clicked help cards</b><span>Card | Clicks (the quick-help shortcuts)</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — four KPI cards over four ranked insight tables.</div></div>
+
+      <h4>KPI cards</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Metric</th><th>Meaning</th><th>Source</th>
+      </tr></thead><tbody>
+        <tr><td><b>Tour starts</b></td><td>How many times the 60-second product tour was started.</td><td>Tour counters</td></tr>
+        <tr><td><b>Tour completions</b></td><td>How many times the tour was finished.</td><td>Tour counters</td></tr>
+        <tr><td><b>Completion rate</b></td><td>Completions ÷ starts, as a percentage.</td><td>Derived</td></tr>
+        <tr><td><b>Searches</b></td><td>The number of distinct search terms customers have used.</td><td>HelpSearch</td></tr>
+      </tbody></table></div>
+
+      <h4>Insight tables</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Table</th><th>Columns</th><th>What it tells you</th><th>Ranking</th>
+      </tr></thead><tbody>
+        <tr><td><b>Most viewed FAQs</b></td><td>Question · Opens</td><td>Which answers customers open most — keep these accurate and near the top of their category.</td><td>Top ~8–10 by opens</td></tr>
+        <tr><td><b>Most searched keywords</b></td><td>Term · Searches</td><td>What customers look for — a signal for new FAQs or better wording.</td><td>Top by search count</td></tr>
+        <tr><td><b>Unanswered searches</b></td><td>Term · Times</td><td>Searches that returned no result — your direct backlog of missing content.</td><td>Top by count</td></tr>
+        <tr><td><b>Most clicked help cards</b></td><td>Card · Clicks</td><td>Which quick-help shortcuts customers tap most on the Help Centre.</td><td>Top by clicks</td></tr>
+      </tbody></table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Where the numbers come from</div>
+          <p>Opening an FAQ, running a search (and whether it found anything) and starting or finishing the product tour are all logged automatically as customers use the site. The backend keeps per-article view counts, groups search terms, isolates zero-result searches, and tallies tour events, so the tables reflect real behaviour rather than guesses.</p>
+        </div>
+      </div>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">Best Practice — run a monthly content loop</div>
+          <p>Once a month, open <b>Unanswered searches</b> and write an FAQ for each recurring term, filed in the closest category and published. Then check <b>Most searched keywords</b> and make sure the top terms lead to a clearly-worded answer. This closes the gap between what customers ask and what the knowledge base answers.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- Publishing / permissions model -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Publishing &amp; permissions</p><p class="sm">Who can edit, how a change reaches customers, and the live-status banner.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Explain the CMS permission gate and the path a saved change travels from this console to the public Help Centre.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> gated by <b>CMS · edit</b></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Help Center</span></span>
+    </div>
+    <div class="spec-body">
+      <div class="twrap"><table><thead><tr>
+        <th>Role</th><th>CMS permission</th><th>Can do here</th>
+      </tr></thead><tbody>
+        <tr><td><span class="pill role">Super Admin</span></td><td>Full</td><td>Everything, including deleting categories.</td></tr>
+        <tr><td><span class="pill role">Admin</span></td><td>Full</td><td>Create / edit / publish / reorder / delete FAQs, categories, videos; edit tooltips and settings.</td></tr>
+        <tr><td><span class="pill role">Manager</span> (Marketing)</td><td>Manage</td><td>Edit FAQs, categories, videos, tooltips and settings. Category <b>delete</b> is Super Admin only.</td></tr>
+        <tr><td><span class="pill role">Accountant</span> · <span class="pill role">Delivery Executive</span> · <span class="pill role">Customer</span></td><td>None</td><td>No access — the backend returns 403 and the console shows an amber "Your role can't manage Help" banner.</td></tr>
+      </tbody></table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — a change from console to customer</div>
+        <div class="wf-flow"><span>Edit in a tab</span><span>Mirrors to browser (instant UI)</span><span>Saves to Postgres via /api/help/admin</span><span>"● Live" banner confirms</span><span>Storefront reads /api/help/public</span><span>Customer sees it</span></div>
+      </div><div class="wire-cap">Figure — the two-step save (browser mirror, then database) and how the storefront picks it up.</div></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Watch the banner colour</div>
+          <p>A <b>green "● Live"</b> banner means your FAQ / category / video edits reached the database. An <b>amber</b> banner means the backend is offline (edits are local only and will not reach customers) or your role was refused (403). If you see amber, do not assume a change published — resolve the connection or permission first.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- Troubleshooting + FAQ -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common issues and quick answers.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Resolve the most frequent Help Centre admin problems fast.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span></span><span class="m"><b>Path</b> <span class="navpath">Admin → Content → Help Center</span></span></div>
+    <div class="spec-body">
+      <div class="twrap"><table><thead><tr>
+        <th>Symptom</th><th>Likely cause</th><th>Fix</th>
+      </tr></thead><tbody>
+        <tr><td>Banner is amber "Backend offline — Help editing locally only".</td><td>The admin API is unreachable from the browser.</td><td>Confirm the backend is up and reachable, then reload. Edits made while offline are local only and must be re-saved once live.</td></tr>
+        <tr><td>Banner reads "Your role can't manage Help (403)".</td><td>The signed-in role lacks the CMS · edit permission.</td><td>Use an Admin, Super Admin or Marketing account, or have Roles &amp; Permissions grant CMS edit.</td></tr>
+        <tr><td>An FAQ I added isn't on the storefront.</td><td>It is saved but Unpublished, or filed in an empty/hidden category.</td><td>Press Publish so its badge turns green. Empty categories are hidden on the storefront; make sure at least one published FAQ sits under it.</td></tr>
+        <tr><td>Save does nothing / "Enter a question and answer".</td><td>Question or Answer is blank, or under 3 characters.</td><td>Fill both fields with at least a few characters before pressing Save.</td></tr>
+        <tr><td>No Delete button on a category.</td><td>Category delete is restricted to Super Admin.</td><td>Ask a Super Admin to delete it, or empty and leave it hidden instead.</td></tr>
+        <tr><td>A video card still says "Coming soon".</td><td>The guide has no URL.</td><td>Paste a valid video URL into the row's "Paste video URL…" box; it saves on blur.</td></tr>
+        <tr><td>Tooltip edits didn't follow me to another computer.</td><td>Tooltip and Settings overrides are stored in the browser, not the database.</td><td>Make those edits from the machine you administer with, or repeat them where needed.</td></tr>
+      </tbody></table></div>
+
+      <h4>Do FAQ edits reach customers immediately?</h4>
+      <p>Yes. Once the green "● Live" banner confirms the save, the storefront Help Centre reads the same published data, so browsing customers see the change on their next load — no deploy or code change.</p>
+
+      <h4>What is the difference between Unpublish and Delete?</h4>
+      <p>Unpublish hides a question from customers but keeps it in the admin list so you can bring it back with one click. Delete permanently removes it from the database with no undo. Prefer Unpublish for anything you might reuse.</p>
+
+      <h4>Where do the tooltips I edit here actually show up?</h4>
+      <p>Everywhere on the platform. The contextual-help engine automatically matches badges, buttons, table headings, KPI cards and known terms to a tooltip key, so editing the copy on the Tooltips tab changes that bubble on every screen it appears — customer, admin and portal pages alike.</p>
+
+      <h4>Why can't I change the support phone number on the Settings tab?</h4>
+      <p>Contact details are shown read-only so they stay identical across the whole product. Edit them once in Brand / CMS settings and the Help Centre, the floating help launcher and emails all update together.</p>
+
+      <h4>What powers the "Unanswered searches" list?</h4>
+      <p>Every customer search is logged with how many results it returned. Searches that returned zero results are grouped and ranked here, giving you a ready-made backlog of FAQs to write.</p>
+    </div>
+  </div>
+
+</section>

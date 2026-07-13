@@ -1,0 +1,220 @@
+<section class="sheet" id="admin-search-insights">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Growth · Search Insights</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Growth</span></div>
+  <h2 class="section-title">Search Insights</h2>
+  <p class="lead">See exactly what customers and staff type into the DOODLY global search — how often, what they find, what they don't, on which device — and curate the trending searches that greet every empty search box.</p>
+
+  <p>Every DOODLY page carries a single global search box (open it with <b>Ctrl-K</b> / <b>⌘K</b>, the header magnifier, the dashboard search bar, or the mobile menu). Whenever a customer runs a search, gets no results, or clicks a result, that action is quietly logged to the database. <b>Search Insights</b> is the reporting cockpit for that stream: a live analytics dashboard, a searchable event ledger, and a manager for the "trending" chips shown when the box is empty. It reads from the <span class="navpath">SearchEvent</span> and <span class="navpath">TrendingSearch</span> tables through the <span class="navpath">/api/search/admin</span> endpoint — no spreadsheets, no manual counting.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — two tabs, two permission levels</div><p>The screen has two tabs: <b>Analytics</b> (read-only reporting, open to any manager who can view Reports or the CMS) and <b>Trending</b> (editing the search chips, restricted to CMS editors — Super Admin, Admin and Marketing). The page opens on Analytics.</p></div></div>
+
+  <!-- ============================================================ SCREEN 1 : ANALYTICS ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Analytics tab</p><p class="sm">Live KPIs, volume trend, device &amp; scope breakdowns, and top-keyword tables</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Show, for a chosen date range, how much the search is used, whether people find what they want, and which terms and results dominate.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Marketing</span><span class="pill role">Accountant</span><span class="pill role">Operations</span><span class="pill role">Procurement</span><span class="pill role">Inventory</span><span class="pill role">Quality</span> — anyone who can view Reports or the CMS.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Search Insights → Analytics</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Search Insights — <b>Analytics</b> · [Analytics | Trending] tabs · live database banner</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Date-range toolbar</b><span>Preset chips: Today · Last 7d · Last 30d · This month · Financial yr · All time. Buttons: Export CSV · Export PDF · ↻ Refresh</span></div>
+          <div class="wf-cell"><b>KPI strip (12 cards)</b><span>Total Searches, Searches Today, Unique Users, Success Rate, No-Result Searches, Avg Search Time, Product Searches, Category Searches, Trending Terms, Conversion Rate, Exit Rate, Result Clicks</span></div>
+          <div class="wf-cell"><b>Search volume trend</b><span>Bar chart of queries over time — daily for ranges ≤45 days, otherwise the last 6 months</span></div>
+          <div class="wf-cell"><b>Searches by device</b><span>Horizontal bars — mobile / tablet / desktop</span></div>
+          <div class="wf-cell"><b>Searches by scope</b><span>Horizontal bars — public / customer / admin</span></div>
+          <div class="wf-cell"><b>Top search keywords</b><span>Table: Keyword · Searches (top 12)</span></div>
+          <div class="wf-cell"><b>Zero-result searches</b><span>Table: Missed keyword · Times (top 12)</span></div>
+          <div class="wf-cell"><b>Most clicked results</b><span>Table: Result · Clicks (top 12)</span></div>
+          <div class="wf-cell"><b>Search event ledger</b><span>Filterable, paginated table of individual events (see next screen)</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 1 — Analytics tab layout. A green "● Live" banner at the top confirms the data source and the active date range.</div></div>
+
+      <h4>The date-range toolbar</h4>
+      <p>The preset chips set the reporting window; the dashboard reloads instantly when you pick one. The default on open is <b>Last 30d</b>. Choosing a range also re-scopes the volume-trend chart's granularity and the "range" figures.</p>
+      <div class="twrap"><table><thead><tr><th>Preset</th><th>What it covers</th><th>Trend chart granularity</th></tr></thead><tbody>
+        <tr><td>Today</td><td>Midnight today → now</td><td>Daily</td></tr>
+        <tr><td>Last 7d</td><td>The last 7 calendar days</td><td>Daily</td></tr>
+        <tr><td>Last 30d <em>(default)</em></td><td>The last 30 calendar days</td><td>Daily</td></tr>
+        <tr><td>This month</td><td>1st of this month → month end</td><td>Daily</td></tr>
+        <tr><td>Financial yr</td><td>1 Apr → 31 Mar of the current Indian FY</td><td>Monthly (last 6 months)</td></tr>
+        <tr><td>All time</td><td>Every event ever recorded</td><td>Monthly (last 6 months)</td></tr>
+      </tbody></table></div>
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — when the chart switches to months</div><p>Ranges of 45 days or less draw one bar per day; anything longer draws one bar per month for the last six months. So "Financial yr" and "All time" show a monthly shape, while the shorter presets show day-by-day detail.</p></div></div>
+
+      <h4>The 12 KPI cards</h4>
+      <p>Every figure is computed server-side from the <span class="navpath">SearchEvent</span> table for the selected range (Total, Success, No-Result and the rates are all-time; Searches Today and the range figures respect the window).</p>
+      <div class="twrap"><table><thead><tr><th>KPI card</th><th>What it means</th><th>How it is calculated (backend)</th></tr></thead><tbody>
+        <tr><td>Total Searches</td><td>All queries ever run</td><td>Count of events where <code>kind = query</code></td></tr>
+        <tr><td>Searches Today</td><td>Queries since midnight</td><td>Query events with <code>createdAt ≥ today 00:00</code></td></tr>
+        <tr><td>Unique Users</td><td>Distinct searchers</td><td>Distinct <code>userId</code>, falling back to distinct <code>sessionId</code> when not signed in</td></tr>
+        <tr><td>Success Rate</td><td>Share of searches that returned something</td><td>(Total queries − no-result queries) ÷ total, as a %</td></tr>
+        <tr><td>No-Result Searches</td><td>Searches that found nothing</td><td>Count of events where <code>kind = noresult</code></td></tr>
+        <tr><td>Avg Search Time</td><td>Average response time in milliseconds</td><td>Average of the client-measured <code>durationMs</code> on query events</td></tr>
+        <tr><td>Product Searches</td><td>Queries that map to a product</td><td>Top terms matched against live product slugs/names</td></tr>
+        <tr><td>Category Searches</td><td>Queries that map to a category</td><td>Top terms matched against live category slugs/names</td></tr>
+        <tr><td>Trending Terms</td><td>Active chips shown in the empty box</td><td>Count of <span class="navpath">TrendingSearch</span> rows with <code>active = true</code></td></tr>
+        <tr><td>Conversion Rate</td><td>How often a search leads to a click</td><td>Total result clicks ÷ total queries, as a %</td></tr>
+        <tr><td>Exit Rate</td><td>How often a search dead-ends</td><td>No-result queries ÷ total queries, as a %</td></tr>
+        <tr><td>Result Clicks</td><td>Results opened from search</td><td>Count of events where <code>kind = click</code></td></tr>
+      </tbody></table></div>
+
+      <h4>Charts and keyword tables</h4>
+      <p>Below the KPIs sit five visual panels. The <b>Search volume trend</b> is a bar chart of query counts over the range. <b>Searches by device</b> and <b>Searches by scope</b> are proportional bar breakdowns. Three tables — <b>Top search keywords</b>, <b>Zero-result searches</b> and <b>Most clicked results</b> — each list up to 12 rows ranked by frequency. Empty panels read "No data yet." rather than showing a blank box.</p>
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — mine the Zero-result table weekly</div><p>The <b>Zero-result searches</b> table is the single most valuable panel here: it is a free, honest list of demand you are not meeting. If "lassi" or "butter" keep appearing with no results, that is a signal to add a product, a synonym, or a help article. Turn recurring misses into action items every week.</p></div></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Preset chip</b> (Today … All time)</td><td>Re-runs the whole dashboard for that window</td><td><code>GET /api/search/admin?view=dashboard&amp;preset=…</code>; also writes a <code>search.filtered</code> audit entry</td><td><span class="pill role">Super Admin</span>+ view</td></tr>
+        <tr><td><b>Export CSV</b></td><td>Downloads a multi-section CSV (KPIs, top keywords, zero-result, most clicked) named <code>doodly-search-insights-&lt;from&gt;_&lt;to&gt;.csv</code></td><td>Built in the browser from the loaded data; logs a <code>search.exported</code> audit entry</td><td><span class="pill role">Super Admin</span>+ view</td></tr>
+        <tr><td><b>Export PDF</b></td><td>Opens a print-ready report in a new tab and triggers the print dialog (save as PDF). Needs pop-ups allowed.</td><td>Client-rendered print page; logs <code>search.exported</code></td><td><span class="pill role">Super Admin</span>+ view</td></tr>
+        <tr><td><b>↻ Refresh</b></td><td>Reloads the dashboard and shows an "Analytics refreshed" toast</td><td>Re-calls the dashboard endpoint; logs <code>search.refreshed</code></td><td><span class="pill role">Super Admin</span>+ view</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — exports are audited, not silent</div><p>Every filter change, refresh and export writes an entry to the platform Audit Log (actions <code>search.filtered</code>, <code>search.refreshed</code>, <code>search.exported</code>). Super Admins can see who pulled which report and when from <span class="navpath">Admin → System → Audit Logs</span>.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 : EVENT LEDGER ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Search event ledger</p><p class="sm">Row-by-row record of every individual search, click and miss</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Drill from the aggregate KPIs down to the raw events — to investigate a spike, trace one customer's search journey, or audit a specific keyword.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span><span class="pill role">Admin</span>+ (same view permission as Analytics)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Search Insights → Analytics → Search event ledger</span></span></div>
+    <div class="spec-body">
+      <p>The ledger lives at the bottom of the Analytics tab. It reads the <span class="navpath">SearchEvent</span> table directly with its own filters and pagination, so it can slice far deeper than the summary tables. A badge next to the title shows the total number of matching events.</p>
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Search event ledger — <b>total count badge</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Filter row</b><span>Keyword/target/session search box + three dropdowns: Event, Scope, Device</span></div>
+          <div class="wf-cell"><b>Events table</b><span>Keyword · Event · Target · Scope · Device · Results · Time · When</span></div>
+          <div class="wf-cell"><b>Pager</b><span>"Page X of Y" with ← Prev / Next → (25 rows per page)</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 2 — the event ledger: filters, table and pager.</div></div>
+
+      <p>The event colour-codes each row by kind: <b>no-result</b> events show a red badge, <b>click</b> events a green badge, and ordinary <b>query</b> events a grey badge.</p>
+
+      <div class="twrap"><table><thead><tr><th>Property</th><th>Detail (from the live table config)</th></tr></thead><tbody>
+        <tr><td><b>Columns</b></td><td>Keyword · Event (query/click/noresult badge) · Target (clicked item, or "—") · Scope · Device · Results (result count, or "—") · Time (<code>durationMs</code> in ms, or "—") · When (date &amp; time, en-IN)</td></tr>
+        <tr><td><b>Search box</b></td><td>Matches against the keyword, target, user id and session id in one field (debounced ~300 ms)</td></tr>
+        <tr><td><b>Filters</b></td><td>Event = All / Query / Click / No result · Scope = All / Public / Customer / Admin · Device = All / Mobile / Tablet / Desktop</td></tr>
+        <tr><td><b>Sorting</b></td><td>Newest first by default (server supports oldest-first)</td></tr>
+        <tr><td><b>Pagination</b></td><td>25 events per page; ← Prev / Next → buttons; disabled at the ends</td></tr>
+        <tr><td><b>Row actions</b></td><td>None — the ledger is read-only (events are immutable facts)</td></tr>
+        <tr><td><b>Empty state</b></td><td>"No search events match these filters."</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — what "Scope" tells you</div><p>Scope records <em>who</em> was searching: <b>public</b> = a visitor who is not signed in, <b>customer</b> = a signed-in customer, <b>admin</b> = a staff member searching inside the admin panel. It is derived server-side from the session, so it cannot be spoofed by the browser.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3 : TRENDING ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Trending tab</p><p class="sm">Curate the search chips shown when the box is empty</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Decide which suggested searches greet every customer the moment they open the search box, steering them toward hero products and promotions.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Marketing</span> — CMS editors only (managing trending needs the CMS <em>edit</em> right).</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Search Insights → Trending</span></span></div>
+    <div class="spec-body">
+      <p>When a customer opens search and hasn't typed anything yet, DOODLY shows a row of tappable "trending" chips. Tapping one runs that search instantly. This tab is where you add, hide and delete those chips. Terms are stored in the <span class="navpath">TrendingSearch</span> table and are seeded automatically the first time (A2 Buffalo Milk, Trial Pack, 30-Day Morning Ritual, Delivery Tracking, Wallet, Bottle Return).</p>
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Search Insights — <b>Trending</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Explainer line</b><span>"These appear in the search overlay when the box is empty… Toggle to hide without deleting."</span></div>
+          <div class="wf-cell"><b>Trending table</b><span>Term · Status (Active/Hidden badge) · Actions (Hide/Show · Delete)</span></div>
+          <div class="wf-cell"><b>Add row</b><span>"Add a trending search…" text field + Add button</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 3 — the Trending manager: a status table plus an add-a-term row.</div></div>
+
+      <h4>Add a trending search — field</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Add a trending search</td><td>The term customers see as a chip and search when tapped</td><td>Free text</td><td class="t-req">Yes</td><td>Minimum 2 characters (checked in the browser and again server-side); appended at the end of the order. Duplicate terms are rejected (the term is unique in the database).</td><td><code>Buffalo Ghee</code></td></tr>
+      </tbody></table></div>
+
+      <h4>Row &amp; form actions</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Add</b></td><td>Creates a new chip and shows a "&lt;term&gt; added" toast</td><td><code>POST /api/search/admin {action:"add"}</code> → new <code>TrendingSearch</code> row with the next sort order; audited as <code>search.trending.add</code></td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Marketing</span></td></tr>
+        <tr><td><b>Hide / Show</b></td><td>Toggles a term's visibility without deleting it (badge flips Active ↔ Hidden)</td><td><code>POST … {action:"toggle", active}</code> → flips <code>TrendingSearch.active</code>; audited as <code>search.trending.toggle</code></td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Marketing</span></td></tr>
+        <tr><td><b>Delete</b></td><td>Permanently removes the term (after a confirm prompt); shows a "Deleted" toast</td><td><code>POST … {action:"remove", id}</code> → deletes the row; audited as <code>search.trending.remove</code></td><td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Marketing</span></td></tr>
+      </tbody></table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — Hide vs. Delete</div><p>Only the customer-facing search overlay pulls active terms (the live storefront shows up to 8 active chips, ordered by sort order). Use <b>Hide</b> for a term you might bring back — a seasonal promo, for instance — so its history and position are kept. Use <b>Delete</b> only for terms you never want again.</p></div></div>
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — Delete is irreversible</div><p><b>Delete</b> removes the <span class="navpath">TrendingSearch</span> row for good. There is no undo and no soft-delete; the only way back is to add the term again as a fresh entry (which lands at the end of the order). The confirm prompt is your last checkpoint.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ HOW EVENTS ARE CAPTURED ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">How the data gets here</p><p class="sm">From a keystroke in the search box to a row on this dashboard</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Understand what each metric is actually counting so you read the numbers correctly.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> — background reference</span>
+      <span class="m"><b>Path</b> n/a — automatic</span></div>
+    <div class="spec-body">
+      <p>Nobody enters this data by hand. The global search palette records three kinds of event automatically and posts them to <span class="navpath">/api/search/log</span>, which writes a row to the <span class="navpath">SearchEvent</span> table. Search Insights then reads and aggregates those rows.</p>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — a search event's journey</div>
+        <div class="wf-flow"><span>Customer types in the search box (Ctrl-K)</span><span>Palette records kind = query / noresult / click + device, session, result count, response time</span><span>POST /api/search/log (fire-and-forget)</span><span>Row saved to SearchEvent table</span><span>Search Insights aggregates → KPIs, charts, tables, ledger</span></div>
+      </div><div class="wire-cap">Figure 4 — every metric on this page is built from these logged events.</div></div>
+
+      <div class="twrap"><table><thead><tr><th>Event kind</th><th>Fired when…</th><th>Feeds these KPIs</th></tr></thead><tbody>
+        <tr><td><b>query</b></td><td>A search returns at least one result</td><td>Total Searches, Searches Today, Success Rate, volume trend, top keywords</td></tr>
+        <tr><td><b>noresult</b></td><td>A search returns zero results</td><td>No-Result Searches, Exit Rate, Zero-result table (and it lowers Success Rate)</td></tr>
+        <tr><td><b>click</b></td><td>A customer opens a result from search</td><td>Result Clicks, Conversion Rate, Most-clicked table</td></tr>
+      </tbody></table></div>
+
+      <div class="twrap"><table><thead><tr><th>Field on each event</th><th>Meaning</th></tr></thead><tbody>
+        <tr><td>term</td><td>The normalised search keyword (lower-cased, trimmed; events shorter than 2 characters are dropped)</td></tr>
+        <tr><td>target</td><td>The title of the clicked result (click events only)</td></tr>
+        <tr><td>scope</td><td>public / customer / admin — derived from the session, server-side</td></tr>
+        <tr><td>resultCount</td><td>How many results the query showed (0 for a no-result)</td></tr>
+        <tr><td>device</td><td>mobile / tablet / desktop — inferred from the window width</td></tr>
+        <tr><td>sessionId · userId</td><td>Group one search journey; power the Unique Users count</td></tr>
+        <tr><td>durationMs</td><td>Client-measured response time, averaged into Avg Search Time</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — logging never blocks the customer</div><p>Analytics logging is fire-and-forget: if the logging call fails, the customer's search still works normally, and the browser also keeps a small offline cache (<code>doodly-search</code> in localStorage) so counts aren't lost while the backend is briefly unreachable. This means the numbers are highly reliable but not guaranteed to the last event.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOTING + FAQ ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common questions and quick fixes</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Resolve the issues staff most often hit on this screen.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> reference</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Search Insights</span></span></div>
+    <div class="spec-body">
+      <div class="twrap"><table><thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead><tbody>
+        <tr><td>Banner reads "Backend offline — start next-app"</td><td>The application server isn't running / unreachable</td><td>Start or restart the backend; the dashboard reloads once the API responds</td></tr>
+        <tr><td>"Your role can't view Search Insights (403)"</td><td>The signed-in role lacks both Reports-view and CMS-view</td><td>Sign in as a role with Reports or CMS access (Super Admin, Admin, Marketing, Accountant, Operations, etc.)</td></tr>
+        <tr><td>Trending edits give "Only CMS editors can manage trending (403)"</td><td>Managing trending needs the CMS <em>edit</em> right</td><td>Have a Super Admin, Admin or Marketing user make the change</td></tr>
+        <tr><td>All KPIs show 0 / tables say "No data yet"</td><td>No search events in the selected range yet</td><td>Widen the range to "All time"; if still empty, confirm the storefront search box is live and being used</td></tr>
+        <tr><td>Export PDF does nothing</td><td>The browser blocked the pop-up window</td><td>Allow pop-ups for the admin site, then click Export PDF again</td></tr>
+        <tr><td>A trending term won't add</td><td>Under 2 characters, or a duplicate of an existing term</td><td>Use a longer, unique term; hide the existing one instead of re-adding</td></tr>
+      </tbody></table></div>
+
+      <h4>Do these numbers include staff searches?</h4>
+      <p>Yes. Staff searches inside the admin panel are logged with <b>scope = admin</b>. To see only customer behaviour, use the ledger's Scope filter and pick <b>Customer</b> (or <b>Public</b> for signed-out visitors).</p>
+
+      <h4>Why is Success Rate all-time even when I pick "Last 7d"?</h4>
+      <p>The volume-trend chart and the "range" figures follow the preset, but the headline KPIs like Total Searches, Success Rate and No-Result Searches are computed across all events for stability. Use the ledger with a date filter when you need a strictly range-bound view of individual events.</p>
+
+      <h4>If I delete a trending term, does it remove those searches from analytics?</h4>
+      <p>No. Trending terms and search events are separate. Deleting a chip only stops it being suggested; every past search anyone ran on that term stays in the analytics and the ledger.</p>
+
+      <h4>Can I reorder trending chips?</h4>
+      <p>New terms are added to the end of the list (next sort order), and the storefront shows up to 8 active terms in that order. There is no drag-to-reorder control on this screen; to move a term to the front, delete it and re-add it, or hide the ones you want to drop below it.</p>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — align trending with what's live</div><p>Keep the trending chips in step with your current catalogue and promotions, and cross-check them against the <b>Top search keywords</b> table. Promoting a term customers already search for (or a new product you're launching) turns the empty search box into a zero-cost merchandising slot.</p></div></div>
+    </div>
+  </div>
+
+</section>

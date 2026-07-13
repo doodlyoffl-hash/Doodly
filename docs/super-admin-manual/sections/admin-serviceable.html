@@ -195,9 +195,9 @@
           </tr>
           <tr>
             <td><b>Reset</b><br><code>#pc-reset</code></td>
-            <td>Discards your unsaved edits and re-draws the table from the last loaded list. It does not touch the database.</td>
-            <td>Client-only — clears the local working copy; reload the page to pull a fresh list from the server.</td>
-            <td>Any viewer</td>
+            <td>Clears the page's local working copy of the list and re-draws the table from the built-in seed list. On the database-wired admin page this <b>also triggers the same sync as Save</b>, so use it carefully — see the caution below. To simply throw away unsaved edits, reload the page instead.</td>
+            <td>Clears the local override, then the wired page runs the same one-pass sync — <span class="navpath">POST</span>/<span class="navpath">PATCH</span>/<span class="navpath">DELETE /api/admin/delivery/pincodes</span> — over the resulting list.</td>
+            <td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Operations</span> (the follow-on sync needs create/edit rights)</td>
           </tr>
           <tr>
             <td><b>Delete (×)</b><br><code>.pc-del</code></td>
@@ -207,6 +207,14 @@
           </tr>
         </tbody>
       </table></div>
+
+      <div class="call danger">
+        <span class="ci">⛔</span>
+        <div class="cbody">
+          <div class="ctitle">Caution — "Reset" is not just an undo</div>
+          <p>On the database-wired page, <b>Reset</b> clears the local working copy so the table falls back to the built-in seed list, and then runs the very same sync as Save over that seed list. In practice this can <b>overwrite your live coverage with the seed defaults and remove pincodes that are not in it</b> (deletes are soft, but the storefront still closes for those areas at once). If you only want to discard edits you have not saved, <b>reload the page</b> instead — that pulls a fresh copy from the database without writing anything.</p>
+        </div>
+      </div>
 
       <div class="call warn">
         <span class="ci">⚠️</span>

@@ -1,0 +1,262 @@
+<section class="sheet" id="admin-loyalty">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Growth · Pure Rewards</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Growth</span></div>
+  <h2 class="section-title">Pure Rewards (Loyalty)</h2>
+  <p class="lead">Configure every earning rate, redemption ratio, tier threshold, expiry window and bonus campaign of the DOODLY Pure Rewards programme, watch programme-wide KPIs, and manually grant or deduct a member's points — with every change written to the audit trail.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">One page, three working areas</div><p>The whole module lives at one screen (<span class="navpath">/admin/loyalty.html</span>, block type <code>loyaltyAdmin</code>, mount <code>#loyaltyAdminMount</code>). It loads two calls in parallel — <code>GET /api/admin/loyalty/config</code> and <code>GET /api/admin/loyalty/members</code> — then paints a KPI strip, a Programme-settings form, and a Members table. Each is documented below as its own screen.</p></div></div>
+
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">The settings row is the single source of truth</div><p>Every rule lives in one database row (<code>LoyaltyConfig</code>, id <code>singleton</code>). Nothing about earning, redeeming, tiers or expiry is hard-coded — what you save here is exactly what customers experience on their Rewards page and what every automatic earn hook (order paid, subscription, referral, bottle return, birthday, puzzle, review…) reads at run time.</p></div></div>
+
+  <!-- ============================================================ SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Rewards dashboard — KPI strip</p><p class="sm">Live, programme-wide health of Pure Rewards at a glance.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Show, at the top of the page, six read-only totals computed across the whole points ledger so you can see the size and cost of the programme before you change any rule.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span> — anyone with <code>loyalty:view</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Pure Rewards</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>DOODLY Pure Rewards</b> · "Configure earning rates, tiers, redemption, expiry and campaigns — and manage members' points. Every change is audited."</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Members</b><span>Customers with any lifetime points earned</span></div>
+          <div class="wf-cell"><b>Points outstanding</b><span>Sum of every member's live balance</span></div>
+          <div class="wf-cell"><b>Lifetime earned</b><span>All EARN points ever awarded</span></div>
+          <div class="wf-cell"><b>Redeemed</b><span>All points converted to wallet</span></div>
+          <div class="wf-cell"><b>Redeemed value</b><span>₹ credited to wallets from redemptions</span></div>
+          <div class="wf-cell"><b>Expired</b><span>Points that lapsed unredeemed</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the six KPI cards, drawn from <code>loyaltyReports()</code> in <code>lib/loyalty/service.ts</code></div></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>KPI card</th><th>What it counts</th><th>How it is calculated (backend)</th><th>Format</th>
+      </tr></thead><tbody>
+        <tr><td><b>Members</b></td><td>Enrolled customers</td><td><code>User.count</code> where <code>role = CUSTOMER</code> AND <code>loyaltyLifetimeEarned &gt; 0</code></td><td>Whole number</td></tr>
+        <tr><td><b>Points outstanding</b></td><td>Unredeemed live balance across everyone</td><td>Sum of <code>User.loyaltyPoints</code></td><td>Points</td></tr>
+        <tr><td><b>Lifetime earned</b></td><td>Every point ever granted</td><td>Sum of <code>points</code> on all <code>EARN</code> ledger rows</td><td>Points</td></tr>
+        <tr><td><b>Redeemed</b></td><td>Points turned into wallet credit</td><td>Sum of <code>points</code> on all <code>REDEEM</code> rows</td><td>Points</td></tr>
+        <tr><td><b>Redeemed value</b></td><td>The rupee cost of those redemptions</td><td><code>redeemed ÷ redeemPointsPerRupee × ₹1</code> (paise → ₹)</td><td>₹</td></tr>
+        <tr><td><b>Expired</b></td><td>Points that lapsed after their expiry date</td><td>Sum of <code>points</code> on all <code>EXPIRE</code> rows</td><td>Points</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">These cards are read-only</div><p>There are no buttons on the KPI strip. It refreshes whenever the page (re)loads — for example after you save settings or apply a points adjustment, both of which reload the module.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Programme settings</p><p class="sm">The master on/off switch and every tunable rule of the programme.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Turn the whole programme on or off and set every earning rate, the redemption ratio, the minimum redemption, the expiry window, expiry reminders, an optional bonus campaign, and the tier ladder. Saving writes back through <code>PATCH /api/admin/loyalty/config</code>.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> Read: <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span> (<code>loyalty:view</code>). Save: same roles with <code>loyalty:edit</code> — a view-only role sees the form but the switch and Save button are disabled.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Pure Rewards → Programme settings</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Panel — <b>Programme settings</b> · <b>Programme ON / OFF</b> toggle (top-right)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Earning</b><span>14 point-value fields (spend, registration, profile, subscribe, referral, bottle, renewal, streak, birthday, anniversary, puzzle play/win, review)</span></div>
+          <div class="wf-cell"><b>Redemption &amp; expiry</b><span>Points per ₹1, minimum redemption, expiry days, reminder days</span></div>
+          <div class="wf-cell"><b>Bonus campaign</b><span>Earning multiplier + campaign end date</span></div>
+          <div class="wf-cell"><b>Tiers</b><span>One editable card per tier: name, min points, benefits (one per line)</span></div>
+          <div class="wf-cell"><b>Save settings</b><span>Primary button + inline "Saved ✓" / error message</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the settings form: master switch, four fieldsets and the Save action</div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">The master switch pauses the entire programme</div><p>The <b>Programme ON/OFF</b> toggle writes <code>enabled</code>. When OFF, every automatic earn hook returns early ("disabled"), redemption is refused, and the customer Rewards page shows "Rewards are taking a short break — your points are safe." Existing balances are never touched; the programme simply stops accruing and paying out until you switch it back on.</p></div></div>
+
+      <h4>Earning rates</h4>
+      <p>Each field is a whole number of points (integer, minimum 0). Blank or non-numeric input is stored as <code>0</code>, and each value is clamped to a safe maximum on the server. Values below are the shipped defaults.</p>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Points per ₹100 spent</td><td>Points earned on the paid value of every order</td><td>Integer 0–100,000</td><td class="t-req">Yes</td><td><code>pointsPerHundred</code>; order earn = <code>floor(paidₚ/10000 × this)</code> on total minus refundable deposit minus coupon discount</td><td>10</td></tr>
+        <tr><td>Registration</td><td>One-time welcome bonus at account creation</td><td>Integer 0–1,000,000</td><td class="t-req">Yes</td><td><code>earnRegistration</code></td><td>50</td></tr>
+        <tr><td>Complete profile</td><td>One-time, when name + email + phone are filled</td><td>Integer 0–1,000,000</td><td class="t-req">Yes</td><td><code>earnProfile</code></td><td>25</td></tr>
+        <tr><td>Subscribe 30-day</td><td>Bonus for taking a 30-day (or longer, under 90) plan</td><td>Integer 0–1,000,000</td><td class="t-req">Yes</td><td><code>earnSubscribe30</code>; campaign multiplier applies</td><td>300</td></tr>
+        <tr><td>Subscribe 90-day</td><td>Bonus for a 90-day (or longer) plan</td><td>Integer 0–1,000,000</td><td class="t-req">Yes</td><td><code>earnSubscribe90</code>; campaign multiplier applies</td><td>1,000</td></tr>
+        <tr><td>Successful referral</td><td>Credited to the referrer once the friend's qualifying subscription is paid</td><td>Integer 0–1,000,000</td><td class="t-req">Yes</td><td><code>earnReferral</code></td><td>500</td></tr>
+        <tr><td>Per bottle returned</td><td>Points for each glass bottle returned in good condition</td><td>Integer 0–100,000</td><td class="t-req">Yes</td><td><code>earnBottleReturn</code> × bottles</td><td>15</td></tr>
+        <tr><td>Subscription renewal</td><td>Points on each renewal cycle</td><td>Integer 0–1,000,000</td><td class="t-req">Yes</td><td><code>earnRenewal</code>; campaign multiplier applies</td><td>150</td></tr>
+        <tr><td>12-delivery streak</td><td>Bonus after 12 consecutive deliveries without a pause</td><td>Integer 0–1,000,000</td><td class="t-req">Yes</td><td><code>earnStreak12</code></td><td>200</td></tr>
+        <tr><td>Birthday</td><td>Annual birthday reward</td><td>Integer 0–1,000,000</td><td class="t-req">Yes</td><td><code>earnBirthday</code></td><td>250</td></tr>
+        <tr><td>Anniversary</td><td>Reward on each DOODLY anniversary</td><td>Integer 0–1,000,000</td><td class="t-req">Yes</td><td><code>earnAnniversary</code></td><td>1,000</td></tr>
+        <tr><td>Puzzle participation</td><td>Points for playing the monthly puzzle</td><td>Integer 0–1,000,000</td><td class="t-req">Yes</td><td><code>earnPuzzlePlay</code></td><td>50</td></tr>
+        <tr><td>Puzzle win</td><td>Winner's bonus for the monthly puzzle</td><td>Integer 0–10,000,000</td><td class="t-req">Yes</td><td><code>earnPuzzleWin</code></td><td>2,500</td></tr>
+        <tr><td>Verified review</td><td>Points for a verified review, once per delivered order</td><td>Integer 0–1,000,000</td><td class="t-req">Yes</td><td><code>earnReview</code></td><td>30</td></tr>
+      </tbody></table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Set a rate to 0 to switch that earn off</div><p>Any earn hook that resolves to 0 points is skipped ("zero") — no ledger row is written. So you don't need code to disable, say, birthday points; just set the field to 0.</p></div></div>
+
+      <h4>Redemption &amp; expiry</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Points per ₹1 redeemed</td><td>The conversion ratio from points to wallet credit</td><td>Integer 1–100,000</td><td class="t-req">Yes</td><td><code>redeemPointsPerRupee</code>; forced to at least 1 to avoid divide-by-zero at redeem time</td><td>10</td></tr>
+        <tr><td>Minimum redemption</td><td>Fewest points a customer may redeem at once</td><td>Integer 0–10,000,000</td><td class="t-req">Yes</td><td><code>minRedeemPoints</code></td><td>100</td></tr>
+        <tr><td>Expiry (days)</td><td>How long a batch of points stays valid from the day it is earned</td><td>Integer 1–3,650</td><td class="t-req">Yes</td><td><code>expiryDays</code>; each EARN "lot" is stamped with its own <code>expiresAt</code></td><td>365</td></tr>
+        <tr><td>Expiry reminders <em>days before</em></td><td>How many days before expiry to remind the customer</td><td>Comma-separated integers, each 1–365, up to 6 values</td><td class="t-opt">Opt.</td><td><code>remindDays</code>; parsed from text, de-duplicated and sorted; drives the reminder cron (in-app + email + WhatsApp)</td><td>30, 7</td></tr>
+      </tbody></table></div>
+
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Changing the ratio does not restate points already earned</div><p>The redemption ratio is read at the moment of redemption. If you raise "Points per ₹1" from 10 to 20, existing balances instantly become worth half as much in wallet credit. Announce ratio changes; they affect every member's live balance value even though the point counts don't change.</p></div></div>
+
+      <h4>Bonus campaign</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Earning multiplier <em>1 = off</em></td><td>Multiplies spend, subscription and renewal earns during a campaign</td><td>Decimal 1–10 (step 0.01)</td><td class="t-opt">Opt.</td><td><code>campaignMultiplier</code>; only applies to earns marked <code>applyCampaign</code> (order, subscribe, renewal), and only while a future end date is set</td><td>1.05 (+5%)</td></tr>
+        <tr><td>Campaign ends</td><td>The date the multiplier stops applying</td><td>Date (or blank to clear)</td><td class="t-opt">Opt.</td><td><code>campaignEndsAt</code>; stored as ISO. The campaign is live only when multiplier &gt; 1 <b>and</b> this date is in the future</td><td>2026-08-31</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">A campaign needs both fields</div><p>A multiplier above 1 does nothing on its own — the end date must be a future date for the boost to count. When live, a "Bonus campaign live — earn X% extra points" banner appears on the customer Rewards page. When the date passes, earning quietly returns to the base rates.</p></div></div>
+
+      <h4>Tiers</h4>
+      <p>The tier a customer sits in is derived from their <b>lifetime points earned</b> — redeeming or expiring points never demotes them. Each tier card has three inputs. You must keep at least one tier (1–10 allowed); the server sorts them by minimum points ascending and ignores any card whose name is blank.</p>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Tier name</td><td>The label shown to members (e.g. on the hero card and ladder)</td><td>Text, up to 60 characters</td><td class="t-req">Yes</td><td>Blank-named cards are dropped on save</td><td>Gold Member</td></tr>
+        <tr><td>Min points</td><td>Lifetime-earned points needed to reach the tier</td><td>Integer 0–100,000,000</td><td class="t-req">Yes</td><td>Tiers are re-sorted by this ascending</td><td>3,000</td></tr>
+        <tr><td>Benefits</td><td>Perk lines listed under the tier</td><td>One benefit per line, up to 12 lines × 200 chars</td><td class="t-opt">Opt.</td><td>Split on newlines, trimmed, empties removed</td><td>5% Extra Reward Points during campaigns<br>Free Surprise Dairy Gift</td></tr>
+      </tbody></table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Default ladder</div><p>The shipped ladder is <b>Fresh Member</b> (0), <b>Silver Member</b> (1,000), <b>Gold Member</b> (3,000) and <b>Platinum Member</b> (6,000), each with its own benefit list. These load automatically the first time the config row is created and can be renamed, re-thresholded or extended here.</p></div></div>
+
+      <h4>Actions</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Button / control</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Programme ON/OFF</b> toggle</td><td>Enables or pauses the whole programme (label updates to ON/OFF)</td><td>Sets <code>enabled</code>; saved with the rest of the form on Save</td><td><span class="pill role">loyalty:edit</span></td></tr>
+        <tr><td><b>Save settings</b></td><td>Collects every field (switch, all numbers, reminder days, campaign, tiers) and stores them</td><td><code>PATCH /api/admin/loyalty/config</code> — Zod-validated, clamped, then audited as <code>loyalty.config.update</code> recording exactly which fields changed (from → to). Button shows "Saving…" then "Saved ✓"; the module reloads</td><td><span class="pill role">loyalty:edit</span></td></tr>
+      </tbody></table></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Change-tracked, prev→new auditing</div><p>Save doesn't just log "settings changed" — it compares the old and new values of every tracked field (all earn rates, redemption, expiry, reminders, tiers, campaign, on/off) and records only the fields that actually changed. You can always see who moved the referral bonus from 500 to 750 and when, in <span class="navpath">Admin → System → Audit Logs</span>.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Members</p><p class="sm">Every enrolled customer, tier-tagged, with live and lifetime balances.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Look up any member's tier and point balances and open the adjust action. The list is loaded once with the page and re-queried live as you type in the search box.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span> (<code>loyalty:view</code>); the Adjust column appears only with <code>loyalty:edit</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Pure Rewards → Members</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Panel — <b>Members</b> · search box "Search name, phone, email…" (top-right)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Member</b><span>Name, with phone or email underneath</span></div>
+          <div class="wf-cell"><b>Tier</b><span>Coloured tier badge (🥉🥈🥇💎)</span></div>
+          <div class="wf-cell"><b>Available</b><span>Live redeemable balance</span></div>
+          <div class="wf-cell"><b>Lifetime earned</b><span>Total ever earned (drives tier)</span></div>
+          <div class="wf-cell"><b>Redeemed</b><span>Total ever redeemed</span></div>
+          <div class="wf-cell"><b>Adjust</b><span>Opens the points-adjustment modal (edit only)</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Members table, from <code>listMembers()</code> in <code>lib/loyalty/service.ts</code></div></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Table aspect</th><th>Behaviour (from the real code)</th>
+      </tr></thead><tbody>
+        <tr><td><b>Columns</b></td><td>Member (name + phone/email), Tier (badge), Available, Lifetime earned, Redeemed, and an Adjust action column (shown only with edit rights).</td></tr>
+        <tr><td><b>Who appears</b></td><td>Customers only (<code>role = CUSTOMER</code>) who have <code>loyaltyLifetimeEarned &gt; 0</code> <b>or</b> a current balance <code>loyaltyPoints &gt; 0</code>. Customers who have never earned a point are not listed.</td></tr>
+        <tr><td><b>Search</b></td><td>A single search box matches <b>name, phone or email</b> (case-insensitive). Typing is debounced ~300&nbsp;ms and re-queries the server via <code>GET /api/admin/loyalty/members?q=…</code>; only the table rows repaint.</td></tr>
+        <tr><td><b>Sorting</b></td><td>Fixed server-side order: highest <b>lifetime earned</b> first. There are no clickable column sorts.</td></tr>
+        <tr><td><b>Pagination</b></td><td>None. The list is capped at 300 members; narrow with search rather than paging.</td></tr>
+        <tr><td><b>Exports</b></td><td>None from this table.</td></tr>
+        <tr><td><b>Row action</b></td><td><b>Adjust</b> — opens the points-adjustment modal for that member (see next screen). Present only with <code>loyalty:edit</code>.</td></tr>
+        <tr><td><b>Empty state</b></td><td>"No members with points yet." when nobody qualifies (or a search returns nothing).</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Available vs. Lifetime earned</div><p><b>Available</b> is what the member can redeem now (<code>loyaltyPoints</code>). <b>Lifetime earned</b> only ever goes up and decides the tier; redeeming or expiry lowers the Available balance but never the lifetime figure, so a customer keeps their tier even after spending their points.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 4 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Adjust points (modal)</p><p class="sm">Manually grant or deduct a member's points, with a mandatory reason.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Hand a goodwill bonus, restore points that expired by mistake, or correct an error — a positive number grants points, a negative number deducts them. The reason is recorded in the audit.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span> — requires <code>loyalty:edit</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Pure Rewards → Members → Adjust</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Modal — <b>Adjust points — {member name}</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Points</b><span>Number field · "positive grants, negative deducts"</span></div>
+          <div class="wf-cell"><b>Reason</b><span>Text field · "recorded in the audit"</span></div>
+          <div class="wf-cell"><b>Message</b><span>Inline validation / error line</span></div>
+          <div class="wf-cell"><b>Cancel / Apply</b><span>Ghost + primary buttons</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the adjustment dialog opened from a member's Adjust button</div></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Points</td><td>How many points to add or remove</td><td>Non-zero integer; positive grants, negative deducts</td><td class="t-req">Yes</td><td>Client rejects zero/blank; server enforces non-zero. Negative larger than the balance is refused ("Customer doesn't have enough points to deduct.")</td><td>100 &nbsp;or&nbsp; -50</td></tr>
+        <tr><td>Reason</td><td>Why the adjustment was made — kept for the audit</td><td>Text, 1–200 characters</td><td class="t-req">Yes</td><td>Required both client- and server-side; stored on the ledger row's description and in the audit target</td><td>Goodwill / restore expired points</td></tr>
+      </tbody></table></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Apply</b></td><td>Submits the grant/deduction; shows "Applying…", then closes and reloads the module</td><td><code>POST /api/admin/loyalty/adjust</code> with <code>{userId, points, reason}</code>. Positive → new EARN lot (kind <code>admin_adjust</code>, with its own expiry). Negative → deducts oldest-first (FIFO) from the balance, no wallet credit. Audited as <code>loyalty.adjust</code></td><td><span class="pill role">loyalty:edit</span></td></tr>
+        <tr><td><b>Cancel</b></td><td>Closes the modal without changing anything</td><td>None — also closes on a click of the dark overlay</td><td><span class="pill role">loyalty:view</span></td></tr>
+      </tbody></table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — manual points adjustment</div>
+        <div class="wf-flow"><span>Find member (search)</span><span>Click Adjust</span><span>Enter points ± &amp; reason</span><span>Apply</span><span>Server writes ledger + audit</span><span>Module reloads, KPIs update</span></div>
+      </div><div class="wire-cap">Figure — end-to-end flow of a goodwill grant or correction</div></div>
+
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">A deduction is not a redemption — it does not credit the wallet</div><p>Deducting points simply removes them from the balance (oldest lots first) and records an <code>ADJUST</code> ledger row. No money moves. Use a deduction only to correct wrongly-granted points; never as a way to "pay" a customer. To convert points to money, the customer redeems on their Rewards page.</p></div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Always write a specific reason</div><p>The reason is the audit trail. Write "Restored 200 pts lost to expiry bug, ticket #4821" rather than "fix". Every adjustment is logged with your role, the member, the signed amount and this reason — a vague reason makes a later review impossible.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ LIFECYCLE -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">How points move (reference)</p><p class="sm">The lifecycle your settings drive — for context, not a screen.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Understand what your configuration actually does behind the scenes, so you can predict the effect of a change before you save it.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> reference</span>
+      <span class="m"><b>Path</b> <span class="navpath">n/a — background</span></span></div>
+    <div class="spec-body">
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — points lifecycle</div>
+        <div class="wf-flow"><span>Customer acts (order paid, subscribe, refer, return bottle, birthday, puzzle, review…)</span><span>Earn hook reads config &amp; awards a lot (idempotent, with expiry)</span><span>Lifetime + available balances rise; tier may upgrade (member notified)</span><span>Customer redeems ≥ minimum → wallet credit (FIFO consume)</span><span>Reminder cron warns 30/7 days before expiry</span><span>Expiry cron lapses past-due points</span></div>
+      </div><div class="wire-cap">Figure — earn → redeem → remind → expire, all governed by the settings on this page</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Earning is idempotent and event-anchored</div><p>Each earn carries a deterministic reference (for example <code>earn:order:&lt;id&gt;</code>, <code>earn:reg:&lt;uid&gt;</code>, <code>earn:birthday:&lt;uid&gt;:&lt;year&gt;</code>). That reference is unique, so a webhook retry or a double event awards the points at most once. This is why order points are safe to fire from both the payment callback and the webhook.</p></div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Redemption is the only place money is created</div><p>Redeeming credits the customer's DOODLY Wallet through a normal wallet transaction (kind <code>loyalty</code>) inside one atomic, serializable transaction. Points balances and wallet balances therefore never drift out of sync, and wallet history shows the redemption like any other credit.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOTING -->
+  <h3>Troubleshooting</h3>
+  <div class="twrap"><table><thead><tr>
+    <th>Symptom</th><th>Likely cause</th><th>Fix</th>
+  </tr></thead><tbody>
+    <tr><td>"You don't have permission to view the rewards programme."</td><td>Signed-in role lacks <code>loyalty:view</code></td><td>Sign in as Super Admin, Admin or Marketing, or grant the role loyalty access in <span class="navpath">Admin → System → Roles &amp; Permissions</span>.</td></tr>
+    <tr><td>Switch and Save button are greyed out; "You have view-only access to these settings."</td><td>Role has <code>loyalty:view</code> but not <code>loyalty:edit</code></td><td>Expected — a view-only role can read everything but not change it. Use an edit-capable role to save.</td></tr>
+    <tr><td>"Backend offline — the loyalty admin needs the DOODLY API."</td><td>The Next.js API isn't reachable from the storefront</td><td>Confirm the backend is running and the API base URL is correct; reload the page.</td></tr>
+    <tr><td>Customers aren't earning any points</td><td>Programme is OFF, or that earn rate is set to 0</td><td>Turn the master switch ON and check the specific earning field is above 0, then Save.</td></tr>
+    <tr><td>A campaign multiplier has no effect</td><td>Multiplier is left at 1, or the end date is missing / in the past</td><td>Set the multiplier above 1 <b>and</b> a future "Campaign ends" date; the boost only applies to order, subscribe and renewal earns.</td></tr>
+    <tr><td>"Customer doesn't have enough points to deduct."</td><td>Negative adjustment exceeds the member's current balance</td><td>Deduct no more than the Available balance shown on the row.</td></tr>
+    <tr><td>A member is missing from the list</td><td>They have never earned a point (lifetime 0 and balance 0)</td><td>Expected — grant them a starter adjustment or wait for their first qualifying action. Use search to confirm the name/phone.</td></tr>
+    <tr><td>Redemption value dropped for everyone</td><td>"Points per ₹1 redeemed" was increased</td><td>Verify the ratio is intentional; the ledger is unchanged but each point is now worth less wallet credit.</td></tr>
+  </tbody></table></div>
+
+  <!-- ============================================================ FAQ -->
+  <h3>Frequently asked questions</h3>
+  <h4>Do customers have to sign up for Pure Rewards?</h4>
+  <p>No. Every registered DOODLY customer is enrolled automatically. There is no separate opt-in; they simply start earning.</p>
+
+  <h4>If I lower an earning rate, do customers lose points they already earned?</h4>
+  <p>No. Rate changes apply only to future earns. Points already awarded keep their value and their original 12-month (or whatever <code>expiryDays</code> was at award time) expiry.</p>
+
+  <h4>Can a customer's tier go down when they redeem?</h4>
+  <p>No. Tiers are based on lifetime points earned, which never decreases. Redeeming and expiry reduce the available balance but never the tier.</p>
+
+  <h4>Who can adjust a member's points, and is it tracked?</h4>
+  <p>Only roles with <code>loyalty:edit</code> (Super Admin, Admin, Marketing by default). Every adjustment is written to the audit log as <code>loyalty.adjust</code> with the member, the signed amount and the reason you type.</p>
+
+  <h4>What happens to points when an account is deleted?</h4>
+  <p>Per the programme terms, if an account is permanently deleted all unused points expire. Points also cannot be transferred between accounts or cashed out — they are redeemable only as DOODLY Wallet credit.</p>
+
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best practice — change rates deliberately, not casually</div><p>Because these settings drive real money (redemptions become wallet credit) and every automatic earn across the platform, treat a change like a policy decision: adjust one thing at a time, note the business reason, Save, and confirm the audit entry. For temporary boosts prefer a time-boxed <b>bonus campaign</b> over editing base rates, so earning returns to normal automatically when the end date passes.</p></div></div>
+</section>

@@ -1,0 +1,479 @@
+<section class="sheet" id="admin-payroll">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · HR · Payroll</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · HR</span></div>
+  <h2 class="section-title">Payroll</h2>
+  <p class="lead">Run the monthly salary for the whole team in one click: DOODLY reads each person's attendance and salary structure, works out earnings, deductions and net pay, produces a printable salary slip per employee, recovers any salary advance from the pay, and prepares a bank-transfer report — moving each payslip through Draft → Finalized → Paid.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">What this screen is (and where it lives)</div>
+      <p>The <b>Payroll</b> item under <span class="navpath">Admin → Human Resources</span> is served by the storefront admin page <code>/admin/payroll.html</code>, whose manifest block <code>{ type:"hrPayroll" }</code> mounts a single empty <code>#hrPayrollMount</code> container. The <code>DOODLY_HR</code> module's <code>mountPayroll()</code> renderer (in <code>assets/js/employees.js</code>) fills it and talks to one backend endpoint, <code>/api/admin/payroll</code> (server code in <code>next-app/lib/payroll/service.ts</code>). Every rupee shown on this page is stored by the backend as an integer number of <b>paise</b> (₹1 = 100 paise) and only divided by 100 for display, so the money is always exact — there is no floating-point rounding of your salaries.</p>
+    </div>
+  </div>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Who can open it, and who can run payroll</div>
+      <p>The endpoint is gated per action: reading the list, a slip, or the bank report needs <code>requirePermission(req, "payroll", "view")</code>; generating, finalizing or marking a payslip paid needs <code>requirePermission(req, "payroll", "edit")</code>. In the default role matrix that means <b>Super Admin</b> (all access) and <b>Admin</b> (full) can both view and run payroll, and the <b>Accountant</b> role also has <b>payroll: full</b> — so an Accountant can generate, finalize and pay too. No other staff role (Operations, Procurement, Inventory, Quality, Marketing, Support, Delivery Executive) has any Payroll rights, and Customers never do. If a user only has view rights, the front-end hides the <b>Generate payroll</b> button and the per-row <b>Finalize</b> / <b>Mark paid</b> buttons — but the server-side permission check is the real boundary.</p>
+    </div>
+  </div>
+
+  <div class="call warn">
+    <span class="ci">⚠️</span>
+    <div class="cbody">
+      <div class="ctitle">Payroll depends on two other HR screens</div>
+      <p>A payslip can only be produced for an employee who has (1) an <b>active salary structure</b> — set on the Employee detail / Salary structure, defining Basic, HRA, Conveyance, Special allowance, other earnings, Professional Tax and other deductions — and (2) their <b>attendance</b> marked for that month in <span class="navpath">HR → Attendance</span>. Employees with no active salary structure are silently <b>skipped</b> when you generate. Advance recovery pulls from approved requests in <span class="navpath">HR → Salary Advances</span>. So the correct month-end order is: mark attendance → confirm salary structures → generate payroll → review → finalize → pay.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 1 : PAYROLL REGISTER -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Payroll Register</p>
+      <p class="sm">The month's payslips in one table, with four KPI totals, filters, and the Generate / Bank report / Export controls.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Give the person running payroll one screen to generate the month's payslips, see the totals (how many slips, gross, deductions, net payable), review each person's pay, and push each slip through Draft → Finalized → Paid.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> — <b>view</b> to read; <b>edit</b> to generate / finalize / pay</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → Payroll</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Human Resources — <b>Payroll</b> · filter bar + 4 KPIs + payslip table</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Filter bar</b><span>Month picker · Status dropdown (All / Draft / Finalized / Paid) · Search employee · Generate payroll · Bank report · Export CSV</span></div>
+          <div class="wf-cell"><b>KPI cards</b><span>Payslips (count) · Gross · Deductions (amber) · Net payable (green)</span></div>
+          <div class="wf-cell"><b>Payslip table</b><span>Slip · Employee (name + code · dept) · Gross · Deductions · Net · Status · row actions</span></div>
+          <div class="wf-cell"><b>Row actions</b><span>Slip (view) · Finalize (drafts) · Mark paid (finalized) — action buttons depend on status and edit rights</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Payroll Register: a filter/action bar above four money KPIs, above the month's payslip table.</div></div>
+
+      <h4>The filter and action bar</h4>
+      <p>Across the top sits a row of controls. The <b>Month</b> field is a native month picker that defaults to the current month; changing it reloads the table for that month. The <b>Status</b> dropdown filters to a single stage (All status / Draft / Finalized / Paid). The <b>Search employee</b> box filters by employee name, employee code or payslip code and is debounced — it waits about a third of a second after you stop typing before searching. Then come the three action buttons described in the button table below.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Month</b></td>
+            <td>Which salary month to view and act on.</td>
+            <td>Month picker (YYYY-MM)</td>
+            <td class="t-req">Yes</td>
+            <td>Defaults to the current month. Sent as <code>?month=</code>; the backend validates the <code>YYYY-MM</code> shape and rejects a malformed value with "Invalid month (YYYY-MM)."</td>
+            <td>2026-07</td>
+          </tr>
+          <tr>
+            <td><b>Status</b></td>
+            <td>Narrow the list to one payroll stage.</td>
+            <td>All status · Draft · Finalized · Paid</td>
+            <td class="t-opt">Opt.</td>
+            <td>Sent as <code>?status=DRAFT|FINALIZED|PAID</code>; blank means all. Filters the <code>Payslip.status</code> column server-side.</td>
+            <td>Finalized</td>
+          </tr>
+          <tr>
+            <td><b>Search employee</b></td>
+            <td>Find one person's payslip quickly.</td>
+            <td>Free text</td>
+            <td class="t-opt">Opt.</td>
+            <td>Debounced ~350&nbsp;ms, sent as <code>?q=</code>. Case-insensitive match on payslip <b>code</b>, employee <b>code</b>, or employee <b>name</b>.</td>
+            <td>Ramesh / EMP-0007 / PS-2026-07</td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <h4>The four KPI totals</h4>
+      <p>Directly under the filter bar are four cards summarising whatever is currently in view (they reflect the active month, status and search filters). They come from the backend's <code>stats</code> aggregate, computed across every matching payslip — not just the rows on screen.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>KPI</th><th>Meaning</th><th>Backend</th></tr></thead>
+        <tbody>
+          <tr><td><b>Payslips</b></td><td>How many payslips match the current filters.</td><td><code>stats.count</code> — total row count for the query.</td></tr>
+          <tr><td><b>Gross</b></td><td>Sum of all earnings before deductions.</td><td>Aggregate <code>SUM(grossPaise)</code>, shown in ₹.</td></tr>
+          <tr><td><b>Deductions</b> <span class="muted-sm">(amber)</span></td><td>Total taken off — advance recovery + PT + other deductions.</td><td>Aggregate <code>SUM(deductionsPaise)</code>, shown in ₹.</td></tr>
+          <tr><td><b>Net payable</b> <span class="muted-sm">(green)</span></td><td>What the business will actually pay out.</td><td>Aggregate <code>SUM(netPaise)</code>, shown in ₹.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The payslip table</h4>
+      <p>The main table lists one row per payslip. The <b>Employee</b> cell shows the name on the first line and the employee code and department on a second, greyed line. Amounts are in ₹. The <b>Status</b> cell is a coloured badge, and the last cell holds the action buttons that apply to that row's status.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Behaviour on this screen</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td><b>Slip</b> (payslip code, e.g. <code>PS-2026-07-0003</code>) · <b>Employee</b> (name + code · department) · <b>Gross</b> · <b>Deductions</b> · <b>Net</b> (bold) · <b>Status</b> (badge) · actions.</td></tr>
+          <tr><td><b>Filters</b></td><td>Month, Status and Search employee (the filter bar). No column-header filters.</td></tr>
+          <tr><td><b>Sorting</b></td><td>Fixed by the backend — newest month first, then payslip code ascending. Not user-sortable by clicking headers.</td></tr>
+          <tr><td><b>Search</b></td><td>The single "Search employee" box (code / employee code / name).</td></tr>
+          <tr><td><b>Pagination</b></td><td>The screen loads the first page only (server default page size 100, hard cap 500); the admin page does not render pager buttons, so use Search or Status to narrow very large months.</td></tr>
+          <tr><td><b>Export</b></td><td><b>Export CSV</b> button — downloads the rows currently loaded as <code>doodly-payroll-&lt;month&gt;.csv</code> (see button table).</td></tr>
+          <tr><td><b>Row actions</b></td><td><b>Slip</b> (always), <b>Finalize</b> (only on Draft rows, edit rights), <b>Mark paid</b> (only on Finalized rows, edit rights).</td></tr>
+          <tr><td><b>Empty state</b></td><td>"No payslips for &lt;Month Year&gt; — click "Generate payroll"." shown when the month has no slips yet.</td></tr>
+          <tr><td><b>Loading / error</b></td><td>A shimmering skeleton panel while loading; an amber warning box ("Couldn't load payroll." or the server message) on failure.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Buttons on this screen</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Generate payroll</b></td>
+            <td>Creates or recalculates draft payslips for every active employee for the chosen month. Asks for confirmation first ("Generate payroll for all active employees for &lt;Month&gt;? Existing drafts are recalculated."). On success it toasts how many were generated and how many were skipped.</td>
+            <td><code>POST { action:"generate", month }</code> → <code>generatePayroll()</code>. See Screen&nbsp;2. Writes an audit entry <code>payroll.generate</code>.</td>
+            <td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span> — edit</td>
+          </tr>
+          <tr>
+            <td><b>Bank report</b></td>
+            <td>Opens the Bank transfer report pop-up for the current month (Screen&nbsp;4).</td>
+            <td><code>GET ?view=bank&amp;month=</code> → <code>bankReport()</code>. Read-only.</td>
+            <td>view (all three roles)</td>
+          </tr>
+          <tr>
+            <td><b>Export CSV</b></td>
+            <td>Downloads the loaded payslip rows as a spreadsheet.</td>
+            <td>Client-side — writes <code>doodly-payroll-&lt;month&gt;.csv</code> with columns Slip, Employee, Emp Code, Department, Gross, Deductions, Net, Status. Amounts are in <b>rupees</b> (paise ÷ 100).</td>
+            <td>view</td>
+          </tr>
+          <tr>
+            <td><b>Slip</b> <span class="muted-sm">(row)</span></td>
+            <td>Opens the salary slip pop-up for that employee (Screen&nbsp;3), with a Print / PDF option.</td>
+            <td><code>GET ?view=detail&amp;id=</code> → <code>payslipDetail()</code>. Read-only.</td>
+            <td>view</td>
+          </tr>
+          <tr>
+            <td><b>Finalize</b> <span class="muted-sm">(row · Draft only)</span></td>
+            <td>Locks a draft payslip so it can no longer be recalculated by a re-generate. Toasts "Finalized ✓".</td>
+            <td><code>POST { action:"finalize", id }</code> → <code>setPayslipStatus(id, "FINALIZED")</code>. Only a Draft can be finalized (else 409 conflict). Audit <code>payroll.finalize</code>.</td>
+            <td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span> — edit</td>
+          </tr>
+          <tr>
+            <td><b>Mark paid</b> <span class="muted-sm">(row · Finalized only)</span></td>
+            <td>Records the salary as paid. Asks to confirm ("Mark this salary as paid? This records the advance recovery and notifies the employee."). On success: "Marked paid ✓ — employee notified".</td>
+            <td><code>POST { action:"pay", id }</code> → <code>setPayslipStatus(id, "PAID")</code>. Applies advance recovery, stamps <code>paidAt</code>, notifies the employee, audit <code>payroll.paid</code>. See Screen&nbsp;5.</td>
+            <td><span class="pill role">Super Admin</span><span class="pill role">Admin</span><span class="pill role">Accountant</span> — edit</td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Export CSV covers only the loaded rows</div>
+          <p>The <b>Export CSV</b> button exports the payslips that are currently loaded into the table (the first page — up to 100 rows — after your Month / Status / Search filters). It is a client-side download of what is on screen, not a fresh server-side pull of the entire company. For a full month with more than 100 payslips, narrow by department search or status before exporting, or export in slices.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 : GENERATE PAYROLL -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Generate Payroll</p>
+      <p class="sm">The one-click monthly run that builds a draft payslip per employee from attendance + salary structure.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Turn a month of attendance and each person's salary structure into draft payslips, automatically — proration for absences, overtime, planned advance recovery and fixed deductions all worked out for you.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> — edit</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → Payroll → Generate payroll</span></span>
+    </div>
+    <div class="spec-body">
+
+      <p>Clicking <b>Generate payroll</b> from the register (after a confirm dialog) sends <code>action:"generate"</code> with the selected month. The backend loops every eligible employee, computes a payslip, and saves it as a <b>Draft</b>. It is <b>idempotent</b>: running it again recalculates existing drafts in place but never touches a payslip that is already Finalized or Paid, and never creates duplicates.</p>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Who gets a payslip when you generate</div>
+          <p>Generate-all builds slips for every employee whose profile is <b>not removed</b> (<code>deletedAt = null</code>) and whose status is <b>ACTIVE</b> or <b>ON_LEAVE</b>. Anyone <b>without an active salary structure</b> is skipped (counted in the "skipped" toast). Anyone whose payslip for that month is already Finalized or Paid is left untouched. The toast reads, for example, "Generated 34 payslip(s), 2 skipped (no salary structure)".</p>
+        </div>
+      </div>
+
+      <h4>The request fields</h4>
+      <p>From the admin button, only <b>month</b> is sent (all active employees, no ad-hoc bonus). The underlying API also accepts three optional fields, used when payroll is run for a single employee (for example from tooling or a future per-person action).</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>month</b></td>
+            <td>The salary month to run.</td>
+            <td>YYYY-MM</td>
+            <td class="t-req">Yes</td>
+            <td>Must match <code>^\d{4}-\d{2}$</code>. Rejected as "Invalid month (YYYY-MM)." otherwise.</td>
+            <td>2026-07</td>
+          </tr>
+          <tr>
+            <td><b>employeeId</b></td>
+            <td>Run for one employee instead of all.</td>
+            <td>Employee id</td>
+            <td class="t-opt">Opt.</td>
+            <td>When present, only that employee is processed; when absent, all eligible employees run. Bonus/incentive below apply <b>only</b> in the single-employee case.</td>
+            <td>ckv…e21</td>
+          </tr>
+          <tr>
+            <td><b>bonusPaise</b></td>
+            <td>A one-off bonus added to earnings.</td>
+            <td>Whole paise ≥ 0</td>
+            <td class="t-opt">Opt.</td>
+            <td>Integer ≥ 0. Added to gross for that person. Ignored on a generate-all run (bonus is forced to 0).</td>
+            <td>500000 (₹5,000)</td>
+          </tr>
+          <tr>
+            <td><b>incentivePaise</b></td>
+            <td>A one-off incentive added to earnings.</td>
+            <td>Whole paise ≥ 0</td>
+            <td class="t-opt">Opt.</td>
+            <td>Integer ≥ 0. Added to gross for that person. Ignored on a generate-all run.</td>
+            <td>250000 (₹2,500)</td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <h4>How each payslip is calculated</h4>
+      <p>For every employee the engine pulls the month's attendance and the active salary structure, then works top-to-bottom. This is the exact logic that fills the salary slip; understanding it makes the numbers self-explanatory.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Line</th><th>How it is worked out</th></tr></thead>
+        <tbody>
+          <tr><td><b>Working days</b></td><td>The number of calendar days in the month (e.g. 31 for July).</td></tr>
+          <tr><td><b>Loss-of-pay (unpaid) days</b></td><td><code>Absent days + (Half-days × 0.5)</code>. Paid leave, sick leave, weekly-off and holiday do <b>not</b> reduce pay.</td></tr>
+          <tr><td><b>Proration factor</b></td><td><code>Paid days ÷ Working days</code>, where Paid days = Working days − LOP days. Every fixed earning below is multiplied by this factor.</td></tr>
+          <tr><td><b>Basic, HRA, Conveyance, Special, Other earnings</b></td><td>Each taken from the salary structure and prorated by the factor above.</td></tr>
+          <tr><td><b>Overtime pay</b></td><td><code>(Overtime minutes ÷ 60) × hourly Basic × 1.5</code>, where hourly Basic = monthly Basic ÷ (Working days × 8). Overtime minutes come from the attendance records.</td></tr>
+          <tr><td><b>Bonus / Incentive</b></td><td>Added if supplied (single-employee run only); otherwise ₹0.</td></tr>
+          <tr><td><b>Gross</b></td><td>Sum of all the earnings above.</td></tr>
+          <tr><td><b>Advance recovery</b></td><td>For each of the employee's <b>approved</b> advances still owing, the smaller of its installment amount and its remaining balance is planned for recovery this cycle. (Actually deducted from the advance ledger only when the slip is marked Paid.)</td></tr>
+          <tr><td><b>Professional Tax + Other deductions</b></td><td>Fixed amounts from the salary structure.</td></tr>
+          <tr><td><b>Total deductions</b></td><td>Advance recovery + Professional Tax + Other deductions.</td></tr>
+          <tr><td><b>Net pay</b></td><td><code>max(0, Gross − Total deductions)</code> — never negative.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Tip — re-generate safely, as many times as you like</div>
+          <p>If you fix an attendance mark or update a salary structure after generating, just click <b>Generate payroll</b> again for the same month. Every <b>Draft</b> is recomputed from the corrected data, so the drafts always reflect the latest records. Only once you <b>Finalize</b> a slip is it frozen against re-generation — that is the point of finalizing.</p>
+        </div>
+      </div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — one generate run</div>
+        <div class="wf-flow"><span>Pick month</span><span>Click Generate payroll</span><span>Confirm</span><span>Loop active employees</span><span>Read attendance + salary structure</span><span>Compute gross → deductions → net</span><span>Save as Draft (or recompute existing draft)</span><span>Toast: N generated, M skipped</span></div>
+      </div><div class="wire-cap">Figure — generate builds or refreshes a draft payslip per eligible employee in a single pass.</div></div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3 : SALARY SLIP -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Salary Slip</p>
+      <p class="sm">The per-employee payslip pop-up — earnings, deductions, net pay, and a Print / PDF button.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Show the full breakdown of one employee's pay for a month, exactly as it will be paid, in a clean layout that can be printed or saved as PDF and handed to the employee.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> — view</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → Payroll → (row) Slip</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Pop-up — <b>Salary slip</b> · header, two earnings/deductions columns, net, print</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Header</b><span>Employee name · code · designation — department · status badge · month</span></div>
+          <div class="wf-cell"><b>Attendance line</b><span>Payable days X of Y · overtime hours</span></div>
+          <div class="wf-cell"><b>Earnings column</b><span>Basic, HRA, Conveyance, Special, Overtime, Bonus, Incentive, Other → Gross</span></div>
+          <div class="wf-cell"><b>Deductions column</b><span>Advance recovery, Professional tax, Other → Total</span></div>
+          <div class="wf-cell"><b>Net pay strip</b><span>Net pay = Gross − Deductions</span></div>
+          <div class="wf-cell"><b>Footer buttons</b><span>Close · Print / PDF</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the salary slip pop-up: header and attendance line above side-by-side Earnings and Deductions, with the net-pay strip and the Print / PDF action.</div></div>
+
+      <h4>What the slip shows</h4>
+      <p>The header names the employee (name, code, designation — department), the status badge and the month. A grey line beneath states <b>Payable days X of Y</b> and the <b>overtime hours</b>. Then two columns list every non-zero line — a line is only printed if it has a value, so a slip with no HRA simply omits the HRA row. If there are no deductions at all, a single "— ₹0" row is shown.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Section</th><th>Lines (each shown only when non-zero)</th><th>Source field</th></tr></thead>
+        <tbody>
+          <tr><td><b>Earnings</b></td><td>Basic · HRA · Conveyance · Special allowance · Overtime · Bonus · Incentive · Other → <b>Gross</b> (total)</td><td><code>basicPaise, hraPaise, conveyancePaise, specialPaise, overtimePaise, bonusPaise, incentivePaise, otherEarnPaise</code> → <code>grossPaise</code></td></tr>
+          <tr><td><b>Deductions</b></td><td>Advance recovery · Professional tax · Other deductions → <b>Total</b></td><td><code>advanceRecoverPaise, ptPaise, otherDeductPaise</code> → <code>deductionsPaise</code></td></tr>
+          <tr><td><b>Net pay</b></td><td>The single figure the employee receives.</td><td><code>netPaise</code></td></tr>
+          <tr><td><b>Employee details</b> <span class="muted-sm">(detail API)</span></td><td>Code, name, designation, department, date of joining, bank name, IFSC, and a <b>masked</b> account number (only the last 4 digits, e.g. "•••• 4821").</td><td><code>payslipDetail()</code> employee block</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Print / PDF</b></td><td>Opens a clean, branded "DOODLY — Salary Slip" print window and triggers the browser print dialog (choose "Save as PDF" to keep a copy). Earnings and deductions are laid out side by side, ending in a Net Pay box and the note "Computer-generated payslip — no signature required."</td><td>Client-side <code>window.open</code> + <code>print()</code>. Needs pop-ups allowed (otherwise it toasts "Allow pop-ups to print the slip").</td><td>view</td></tr>
+          <tr><td><b>Close</b></td><td>Dismisses the pop-up. No data change.</td><td>—</td><td>view</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Employees see their own slips too</div>
+          <p>The same payslips appear to each staff member on their self-service <b>My HR → Salary slips</b> tab (account surface), where they can view and print any slip once payroll is finalized. Employees never see anyone else's pay — that surface is scoped to the signed-in person only.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 4 : BANK TRANSFER REPORT -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Bank Transfer Report</p>
+      <p class="sm">A pop-up listing net payable per employee with bank details, for handing to the bank / uploading for payment.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Produce the single list a payments team needs to actually move the money: each employee's bank, account number, IFSC and net amount, plus the grand total, for the chosen month.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> — view</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → Payroll → Bank report</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Pop-up — <b>Bank transfer report — &lt;Month Year&gt;</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Note</b><span>"Finalized + paid payslips only."</span></div>
+          <div class="wf-cell"><b>Table</b><span>Code · Name · Bank · Account · IFSC · Net</span></div>
+          <div class="wf-cell"><b>Footer</b><span>Total (sum of all Net amounts)</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the bank transfer report: one row per payable employee with full bank details, totalled at the foot.</div></div>
+
+      <h4>What it contains</h4>
+      <p>The report opens for the month currently selected on the register. It includes <b>only</b> payslips whose status is <b>Finalized</b> or <b>Paid</b> — drafts are excluded, because you should not pay out an amount you have not finalized. Rows are ordered by payslip code.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><b>Code</b></td><td>The employee code.</td></tr>
+          <tr><td><b>Name</b></td><td>The employee's name.</td></tr>
+          <tr><td><b>Bank</b></td><td>Bank name from the employee's profile ("—" if not on file).</td></tr>
+          <tr><td><b>Account</b></td><td>The <b>full</b> bank account number ("—" if not on file).</td></tr>
+          <tr><td><b>IFSC</b></td><td>The branch IFSC code ("—" if not on file).</td></tr>
+          <tr><td><b>Net</b></td><td>The net amount to transfer, in ₹.</td></tr>
+          <tr><td><b>Total</b> <span class="muted-sm">(footer)</span></td><td>Sum of every Net amount in the report.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call danger">
+        <span class="ci">⛔</span>
+        <div class="cbody">
+          <div class="ctitle">Caution — this report shows full account numbers</div>
+          <p>Unlike the salary slip (which masks the account to its last four digits), the Bank transfer report deliberately shows the <b>complete account number</b> because it is meant to drive a real bank transfer. Treat this pop-up as sensitive financial data: do not screen-share it, do not paste it into chat or email, and only open it when you are ready to process payments. Access is already limited to Super Admin, Admin and Accountant.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 5 : FINALIZE & PAY LIFECYCLE -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Finalize &amp; Pay (payslip lifecycle)</p>
+      <p class="sm">Moving each payslip through Draft → Finalized → Paid, and what happens when you pay.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Control when a payslip stops being editable (Finalize) and when the money is actually released, advances are recovered, and the employee is notified (Mark paid).</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Accountant</span> — edit</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Human Resources → Payroll → (row) Finalize / Mark paid</span></span>
+    </div>
+    <div class="spec-body">
+
+      <h4>The three statuses</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Status</th><th>Badge</th><th>What it means</th><th>What you can do</th></tr></thead>
+        <tbody>
+          <tr><td><b>Draft</b></td><td><span class="muted-sm">amber</span></td><td>Freshly generated. Editable — a re-generate recalculates it.</td><td>Review the slip; <b>Finalize</b> it.</td></tr>
+          <tr><td><b>Finalized</b></td><td><span class="muted-sm">blue</span></td><td>Locked figures. No longer recalculated by generate; appears on the Bank report.</td><td><b>Mark paid</b>.</td></tr>
+          <tr><td><b>Paid</b></td><td><span class="muted-sm">green</span></td><td>Salary released. <code>paidAt</code> is stamped, advances recovered, employee notified.</td><td>View / print the slip only — terminal state.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>What "Mark paid" actually does</h4>
+      <p>Marking a Finalized payslip as Paid runs inside a single database transaction so the money and the advance ledger always stay in step:</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Step</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><b>Recover advances</b></td><td>If this slip has planned advance recovery and hasn't been recovered before, the engine walks the employee's <b>approved</b> advances oldest-first and, for each, deducts the smaller of its installment, its remaining balance, and what's still to recover. Each deduction creates an <code>AdvanceRecovery</code> record, reduces the advance's remaining balance, and marks the advance <b>Completed</b> when it hits zero. Recovery is applied <b>once</b> per slip (idempotent).</td></tr>
+          <tr><td><b>Stamp paid</b></td><td>The payslip status becomes <b>PAID</b> and <code>paidAt</code> is set to now.</td></tr>
+          <tr><td><b>Notify the employee</b></td><td>Sends a "Salary credited 💰" notification with the month, the net amount and the payslip code (non-blocking — payment still succeeds if the message fails).</td></tr>
+          <tr><td><b>Audit</b></td><td>Writes a <code>payroll.paid</code> audit entry (employee code, slip code and net amount). Finalize writes <code>payroll.finalize</code>; generate writes <code>payroll.generate</code>.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Finalize before you pay — and check the order of operations</div>
+          <p>The register only offers <b>Mark paid</b> on a <b>Finalized</b> slip, so you must Finalize first. Finalizing is what freezes the figures against a later re-generate, so if you spot a mistake on a <b>Draft</b>, fix the source (attendance / salary structure / advance) and re-generate <i>before</i> finalizing. Marking Paid a second time is harmless (it returns without re-recovering advances), but there is no "un-pay" button — treat Mark paid as the point of no return.</p>
+        </div>
+      </div>
+
+      <div class="call danger">
+        <span class="ci">⛔</span>
+        <div class="cbody">
+          <div class="ctitle">Caution — paying recovers advances for real</div>
+          <p>Advance recovery is only <b>planned</b> at generate time; it is actually applied to the salary-advance ledger the moment you Mark paid. That reduces the employee's outstanding advance balance and can complete the advance. There is no reversal in the UI — if you paid in error, you must correct the advance and pay records manually. Confirm the net amount and the "Advance recovery" line on the slip before clicking Mark paid.</p>
+        </div>
+      </div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — payslip lifecycle</div>
+        <div class="wf-flow"><span>Generate → Draft</span><span>Review slip</span><span>Finalize → Finalized</span><span>(appears on Bank report)</span><span>Mark paid</span><span>Recover advances + stamp paidAt</span><span>Notify employee</span><span>Paid</span></div>
+      </div><div class="wire-cap">Figure — the full path a payslip travels, from a recalculable draft to a paid, notified salary.</div></div>
+
+    </div>
+  </div>
+
+  <div class="call best">
+    <span class="ci">✅</span>
+    <div class="cbody">
+      <div class="ctitle">Best Practice — the month-end payroll checklist</div>
+      <p>Run payroll in this order every month: (1) close and correct <b>Attendance</b> for the month so proration and overtime are right; (2) confirm every active employee has an up-to-date <b>salary structure</b> and that pending <b>advances</b> are approved; (3) click <b>Generate payroll</b> and read the "N generated, M skipped" toast — investigate any "skipped (no salary structure)"; (4) open a few <b>Slips</b> and sanity-check gross, deductions and net; (5) re-generate if you had to fix anything; (6) <b>Finalize</b> the slips; (7) open the <b>Bank report</b>, transfer the money through your bank, then (8) <b>Mark paid</b> so advances are recovered and staff are notified. Keep the CSV export as your internal record of each run.</p>
+    </div>
+  </div>
+
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>An employee is missing from the generated list</td><td>They have <b>no active salary structure</b>, or their status isn't ACTIVE/ON_LEAVE, or the profile is removed — so they were skipped.</td><td>Set a salary structure on the Employee detail, confirm their status, then re-generate. Watch the "skipped" count in the toast.</td></tr>
+      <tr><td>Net pay looks too low for someone</td><td>Loss-of-pay days (absent / half-day) prorated their earnings, or an advance recovery / PT / other deduction applied.</td><td>Open their <b>Slip</b> — check the "Payable days X of Y" line and the Deductions column. Fix attendance and re-generate the (still Draft) slip if needed.</td></tr>
+      <tr><td>"Generate payroll" button isn't visible</td><td>The signed-in role has <b>payroll: view</b> but not <b>edit</b>.</td><td>Only Super Admin, Admin and Accountant have edit rights. Ask one of them to run payroll, or have the role adjusted.</td></tr>
+      <tr><td>Can't Finalize — "Only a draft payslip can be finalized."</td><td>The slip is already Finalized or Paid.</td><td>No action needed; it's past the draft stage. Use Mark paid (if Finalized) or just view it (if Paid).</td></tr>
+      <tr><td>I re-generated but a slip didn't change</td><td>That slip is already <b>Finalized</b> or <b>Paid</b>, which generate never overwrites.</td><td>Only Drafts are recalculated. There is no un-finalize; correct downstream if the figures are wrong.</td></tr>
+      <tr><td>Employee didn't get the "Salary credited" message</td><td>Notification delivery failed — it is non-blocking, so payment still went through.</td><td>The payment is fine (status is Paid). Check the notifications/provider setup; the slip is available in the employee's My HR regardless.</td></tr>
+      <tr><td>Bank report is empty for the month</td><td>No payslips are Finalized or Paid yet — the report excludes Drafts.</td><td>Finalize the drafts first, then reopen the Bank report.</td></tr>
+      <tr><td>Print / PDF does nothing</td><td>The browser blocked the pop-up window.</td><td>Allow pop-ups for the admin site, then click Print / PDF again (it toasts "Allow pop-ups to print the slip").</td></tr>
+      <tr><td>CSV is missing some payslips</td><td>Export writes only the loaded rows (first page, after filters).</td><td>Narrow by Status / Search or export in slices for a large month.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Frequently asked questions</h4>
+  <h4>If I run "Generate payroll" twice, do employees get paid twice?</h4>
+  <p>No. Generate is idempotent — it recalculates each existing Draft in place and never creates duplicates, and it never touches a Finalized or Paid slip. Money only moves when you <b>Mark paid</b>, and marking an already-Paid slip does nothing.</p>
+  <h4>How are absences and overtime reflected in pay?</h4>
+  <p>Fixed earnings (Basic, HRA, etc.) are prorated by "paid days ÷ working days", where unpaid days are absences plus half of any half-days (paid/sick leave, weekly-off and holidays are not unpaid). Overtime is paid separately at 1.5× the hourly Basic rate for the recorded overtime minutes.</p>
+  <h4>When exactly is a salary advance recovered?</h4>
+  <p>The recovery amount is <b>planned</b> (shown as "Advance recovery" on the slip) when payroll is generated, but it is only <b>applied</b> to the advance ledger when you Mark the slip Paid — reducing the outstanding balance and completing the advance if it reaches zero. It is applied once per slip.</p>
+  <h4>Can an Accountant run payroll, or only Admins?</h4>
+  <p>The Accountant role has <b>payroll: full</b> in the default matrix, so an Accountant can generate, finalize and mark paid — the same as Admin and Super Admin. No other staff role can open Payroll at all.</p>
+  <h4>What is the payslip code format?</h4>
+  <p>Each slip is coded <code>PS-&lt;month&gt;-&lt;sequence&gt;</code>, e.g. <code>PS-2026-07-0004</code> — the month plus a four-digit running number within that month.</p>
+  <h4>Are the ₹ amounts stored as rupees or paise?</h4>
+  <p>The screen shows rupees, but the database stores every amount as integer <b>paise</b> (₹1 = 100 paise), which is why the totals are always exact. The CSV export writes rupees (paise ÷ 100).</p>
+
+</section>

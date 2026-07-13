@@ -1,0 +1,241 @@
+<section class="sheet" id="admin-coupons">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Growth · Coupons</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Growth</span></div>
+  <h2 class="section-title">Coupons</h2>
+  <p class="lead">Create and manage discount codes — percentage or flat-value — that customers type at checkout to reduce their order total, with live usage, redemption limits and revenue tracking.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where this lives</div><p>Open it from <b>Admin → Growth → Coupons</b> (URL <b>/admin/coupons.html</b>). The whole page is driven live from the DOODLY database through the endpoint <b>/api/admin/coupons</b>. When the page loads you will see a green banner reading “● Live — N coupon(s) from the DOODLY database”. If the banner is red, the backend is offline or your role is not allowed to view coupons — see Troubleshooting.</p></div></div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 1 — COUPON LIST + DASHBOARD                            -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Coupon List &amp; Dashboard</p><p class="sm">The landing screen — headline numbers on top, a searchable table of every coupon below.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> See how every discount code is performing at a glance, then drill into any one to edit it or read its full redemption history.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span> can view <b>and manage</b>; <span class="pill role">Accountant</span> and other reporting roles can <b>view only</b>.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Coupons</span></span>
+    </div>
+
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Coupons</b> · “Discount codes and usage.” · <b>[＋ Create coupon]</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>KPI strip (8 cards)</b><span>Total Coupons · Active · Scheduled · Expired · Redeemed · Discount Given (₹) · Revenue via Coupons (₹) · Most Used</span></div>
+          <div class="wf-cell"><b>Live status banner</b><span>Green “● Live — N coupon(s)…” on success; red warning if offline or blocked</span></div>
+          <div class="wf-cell"><b>Toolbar</b><span>Search box · filter chips (All / Active / Scheduled / Paused) · sort · export · pagination</span></div>
+          <div class="wf-cell"><b>Coupon table</b><span>Columns: Code · Description · Usage · Status · Manage</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Coupons list screen: KPI dashboard on top, filterable data table below.</div></div>
+
+      <h4>The 8 dashboard cards (KPI strip)</h4>
+      <p>These are calculated live from the <b>Coupon</b> and <b>CouponRedemption</b> tables (endpoint <b>/api/admin/coupons?view=dashboard</b>). They sit above the table.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Card</th><th>What it counts</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><b>Total Coupons</b></td><td>All coupons that are not soft-deleted.</td><td>The full catalogue, active or not.</td></tr>
+          <tr><td><b>Active</b></td><td>Coupons live right now.</td><td>Marked Active — see the status rules below.</td></tr>
+          <tr><td><b>Scheduled</b></td><td>Coupons whose start date is still in the future.</td><td>Turn Active automatically on their start date.</td></tr>
+          <tr><td><b>Expired</b></td><td>Coupons whose expiry date has passed.</td><td>No longer accepted at checkout.</td></tr>
+          <tr><td><b>Redeemed</b></td><td>Total number of redemptions across all coupons ever.</td><td>Counts every recorded use.</td></tr>
+          <tr><td><b>Discount Given</b></td><td>Total rupee value of discount handed out.</td><td>Sum of every redemption's discount.</td></tr>
+          <tr><td><b>Revenue via Coupons</b></td><td>Total order value of orders that used a coupon.</td><td>Order totals on which a code was applied.</td></tr>
+          <tr><td><b>Most Used</b></td><td>The single most-redeemed coupon code.</td><td>Shows “—” when nothing has been redeemed yet.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Two more figures behind the scenes</div><p>The dashboard endpoint also returns an <b>average discount</b> per redemption, a <b>conversion rate</b> (discount as a percentage of revenue), and <b>coupons used today</b>. These feed the analytics layer even though the eight cards above are what appear on screen.</p></div></div>
+
+      <h4>The coupon table</h4>
+      <p>Every coupon is a row. The table is rendered by the shared DOODLY DataTable engine, so it supports search, sorting, filtering, export and pagination.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Element</th><th>Detail (from the real table config)</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td><b>Code</b> (the code the customer types, e.g. FRESH10) · <b>Description</b> (the coupon's Name, plus its Campaign after a “·” if set) · <b>Usage</b> (times used, shown as <i>used / limit</i> when a total limit exists, otherwise just the count) · <b>Status</b> (colour badge) · <b>Manage</b> (opens the edit dialog).</td></tr>
+          <tr><td><b>Filter chips</b></td><td><b>All</b> · <b>Active</b> · <b>Scheduled</b> · <b>Paused</b> — quick facet filters above the table.</td></tr>
+          <tr><td><b>Search</b></td><td>Free-text box. The backend matches on code, name, campaign and description (case-insensitive).</td></tr>
+          <tr><td><b>Sorting</b></td><td>Newest first by default. The backend also supports sort by usage (most-redeemed), expiry (soonest), name (A→Z) and last-updated.</td></tr>
+          <tr><td><b>Pagination</b></td><td>Up to 500 coupons are loaded into the page; the DataTable pages through them.</td></tr>
+          <tr><td><b>Export</b></td><td>The toolbar's Export button downloads the visible table as CSV.</td></tr>
+          <tr><td><b>Row action</b></td><td><b>Manage</b> opens the Create/Edit Coupon dialog (next screen) pre-filled with that coupon.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Status badge — what each colour means</h4>
+      <p>A coupon's status is worked out automatically from its flags and dates (it is never typed in). The order of precedence is:</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Status</th><th>Shown when</th><th>Accepted at checkout?</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pill">Deleted</span></td><td>The coupon has been soft-deleted.</td><td>No.</td></tr>
+          <tr><td><span class="pill">Inactive</span></td><td>The Active switch is off. (The list's “Paused” filter chip maps to this state.)</td><td>No.</td></tr>
+          <tr><td><span class="pill">Scheduled</span></td><td>The start date is in the future.</td><td>No — not yet.</td></tr>
+          <tr><td><span class="pill">Expired</span></td><td>The expiry date has passed.</td><td>No — anymore.</td></tr>
+          <tr><td><span class="pill">Active</span></td><td>Switched on, started, and not expired.</td><td>Yes.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">“Paused” vs “Inactive”</div><p>The filter chip reads <b>Paused</b>, but a coupon you switch off shows the badge <b>Inactive</b>. They mean the same thing — a live coupon that has been turned off with the Active checkbox. Filtering by “Paused” finds your switched-off codes.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 2 — CREATE / EDIT COUPON                               -->
+  <!-- ============================================================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Create / Edit Coupon</p><p class="sm">The dialog where you build a new code or change an existing one.</p></div>
+
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Define exactly what the discount is, who can use it, on what, and for how long — then save it live.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span> only. Other roles that can view coupons get a “403 — only Marketing / Admin can manage coupons” error if they try to save.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Growth → Coupons → Create coupon</span> (or the <b>Manage</b> link on any row)</span>
+    </div>
+
+    <div class="spec-body">
+      <p>Click <b>＋ Create coupon</b> (top-right) for a blank form, or <b>Manage</b> on a row to edit that coupon. The dialog title reads “Create coupon” or “Edit &lt;CODE&gt;”.</p>
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Dialog — <b>Create coupon / Edit CODE</b> · ✕ close</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Row 1</b><span>Code * (with 🎲 random-code button) · Name</span></div>
+          <div class="wf-cell"><b>Row 2</b><span>Campaign · Discount type (Percentage % / Flat ₹)</span></div>
+          <div class="wf-cell"><b>Row 3</b><span>Value * (% or ₹, hint changes) · Max discount (₹)</span></div>
+          <div class="wf-cell"><b>Row 4</b><span>Min order (₹) · Usage limit (total)</span></div>
+          <div class="wf-cell"><b>Row 5</b><span>Per-customer limit · Expiry date</span></div>
+          <div class="wf-cell"><b>Row 6</b><span>Applicable products (slugs) · Applicable plans (slugs)</span></div>
+          <div class="wf-cell"><b>Checkboxes</b><span>☐ First order only   ☑ Active</span></div>
+          <div class="wf-cell"><b>Footer</b><span>(edit only) Duplicate · Delete/Restore | Cancel · Create coupon / Save changes</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Create/Edit Coupon dialog with its two-column field layout.</div></div>
+
+      <h4>Field reference</h4>
+      <p>Every field below is real. Values you type in rupees are stored internally in paise (1 ₹ = 100 paise) and in basis points for percentages, but you only ever work in ₹ and %.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Code</b></td><td>What the customer types at checkout.</td><td>Letters, numbers, hyphen and underscore only.</td><td class="t-req">Yes</td><td>3–40 characters; automatically stored in UPPERCASE; must be unique (a duplicate code is rejected). The 🎲 button fills a random “DOODLY####” code.</td><td>FRESH10</td></tr>
+          <tr><td><b>Name</b></td><td>Short human label shown in the Description column.</td><td>Free text, up to 120 chars.</td><td class="t-opt">Opt.</td><td>Trimmed; blank is stored as empty.</td><td>10% off first subscription</td></tr>
+          <tr><td><b>Campaign</b></td><td>Groups coupons under a marketing campaign for reporting.</td><td>Free text, up to 120 chars.</td><td class="t-opt">Opt.</td><td>Appears after the name in the list and drives the “by campaign” report.</td><td>Diwali 2026</td></tr>
+          <tr><td><b>Discount type</b></td><td>How the discount is calculated.</td><td>Percentage % · Flat ₹</td><td class="t-req">Yes</td><td>Defaults to Percentage. Switching it changes the Value hint.</td><td>Percentage %</td></tr>
+          <tr><td><b>Value</b></td><td>The size of the discount.</td><td>A number — a percent when type is %, a rupee amount when type is Flat.</td><td class="t-req">Yes</td><td>Must be greater than zero. A percentage cannot exceed 100%.</td><td>10 (= 10%)</td></tr>
+          <tr><td><b>Max discount (₹)</b></td><td>Caps a percentage discount at a ceiling.</td><td>Rupee amount.</td><td class="t-opt">Opt.</td><td>Only meaningful for percentage coupons; ignored for flat.</td><td>150</td></tr>
+          <tr><td><b>Min order (₹)</b></td><td>The smallest order the coupon works on.</td><td>Rupee amount.</td><td class="t-opt">Opt.</td><td>Defaults to 0 (no minimum). Orders below this are rejected at checkout.</td><td>499</td></tr>
+          <tr><td><b>Usage limit (total)</b></td><td>How many times the coupon can be used in total, across all customers.</td><td>Whole number.</td><td class="t-opt">Opt.</td><td>Must be a positive whole number. Blank = unlimited (∞). Once reached, the code stops working.</td><td>1000</td></tr>
+          <tr><td><b>Per-customer limit</b></td><td>How many times one customer may use it.</td><td>Whole number.</td><td class="t-opt">Opt.</td><td>Positive whole number. Blank = no per-customer cap.</td><td>1</td></tr>
+          <tr><td><b>Expiry date</b></td><td>The last day the coupon is valid.</td><td>Date picker.</td><td class="t-opt">Opt.</td><td>After this date the status becomes Expired. Blank = never expires.</td><td>2026-11-15</td></tr>
+          <tr><td><b>Applicable products (slugs)</b></td><td>Restricts the coupon to specific products.</td><td>Comma-separated product slugs.</td><td class="t-opt">Opt.</td><td>Blank = applies to all products. At checkout the cart must contain at least one listed product.</td><td>milk,curd</td></tr>
+          <tr><td><b>Applicable plans (slugs)</b></td><td>Restricts the coupon to specific subscription plans.</td><td>Comma-separated plan slugs.</td><td class="t-opt">Opt.</td><td>Blank = applies to all plans. Otherwise the chosen plan must match.</td><td>p30,p90</td></tr>
+          <tr><td><b>First order only</b></td><td>Limits the coupon to a customer's very first paid order.</td><td>Checkbox.</td><td class="t-opt">Opt.</td><td>When ticked, customers who already have a paid order are blocked.</td><td>☑</td></tr>
+          <tr><td><b>Active</b></td><td>Master on/off switch.</td><td>Checkbox.</td><td class="t-opt">Opt.</td><td>On by default. Unticking it makes the coupon Inactive immediately.</td><td>☑</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — flat vs percentage</div><p>Pick <b>Flat ₹</b> when you want a fixed rupee cut (e.g. ₹50 off). Pick <b>Percentage %</b> for a proportional discount, and set <b>Max discount</b> so a big cart does not give away too much. A discount can never exceed the order total, so a flat ₹100 on a ₹80 cart only takes off ₹80.</p></div></div>
+
+      <h4>Buttons in the dialog</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>🎲 (random code)</b></td><td>Fills the Code box with a fresh “DOODLY####” code.</td><td>Client-side only — no save.</td><td><span class="pill role">Marketing</span>+</td></tr>
+          <tr><td><b>Create coupon</b></td><td>Saves a brand-new coupon.</td><td>POST /api/admin/coupons <code>action: create</code>. Rejects a duplicate code; writes an audit entry.</td><td><span class="pill role">Marketing</span> <span class="pill role">Admin</span> <span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Save changes</b></td><td>Updates the coupon you are editing.</td><td>POST <code>action: update</code>. Audited.</td><td><span class="pill role">Marketing</span> <span class="pill role">Admin</span> <span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Duplicate</b> <span class="pill">edit only</span></td><td>Makes a copy of the coupon to tweak.</td><td>POST <code>action: duplicate</code> — new code “&lt;CODE&gt;-COPY”, name “(copy)”, and it is created <b>switched off</b> so it can't go live by accident.</td><td><span class="pill role">Marketing</span>+</td></tr>
+          <tr><td><b>Delete</b> <span class="pill">edit only</span></td><td>Removes the coupon from the live list.</td><td>POST <code>action: delete</code> — a <b>soft delete</b>: it is hidden and switched off, not erased. Asks you to confirm first.</td><td><span class="pill role">Marketing</span>+</td></tr>
+          <tr><td><b>Restore</b> <span class="pill">edit only</span></td><td>Brings a deleted coupon back. (This button replaces Delete when the coupon is already deleted.)</td><td>POST <code>action: restore</code> — clears the deleted flag.</td><td><span class="pill role">Marketing</span>+</td></tr>
+          <tr><td><b>Cancel</b> / <b>✕</b></td><td>Closes the dialog without saving. (Pressing Esc or clicking outside also closes it.)</td><td>None.</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — deleting a live code</div><p>Delete is a soft-delete, so the redemption history is kept and you can Restore later — but the moment you delete, the code <b>stops working at checkout</b>. If a campaign is still running, switch <b>Active</b> off instead, or set an <b>Expiry date</b>, rather than deleting.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- WORKFLOW — LIFECYCLE                                          -->
+  <!-- ============================================================ -->
+  <div class="diagram"><div class="wf">
+    <div class="wf-topbar">Workflow — coupon lifecycle</div>
+    <div class="wf-flow">
+      <span>Create (draft)</span>
+      <span>Active</span>
+      <span>Customer applies at checkout</span>
+      <span>Validated (limits &amp; eligibility)</span>
+      <span>Redeemed on paid order</span>
+      <span>Expired / Deactivated / Deleted</span>
+    </div>
+  </div><div class="wire-cap">Figure — a coupon's journey from creation to redemption and retirement.</div></div>
+
+  <h4>How a coupon is checked at checkout</h4>
+  <p>When a customer types a code, the storefront calls the validation service, which runs these checks <b>in order</b> and stops at the first failure — giving the customer a clear reason. This is why a coupon that looks Active can still be refused for a specific cart.</p>
+  <div class="twrap"><table>
+    <thead><tr><th>#</th><th>Check</th><th>Message the customer sees when it fails</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Not deleted</td><td>“This coupon no longer exists.”</td></tr>
+      <tr><td>2</td><td>Active switch is on</td><td>“This coupon is not active.”</td></tr>
+      <tr><td>3</td><td>Start date reached</td><td>“This coupon is not yet active.”</td></tr>
+      <tr><td>4</td><td>Not past expiry</td><td>“This coupon has expired.”</td></tr>
+      <tr><td>5</td><td>Order meets minimum value</td><td>“Your order does not meet the minimum value for this coupon.”</td></tr>
+      <tr><td>6</td><td>First-order rule (if set)</td><td>“This coupon is valid on your first order only.”</td></tr>
+      <tr><td>7</td><td>Customer eligibility (if restricted)</td><td>“This coupon is not available for your account.”</td></tr>
+      <tr><td>8</td><td>Total usage limit not reached</td><td>“This coupon has reached its usage limit.”</td></tr>
+      <tr><td>9</td><td>Per-customer limit not reached</td><td>“You have already used this coupon the maximum number of times.”</td></tr>
+      <tr><td>10</td><td>Product / plan applies to the cart</td><td>“This coupon does not apply to the items in your cart.”</td></tr>
+      <tr><td>11</td><td>Discount is greater than zero</td><td>“This coupon gives no discount on this order.”</td></tr>
+    </tbody>
+  </table></div>
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Redemption is recorded once, at payment</div><p>Validation happens as the customer types the code, but the usage count only goes up when the order is actually <b>paid</b>. The redemption is recorded atomically and is idempotent per order — so a retried payment never double-counts a coupon.</p></div></div>
+
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Always set a <b>Usage limit</b> and an <b>Expiry date</b> on promotional codes, and add a <b>Per-customer limit</b> of 1 for welcome or first-order offers. This caps your maximum discount exposure and stops a single code from being shared and over-used. For a percentage coupon, also set a <b>Max discount</b> ceiling so a large basket never gives away more than you intend. Use the <b>Campaign</b> field consistently so the reports can total each promotion cleanly.</p></div></div>
+
+  <!-- ============================================================ -->
+  <!-- WHO CAN DO WHAT                                               -->
+  <!-- ============================================================ -->
+  <h4>Who can do what</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Role</th><th>View list &amp; dashboard</th><th>Create / edit / delete</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill role">Super Admin</span></td><td>Yes</td><td>Yes</td></tr>
+      <tr><td><span class="pill role">Admin</span></td><td>Yes</td><td>Yes</td></tr>
+      <tr><td><span class="pill role">Marketing</span></td><td>Yes (this is the Marketing role's home page)</td><td>Yes</td></tr>
+      <tr><td><span class="pill role">Accountant</span></td><td>Yes (view only)</td><td>No</td></tr>
+      <tr><td><span class="pill role">Manager</span> / support / operations with reporting access</td><td>Yes (view only, where their role grants Reports or Customers view)</td><td>No</td></tr>
+      <tr><td><span class="pill role">Delivery Executive</span> / <span class="pill role">Customer</span></td><td>No</td><td>No</td></tr>
+    </tbody>
+  </table></div>
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note</div><p>Every create, update, activate, deactivate, delete, restore and duplicate is written to the central <b>Audit Log</b> with the actor's role and the coupon code — so there is always a record of who changed which promotion and when.</p></div></div>
+
+  <!-- ============================================================ -->
+  <!-- TROUBLESHOOTING                                               -->
+  <!-- ============================================================ -->
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>Red banner “Your role can't view Coupons (403)”.</td><td>Your account's role does not include coupon, reports or customer viewing.</td><td>Ask a Super Admin to grant your role coupon-view (Marketing gets it by default).</td></tr>
+      <tr><td>Red banner “Backend offline… no coupons to display”.</td><td>The DOODLY backend is unreachable.</td><td>Confirm the backend is running and reachable; reload the page once it is back.</td></tr>
+      <tr><td>“Only Marketing / Admin can manage coupons (403)” when saving.</td><td>You can view but not manage coupons.</td><td>Have a Marketing, Admin or Super Admin user make the change.</td></tr>
+      <tr><td>“Coupon code &lt;CODE&gt; already exists.”</td><td>A coupon (even a deleted one) already uses that code.</td><td>Pick a different code — codes are unique. Use the 🎲 button for a fresh one, or Restore the existing coupon instead.</td></tr>
+      <tr><td>“Enter a coupon code (min 3 characters).” / “Enter a discount value greater than zero.”</td><td>Code is too short/empty, or Value is 0 or blank.</td><td>Give a code of 3+ characters (letters, numbers, - and _) and a Value above zero.</td></tr>
+      <tr><td>Customer says a valid-looking code is refused at checkout.</td><td>An eligibility rule is failing — minimum order, first-order-only, usage or per-customer limit, or a product/plan restriction.</td><td>Open the coupon and check those fields against the customer's cart; the checkout message names the exact reason.</td></tr>
+      <tr><td>Coupon shows <b>Inactive</b> though you expected it live.</td><td>The Active checkbox is off (this is the “Paused” state).</td><td>Edit the coupon and tick Active, then Save.</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- ============================================================ -->
+  <!-- FAQ                                                          -->
+  <!-- ============================================================ -->
+  <h4>Frequently asked questions</h4>
+
+  <h4>Q. What is the difference between a Coupon and an Offer?</h4>
+  <p>A <b>Coupon</b> is a code the customer must type at checkout (managed here). An <b>Offer</b> is a campaign-driven promotion managed on the separate <b>Admin → Growth → Offers</b> screen. Use Coupons for shareable discount codes.</p>
+
+  <h4>Q. Can I change a coupon after customers have started using it?</h4>
+  <p>Yes. Editing and saving updates the rules for all future redemptions; past redemptions are untouched and stay in the coupon's history and totals.</p>
+
+  <h4>Q. How do I run the same coupon for a new campaign without retyping everything?</h4>
+  <p>Open the coupon and click <b>Duplicate</b>. You get an identical copy with a “-COPY” code, created switched off. Rename its code, adjust the dates, then tick Active.</p>
+
+  <h4>Q. What happens to redemption history if I delete a coupon?</h4>
+  <p>Nothing is lost. Delete is a soft-delete — the code stops working but its redemptions, discount given and revenue stay recorded, and you can Restore the coupon later.</p>
+
+  <h4>Q. Why does the Usage column sometimes show “∞”?</h4>
+  <p>When you leave the total Usage limit blank, the coupon can be redeemed an unlimited number of times, so the list shows only the count with no ceiling.</p>
+</section>

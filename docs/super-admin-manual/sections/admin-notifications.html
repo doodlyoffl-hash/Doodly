@@ -1,0 +1,327 @@
+<section class="sheet" id="admin-notifications">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Content · Notifications (campaigns)</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Content</span></div>
+  <h2 class="section-title">Notifications (campaigns)</h2>
+  <p class="lead">Compose and blast WhatsApp, SMS, push and email campaigns to a live customer audience — every campaign is recorded, personalised and delivered straight from the DOODLY database.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">What this screen is (and isn't)</div><p>This is a one-time <b>marketing broadcast</b> tool: pick an audience, pick a channel, type a message, and send. It is <b>not</b> the transactional notification system (order confirmed, out-for-delivery, delivered) — those fire automatically from order events and are not composed here. Both share the same delivery engine and the same customer consent rules, so a campaign only reaches people who have opted in to marketing on that channel.</p></div></div>
+
+  <!-- ===================================================================== -->
+  <!-- SCREEN 1 — Campaign overview (KPIs + live banner)                      -->
+  <!-- ===================================================================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Campaign overview</p><p class="sm">The KPI strip and live-database banner at the top of the Notifications page.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the sender an at-a-glance read on how many campaigns exist, how many have gone out, how many are still drafts, and how many people have actually been reached.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span> — anyone with <code>notifications:view</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Notifications</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Notifications</b> · button: <b>New campaign</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>KPI · Total Campaigns</b><span>every non-deleted campaign in history</span></div>
+          <div class="wf-cell"><b>KPI · Sent</b><span>campaigns with status "Sent"</span></div>
+          <div class="wf-cell"><b>KPI · Drafts</b><span>campaigns still in "Draft"</span></div>
+          <div class="wf-cell"><b>KPI · Recipients Reached</b><span>sum of delivered counts across all sent campaigns</span></div>
+          <div class="wf-cell"><b>KPI · Sent Today</b><span>campaigns whose send time is today</span></div>
+          <div class="wf-cell"><b>Live banner</b><span>green "● Live" status line with the database URL</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the five live KPI cards and the database status banner that load first.</div></div>
+
+      <p>The board calls <code>GET /api/admin/notifications?view=dashboard</code> on open and paints five KPI cards from the real database, then a status banner beneath the table.</p>
+
+      <div class="twrap"><table>
+        <thead><tr><th>KPI card</th><th>What it counts</th><th>Backend source</th></tr></thead>
+        <tbody>
+          <tr><td><b>Total Campaigns</b></td><td>All campaigns that have not been deleted.</td><td><code>notificationsDashboard()</code> — count of <code>NotificationCampaign</code> where <code>deletedAt</code> is null.</td></tr>
+          <tr><td><b>Sent</b></td><td>Campaigns whose status is <b>Sent</b>.</td><td>count where <code>status = SENT</code>.</td></tr>
+          <tr><td><b>Drafts</b></td><td>Campaigns saved but not yet launched.</td><td>count where <code>status = DRAFT</code>.</td></tr>
+          <tr><td><b>Recipients Reached</b></td><td>Total notifications actually delivered across every sent campaign.</td><td>sum of <code>deliveredCount</code> over sent campaigns.</td></tr>
+          <tr><td><b>Sent Today</b></td><td>Campaigns launched since midnight today.</td><td>count where <code>sentAt ≥ start-of-today</code>.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">The live banner text</div><p>When the dashboard loads you will see a green line such as <em>"● Live — 12 campaign(s) · 3,480 notification(s) delivered from the DOODLY database (…). External channels also need provider credentials."</em> If the backend is unreachable it turns red: <em>"⚠ Backend offline … — start next-app."</em> A red <em>"⚠ Your role can't view Notifications (403)"</em> means your role lacks <code>notifications:view</code>.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- SCREEN 2 — Compose campaign                                            -->
+  <!-- ===================================================================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Compose campaign</p><p class="sm">The form that builds and immediately sends a broadcast.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Choose an audience and channel, write the title and message, see the live recipient count, and send — one click creates the campaign record and launches delivery.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span> — sending needs <code>notifications:edit</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Notifications → Compose campaign</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Panel — <b>Compose campaign</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Campaign name</b><span>optional label · "Weekend offer blast"</span></div>
+          <div class="wf-cell"><b>Audience</b><span>dropdown + live "N recipient(s)" counter under it</span></div>
+          <div class="wf-cell"><b>Channel</b><span>WhatsApp / SMS / Push / Email</span></div>
+          <div class="wf-cell"><b>Title</b><span>optional heading shown in-app</span></div>
+          <div class="wf-cell"><b>Message</b><span>required · multi-line · supports {{variables}}</span></div>
+          <div class="wf-cell"><b>Send campaign</b><span>primary button · error line above it</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the compose panel with the live audience counter and the Send button.</div></div>
+
+      <h4 style="margin:14px 0 6px">Fields</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Campaign name</b> <span class="muted-sm">(#nc-name)</span></td>
+            <td>An internal label so you can recognise the campaign later in history.</td>
+            <td>Free text.</td>
+            <td class="t-opt">Opt.</td>
+            <td>Trimmed, max <b>120</b> chars (<code>CampaignSchema.name</code>). If left blank the server names it automatically as <code>"&lt;Channel&gt; · &lt;Audience&gt;"</code> (e.g. <em>WhatsApp · All customers</em>).</td>
+            <td>Weekend offer blast</td>
+          </tr>
+          <tr>
+            <td><b>Audience</b> <span class="muted-sm">(#nc-audience)</span></td>
+            <td>Who receives the campaign. A live counter beneath the dropdown shows exactly how many people match right now.</td>
+            <td>All customers · Active subscribers · Paused · Trial users</td>
+            <td class="t-req">Yes</td>
+            <td>Server resolves the audience to real user IDs and returns the count via <code>?view=audience</code>. Only one of the four fixed segments (<code>z.enum(AUDIENCES)</code>).</td>
+            <td>Active subscribers</td>
+          </tr>
+          <tr>
+            <td><b>Channel</b> <span class="muted-sm">(#nc-channel)</span></td>
+            <td>Which delivery rail the message goes out on.</td>
+            <td>WhatsApp · SMS · Push · Email</td>
+            <td class="t-req">Yes</td>
+            <td>Stored as <code>WHATSAPP / SMS / PUSH / EMAIL</code> (<code>z.enum(CHANNELS)</code>). Push is in-app only; the other three need provider credentials to leave the app.</td>
+            <td>Email</td>
+          </tr>
+          <tr>
+            <td><b>Title</b> <span class="muted-sm">(#nc-title)</span></td>
+            <td>The heading shown in-app and used as the email subject / message heading.</td>
+            <td>Free text.</td>
+            <td class="t-opt">Opt.</td>
+            <td>Trimmed, max <b>160</b> chars. If blank, a default <code>"&lt;Channel&gt; update"</code> heading is used at send time.</td>
+            <td>Fresh milk, on us</td>
+          </tr>
+          <tr>
+            <td><b>Message</b> <span class="muted-sm">(#nc-msg)</span></td>
+            <td>The body of the campaign. Supports personalisation variables (see below).</td>
+            <td>Multi-line text.</td>
+            <td class="t-req">Yes</td>
+            <td>Client blocks an empty message ("Enter a message."). Server requires <b>1–4000</b> chars (<code>message: z.string().min(1).max(4000)</code>).</td>
+            <td>Hi {{first_name}}, enjoy 10% off this weekend!</td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Personalisation variables</div><p>The message and title are personalised per recipient. These placeholders are supported: <code>{{first_name}}</code>, <code>{{name}}</code>, and <code>{{referral_code}}</code>. Any variable that has no value (or an unrecognised one) is replaced with a blank string, so the send never breaks. <code>{{first_name}}</code> falls back to "there" when the customer has no name on file.</p></div></div>
+
+      <h4 style="margin:14px 0 6px">Buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>New campaign</b> <span class="muted-sm">(page header)</span></td>
+            <td>Scrolls the compose panel into view and puts the cursor in the Campaign name field. A shortcut, not a save.</td>
+            <td>Front-end only — <code>DOODLY_ADMIN.newCampaign()</code> focuses <code>#nc-name</code>.</td>
+            <td><span class="pill role">Super Admin</span>+</td>
+          </tr>
+          <tr>
+            <td><b>Send campaign</b> <span class="muted-sm">(#nc-send)</span></td>
+            <td>Creates the campaign record and immediately launches it to the chosen audience. Button shows "Sending…" while in flight; on success a toast reads "Campaign sent to N recipient(s)".</td>
+            <td><code>POST /api/admin/notifications</code> with <code>action:"createAndSend"</code> → <code>createAndSend()</code> = create the <code>NotificationCampaign</code>, then <code>sendCampaign()</code> resolves the audience, enqueues per-recipient rows and dispatches them.</td>
+            <td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Send is immediate — there is no "save as draft" in this UI</div><p>The compose form always does <b>create-and-send</b> in one step. Once you click <b>Send campaign</b> the message goes out to everyone in the audience who has opted in. Check the live recipient count and re-read the message before sending — there is no undo, and deleting the campaign afterwards only removes it from history, it does not recall messages already delivered.</p></div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Consent gating — who actually gets the message</div><p>The audience count is who <em>matches the segment</em>; the delivered count is who <em>also consented</em>. At send time each recipient is filtered by their <code>CustomerPreference</code>: they must have the global <b>marketing opt-in</b> on <b>and</b> the per-channel opt-in for the chosen channel. Defaults when a customer has never set preferences: Email <b>on</b>, WhatsApp <b>on</b>, Push <b>on</b>, <b>SMS off</b>. So an SMS campaign will typically reach fewer people than the segment size unless customers have explicitly enabled SMS.</p></div></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — Send campaign</div>
+        <div class="wf-flow">
+          <span>Pick audience + channel</span>
+          <span>Write title + message</span>
+          <span>Click Send campaign</span>
+          <span>Campaign record created (DRAFT → SENDING)</span>
+          <span>Audience resolved to user IDs</span>
+          <span>Filter by marketing consent</span>
+          <span>Per-recipient notification rows queued</span>
+          <span>Dispatch (Push instant · Email/SMS/WhatsApp via provider)</span>
+          <span>Status → Sent / Sending / Failed · delivered count stamped</span>
+        </div>
+      </div><div class="wire-cap">Figure — end-to-end path of a single Send campaign click.</div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">How delivery finishes for large audiences</div><p><b>Push</b> is in-app only, so those rows are marked delivered the instant they are created. <b>Email, SMS and WhatsApp</b> rows are queued and dispatched inline within a short time budget (~9 seconds) so a big audience never times out the request. Anything left over stays queued and is finished by the daily drain job (or a manual retry). That is why a fresh campaign can briefly show status <b>Sending</b> before it settles to <b>Sent</b>.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- SCREEN 3 — Recent campaigns (history table)                            -->
+  <!-- ===================================================================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Recent campaigns</p><p class="sm">The history table of every campaign, with delivery counts and a delete action.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Review what has been sent, to which audience, on which channel, whether it succeeded, and how many people it reached; remove old entries from the log.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span> — deleting needs <code>notifications:edit</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Notifications → Recent campaigns</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Panel — <b>Recent campaigns</b> · total-count badge</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Campaign</b><span>campaign name (bold)</span></div>
+          <div class="wf-cell"><b>Audience</b><span>segment it targeted</span></div>
+          <div class="wf-cell"><b>Channel</b><span>WhatsApp / SMS / Push / Email</span></div>
+          <div class="wf-cell"><b>Status</b><span>colour badge: Sent / Sending / Failed / Draft</span></div>
+          <div class="wf-cell"><b>Delivered</b><span>delivered / recipient count</span></div>
+          <div class="wf-cell"><b>Sent</b><span>send date &amp; time, or —</span></div>
+          <div class="wf-cell"><b>Row action</b><span>Delete link</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the seven columns of the campaign history table.</div></div>
+
+      <p>The table loads via <code>GET /api/admin/notifications?view=list&amp;pageSize=200</code> (newest first). The panel header shows a badge with the total number of campaigns. When there are none you see <em>"No campaigns yet — compose one above."</em></p>
+
+      <h4 style="margin:14px 0 6px">Table specification</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Aspect</th><th>Behaviour</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td>Campaign (name) · Audience · Channel · Status · Delivered (delivered / recipients) · Sent (timestamp) · Delete.</td></tr>
+          <tr><td><b>Status badge</b></td><td>Sent = green · Sending = blue · Failed = red · Draft = amber (<code>ncStatusTone</code>).</td></tr>
+          <tr><td><b>Delivered column</b></td><td>Shows <code>deliveredCount / recipientCount</code> — how many were actually delivered out of how many the segment matched.</td></tr>
+          <tr><td><b>Sent column</b></td><td>Send date/time formatted as <code>YYYY-MM-DD HH:MM</code>; a dash (—) for campaigns never sent.</td></tr>
+          <tr><td><b>Sorting</b></td><td>Fixed — newest campaign first (<code>orderBy createdAt desc</code>). No column sorting in this UI.</td></tr>
+          <tr><td><b>Search / filters</b></td><td>Not exposed on this screen. (The backend list endpoint supports <code>q</code>, <code>status</code> and <code>channel</code> filters, but the board loads an unfiltered page.)</td></tr>
+          <tr><td><b>Pagination</b></td><td>Loads up to <b>200</b> campaigns in one page (<code>pageSize=200</code>); server caps a page at 500.</td></tr>
+          <tr><td><b>Exports</b></td><td>No dedicated export button; the backend records an audit event if an export/log action is fired.</td></tr>
+          <tr><td><b>Row actions</b></td><td><b>Delete</b> — soft-removes the campaign from history after a confirm prompt.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4 style="margin:14px 0 6px">Buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Delete</b> <span class="muted-sm">(row link)</span></td>
+            <td>Asks "Delete this campaign from the history?" then removes the row and re-loads the board. Toast: "Campaign deleted".</td>
+            <td><code>POST /api/admin/notifications</code> with <code>action:"delete"</code> → <code>softDeleteCampaign()</code> stamps <code>deletedAt</code> (a soft delete — the record is hidden, not erased, and can be restored server-side).</td>
+            <td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td>
+          </tr>
+        </tbody>
+      </table></div>
+
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Delete removes the record, not the messages</div><p>Deleting a campaign only takes it out of the history list. Messages already delivered to customers (in-app, email, SMS or WhatsApp) are <b>not</b> recalled — a broadcast cannot be un-sent. Treat delete as "tidy up the log", never as "cancel the campaign".</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- Audiences reference                                                    -->
+  <!-- ===================================================================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Audience segments (reference)</p><p class="sm">Exactly how each of the four audiences is resolved on the server.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Understand precisely who is in each segment so the recipient count is never a surprise.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Notifications → Compose → Audience</span></span></div>
+    <div class="spec-body">
+      <div class="twrap"><table>
+        <thead><tr><th>Audience</th><th>Who it includes</th><th>Backend rule (<code>resolveAudience</code>)</th></tr></thead>
+        <tbody>
+          <tr><td><b>All customers</b></td><td>Every customer account that is active.</td><td>Users with role <code>CUSTOMER</code> and no <code>deletedAt</code>.</td></tr>
+          <tr><td><b>Active subscribers</b></td><td>Customers with a live subscription.</td><td>Distinct users with a <code>Subscription</code> in status <code>ACTIVE</code> (non-deleted user).</td></tr>
+          <tr><td><b>Paused</b></td><td>Customers whose subscription is paused or on vacation hold.</td><td>Distinct users with a subscription in status <code>PAUSED</code> or <code>VACATION</code>.</td></tr>
+          <tr><td><b>Trial users</b></td><td>Customers linked to a Trial-Pack cashback benefit.</td><td>Users with a related <code>trialCashback</code> record (non-deleted).</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Count vs delivered, again</div><p>The counter next to the dropdown is the raw segment size. The <b>Delivered</b> figure on the sent campaign will be lower whenever some of those people have not opted in to marketing on that channel (especially SMS, which is off by default).</p></div></div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- Channels & providers                                                   -->
+  <!-- ===================================================================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Channels &amp; provider credentials</p><p class="sm">Which rails can leave the app, and what each one needs configured.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Explain why a campaign may deliver in-app but not reach the external channel until credentials are set.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> — credentials live in server environment variables (Vercel), not in this screen</span></div>
+    <div class="spec-body">
+      <div class="twrap"><table>
+        <thead><tr><th>Channel</th><th>Leaves the app?</th><th>Provider(s) required</th></tr></thead>
+        <tbody>
+          <tr><td><b>Push</b></td><td>No — in-app inbox only.</td><td>None. Push rows are delivered instantly with no external provider.</td></tr>
+          <tr><td><b>Email</b></td><td>Yes.</td><td>Resend (<code>RESEND_API_KEY</code>, optional <code>EMAIL_FROM</code>).</td></tr>
+          <tr><td><b>SMS</b></td><td>Yes.</td><td>MSG91 (DLT template) or Twilio (<code>TWILIO_*</code> + <code>TWILIO_SMS_FROM</code>).</td></tr>
+          <tr><td><b>WhatsApp</b></td><td>Yes.</td><td>Superfone (preferred), MSG91, or Twilio (<code>TWILIO_WHATSAPP_FROM</code>).</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Fallback-safe by design</div><p>If a channel has no provider key, its sends are marked <b>skipped</b> (never an error) and the campaign quietly degrades to in-app delivery. That is why the live banner reminds you: <em>"External channels also need provider credentials."</em> If an SMS or WhatsApp campaign shows a low delivered count, first confirm the provider is configured — not just that customers opted in.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- Permissions & audit                                                    -->
+  <!-- ===================================================================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Permissions &amp; audit trail</p><p class="sm">Who can see, send and delete campaigns — and what gets logged.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Make the access rules and the audit footprint explicit.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span></span></div>
+    <div class="spec-body">
+      <div class="twrap"><table>
+        <thead><tr><th>Capability</th><th>Permission checked</th><th>Roles that have it</th></tr></thead>
+        <tbody>
+          <tr><td>View KPIs, list &amp; recipient counts</td><td><code>notifications:view</code></td><td>Super Admin, Admin, Marketing.</td></tr>
+          <tr><td>Compose &amp; send a campaign</td><td><code>notifications:edit</code></td><td>Super Admin, Admin, Marketing.</td></tr>
+          <tr><td>Delete a campaign from history</td><td><code>notifications:edit</code></td><td>Super Admin, Admin, Marketing.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Everything sensitive is audited</div><p>Every send and delete writes an <code>AuditLog</code> entry (<code>notification.createAndSend</code>, <code>notification.delete</code>, etc.) recording the acting role and the target campaign. A blocked action returns <b>403</b> and the UI shows "Only Marketing / Admin can send campaigns (403)."</p></div></div>
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Send yourself (or a test account that opted into all channels) a copy first by narrowing to a small segment, and always fill the optional <b>Campaign name</b> — a clear name like "Diwali 15% off · Active subscribers" makes the history table and audit log readable months later. Keep messages short, personalise with <code>{{first_name}}</code>, and never blast SMS as a first channel since it is off by default and DLT-template-restricted.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- Troubleshooting + FAQ                                                  -->
+  <!-- ===================================================================== -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common issues and quick answers.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Resolve the most frequent problems without leaving the manual.</span></div>
+    <div class="spec-body">
+
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>Delivered count far below the audience count.</td><td>Many recipients have not opted in to marketing on that channel (SMS is off by default), or the channel's provider is not configured.</td><td>Check the channel's provider credentials; try Email or WhatsApp (both default on); accept that consent will always trim the reach.</td></tr>
+          <tr><td>Campaign stuck on "Sending".</td><td>A large audience — external sends are dispatched in batches within a time budget; the remainder is queued.</td><td>Wait for the daily drain to finish the queue, then re-open the board; the status settles to Sent.</td></tr>
+          <tr><td>Status shows "Failed".</td><td>Every attempted external send failed (e.g. provider rejected the message or all recipients were undeliverable).</td><td>Verify provider keys and the sender/template setup; the campaign can be retried server-side once the provider is fixed.</td></tr>
+          <tr><td>"Enter a message." error under the form.</td><td>The Message field is empty.</td><td>Type a body — the message is the only required field.</td></tr>
+          <tr><td>Red banner "Your role can't view Notifications (403)".</td><td>Your role lacks <code>notifications:view</code>.</td><td>Ask a Super Admin to grant the Marketing/Admin role or the notifications permission.</td></tr>
+          <tr><td>Banner reads "Backend offline".</td><td>The next-app backend is not running / unreachable.</td><td>Start or restore the backend service; reload the page.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Can I schedule a campaign for later?</h4>
+      <p>No. This screen only does create-and-send immediately. There is no scheduler or "save as draft" in the compose form — send it when you are ready.</p>
+
+      <h4>Can I edit a campaign after sending?</h4>
+      <p>No. A sent campaign is a delivery record; you can delete it from history but you cannot change or resend the same record. Compose a new campaign instead.</p>
+
+      <h4>Do transactional messages (order confirmed, out for delivery) come from here?</h4>
+      <p>No. Those fire automatically from order and delivery events through the same delivery engine and consent rules, but they are not composed on this screen and do not appear in the campaign history.</p>
+
+      <h4>Why did a customer not receive my Push campaign externally?</h4>
+      <p>Push is in-app only — it appears in the customer's DOODLY notification inbox, it is never sent to a phone's OS push service. Use Email, SMS or WhatsApp for messages that must reach people outside the app.</p>
+
+    </div>
+  </div>
+
+</section>

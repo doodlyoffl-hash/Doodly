@@ -1,0 +1,353 @@
+<section class="sheet" id="admin-blogs">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Content · Blogs</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Content</span></div>
+  <h2 class="section-title">Blogs</h2>
+  <p class="lead">The DOODLY journal manager — write, schedule and publish the articles that appear on the customer website, with a full Draft → Scheduled → Published ⇄ Archived lifecycle, automatic slug and reading-time, SEO metadata, live view counts, soft-delete/restore, and a one-click preview, all backed by the DOODLY database.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">What this screen is, and how it is built</div>
+      <p>The <b>Blogs</b> item under <span class="navpath">Admin → Content</span> opens the storefront admin page <code>/admin/blogs.html</code>. That page renders a single block, <code>blogBoard</code>, which mounts into <code>#blogMount</code> and is driven entirely by the live DOODLY database through the API <code>/api/admin/blog</code>. Everything you see — the seven KPI cards, the search box and two dropdowns, the posts table, the <b>New post</b> and <b>Manage</b> forms — is real data. When the backend is reachable a green <b>“● Live”</b> banner confirms it and names the database (for example “● Live — 12 post(s) · 8 published · 3 draft · 1 scheduled · 4,120 views from the DOODLY database”). Published posts (and scheduled posts whose time has arrived) appear on the public customer journal, ordered newest-first, and each page-view they receive is counted back into the <b>Views</b> column here.</p>
+    </div>
+  </div>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Who can view and who can manage</div>
+      <p>Two permission levels guard this module. <b>Viewing</b> (the board, KPIs and table) is open to any role that can view blogs, reports or CMS — that is <span class="pill role">Super Admin</span>, <span class="pill role">Admin</span> and <span class="pill role">Marketing</span> directly, plus read-only report viewers such as <span class="pill role">Accountant</span>, Operations, Procurement, Quality and Inventory (through their <code>reports:view</code> access). <b>Managing</b> a post — create, edit, publish/unpublish, duplicate, delete/restore — requires the <code>blogs</code> edit permission, which by default only <span class="pill role">Super Admin</span>, <span class="pill role">Admin</span> and <span class="pill role">Marketing</span> hold. A blocked mutation returns <b>HTTP 403</b> and the screen shows “Only Marketing / Admin can manage the blog (403)”. The server-side checks <code>canViewBlog</code> / <code>canManageBlog</code> are the real boundary — hidden or greyed buttons are convenience only.</p>
+    </div>
+  </div>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Status is partly derived — you set a state, the system decides the badge</div>
+      <p>You choose a post’s <b>state</b> (Draft / Published / Scheduled / Archived) in the form, but the coloured <b>status badge</b> on the table is <i>computed</i> from that state together with the schedule and the deletion flag. The rule, in order: deleted → <b>Deleted</b> (red); state ARCHIVED → <b>Archived</b> (grey); state DRAFT → <b>Draft</b> (amber); state SCHEDULED with a <b>future</b> schedule date → <b>Scheduled</b> (blue); state SCHEDULED whose date has <b>already passed</b> → <b>Published</b> (green); anything else → <b>Published</b>. So a post set to <b>Scheduled</b> for next Monday shows as <b>Scheduled</b> until that day and then goes live — and starts appearing on the customer website — on its own, with no manual toggling.</p>
+    </div>
+  </div>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">Slug and reading-time are automatic</div>
+      <p>You never have to calculate two of the fields. The <b>slug</b> (the URL-friendly part of the address, e.g. <code>why-a2-milk</code>) is generated from the title if you leave it blank — lower-cased, spaces and symbols turned to dashes, <code>&amp;</code> turned to “and”, trimmed to 80 characters — and is always made <b>unique</b> by appending <code>-2</code>, <code>-3</code> and so on if that slug already exists. The <b>reading time</b> is recomputed every time you save from the article body: HTML tags are stripped, words are counted, divided by 200 words-per-minute, and rounded up to at least 1 minute. It shows as “N min read” under the title and in the editor header.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 1 : BLOG BOARD -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Blog Board</p>
+      <p class="sm">Seven live KPI cards over a searchable, filterable, sortable table of every post — the editorial pulse of the journal at a glance.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Show at a glance how many posts exist and in what state, how many total views the journal has earned and which post is winning — then let you drill into any one post to manage it, or start a new one.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span> (+ read-only report/CMS viewers) — view. Managing requires the <code>blogs</code> edit permission.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Blogs</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Blogs — <b>Board</b> · header “New post” button · 7 KPI cards · toolbar · table</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Page header</b><span>Title “Blog Manager” + intro line + <b>New post</b> primary button (top-right)</span></div>
+          <div class="wf-cell"><b>KPI row (7)</b><span>Total Posts · Published · Drafts · Scheduled · Archived · Total Views · Top Post</span></div>
+          <div class="wf-cell"><b>Toolbar</b><span>Search box · status dropdown (“All statuses”) · sort dropdown (“Newest”)</span></div>
+          <div class="wf-cell"><b>Posts table</b><span>Panel headed “Posts” with a live count badge; columns Post · Author · Category · Views · Status · Updated · Manage</span></div>
+          <div class="wf-cell"><b>Live banner</b><span>Green “● Live — N post(s) · M published · K draft · S scheduled · V views” from the database, or an amber/red offline / 403 notice</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Blog board: KPI cards, a three-control toolbar, and the posts table.</div></div>
+
+      <h4>Every KPI card and where the number comes from</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>KPI card</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Total Posts</td><td>Every live (non-deleted) post</td><td>Count</td><td class="t-opt">Read-only</td><td>Count of all posts where <code>deletedAt</code> is null (<code>kpis.totalPosts</code>).</td><td>12</td></tr>
+          <tr><td>Published</td><td>Posts live on the website now</td><td>Count</td><td class="t-opt">Read-only</td><td>Posts whose derived status is <b>Published</b> — includes scheduled posts whose date has passed (<code>kpis.published</code>).</td><td>8</td></tr>
+          <tr><td>Drafts</td><td>Written but not launched</td><td>Count</td><td class="t-opt">Read-only</td><td>Posts in state <b>DRAFT</b> (<code>kpis.drafts</code>).</td><td>3</td></tr>
+          <tr><td>Scheduled</td><td>Set to publish later</td><td>Count</td><td class="t-opt">Read-only</td><td>Posts in state <b>SCHEDULED</b> whose date is still in the future (<code>kpis.scheduled</code>).</td><td>1</td></tr>
+          <tr><td>Archived</td><td>Retired from the journal</td><td>Count</td><td class="t-opt">Read-only</td><td>Posts in state <b>ARCHIVED</b> (<code>kpis.archived</code>).</td><td>0</td></tr>
+          <tr><td>Total Views</td><td>All page-views across the journal</td><td>Number</td><td class="t-opt">Read-only</td><td>Sum of the <code>views</code> counter over every non-deleted post (<code>kpis.totalViews</code>).</td><td>4,120</td></tr>
+          <tr><td>Top Post</td><td>The most-read article</td><td>Post title (or “—”)</td><td class="t-opt">Read-only</td><td>The non-deleted post with the highest <code>views</code> (<code>kpis.topPost</code>); its view count is also computed (<code>topPostViews</code>).</td><td>Why A2 milk?</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The toolbar — search and two dropdowns</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Control</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Search box</td><td>Free-text find</td><td>Any text</td><td class="t-opt">Opt.</td><td>Debounced ~300&nbsp;ms; the API matches the post <b>title</b>, <b>slug</b>, <b>excerpt</b>, <b>author</b> and <b>category</b>, case-insensitive (<code>q=</code>). Placeholder reads “Search title, author, category…”.</td><td>a2 milk</td></tr>
+          <tr><td>Status dropdown</td><td>Filter by derived status</td><td>All statuses · Published · Draft · Scheduled · Archived</td><td class="t-opt">Opt.</td><td>Filters the list to the chosen derived <b>status label</b>, matched case-insensitively (<code>status=</code>).</td><td>Published</td></tr>
+          <tr><td>Sort dropdown</td><td>Order the list</td><td>Newest · Recently updated · Recently published · Most viewed · Title A–Z</td><td class="t-opt">Opt.</td><td>Maps to <code>sort=</code> values <code>updated</code> / <code>published</code> / <code>views</code> / <code>title</code>; blank (“Newest”) sorts by created date, newest first.</td><td>Most viewed</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The posts table</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>Shows</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><b>Post</b></td><td>The title in bold, with the category and the reading time (“N min read”) as small muted sub-lines beneath it</td><td>Three stacked lines in one cell.</td></tr>
+          <tr><td><b>Author</b></td><td>The by-line, or “—” if none was set</td><td>Free-text author name.</td></tr>
+          <tr><td><b>Category</b></td><td>The category name, or “—”</td><td>Free-text category (no fixed list).</td></tr>
+          <tr><td><b>Views</b></td><td>The live page-view counter for that post</td><td>Incremented by the public website each time the article is opened.</td></tr>
+          <tr><td><b>Status</b></td><td>Coloured badge — Published (green), Scheduled (blue), Draft (amber), Archived (grey), Deleted (red)</td><td>Derived, not stored (see the callout above).</td></tr>
+          <tr><td><b>Updated</b></td><td>The date the post was last changed (YYYY-MM-DD)</td><td>From the record’s <code>updatedAt</code>.</td></tr>
+          <tr><td><b>Manage</b></td><td>A <b>Manage</b> link that opens the Edit-post form</td><td>Only actionable for roles with manage permission.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Table behaviour</th><th>How it works</th></tr></thead>
+        <tbody>
+          <tr><td>Search</td><td>Live debounced search over title / slug / excerpt / author / category.</td></tr>
+          <tr><td>Filters</td><td>Status (All / Published / Draft / Scheduled / Archived), applied to the derived status label.</td></tr>
+          <tr><td>Sorting</td><td>Newest first by default; or recently updated, recently published, most viewed, or title A–Z.</td></tr>
+          <tr><td>Pagination</td><td>The board requests up to 500 rows at once (<code>view=list&amp;pageSize=500</code>); the API paginates and reports total / page / pages.</td></tr>
+          <tr><td>Row action</td><td><b>Manage</b> → opens the Edit-post modal for that post.</td></tr>
+          <tr><td>Count badge</td><td>The panel header shows the total number of matching posts.</td></tr>
+          <tr><td>Empty state</td><td>“No posts match these filters.” when nothing matches.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Tip — the search box does more than its placeholder promises</div>
+          <p>The placeholder says “title, author, category”, but the backend also searches the <b>slug</b> and the <b>excerpt</b>. So you can find a post by a phrase from its summary card, or by a fragment of its URL, not just by its headline.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 : NEW / EDIT POST -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">New / Edit Post</p>
+      <p class="sm">The single modal form that writes a post or edits an existing one — title, slug, body, imagery, category, tags, status, schedule and SEO — plus Preview, Publish/Unpublish, Duplicate and Delete.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Capture everything about one article in one dialog: what it is called and where it lives (title, slug), what it says (excerpt, content), how it looks and is grouped (image, category, author, tags), when and whether it is live (status, schedule), and how search engines see it (SEO) — then save it to the database.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span> — the <code>blogs</code> edit permission is required; other roles get a 403.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Blogs → New post / Manage</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Blogs — <b>New / Edit post</b> · modal dialog · fields + collapsible SEO · footer actions</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Header</b><span>Title “New post”, or “Edit post · N views · M min” when editing + close (×)</span></div>
+          <div class="wf-cell"><b>Row 1</b><span>Title* · Slug (auto if blank)</span></div>
+          <div class="wf-cell"><b>Row 2</b><span>Category · Author</span></div>
+          <div class="wf-cell"><b>Excerpt</b><span>Card summary (textarea)</span></div>
+          <div class="wf-cell"><b>Content</b><span>Article body, HTML supported (monospace textarea)</span></div>
+          <div class="wf-cell"><b>Row 3</b><span>Featured image URL · Tags (comma)</span></div>
+          <div class="wf-cell"><b>Row 4</b><span>Status · Schedule for (if Scheduled)</span></div>
+          <div class="wf-cell"><b>SEO metadata</b><span>Collapsible: SEO title · SEO description · SEO keywords (comma)</span></div>
+          <div class="wf-cell"><b>Footer</b><span>Preview · Publish/Unpublish · Duplicate · Delete/Restore (edit only) · Cancel · Create post / Save changes</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the post editor: the core fields, a full-width content area, a collapsible SEO section, and lifecycle actions in the footer.</div></div>
+
+      <h4>Every field on the form</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Title</td><td>The headline of the article</td><td>Text</td><td class="t-req">Yes</td><td>At least 3 characters (blocked client-side with “Enter a title (at least 3 characters).”); server enforces 3–200 chars (<code>title</code>).</td><td>Why A2 milk is easier to digest</td></tr>
+          <tr><td>Slug</td><td>The URL-friendly address; blank = generated from the title</td><td>Text (url-friendly)</td><td class="t-opt">Opt.</td><td>Placeholder “url-friendly-slug”. If blank, generated from the title by <code>slugify</code>; either way it is trimmed to 80 chars and made <b>unique</b> (adds <code>-2</code>, <code>-3</code>…). On edit, only changes if you type a new one. Field accepts up to 90 chars (<code>slug</code>).</td><td>why-a2-milk</td></tr>
+          <tr><td>Category</td><td>Groups the post on the journal</td><td>Free text</td><td class="t-opt">Opt.</td><td>Any free-text name (no fixed list), up to 80 chars; blank stored as none (<code>categoryName</code>). Placeholder “Health”.</td><td>Health</td></tr>
+          <tr><td>Author</td><td>The by-line shown on the article</td><td>Free text</td><td class="t-opt">Opt.</td><td>Up to 120 chars; blank stored as none (<code>author</code>). Placeholder “Team DOODLY”.</td><td>Team DOODLY</td></tr>
+          <tr><td>Excerpt</td><td>The short summary shown on cards and previews</td><td>Text</td><td class="t-opt">Opt.</td><td>Up to 400 chars (<code>excerpt</code>); rendered in italics on the preview and used as the card teaser.</td><td>A2 milk carries only the A2 beta-casein protein…</td></tr>
+          <tr><td>Content</td><td>The full article body</td><td>HTML / text</td><td class="t-opt">Opt.</td><td>Up to 100,000 chars; <b>HTML is supported</b> and rendered as-is (monospace editor). The <b>reading time</b> is recomputed from this on every save (<code>content</code> → <code>readingMinutes</code>).</td><td>&lt;p&gt;Buffalo A2 milk…&lt;/p&gt;</td></tr>
+          <tr><td>Featured image URL</td><td>The hero image at the top of the post and on the card</td><td>URL</td><td class="t-opt">Opt.</td><td>Up to 2,000 chars; stored as-is and shown full-width in the preview (<code>featuredImage</code>). Placeholder “https://…”.</td><td>https://cdn.doodly.in/a2.jpg</td></tr>
+          <tr><td>Tags</td><td>Keywords for grouping / related content</td><td>Comma-separated words</td><td class="t-opt">Opt.</td><td>Split on commas, trimmed, blanks dropped → an array of up to 20 tags, each up to 40 chars (<code>tags</code>). Placeholder “a2, health”.</td><td>a2, health, digestion</td></tr>
+          <tr><td>Status</td><td>The lifecycle state of the post</td><td>Draft · Published · Scheduled · Archived</td><td class="t-opt">Opt.</td><td>Stored as <code>status</code>; defaults to <b>Draft</b> on a new post. Choosing <b>Published</b> stamps <code>publishedAt</code> and puts it on the website; <b>Scheduled</b> needs a date (below).</td><td>Published</td></tr>
+          <tr><td>Schedule for</td><td>The date a Scheduled post should go live</td><td>Date</td><td class="t-opt">Opt.*</td><td>A date picker (<code>scheduledFor</code>). <b>Required when Status is Scheduled</b> — otherwise saving is blocked with “Pick a schedule date for a scheduled post.” Only sent to the server when Status is Scheduled; cleared otherwise.</td><td>2026-07-20</td></tr>
+          <tr><td>SEO title</td><td>The <code>&lt;title&gt;</code> / search-result headline</td><td>Text</td><td class="t-opt">Opt.</td><td>Inside the collapsible <b>SEO metadata</b> section; up to 160 chars (<code>seoTitle</code>).</td><td>A2 Milk &amp; Digestion | DOODLY</td></tr>
+          <tr><td>SEO description</td><td>The search-result snippet</td><td>Text</td><td class="t-opt">Opt.</td><td>Up to 320 chars (<code>seoDescription</code>).</td><td>Learn why A2 buffalo milk is gentler on the gut…</td></tr>
+          <tr><td>SEO keywords</td><td>Keyword hints for search engines</td><td>Comma-separated words</td><td class="t-opt">Opt.</td><td>Split on commas → an array of up to 20 keywords, each up to 60 chars (<code>seoKeywords</code>).</td><td>a2 milk, buffalo milk, digestion</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">The editor header shows read-only stats when editing</div>
+          <p>When you open an existing post, the modal title reads “<b>Edit post</b> · <i>N</i> views · <i>M</i> min” — the live view count and the current reading time. These are informational; you cannot type them. Views are driven by real customer traffic, and the reading time is recalculated from the Content field every time you save.</p>
+        </div>
+      </div>
+
+      <h4>Buttons on the form and table</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>New post</b> (header)</td><td>Opens the blank post form (Status defaults to Draft)</td><td>None until you save.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Manage</b> (table row)</td><td>Opens the Edit-post form pre-filled from that post</td><td>None until you save.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Create post</b></td><td>Validates then saves a new post</td><td><code>POST</code> action <b>create</b> → parses the schema, generates a unique slug, computes reading time, stamps <code>publishedAt</code> if Published, writes the post, appends an audit line, toasts “Post created”, reloads the board.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Save changes</b></td><td>Saves edits to an existing post</td><td><code>POST</code> action <b>update</b> → partial-schema update (incl. changing Status), regenerates the slug only if you changed it, recomputes reading time when Content changed, audits, toasts “Post updated”, reloads.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Preview</b> (edit only)</td><td>Opens the post in a new browser tab as a reader would see it</td><td>Local only — renders the <b>current form values</b> (image, category pill, title, meta line, excerpt, content) in a pop-up window with a “DOODLY preview — not the live page” banner. Needs pop-ups allowed.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Publish</b> / <b>Unpublish</b> (edit only)</td><td>Toggles the post live or back to Draft in one click</td><td><code>POST</code> action <b>publish</b> (sets status PUBLISHED + stamps <code>publishedAt</code>, toasts “Published”) or <b>unpublish</b> (sets status DRAFT, toasts “Unpublished”). The button label flips based on the current status.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Duplicate</b> (edit only)</td><td>Clones the post as a fresh Draft</td><td><code>POST</code> action <b>duplicate</b> → copies all fields, names it “… (copy)”, gives it a “…-copy” slug (de-duplicated), resets views to 0 and status to DRAFT, clears <code>publishedAt</code>; toasts “Duplicated (draft)”.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Delete</b> (edit only)</td><td>Soft-deletes the post after a confirm prompt</td><td><code>POST</code> action <b>delete</b> → sets <code>deletedAt</code> (the post is hidden and pulled from the site, not erased). Confirms “Soft-delete post ‘…’?” first; toasts “Post deleted”.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Restore</b> (edit only)</td><td>Brings a deleted post back</td><td><code>POST</code> action <b>restore</b> → clears <code>deletedAt</code>; toasts “Restored”. This button replaces <b>Delete</b> once a post is deleted.</td><td><span class="pill role">Super Admin</span>+ <span class="pill role">Admin</span> <span class="pill role">Marketing</span></td></tr>
+          <tr><td><b>Cancel</b> / <b>×</b> / Esc / click-outside</td><td>Closes the form without saving</td><td>None.</td><td>Anyone with the form open</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Tip — more lifecycle actions exist on the API than on the form</div>
+          <p>The form covers everyday editing, but the backend also exposes dedicated <b>schedule</b> and <b>archive</b> actions and a <b>bulk</b> action that can publish, unpublish, archive, delete or restore up to 1,000 posts in one call — available to the API and to any future multi-select tooling. On this screen you achieve the same outcomes through the <b>Status</b> dropdown plus the Publish / Delete buttons.</p>
+        </div>
+      </div>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">Best Practice — preview before you publish, and fill the SEO fields</div>
+          <p>Because the Content field renders raw HTML, always click <b>Preview</b> to confirm the layout, image and formatting look right before you Publish. And spend the extra minute on the collapsible <b>SEO metadata</b> — an SEO title, a description and a handful of keywords make the article far easier to find on search engines than the auto-derived title alone.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3 : PREVIEW -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Post Preview</p>
+      <p class="sm">A reader’s-eye rendering of the post, opened in a separate browser tab straight from the editor.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Let you see exactly how the article will look — hero image, category, headline, by-line, reading time, summary and body — before it goes live, using whatever you have currently typed in the form.</span>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Marketing</span> — from the <b>Preview</b> button on an existing post.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Blogs → Manage → Preview</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Blogs — <b>Preview</b> · new browser tab · magazine-style article</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Status banner</b><span>Fixed top bar: “DOODLY preview — status: … — not the live page”</span></div>
+          <div class="wf-cell"><b>Featured image</b><span>Full-width hero (only if a Featured image URL is set)</span></div>
+          <div class="wf-cell"><b>Category pill</b><span>The category name in a rounded pill (if set)</span></div>
+          <div class="wf-cell"><b>Headline</b><span>The post title as a large heading</span></div>
+          <div class="wf-cell"><b>Meta line</b><span>Category · Author · “N min read”</span></div>
+          <div class="wf-cell"><b>Body</b><span>The excerpt in italics, then the article HTML rendered as the reader will see it</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the preview tab: a serif, reading-optimised layout with a clear “not the live page” banner.</div></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Warning — allow pop-ups, and remember it uses unsaved values</div>
+          <p>Preview opens a new browser tab. If your browser blocks it you will see the toast “Allow pop-ups to preview.” — permit pop-ups for the admin site and try again. The preview reflects the <b>current, possibly unsaved</b> contents of the form, so it is a true what-you-see-is-what-you-get check — but nothing is written to the database until you click <b>Save changes</b>.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ WORKFLOWS -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Lifecycle &amp; publishing workflows</p>
+      <p class="sm">How a post moves from a blank draft to a live article — and to the customer website.</p>
+    </div>
+    <div class="spec-meta">
+      <span class="m"><b>Purpose</b> Show the two processes this module drives: the editorial lifecycle of one post, and how a published or due-scheduled post reaches the public journal and starts counting views.</span>
+    </div>
+    <div class="spec-body">
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — post lifecycle</div>
+        <div class="wf-flow"><span>New post (Draft)</span><span>Write &amp; Preview</span><span>Publish now → Published</span><span>or Schedule → Scheduled → Published (on date)</span><span>Unpublish ⇄ Republish</span><span>Archive</span><span>Delete → Restore</span></div>
+      </div><div class="wire-cap">Figure — a post starts as a Draft; Publish (or a Scheduled date arriving) makes it live; it can be Unpublished back to Draft, Archived, or soft-Deleted and later Restored.</div></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — how a post reaches the customer website</div>
+        <div class="wf-flow"><span>Status = Published (or Scheduled date passed)</span><span>Public feed serves it, newest first</span><span>Customer opens the article</span><span>View counter increments</span><span>Views &amp; Total Views update on the board</span></div>
+      </div><div class="wire-cap">Figure — the public journal shows published posts (plus scheduled posts whose time has come), limited to the most recent set; every page-view is counted back into the admin board.</div></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Scheduling is “publish on arrival”, not a background job</div>
+          <p>A Scheduled post does not need a cron to go live. The moment its <b>Schedule for</b> date has passed, the derived status becomes <b>Published</b> and the public feed starts serving it automatically (the feed asks for PUBLISHED posts <i>and</i> SCHEDULED posts whose date is on/before now). Until then the badge stays <b>Scheduled</b> (blue) and the article is invisible to customers.</p>
+        </div>
+      </div>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">Best Practice — draft, preview, schedule, then let it launch itself</div>
+          <p>Write the post as a <b>Draft</b>, use <b>Preview</b> to check it renders correctly, fill in the SEO fields, then set Status to <b>Scheduled</b> with a future date and <b>Save changes</b>. It will publish on its own on that day — no need to remember to come back and flip the switch. Reserve the instant <b>Publish</b> button for time-sensitive news.</p>
+        </div>
+      </div>
+
+      <div class="call danger">
+        <span class="ci">⛔</span>
+        <div class="cbody">
+          <div class="ctitle">Caution — delete is reversible, but the post disappears from the site immediately</div>
+          <p>Deleting is a <b>soft delete</b>: the post and its view history are kept and can be <b>Restored</b>. But the instant you delete, the post is pulled from the public journal and hidden from the default board. If you only want to take an article off the site temporarily, prefer <b>Unpublish</b> or <b>Archive</b> over Delete so it stays visible in your working list.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOTING + FAQ -->
+  <div class="spec">
+    <div class="spec-h">
+      <p class="st">Troubleshooting &amp; FAQ</p>
+      <p class="sm">Common issues and answers.</p>
+    </div>
+    <div class="spec-body">
+
+      <h4>Troubleshooting</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>Amber/red banner instead of the “● Live” one; no posts load</td><td>The Next.js backend is offline, or your role can’t view the blog</td><td>Start the backend; if it reads “403”, ask an Admin to grant blogs / reports / CMS view access.</td></tr>
+          <tr><td>“Only Marketing / Admin can manage the blog (403).”</td><td>Your role has view but not <b>edit</b> on the blogs module</td><td>Have a Super Admin, Admin or Marketing user make the change, or request the permission.</td></tr>
+          <tr><td>Saving is blocked with “Enter a title (at least 3 characters).”</td><td>The Title is empty or under 3 characters</td><td>Type a title of at least 3 characters.</td></tr>
+          <tr><td>Saving is blocked with “Pick a schedule date for a scheduled post.”</td><td>Status is Scheduled but the Schedule-for date is empty</td><td>Pick a date, or change the Status away from Scheduled.</td></tr>
+          <tr><td>“Allow pop-ups to preview.”</td><td>The browser blocked the preview tab</td><td>Allow pop-ups for the admin site, then click Preview again.</td></tr>
+          <tr><td>Post shows <b>Scheduled</b>, customers can’t see it yet</td><td>Its Schedule-for date is still in the future</td><td>Expected — it will publish itself on that date, or Publish it now to go live immediately.</td></tr>
+          <tr><td>Two posts have almost the same URL (…-2)</td><td>The slug you chose already existed, so a number was appended for uniqueness</td><td>Edit the Slug field to a distinct value if you want a cleaner URL.</td></tr>
+          <tr><td>Deleted a post by mistake and it vanished from the list</td><td>Soft delete hides it from the default board</td><td>The record is safe; use the API’s <code>includeDeleted</code> view (or ask an admin) to find it and <b>Restore</b>.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Frequently asked questions</h4>
+
+      <h4>Q: What is the difference between Unpublish, Archive and Delete?</h4>
+      <p><b>Unpublish</b> sends a live post back to <b>Draft</b> so you can keep editing it; it leaves the website. <b>Archive</b> retires a post (state Archived, grey badge) — a tidy “done with this” state that keeps it in the list. <b>Delete</b> soft-deletes it: hidden from the site and the default board, but recoverable via <b>Restore</b>. All three take the article off the public journal; they differ in intent and where the post then lives in your workflow.</p>
+
+      <h4>Q: Do I have to write the slug and reading time myself?</h4>
+      <p>No. Leave the <b>Slug</b> blank and it is generated from the title (and made unique automatically). The <b>reading time</b> is always calculated from the Content on save — you never type it.</p>
+
+      <h4>Q: My post is set to Published but shows the Scheduled badge — why?</h4>
+      <p>That happens when the Status is actually <b>Scheduled</b> with a future date, not Published. The blue Scheduled badge means “not live yet”. It flips to the green Published badge automatically once the schedule date passes, or immediately if you click <b>Publish</b> or clear the schedule.</p>
+
+      <h4>Q: Can I use images and formatting in the article?</h4>
+      <p>Yes. The Content field <b>supports HTML</b>, and there is a dedicated <b>Featured image URL</b> for the hero image. Because raw HTML is rendered, always <b>Preview</b> before publishing to confirm it looks right.</p>
+
+      <h4>Q: Where do published posts actually appear?</h4>
+      <p>On the public DOODLY customer website’s journal. The public feed serves posts whose derived status is Published (including scheduled posts whose date has arrived), newest first. Each time a reader opens an article its <b>Views</b> counter goes up, which feeds the <b>Views</b> column and the <b>Total Views</b> KPI here.</p>
+
+      <h4>Q: Does duplicating a post copy its views and publish it?</h4>
+      <p>No. A duplicate is created as a fresh <b>Draft</b> named “… (copy)” with a new “…-copy” slug, its view count reset to zero and no publish date. It never touches the original — it is a safe starting point for a similar article.</p>
+
+    </div>
+  </div>
+
+</section>

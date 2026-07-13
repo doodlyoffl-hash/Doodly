@@ -2,265 +2,231 @@
   <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Operations · Drivers</span></div>
   <div class="secnum"><span class="n">§</span><span class="k">Admin · Operations</span></div>
   <h2 class="section-title">Drivers</h2>
-  <p class="lead">Onboard, monitor and manage the delivery executives who carry DOODLY A2 buffalo milk from the dairy to the customer's doorstep.</p>
+  <p class="lead">Onboard and manage your delivery executives — the people who carry the morning A2 buffalo milk from the dairy to each customer's door — with a live fleet dashboard, one-page profiles, zone and capacity settings, password resets and safe soft-deletes.</p>
 
-  <p>The Drivers module is the single place where you keep the delivery fleet in order. Every driver here is a real login account (role <b>Delivery Executive</b>) paired with a <b>Driver</b> record that stores their employee ID, vehicle, assigned zone and daily bottle capacity. The screen shows a live seven-card performance strip, a searchable and filterable list of executives, and two pop-up dialogs — <b>Add delivery executive</b> and <b>Manage driver</b> — that drive the full onboarding and life-cycle workflow. Everything on this page reads and writes the production database through the <code>/api/admin/drivers*</code> endpoints, so what you see is always the true state of the fleet.</p>
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">One person, several records — no duplicate data</div><p>A "driver" (the app calls them <b>Delivery Executives</b>) is not a single table. Each driver links a login <b>User</b> account (role <code>DELIVERY_EXECUTIVE</code>) to a <b>Driver</b> record, plus a <b>Delivery Capacity</b> (how many bottles they can carry), an <b>Executive Status</b> (are they available right now) and their <b>Deliveries</b> for the day. The Drivers screen stitches all of these together so you edit one profile and every part stays in step. Nothing here keeps a second copy of the delivery board.</p></div></div>
 
-  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note</div><p>A driver record is not a stand-alone row — it is bonded to a User account. Adding a driver creates <b>both</b> a login (with the <b>Delivery Executive</b> role) and the Driver record in one atomic step. Suspending a driver locks that same login.</p></div></div>
-
-  <!-- ============================================================ -->
-  <!-- SCREEN 1 — Dashboard + list                                  -->
-  <!-- ============================================================ -->
+  <!-- ============================ SCREEN 1 — DRIVERS BOARD ============================ -->
   <div class="spec">
-    <div class="spec-h"><p class="st">Delivery Executives — dashboard &amp; list</p><p class="sm">Live KPI strip plus the full driver table with search, filters, export and per-row Manage.</p></div>
-    <div class="spec-meta"><span class="m"><b>Purpose</b> See fleet health at a glance and open any executive to edit, suspend, reset or remove them.</span></div>
+    <div class="spec-h"><p class="st">Drivers board</p><p class="sm">Live list of every delivery executive, a seven-tile KPI strip and a per-driver Manage action.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> See the whole delivery fleet at a glance — who is available, busy or offline, how far each has got today, their rating — and open any driver to edit, reset or retire them.</span></div>
     <div class="spec-meta">
-      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations Mgr</span> — view/edit for all three; permanent removal (soft-delete) is Super Admin &amp; Admin only.</span>
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations</span> — view, add and edit. Soft-delete / restore needs <span class="pill role">Super Admin</span> or <span class="pill role">Admin</span>.</span>
       <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Drivers</span></span>
     </div>
     <div class="spec-body">
 
       <div class="wire"><div class="wf">
-        <div class="wf-topbar">Header — <b>Delivery Executives</b> · "Manage drivers and assignments." · <b>+ Add driver</b></div>
+        <div class="wf-topbar">Header — <b>Delivery Executives</b> · "Manage drivers and assignments." · <b>Add driver</b> button</div>
         <div class="wf-grid">
-          <div class="wf-cell"><b>KPI strip (7 cards)</b><span>Total Drivers · Active · Available · Busy · Offline · Deliveries Today · Completed Today</span></div>
-          <div class="wf-cell"><b>Live status banner</b><span>Green "● Live — N delivery executive(s) from the DOODLY database" or a red offline / 403 warning</span></div>
-          <div class="wf-cell"><b>Toolbar</b><span>Search box · filter chips (All · On route · Completed · Idle) · Export</span></div>
-          <div class="wf-cell"><b>Driver table</b><span>ID · Driver · Zone · Progress · Rating · Status · Manage</span></div>
-          <div class="wf-cell"><b>Pager</b><span>Page-through controls at the foot of the table</span></div>
+          <div class="wf-cell"><b>KPI strip</b><span>Seven live tiles: Total Drivers · Active · Available · Busy · Offline · Deliveries Today · Completed Today</span></div>
+          <div class="wf-cell"><b>Live status banner</b><span>Green "● Live — N delivery executive(s) from the DOODLY database" or a red offline / 403 / error message</span></div>
+          <div class="wf-cell"><b>Toolbar</b><span>Search box, filter chips (All · On route · Completed · Idle), sort, saved views, favourites and Export</span></div>
+          <div class="wf-cell"><b>Drivers table</b><span>ID · Driver · Zone · Progress · Rating · Status · Manage</span></div>
         </div>
-      </div><div class="wire-cap">Figure — labelled layout of the Drivers dashboard and list.</div></div>
+      </div><div class="wire-cap">Figure — labelled layout of the Drivers board</div></div>
 
-      <h4>The KPI strip</h4>
-      <p>Seven live cards sit above the table, refreshed from <code>GET /api/admin/drivers/stats</code> every time the page loads or a change is saved. All counts are computed from the real Driver, Executive-Status and Delivery tables for today.</p>
-      <div class="twrap"><table>
-        <thead><tr><th>Card</th><th>What it counts</th><th>How it is derived</th></tr></thead>
-        <tbody>
-          <tr><td><b>Total Drivers</b></td><td>Every non-deleted executive on the fleet.</td><td>Count of Driver records where <code>deletedAt</code> is empty.</td></tr>
-          <tr><td><b>Active</b></td><td>Drivers whose account is switched on.</td><td>Driver <code>active = true</code>.</td></tr>
-          <tr><td><b>Available</b></td><td>Active drivers free to take work right now.</td><td>Availability is AVAILABLE or RETURNED_TO_DAIRY and the driver is active.</td></tr>
-          <tr><td><b>Busy</b></td><td>Drivers currently on a run.</td><td>Availability is ASSIGNED, ACCEPTED, OUT_FOR_DELIVERY or COMPLETED.</td></tr>
-          <tr><td><b>Offline</b></td><td>Drivers not on shift.</td><td>Availability is OFFLINE (or none recorded).</td></tr>
-          <tr><td><b>Deliveries Today</b></td><td>Total stops assigned to the fleet today.</td><td>Count of today's Delivery rows that have a driver.</td></tr>
-          <tr><td><b>Completed Today</b></td><td>Stops already delivered today.</td><td>Today's Delivery rows with status DELIVERED.</td></tr>
-        </tbody>
-      </table></div>
-      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip</div><p>The stats endpoint also computes fleet averages the cards do not print — <b>on-time %</b>, <b>average delivery time (minutes)</b>, <b>average rating</b>, <b>pending</b>, <b>suspended</b> and <b>on-leave</b> counts. These feed reporting and can be surfaced later without any backend change.</p></div></div>
+      <h4>KPI strip</h4>
+      <p>The tiles above the table are drawn live from <span class="navpath">GET /api/admin/drivers/stats</span>. Every count excludes soft-deleted drivers.</p>
+      <div class="twrap"><table><thead><tr><th>Tile</th><th>What it shows</th><th>How it is calculated</th></tr></thead><tbody>
+        <tr><td>Total Drivers</td><td>Every live executive</td><td>Count of Driver records that are not soft-deleted</td></tr>
+        <tr><td>Active</td><td>Executives switched on</td><td>Count where the Driver's <b>Active</b> flag is on</td></tr>
+        <tr><td>Available</td><td>Free to take a run now</td><td>Active drivers whose live availability is <b>Available</b> (or Returned-to-dairy)</td></tr>
+        <tr><td>Busy</td><td>On a delivery run</td><td>Drivers whose availability is Assigned, Accepted, Out-for-delivery or Completed</td></tr>
+        <tr><td>Offline</td><td>Not on shift</td><td>Drivers with no live status or an Offline status</td></tr>
+        <tr><td>Deliveries Today</td><td>Stops assigned today</td><td>Count of today's deliveries that have a driver attached</td></tr>
+        <tr><td>Completed Today</td><td>Stops delivered today</td><td>Count of today's deliveries marked <b>DELIVERED</b></td></tr>
+      </tbody></table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Also computed in the background</div><p>The same stats call additionally works out <b>On leave</b>, <b>Suspended</b>, <b>Pending</b> (today's stops not yet delivered/failed/skipped), average delivery time in minutes, an on-time percentage and the fleet's average star rating. The strip surfaces the seven tiles above; the extra figures are available in the data for reports and other tools.</p></div></div>
 
-      <h4>The driver table</h4>
-      <p>The list is rendered by the shared DataTable engine, so it comes with search, column sorting, filter chips, export and pagination out of the box. Columns are fixed for this dataset:</p>
-      <div class="twrap"><table>
-        <thead><tr><th>Column</th><th>Shows</th><th>Source field</th></tr></thead>
-        <tbody>
-          <tr><td><b>ID</b></td><td>Employee ID (e.g. <code>DRV-02</code>); if none is set, a short fallback like <code>#a1b2c</code> from the record ID.</td><td><code>employeeId</code></td></tr>
-          <tr><td><b>Driver</b></td><td>Two-letter avatar initials next to the full name.</td><td><code>name</code> (from the linked User)</td></tr>
-          <tr><td><b>Zone</b></td><td>Assigned delivery zone name, or "—" when unassigned.</td><td><code>zone</code> (from DeliveryZone)</td></tr>
-          <tr><td><b>Progress</b></td><td>Today's completed-out-of-assigned stops, e.g. "8/12 stops".</td><td><code>completedToday</code> / <code>assignedToday</code></td></tr>
-          <tr><td><b>Rating</b></td><td>Star rating, e.g. "4.6★".</td><td><code>rating</code></td></tr>
-          <tr><td><b>Status</b></td><td>Colour-coded availability pill (see below).</td><td><code>status</code></td></tr>
-          <tr><td><b>Manage</b></td><td>A <b>Manage</b> link that opens the driver dialog.</td><td>row action</td></tr>
-        </tbody>
-      </table></div>
+      <h4>Drivers table</h4>
+      <div class="twrap"><table><thead><tr><th>Aspect</th><th>Behaviour in this screen</th></tr></thead><tbody>
+        <tr><td><b>Columns</b></td><td>ID · Driver · Zone · Progress · Rating · Status · Manage</td></tr>
+        <tr><td><b>ID</b></td><td>The driver's <b>Employee ID</b> if one was set (for example <code>DRV-02</code>); otherwise a short fallback code built from the record's internal ID</td></tr>
+        <tr><td><b>Driver</b></td><td>The person's name with an initials avatar</td></tr>
+        <tr><td><b>Zone</b></td><td>The assigned delivery zone's name, or "—" if none</td></tr>
+        <tr><td><b>Progress</b></td><td>Today's stops as <b>completed / assigned</b> — e.g. "12/20 stops"</td></tr>
+        <tr><td><b>Rating</b></td><td>The driver's star rating, e.g. "4.8★"</td></tr>
+        <tr><td><b>Status</b></td><td>Coloured badge — see "Understanding the status badge" below</td></tr>
+        <tr><td><b>Search</b></td><td>The toolbar search box matches across ID, name, phone, email and zone</td></tr>
+        <tr><td><b>Filters</b></td><td>Filter chips <b>All · On route · Completed · Idle</b> are declared for this table; the shared DataTable engine also derives facet filters from the visible columns (for example the Status badge)</td></tr>
+        <tr><td><b>Sorting</b></td><td>Click a column header to sort; the shared engine supports column sort and saved views</td></tr>
+        <tr><td><b>Pagination</b></td><td>On — long fleets are paged by the DataTable engine</td></tr>
+        <tr><td><b>Exports</b></td><td>The toolbar <b>Export</b> writes the current table page to CSV</td></tr>
+        <tr><td><b>Row actions</b></td><td><b>Manage</b> — opens the driver drawer (Screen 3)</td></tr>
+      </tbody></table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">The table is powered by the shared DataTable engine</div><p>Drivers uses DOODLY's unified table with search, sort, facet filters, saved views, favourites, Export and pagination built in. If that engine has not finished loading, the page still renders a plain table so the data is never invisible.</p></div></div>
 
-      <div class="twrap"><table>
-        <thead><tr><th>Element</th><th>Behaviour on this screen</th></tr></thead>
-        <tbody>
-          <tr><td><b>Search</b></td><td>Free-text box; server-side match on ID, employee ID, name, phone, email and zone.</td></tr>
-          <tr><td><b>Filters</b></td><td>Chips: <b>All · On route · Completed · Idle</b>. The backend also accepts <code>status=</code> values <code>active</code>, <code>inactive</code>, <code>available</code>, <code>busy</code>, <code>offline</code>, <code>leave</code> and <code>deleted</code>.</td></tr>
-          <tr><td><b>Sorting</b></td><td>Click any column header to sort ascending / descending.</td></tr>
-          <tr><td><b>Pagination</b></td><td>Enabled — the list pages when it grows long.</td></tr>
-          <tr><td><b>Export</b></td><td>Toolbar export downloads the current view as CSV.</td></tr>
-          <tr><td><b>Row action</b></td><td><b>Manage</b> per row (opens the Manage-driver dialog).</td></tr>
-        </tbody>
-      </table></div>
+      <h4>Understanding the status badge</h4>
+      <p>The Status column condenses two things — whether the account is switched on, and the driver's live availability — into one badge. The rules apply in this order:</p>
+      <div class="twrap"><table><thead><tr><th>Badge</th><th>Colour</th><th>Shown when</th></tr></thead><tbody>
+        <tr><td><b>Inactive</b></td><td>Grey</td><td>The driver's Active flag is off (they are on file but not working)</td></tr>
+        <tr><td><b>Suspended</b></td><td>Red</td><td>Their login is locked (from the Suspended checkbox) — overrides availability</td></tr>
+        <tr><td><b>Available</b></td><td>Green</td><td>Active and free — live status Available, or just returned to the dairy</td></tr>
+        <tr><td><b>Busy</b></td><td>Amber</td><td>On a run — assigned, accepted or out for delivery</td></tr>
+        <tr><td><b>On leave</b></td><td>Blue</td><td>The driver has flagged a break in the driver app</td></tr>
+        <tr><td><b>Offline</b></td><td>Grey</td><td>Active but not on shift / no live status reported</td></tr>
+      </tbody></table></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Availability comes from the driver, status from you</div><p>Available / Busy / On leave / Offline are reported by the driver's own app as they work. <b>Inactive</b> and <b>Suspended</b> are set by you from the Manage drawer. That is why a suspended driver always reads red no matter what their app says.</p></div></div>
 
-      <h4>Status pill reference</h4>
-      <p>The Status pill is a single source of truth combining the driver's live availability, their active flag and their login state.</p>
-      <div class="twrap"><table>
-        <thead><tr><th>Pill</th><th>Colour</th><th>Meaning</th></tr></thead>
-        <tbody>
-          <tr><td><b>Available</b></td><td>Green</td><td>Active and free to take deliveries (AVAILABLE / just returned to dairy).</td></tr>
-          <tr><td><b>Busy</b></td><td>Amber</td><td>Active and currently assigned / out on a run.</td></tr>
-          <tr><td><b>On leave</b></td><td>Blue</td><td>Active but on a break shift (BREAK).</td></tr>
-          <tr><td><b>Offline</b></td><td>Grey</td><td>Active but not on shift right now.</td></tr>
-          <tr><td><b>Suspended</b></td><td>Red</td><td>Login is locked — the account cannot sign in.</td></tr>
-          <tr><td><b>Inactive</b></td><td>Grey</td><td>Driver record switched off (not active).</td></tr>
-        </tbody>
-      </table></div>
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td><b>Add driver</b> (header)</td><td>Opens the "Add delivery executive" dialog</td><td>On save → <span class="navpath">POST /api/admin/drivers</span></td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations</span></td></tr>
+        <tr><td><b>Manage</b> (row)</td><td>Opens the driver drawer to edit, reset the password or soft-delete</td><td>Reads the loaded driver list</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations</span></td></tr>
+        <tr><td><b>Export</b> (toolbar)</td><td>Downloads the current table page as a CSV file</td><td>Client-side — no server call</td><td>Anyone who can view the page</td></tr>
+      </tbody></table></div>
 
-      <div class="twrap"><table>
-        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
-        <tbody>
-          <tr><td><b>+ Add driver</b></td><td>Opens the Add delivery executive dialog.</td><td>On submit: <code>POST /api/admin/drivers</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations Mgr</span></td></tr>
-          <tr><td><b>Manage</b> (row)</td><td>Opens the Manage-driver dialog for that executive.</td><td>Reads the already-loaded list row; saves via <code>PATCH /api/admin/drivers/{id}</code>.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations Mgr</span></td></tr>
-          <tr><td><b>Export</b></td><td>Downloads the visible driver rows as CSV.</td><td>Client-side, from the loaded table.</td><td>Any viewer.</td></tr>
-        </tbody>
-      </table></div>
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Give every executive a clear <b>Employee ID</b> (for example <code>DRV-02</code>) and assign a <b>zone</b> the day you onboard them. The ID becomes their identifier in the table, reports and audit trail, and the zone is what the auto-assignment engine uses to hand them the right stops each morning.</p></div></div>
 
     </div>
   </div>
 
-  <!-- ============================================================ -->
-  <!-- SCREEN 2 — Add delivery executive                            -->
-  <!-- ============================================================ -->
+  <!-- ============================ SCREEN 2 — ADD DELIVERY EXECUTIVE ============================ -->
   <div class="spec">
-    <div class="spec-h"><p class="st">Add delivery executive</p><p class="sm">One dialog that creates the login and the driver record together.</p></div>
-    <div class="spec-meta"><span class="m"><b>Purpose</b> Onboard a new driver — provision their sign-in account and Driver profile in a single step.</span></div>
+    <div class="spec-h"><p class="st">Add delivery executive</p><p class="sm">Create a driver's login and profile together in one step.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Onboard a new driver — this creates their delivery-executive login account and their Driver record in a single, safe transaction.</span></div>
     <div class="spec-meta">
-      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations Mgr</span> — requires <code>drivers:create</code>.</span>
-      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Drivers → + Add driver</span></span>
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Drivers → Add driver</span></span>
     </div>
     <div class="spec-body">
 
       <div class="wire"><div class="wf">
-        <div class="wf-topbar">Dialog — <b>Add delivery executive</b></div>
+        <div class="wf-topbar">Dialog — <b>Add delivery executive</b> · ✕ close</div>
         <div class="wf-grid">
-          <div class="wf-cell"><b>Full name</b><span>Required text field</span></div>
-          <div class="wf-cell"><b>Email &amp; Mobile</b><span>Email required, mobile optional (side by side)</span></div>
-          <div class="wf-cell"><b>Employee ID &amp; Vehicle no.</b><span>Both optional (side by side)</span></div>
-          <div class="wf-cell"><b>Temporary password</b><span>Required — driver resets on first login</span></div>
+          <div class="wf-cell"><b>Full name *</b><span>Text, e.g. "Anil Sharma"</span></div>
+          <div class="wf-cell"><b>Email *</b><span>Login email, e.g. name@example.com</span></div>
+          <div class="wf-cell"><b>Mobile</b><span>Optional, e.g. +91…</span></div>
+          <div class="wf-cell"><b>Employee ID</b><span>Optional, e.g. DRV-02</span></div>
+          <div class="wf-cell"><b>Vehicle no.</b><span>Optional, e.g. AP16 CD 1234</span></div>
+          <div class="wf-cell"><b>Temporary password *</b><span>Min 8 chars — driver resets on first login</span></div>
           <div class="wf-cell"><b>Footer</b><span>Cancel · Add driver</span></div>
         </div>
-      </div><div class="wire-cap">Figure — the Add delivery executive form.</div></div>
+      </div><div class="wire-cap">Figure — the Add delivery executive dialog</div></div>
 
-      <div class="twrap"><table>
-        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
-        <tbody>
-          <tr><td><b>Full name</b></td><td>Name shown across the fleet and to customers.</td><td>Free text, 1–80 chars.</td><td class="t-req">Yes</td><td>Must not be blank; trimmed, max 80.</td><td>Anil Sharma</td></tr>
-          <tr><td><b>Email</b></td><td>The driver's login username.</td><td>Valid email address.</td><td class="t-req">Yes</td><td>Format checked in the form; lower-cased and de-duplicated server-side (409 if it already exists).</td><td>anil@doodly.in</td></tr>
-          <tr><td><b>Mobile</b></td><td>Contact / SMS number.</td><td>7–15 digits, may start with "+".</td><td class="t-opt">Opt.</td><td>Pattern-checked; must be unique across users (409 on clash).</td><td>+91 98480 12345</td></tr>
-          <tr><td><b>Employee ID</b></td><td>Human-friendly staff code shown in the ID column.</td><td>Text, up to 20 chars.</td><td class="t-opt">Opt.</td><td>Must be unique across drivers (409 if in use).</td><td>DRV-02</td></tr>
-          <tr><td><b>Vehicle no.</b></td><td>Registration plate of the delivery vehicle.</td><td>Text, up to 20 chars.</td><td class="t-opt">Opt.</td><td>Trimmed; stored as-is.</td><td>AP16 CD 1234</td></tr>
-          <tr><td><b>Temporary password</b></td><td>First sign-in secret the driver must change.</td><td>At least 8 characters.</td><td class="t-req">Yes</td><td>Form enforces min 8; backend enforces the full password policy and sets <code>forcePwReset</code>.</td><td>Welcome@2026</td></tr>
-        </tbody>
-      </table></div>
+      <h4>Fields</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Full name</td><td>The driver's name shown everywhere</td><td>Text</td><td class="t-req">Yes</td><td>Cannot be empty (client); server requires 1–80 characters</td><td>Anil Sharma</td></tr>
+        <tr><td>Email</td><td>Their login username and contact email</td><td>A valid email address</td><td class="t-req">Yes</td><td>Must be a valid email; stored lower-case. A duplicate returns "An account with this email already exists."</td><td>anil@doodly.in</td></tr>
+        <tr><td>Mobile</td><td>Contact number for the driver</td><td>Phone number, may start with +</td><td class="t-opt">Opt.</td><td>Server accepts 7–15 digits (spaces / dashes allowed). A duplicate phone returns a conflict</td><td>+91 98765 43210</td></tr>
+        <tr><td>Employee ID</td><td>Short staff code used as the table ID</td><td>Text, up to 20 characters</td><td class="t-opt">Opt.</td><td>Must be unique — a clash returns "That employee ID is already in use."</td><td>DRV-02</td></tr>
+        <tr><td>Vehicle no.</td><td>The bike / van registration they run</td><td>Text, up to 20 characters</td><td class="t-opt">Opt.</td><td>Trimmed and stored on the Driver record</td><td>AP16 CD 1234</td></tr>
+        <tr><td>Temporary password</td><td>A first-login password you hand over</td><td>Text, at least 8 characters</td><td class="t-req">Yes</td><td>Client blocks under 8; server enforces the full password policy. Saved hashed, and the driver is forced to reset it on first login</td><td>Welcome@2026</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">What "Add driver" creates</div><p>On save, DOODLY creates the login <b>User</b> (role <code>DELIVERY_EXECUTIVE</code>, marked to reset the password on first login) and the linked <b>Driver</b> record (Active, with the employee ID and vehicle number) together in one transaction — so you never end up with a half-made account. The action is written to the audit trail as <b>driver.create</b>.</p></div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — the temporary password is shown only in this dialog</div><p>Type a password you can pass to the driver securely, then note it before you close. They must change it the first time they log in. If it is lost, use <b>Reset password</b> in the Manage drawer to issue a fresh one.</p></div></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td><b>Add driver</b></td><td>Validates the name, email and password, then creates the account and refreshes the board</td><td><span class="navpath">POST /api/admin/drivers</span> → creates User + Driver, audits <b>driver.create</b>, returns the new driver</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations</span></td></tr>
+        <tr><td><b>Cancel</b> / ✕ / Esc</td><td>Closes the dialog without saving</td><td>—</td><td>—</td></tr>
+      </tbody></table></div>
 
       <div class="diagram"><div class="wf">
         <div class="wf-topbar">Workflow — onboarding a driver</div>
-        <div class="wf-flow"><span>Fill the form</span><span>Add driver</span><span>Create User (Delivery Executive role)</span><span>Create linked Driver record (active)</span><span>Force password reset flag set</span><span>List refreshes · toast confirms</span></div>
-      </div><div class="wire-cap">Figure — what happens when you save a new executive.</div></div>
+        <div class="wf-flow"><span>Click Add driver</span><span>Enter name, email, temp password (+ mobile / ID / vehicle)</span><span>Add driver</span><span>User + Driver created &amp; audited</span><span>Board refreshes with the new row</span><span>Driver resets password on first login</span></div>
+      </div><div class="wire-cap">Figure — from empty dialog to a working delivery-executive login</div></div>
 
-      <div class="twrap"><table>
-        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
-        <tbody>
-          <tr><td><b>Add driver</b></td><td>Validates the form, then creates the account and driver profile.</td><td><code>POST /api/admin/drivers</code> — in one transaction creates a <code>DELIVERY_EXECUTIVE</code> User (hashed password, force-reset) and a Driver record (<code>active = true</code>); writes an audit entry.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations Mgr</span></td></tr>
-          <tr><td><b>Cancel</b> / <b>✕</b></td><td>Closes the dialog with no changes.</td><td>None.</td><td>—</td></tr>
-        </tbody>
-      </table></div>
-
-      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning</div><p>The driver's account is set to <b>force a password reset on first login</b>. Share the temporary password securely and tell the driver they will be asked to set their own on the first sign-in.</p></div></div>
-      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip</div><p>You can leave <b>Employee ID</b> and <b>Vehicle no.</b> blank at onboarding and fill them in later from the Manage-driver dialog. Zone and daily bottle capacity are also set there, not here.</p></div></div>
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Use the driver's real work email, add their mobile, and give them a memorable temporary password you can share over a call or in person. Then open <b>Manage</b> straight away to set their zone and daily bottle capacity so the assignment engine can start giving them stops.</p></div></div>
 
     </div>
   </div>
 
-  <!-- ============================================================ -->
-  <!-- SCREEN 3 — Manage driver                                     -->
-  <!-- ============================================================ -->
+  <!-- ============================ SCREEN 3 — MANAGE DRIVER ============================ -->
   <div class="spec">
-    <div class="spec-h"><p class="st">Manage driver</p><p class="sm">Edit details, assign a zone, set capacity, suspend, reset the password or remove a driver.</p></div>
-    <div class="spec-meta"><span class="m"><b>Purpose</b> The life-cycle control panel for one executive — every routine change lives here.</span></div>
+    <div class="spec-h"><p class="st">Manage driver</p><p class="sm">The full control drawer for a single executive — edit details, set zone and capacity, reset the password, suspend or soft-delete.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Everything you need to run one driver's account: change their ID and vehicle, move them to another zone, adjust how many bottles they carry, lock their login, issue a fresh password, or retire them safely.</span></div>
     <div class="spec-meta">
-      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations Mgr</span> for edits &amp; password reset (<code>drivers:edit</code>); <b>Soft-delete</b> needs <code>drivers:delete</code> — <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> only.</span>
+      <span class="m"><b>Access</b> Edit, zone, capacity, suspend &amp; reset password: <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations</span>. Soft-delete: <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> only.</span>
       <span class="m"><b>Path</b> <span class="navpath">Admin → Operations → Drivers → Manage</span></span>
     </div>
     <div class="spec-body">
 
       <div class="wire"><div class="wf">
-        <div class="wf-topbar">Dialog — <b>{Driver name}</b></div>
+        <div class="wf-topbar">Drawer — <b>{driver name}</b> · email · phone · N deliveries · rating★ · availability · ✕</div>
         <div class="wf-grid">
-          <div class="wf-cell"><b>Summary line</b><span>Email · phone · total deliveries · rating★ · availability label</span></div>
-          <div class="wf-cell"><b>Employee ID &amp; Vehicle no.</b><span>Editable text (side by side)</span></div>
-          <div class="wf-cell"><b>Assigned zone &amp; Daily capacity</b><span>Zone dropdown · bottles number</span></div>
-          <div class="wf-cell"><b>Toggles</b><span>Active · Suspended (locks login)</span></div>
-          <div class="wf-cell"><b>Footer actions</b><span>Reset password · Soft-delete · Close · Save</span></div>
+          <div class="wf-cell"><b>Employee ID</b><span>Editable text</span></div>
+          <div class="wf-cell"><b>Vehicle no.</b><span>Editable text</span></div>
+          <div class="wf-cell"><b>Assigned zone</b><span>Zone dropdown (— No zone —)</span></div>
+          <div class="wf-cell"><b>Daily capacity (bottles)</b><span>Numeric, default 45</span></div>
+          <div class="wf-cell"><b>Active</b><span>Checkbox — driver on/off</span></div>
+          <div class="wf-cell"><b>Suspended (locks login)</b><span>Checkbox — blocks sign-in</span></div>
+          <div class="wf-cell"><b>Footer</b><span>Reset password · Soft-delete · Close · Save</span></div>
         </div>
-      </div><div class="wire-cap">Figure — the Manage-driver control panel.</div></div>
+      </div><div class="wire-cap">Figure — the Manage driver drawer</div></div>
 
-      <div class="twrap"><table>
-        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
-        <tbody>
-          <tr><td><b>Employee ID</b></td><td>Staff code in the ID column.</td><td>Text, up to 20 chars (blank clears it).</td><td class="t-opt">Opt.</td><td>Must stay unique across drivers (409 if it clashes with another).</td><td>DRV-02</td></tr>
-          <tr><td><b>Vehicle no.</b></td><td>Delivery vehicle plate.</td><td>Text, up to 20 chars.</td><td class="t-opt">Opt.</td><td>Trimmed; blank clears it.</td><td>AP16 CD 1234</td></tr>
-          <tr><td><b>Assigned zone</b></td><td>Delivery zone the driver serves.</td><td>Pick from live zones, or "— No zone —".</td><td class="t-opt">Opt.</td><td>Saved to the Driver's <code>zoneId</code>; logged as an "assign zone" audit event.</td><td>Jubilee Hills</td></tr>
-          <tr><td><b>Daily capacity (bottles)</b></td><td>Maximum bottles the driver can carry per day — used by auto-assignment.</td><td>Whole number, 1–10000 (defaults to 45).</td><td class="t-opt">Opt.</td><td>Clamped to 1–10000; upserted into the driver's Delivery-Capacity record.</td><td>45</td></tr>
-          <tr><td><b>Active</b></td><td>Whether the driver is on the working roster.</td><td>Checkbox on / off.</td><td class="t-opt">Opt.</td><td>Sets Driver <code>active</code>. Inactive drivers show a grey "Inactive" pill.</td><td>On</td></tr>
-          <tr><td><b>Suspended (locks login)</b></td><td>Blocks the driver from signing in without deleting them.</td><td>Checkbox on / off.</td><td class="t-opt">Opt.</td><td>Sets the linked User status to LOCKED / ACTIVE; shows a red "Suspended" pill; audited as a suspend event.</td><td>Off</td></tr>
-        </tbody>
-      </table></div>
+      <p>The drawer header carries a read-only summary line — the driver's email, their phone (or "no mobile"), their total lifetime deliveries, their star rating and their current availability label — so you can identify them before making changes.</p>
 
-      <div class="twrap"><table>
-        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
-        <tbody>
-          <tr><td><b>Save</b></td><td>Writes all field edits and toggles at once.</td><td><code>PATCH /api/admin/drivers/{id}</code> with employee ID, vehicle, zone, capacity, active and suspended; audited.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations Mgr</span></td></tr>
-          <tr><td><b>Reset password</b></td><td>Issues a fresh temporary password and shows it once in a toast.</td><td><code>POST /api/admin/drivers/{id}/reset-password</code> — generates a temp secret (e.g. <code>Doodly@1234</code>), sets force-reset, returns it once; audited.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations Mgr</span></td></tr>
-          <tr><td><b>Soft-delete</b></td><td>Removes the driver from the active fleet but keeps the record so it can be restored.</td><td><code>PATCH /api/admin/drivers/{id}</code> with <code>deleted:true</code> — stamps <code>deletedAt</code>; audited as a delete event.</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
-          <tr><td><b>Close</b> / <b>✕</b></td><td>Closes the dialog without saving.</td><td>None.</td><td>—</td></tr>
-        </tbody>
-      </table></div>
+      <h4>Editable fields</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Employee ID</td><td>Change the staff code</td><td>Text, up to 20 characters (blank = none)</td><td class="t-opt">Opt.</td><td>Must stay unique across drivers — a clash returns "That employee ID is already in use."</td><td>DRV-02</td></tr>
+        <tr><td>Vehicle no.</td><td>Update the vehicle registration</td><td>Text, up to 20 characters</td><td class="t-opt">Opt.</td><td>Trimmed; blank clears it</td><td>AP16 CD 1234</td></tr>
+        <tr><td>Assigned zone</td><td>Move the driver to a delivery zone</td><td>Pick a zone / — No zone —</td><td class="t-opt">Opt.</td><td>Zone list loaded from <span class="navpath">GET /api/admin/delivery/zones</span>; saving is audited as <b>driver.assign_zone</b></td><td>Vijayawada West</td></tr>
+        <tr><td>Daily capacity (bottles)</td><td>How many bottles they can carry per run</td><td>Whole number, defaults to 45</td><td class="t-opt">Opt.</td><td>Clamped to 1–10,000; written to the driver's Delivery Capacity (created if missing); audited as <b>driver.capacity</b></td><td>45</td></tr>
+        <tr><td>Active</td><td>Turn the driver on or off</td><td>Checkbox</td><td class="t-opt">Opt.</td><td>Unticking marks them <b>Inactive</b> (kept on file, excluded from Active counts)</td><td>Ticked</td></tr>
+        <tr><td>Suspended (locks login)</td><td>Block the driver from signing in</td><td>Checkbox</td><td class="t-opt">Opt.</td><td>Ticking locks the login (badge turns red "Suspended"); unticking restores it. Audited as <b>driver.suspend</b></td><td>Unticked</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Active vs Suspended — two different switches</div><p><b>Active</b> is an operational flag: an inactive driver stops counting toward your fleet and won't be handed new stops, but their login still works. <b>Suspended</b> is a security lock: it blocks the person from signing in altogether (their badge goes red). Use Suspended when someone leaves or is under review; use Inactive for a temporary pause.</p></div></div>
+
+      <h4>Buttons</h4>
+      <div class="twrap"><table><thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead><tbody>
+        <tr><td><b>Save</b></td><td>Saves the employee ID, vehicle, zone, capacity, Active and Suspended settings</td><td><span class="navpath">PATCH /api/admin/drivers/{id}</span> → audited as driver.update / assign_zone / capacity / suspend</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations</span></td></tr>
+        <tr><td><b>Reset password</b></td><td>Issues a fresh temporary password and shows it once in a toast; the driver must change it on next login</td><td><span class="navpath">POST /api/admin/drivers/{id}/reset-password</span> → new random password, force-reset flag; audited as driver.reset_password</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Operations</span></td></tr>
+        <tr><td><b>Soft-delete</b></td><td>Retires the driver (recoverable) and refreshes the board</td><td><span class="navpath">PATCH /api/admin/drivers/{id}</span> with deleted = true → sets a deleted timestamp; audited as driver.delete</td><td><span class="pill role">Super Admin</span> <span class="pill role">Admin</span></td></tr>
+        <tr><td><b>Close</b> / ✕ / Esc</td><td>Closes the drawer without saving</td><td>—</td><td>—</td></tr>
+      </tbody></table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — Reset password shows the new password only once</div><p>After you click <b>Reset password</b>, the new temporary password appears in a toast message (for example "Temp password: Doodly@4821 — driver resets on next login"). Copy it and pass it to the driver right away — it is not stored in readable form and cannot be shown again. The driver is forced to set their own password the next time they log in.</p></div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Soft-delete, not permanent delete</div><p>Soft-delete hides the driver from the live list and marks the record deleted; the account and its delivery history are kept and can be restored. This screen never hard-deletes a driver, and deleting also switches them inactive. Restore is available through the backend (see below).</p></div></div>
 
       <div class="diagram"><div class="wf">
-        <div class="wf-topbar">Workflow — suspend vs. soft-delete</div>
-        <div class="wf-flow"><span>Open Manage</span><span>Suspend → login locked (still on fleet)</span><span>or</span><span>Soft-delete → removed from list, restorable</span><span>Reset password → new temp secret</span></div>
-      </div><div class="wire-cap">Figure — the three ways to take a driver off the road.</div></div>
+        <div class="wf-topbar">Workflow — reassigning a driver's zone &amp; capacity</div>
+        <div class="wf-flow"><span>Open Manage</span><span>Pick the new zone</span><span>Set daily bottle capacity</span><span>Save</span><span>Delivery Capacity updated &amp; audited</span><span>Assignment engine uses the new zone next run</span></div>
+      </div><div class="wire-cap">Figure — moving a driver to a new zone</div></div>
 
-      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — the temporary password shows only once</div><p>After <b>Reset password</b>, the new secret appears in a toast such as "Temp password: Doodly@1234 — driver resets on next login". It is not stored in readable form and cannot be shown again. Copy it before the toast disappears, then hand it to the driver.</p></div></div>
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Bulk operations exist behind the scenes</div><p>The backend also supports acting on many drivers at once — activate, deactivate, assign a zone, soft-delete and restore (<span class="navpath">POST /api/admin/drivers/bulk</span>; delete and restore need delete permission). The current Drivers screen manages one driver at a time; the bulk actions — including <b>restore</b> — are available to tooling built on the API.</p></div></div>
 
-      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — suspend, don't delete, for temporary issues</div><p>For a driver who is on unpaid leave, under review, or has quit but may return, use <b>Suspended</b> (locks the login) or clear the <b>Active</b> toggle. Reserve <b>Soft-delete</b> for people who have genuinely left. Because soft-delete only stamps a date, an admin can still restore the record later, but suspend keeps their history and zone assignment intact and is instantly reversible.</p></div></div>
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Set a realistic <b>daily capacity</b> for each driver (the default is 45 bottles). The auto-assignment engine caps how many stops a driver receives by this number, so an accurate figure keeps morning runs balanced and prevents anyone being overloaded or left idle.</p></div></div>
 
     </div>
   </div>
 
-  <!-- ============================================================ -->
-  <!-- Permissions & bulk                                           -->
-  <!-- ============================================================ -->
+  <!-- ============================ TROUBLESHOOTING & FAQ ============================ -->
   <div class="spec">
-    <div class="spec-h"><p class="st">Permissions &amp; fleet-wide actions</p><p class="sm">Who can do what, and the bulk operations the backend supports.</p></div>
-    <div class="spec-meta"><span class="m"><b>Purpose</b> Reference for role-based access and batch driver management.</span></div>
+    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common Drivers issues and quick answers.</p></div>
     <div class="spec-body">
-      <div class="twrap"><table>
-        <thead><tr><th>Capability</th><th>Permission key</th><th>Roles</th></tr></thead>
-        <tbody>
-          <tr><td>View drivers, KPIs, export</td><td><code>drivers:view</code></td><td>Super Admin, Admin, Operations Mgr</td></tr>
-          <tr><td>Add a driver</td><td><code>drivers:create</code></td><td>Super Admin, Admin, Operations Mgr</td></tr>
-          <tr><td>Edit / zone / capacity / suspend / reset password</td><td><code>drivers:edit</code></td><td>Super Admin, Admin, Operations Mgr</td></tr>
-          <tr><td>Soft-delete / restore</td><td><code>drivers:delete</code></td><td>Super Admin, Admin</td></tr>
-        </tbody>
-      </table></div>
-      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — bulk endpoint</div><p>The platform exposes <code>POST /api/admin/drivers/bulk</code> for fleet-wide moves — <b>activate</b>, <b>deactivate</b>, <b>assign zone</b>, <b>delete</b> and <b>restore</b> across up to 1,000 drivers at once (delete/restore require <code>drivers:delete</code>). Every bulk run is audited. Day-to-day work on this screen is done per-driver through the Manage dialog.</p></div></div>
-      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution</div><p>Client-side role hiding is only for tidiness — the real security boundary is enforced on every API call. A driver's login and the customer-facing app depend on these records, so treat suspend, delete and password reset as production actions, not tests.</p></div></div>
-    </div>
-  </div>
 
-  <!-- ============================================================ -->
-  <!-- Troubleshooting & FAQ                                        -->
-  <!-- ============================================================ -->
-  <div class="spec">
-    <div class="spec-h"><p class="st">Troubleshooting &amp; FAQ</p><p class="sm">Common snags and quick answers.</p></div>
-    <div class="spec-body">
-      <div class="twrap"><table>
-        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
-        <tbody>
-          <tr><td>Red banner "Backend offline — couldn't load live drivers".</td><td>The API server is unreachable.</td><td>Confirm the backend is running and reachable; reload once it is back. The page shows this instead of stale data on purpose.</td></tr>
-          <tr><td>"Your role can't view drivers (403)".</td><td>Signed-in role lacks <code>drivers:view</code>.</td><td>Use a Super Admin, Admin or Operations account, or have an admin grant the permission.</td></tr>
-          <tr><td>"An account with this email already exists" on Add.</td><td>A user (any role) already uses that email or phone.</td><td>Use a different email/mobile, or find the existing account instead of creating a duplicate.</td></tr>
-          <tr><td>"That employee ID is already in use".</td><td>Another driver holds the same employee ID.</td><td>Pick a unique ID, or clear the field to leave it blank.</td></tr>
-          <tr><td>Driver can't sign in after onboarding.</td><td>Suspended toggle is on, or the temporary password was mistyped.</td><td>Open Manage, clear <b>Suspended</b>, and use <b>Reset password</b> to issue a fresh secret.</td></tr>
-          <tr><td>Auto-assignment gives a driver too few / too many stops.</td><td>Daily capacity is wrong (default 45).</td><td>Open Manage and set <b>Daily capacity (bottles)</b> to the driver's true limit.</td></tr>
-        </tbody>
-      </table></div>
+      <div class="twrap"><table><thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead><tbody>
+        <tr><td>Red "Backend offline" banner and no drivers</td><td>The API server is unreachable</td><td>Confirm the backend is running and reachable at the shown address, then reload</td></tr>
+        <tr><td>Red "Your role can't view drivers (403)"</td><td>Your role lacks drivers:view</td><td>Sign in as Super Admin, Admin or Operations, or ask for the Operations role</td></tr>
+        <tr><td>"An account with this email already exists."</td><td>That email is already used by a user</td><td>Use a different email, or find the existing account instead of creating a new one</td></tr>
+        <tr><td>"That employee ID is already in use."</td><td>Another driver has the same ID</td><td>Pick a different, unique employee ID</td></tr>
+        <tr><td>"Temporary password must be at least 8 characters."</td><td>Password too short / weak</td><td>Enter at least 8 characters that meet the password policy</td></tr>
+        <tr><td>Driver shows red "Suspended" and can't log in</td><td>The Suspended checkbox is ticked</td><td>Open Manage and untick Suspended, then Save</td></tr>
+        <tr><td>Driver never gets any stops</td><td>Inactive, no zone, or capacity set to a tiny number</td><td>In Manage, tick Active, set a zone, and give a sensible daily capacity</td></tr>
+        <tr><td>Soft-delete button seems missing / blocked</td><td>Your role has manage (Operations) but not delete</td><td>Deleting a driver needs Super Admin or Admin</td></tr>
+      </tbody></table></div>
 
-      <h4>Does adding a driver here also create their login?</h4>
-      <p>Yes. Saving the Add form creates a User account with the <b>Delivery Executive</b> role and the Driver record together, in one step. There is no separate account to create.</p>
+      <h4>Do I create the driver's login separately?</h4>
+      <p>No. <b>Add driver</b> creates both the login account and the Driver profile together in one step. You only supply a temporary password, which the driver changes on their first login.</p>
 
-      <h4>What is the difference between Inactive, Suspended and Soft-deleted?</h4>
-      <p><b>Inactive</b> takes the driver off the working roster but keeps the login usable. <b>Suspended</b> locks the login so they cannot sign in, while keeping them on the fleet. <b>Soft-deleted</b> removes them from the list entirely but preserves the record so it can be restored later.</p>
+      <h4>What is the difference between the Status badge and Availability?</h4>
+      <p>Availability (Available / Busy / On leave / Offline) is reported by the driver's own app as they work. The Status badge combines that with the two switches you control — <b>Inactive</b> (Active off) and <b>Suspended</b> (login locked) — which always take priority. A suspended driver reads red regardless of their app.</p>
 
-      <h4>Where do I set the driver's zone and capacity?</h4>
-      <p>In the <b>Manage driver</b> dialog, not on the Add form. Zone feeds routing; daily bottle capacity feeds the auto-assignment engine.</p>
+      <h4>Can I recover a driver I soft-deleted?</h4>
+      <p>Yes. Soft-delete only hides and flags the record; the account and its history remain. Restoring is done through the backend's restore action (part of the bulk operations), which reactivates the driver and clears the deleted flag.</p>
 
-      <h4>Can I recover a driver I removed?</h4>
-      <p>Yes — soft-delete only marks the record; it is not erased. An admin can restore it (the bulk endpoint offers a <b>restore</b> action), which brings the driver and their history back.</p>
+      <h4>Why is a driver's capacity 45 when I never set it?</h4>
+      <p>45 bottles is the default per-executive capacity. It applies until you set a specific number in the Manage drawer, at which point your value (1–10,000) is saved to that driver's Delivery Capacity.</p>
+
     </div>
   </div>
 

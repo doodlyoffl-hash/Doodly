@@ -1,0 +1,143 @@
+<section class="sheet" id="driver-cash">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Delivery Executive · Cash Collection</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Delivery Executive</span></div>
+  <h2 class="section-title">Cash Collection</h2>
+  <p class="lead">A read-only, self-service view that totals the cash-on-delivery (COD) a delivery executive has collected on today's route, so they can reconcile and hand it in at the hub.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — whose screen this is</div><p>Cash Collection lives in the <b>driver portal</b>, not the admin console. It shows one executive their own numbers only. The data endpoint refuses anyone who does not have a Driver profile linked to their account (<code>"No delivery profile is linked to this account."</code>). A Super Admin reads this section to understand the driver's daily cash workflow and to oversee reconciliation from <span class="navpath">Admin → Operations → Delivery Mgmt</span>; they do not personally use this screen.</p></div></div>
+
+  <!-- ============================ SCREEN 1 ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Cash Collection (today)</p><p class="sm">Live COD summary for the signed-in executive.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Show how much cash was collected today, on how many stops, and list each cash payment so the executive can match it against the physical cash before handing it over at the hub.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Delivery Executive</span> (own route only) · viewable for oversight by <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Manager</span></span>
+      <span class="m"><b>Path</b> <span class="navpath">Driver → Tasks → Cash Collection</span></span>
+    </div>
+    <div class="spec-meta"><span class="m"><b>Data</b> <code>GET /api/driver/route</code> (the driver's own stops) → filtered to today, sorted by stop sequence.</span> <span class="m"><b>Money unit</b> stored as <b>paise</b> on <code>Delivery.cashCollected</code>; displayed as rounded rupees (₹).</span></div>
+
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Cash Collection</b> · "Cash collected on today's route."</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Sign-in gate</b><span>State gate — must be signed in as an executive with a Driver profile, else a sign-in prompt.</span></div>
+          <div class="wf-cell"><b>Empty state (no stops)</b><span>"No deliveries today — No cash to collect." shown when the executive has no stops dated today.</span></div>
+          <div class="wf-cell"><b>Stat card — Cash collected today</b><span>Sum of cash across all of today's stops, in ₹.</span></div>
+          <div class="wf-cell"><b>Stat card — Cash payments</b><span>Count of today's stops where cash &gt; 0.</span></div>
+          <div class="wf-cell"><b>COD table</b><span>One row per cash-paying stop: #, Customer, Cash, Status.</span></div>
+          <div class="wf-cell"><b>Empty state (no cash)</b><span>"No cash collected yet — Most stops are prepaid…" when there are stops but none took cash.</span></div>
+          <div class="wf-cell"><b>Footer note</b><span>"Record cash when you mark a stop delivered on the route." with a link to Today's Route.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the Cash Collection screen (delivery portal).</div></div>
+
+      <h4>KPIs / stat cards on this screen</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Stat</th><th>What it measures</th><th>How it is computed</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Cash collected today</b></td><td>Total physical cash the executive is holding from today's deliveries.</td><td>Sum of <code>cashCollected</code> (paise) across every stop dated today, formatted to ₹ (rounded).</td><td>₹1,540</td></tr>
+          <tr><td><b>Cash payments</b></td><td>How many of today's stops actually took cash.</td><td>Count of today's stops where <code>cashCollected &gt; 0</code>.</td><td>8</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Static preview build shows a fixed KPI strip</div><p>In the static preview/marketing build, this route is rendered from a fixed recipe and shows four demo tiles — <b>Expected</b> (₹2,140), <b>Collected</b> (₹1,540), <b>Remaining</b> (₹600) and <b>COD stops</b> (8) — plus the notice "Hand over collected cash at the hub at end of route. Reconciliation is automatic against delivered COD stops." Those are placeholder figures. The live delivery app computes the two real stat cards above from the executive's actual stops.</p></div></div>
+
+      <h4>COD table</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Property</th><th>Behaviour (from the real component)</th></tr></thead>
+        <tbody>
+          <tr><td><b>Columns</b></td><td><code>#</code> (stop sequence), <b>Customer</b> (name), <b>Cash</b> (₹ collected), <b>Status</b> (delivery status pill).</td></tr>
+          <tr><td><b>Rows shown</b></td><td>Only today's stops whose <code>cashCollected &gt; 0</code>. Prepaid / zero-cash stops are hidden.</td></tr>
+          <tr><td><b>Sorting</b></td><td>Fixed — by stop <b>sequence</b> ascending (route order). No column-click sorting.</td></tr>
+          <tr><td><b>Search / filters / pagination</b></td><td>None. It is a short, single-day list scoped to one executive.</td></tr>
+          <tr><td><b>Row actions</b></td><td>None — read-only. Cash is edited on the Route screen, not here.</td></tr>
+          <tr><td><b>Status pill</b></td><td>Reflects the delivery's status; cash rows are typically <code>DELIVERED</code> because cash is captured at the moment a stop is marked delivered.</td></tr>
+          <tr><td><b>Empty behaviour</b></td><td>No stops today → "No deliveries today". Stops but no cash → "No cash collected yet".</td></tr>
+          <tr><td><b>Exports</b></td><td>None on the driver screen. Cash figures roll up to admin reporting.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip — why the total may exceed the visible rows' sum on a busy day</div><p>The <b>Cash collected today</b> stat sums cash across <i>all</i> of today's stops, while the table lists only stops with cash. In normal operation these agree, because a stop only has cash after it is delivered. If you ever see a mismatch, refresh — a stop was likely just updated on the Route screen.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================ SCREEN 2 ============================ -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Where cash is recorded — "Mark delivered" form</p><p class="sm">The upstream step that feeds every number on the Cash Collection screen.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Capture the cash taken at the door for one stop. Cash is never typed on the Cash Collection screen itself — it is entered here when the executive confirms a delivery, then aggregated onto Cash Collection.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Delivery Executive</span> (only their own assigned stops)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Driver → Today → Today's Route → (stop) → Mark delivered</span></span>
+    </div>
+    <div class="spec-meta"><span class="m"><b>Writes</b> <code>PATCH /api/driver/deliveries/{id}</code> → updates <code>Delivery.cashCollected</code>, <code>bottlesIn</code>, <code>customerRemark</code>, stamps <code>deliveredAt</code>, writes the bottle ledger, and audits the action.</span></div>
+
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Stop card — <b>Customer · address · items</b> · Navigate / Call / WhatsApp</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Workflow buttons</b><span>Start delivery → Mark reached → Mark delivered · Couldn't deliver.</span></div>
+          <div class="wf-cell"><b>Empties collected</b><span>Number of returned empty bottles (defaults to the stop's bottle count).</span></div>
+          <div class="wf-cell"><b>Cash collected (₹)</b><span>The COD amount taken at the door — this is what lands on Cash Collection.</span></div>
+          <div class="wf-cell"><b>Remark</b><span>Optional free-text note, e.g. "Left at door".</span></div>
+          <div class="wf-cell"><b>Confirm delivered</b><span>Saves the form, marks the stop DELIVERED and posts the ledger.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the "Mark delivered" panel on the Route screen; the Cash field feeds Cash Collection.</div></div>
+
+      <h4>Fields — "Mark delivered" panel</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Empties collected</td><td>How many empty glass bottles were picked up at this stop.</td><td>Whole number 0–99</td><td class="t-opt">Opt.</td><td>Server: integer, min 0, max 99. Defaults to the stop's bottle count in the form. Posts a <code>RETURNED</code> bottle-ledger row on delivery.</td><td>2</td></tr>
+          <tr><td>Cash collected (₹)</td><td>Rupee amount of cash taken at the door for a COD order.</td><td>Number ≥ 0 (up to 2 decimals in the input)</td><td class="t-opt">Opt.</td><td>Input rupees are converted to <b>paise</b> (<code>round(₹ × 100)</code>) and stored on <code>Delivery.cashCollected</code>. Server: integer, min 0. Blank = 0 (prepaid).</td><td>70</td></tr>
+          <tr><td>Remark</td><td>Optional delivery note visible to admin/customer service.</td><td>Free text</td><td class="t-opt">Opt.</td><td>Server: trimmed, max 200 characters. Saved to <code>customerRemark</code>.</td><td>Left with guard</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Buttons / actions</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td>Start delivery</td><td>Moves a scheduled/assigned/accepted/packed stop to <b>Out for delivery</b>.</td><td><code>PATCH /api/driver/deliveries/{id}</code> with <code>status: OUT_FOR_DELIVERY</code>.</td><td><span class="pill role">Delivery Executive</span></td></tr>
+          <tr><td>Mark reached</td><td>Marks arrival at the doorstep (from Out-for-delivery / On-the-way).</td><td><code>PATCH …</code> <code>status: REACHED</code>.</td><td><span class="pill role">Delivery Executive</span></td></tr>
+          <tr><td>Mark delivered</td><td>Opens the proof form with Empties, <b>Cash collected</b> and Remark.</td><td>Reveals the form; no write until confirmed.</td><td><span class="pill role">Delivery Executive</span></td></tr>
+          <tr><td>Confirm delivered</td><td>Saves cash + empties + remark and completes the stop.</td><td><code>PATCH …</code> <code>status: DELIVERED</code>, <code>cashCollected</code> (paise), <code>bottlesIn</code>, <code>customerRemark</code>; stamps <code>deliveredAt</code>; writes ISSUED/RETURNED bottle-ledger; best-effort loyalty points; audit <code>delivery.delivered</code>.</td><td><span class="pill role">Delivery Executive</span></td></tr>
+          <tr><td>Couldn't deliver</td><td>Marks the stop <b>Failed</b> (no cash captured).</td><td><code>PATCH …</code> <code>status: FAILED</code>.</td><td><span class="pill role">Delivery Executive</span></td></tr>
+          <tr><td>Navigate / Call / WhatsApp</td><td>Opens Google Maps directions, a phone dial, or WhatsApp chat for the stop.</td><td>Client-side deep links only (no write).</td><td><span class="pill role">Delivery Executive</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — cash from door to hub</div>
+        <div class="wf-flow"><span>Deliver stop</span><span>Enter Cash collected (₹)</span><span>Confirm delivered → stored as paise</span><span>Aggregated onto Cash Collection</span><span>Reconcile against physical cash</span><span>Hand over at hub</span></div>
+      </div><div class="wire-cap">Figure — end-to-end COD reconciliation path.</div></div>
+
+      <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — cash can't be edited from the driver app once delivered</div><p>After a stop is marked <code>DELIVERED</code>, the stop card switches to a read-only summary ("✓ Delivered … · ₹70 cash") and the cash field disappears. The executive cannot re-open it to correct a wrong amount. A mistake must be fixed by an Admin/Super Admin on the delivery record. Enter the exact amount before tapping <b>Confirm delivered</b>.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================ GUIDANCE ============================ -->
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice — daily hub reconciliation</div><p>At the end of every route, open Cash Collection, read the <b>Cash collected today</b> total, and count the physical notes to match it before you hand cash to the hub. Because most orders are prepaid, the <b>Cash payments</b> count should equal the number of COD stops on your route — if it is lower, a COD stop was delivered with the cash field left blank; report it so Admin can correct the record.</p></div></div>
+
+  <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — blank cash field defaults to ₹0</div><p>Leaving the Cash collected field empty on a COD stop records ₹0, not the amount owed. The order is not held or flagged for this. Always type the amount on cash orders; only leave it blank for genuinely prepaid deliveries.</p></div></div>
+
+  <h4>Troubleshooting</h4>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>"No delivery profile is linked to this account."</td><td>The signed-in user has no Driver record.</td><td>Super Admin adds/links the executive under <span class="navpath">Admin → Operations → Drivers</span> so a Driver profile exists.</td></tr>
+      <tr><td>"No deliveries today"</td><td>No stops dated today are assigned to this driver.</td><td>Confirm today's route was generated and assigned (Delivery Mgmt / Auto Assignment). It reads only stops with today's date.</td></tr>
+      <tr><td>Cash total looks too low</td><td>A COD stop was confirmed with the cash field blank (₹0).</td><td>Identify the stop; have Admin correct <code>cashCollected</code> on the delivery record.</td></tr>
+      <tr><td>Collected an amount but stop not in the table</td><td>The stop isn't dated today, or cash was recorded as 0.</td><td>Only today's stops with cash &gt; 0 appear. Check the stop on Today's Route.</td></tr>
+      <tr><td>Wrong amount recorded and field is gone</td><td>Stop already marked DELIVERED — driver UI is read-only after that.</td><td>Admin/Super Admin edits the delivery's cash on the backend record.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Frequently asked questions</h4>
+  <h4>Q: Do I type cash amounts on the Cash Collection screen?</h4>
+  <p>No. Cash Collection is read-only. You enter cash on the <b>Route</b> screen in the "Mark delivered" form; it then rolls up here automatically.</p>
+  <h4>Q: Why is the amount stored in paise?</h4>
+  <p>All money in DOODLY is stored as integer paise to avoid rounding errors. The rupees you type are multiplied by 100 on save, and the screen divides back and rounds to whole rupees for display.</p>
+  <h4>Q: Where does the cash physically go?</h4>
+  <p>You hand collected cash to the hub at the end of the route. The app's job is reconciliation — matching your counted cash to the recorded total against delivered COD stops.</p>
+  <h4>Q: Can a Super Admin see a driver's cash?</h4>
+  <p>Not on this driver-only screen. Super Admin oversight of delivered stops, cash and reconciliation is done through the admin Delivery Management module, which reads the same <code>Delivery</code> records.</p>
+</section>

@@ -1,0 +1,204 @@
+<section class="sheet" id="driver-deliveries">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Delivery Executive · Deliveries &amp; Delivery Detail</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Delivery Executive</span></div>
+  <h2 class="section-title">Deliveries &amp; Delivery Detail</h2>
+  <p class="lead">The delivery executive's working list of today's stops and the per-stop screen where each delivery is marked, bottles are counted, proof is captured and problems are reported — the last mile of every DOODLY order.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where this lives in the product</div><p>DOODLY ships two views of the same work. The <b>Deliveries</b> list and <b>Delivery Detail</b> screens documented here are the executive-facing pages (route keys <code>driver/deliveries</code> and <code>driver/delivery</code>). The functional field app the executive actually taps through on their phone is the <b>Delivery Executive Portal</b> (<code>DOODLY_DELIVERY</code>), which renders the very same stops as interactive cards and writes every action to the live backend. Both are described below so a new employee understands the screen they see <em>and</em> the record it creates.</p></div></div>
+
+  <!-- ================= SCREEN 1 — DELIVERIES LIST ================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Deliveries — today's stops</p><p class="sm">The ordered list of every stop on the executive's assigned route, with live status.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the executive one scannable list of who to deliver to, in what sequence, with the item, the payment type and whether each stop is still Pending or already Delivered.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Delivery Executive</span> — an executive only ever sees their <em>own</em> route</span>
+      <span class="m"><b>Path</b> <span class="navpath">Driver → Today → Deliveries</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Deliveries</b> · "Mark each stop as you go."</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Toolbar</b><span>Search box, Filters button, Export ▾ (CSV / Excel / PDF)</span></div>
+          <div class="wf-cell"><b>Quick filters</b><span>All · Pending · Delivered chips</span></div>
+          <div class="wf-cell"><b>Stops table</b><span>Columns: # · Customer · Address · Item · Payment · Status</span></div>
+          <div class="wf-cell"><b>Status badge</b><span>Delivered (green) · Next stop (amber) · Pending (grey)</span></div>
+          <div class="wf-cell"><b>Pagination</b><span>Page size 25, removable filter chips, saved view persists</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 1 — labelled layout of the Deliveries list screen</div></div>
+
+      <p>The list is powered by the shared DOODLY DataTable engine, so it is never a static table: it supports instant search, multi-column sort, auto-detected facet filters, a date range, saved views, favorites, CSV / Excel / PDF export and pagination. The active view (search text, filters, sort, page size) is remembered per user, so it survives a reload or navigating away and back.</p>
+
+      <p class="tbl-cap"><b>Table 1 — Column reference</b> (dataset <code>driverStops</code>)</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>What it shows</th><th>Source / notes</th></tr></thead>
+        <tbody>
+          <tr><td><b>#</b></td><td>Stop sequence number on the route</td><td><code>sequence</code> on the Delivery — the order the executive should drive the stops</td></tr>
+          <tr><td><b>Customer</b></td><td>The person to meet at the door</td><td>Address contact name if set, else the account holder's name</td></tr>
+          <tr><td><b>Address</b></td><td>Delivery address line</td><td>House / building / area / pincode assembled from the saved Address</td></tr>
+          <tr><td><b>Item</b></td><td>Product and pack size for this stop</td><td>e.g. "1000 ml", "500 ml" — the subscription / order line item</td></tr>
+          <tr><td><b>Payment</b></td><td>How the stop is paid</td><td><b>Prepaid / Paid</b> or <b>COD ₹&lt;amount&gt;</b> when it is a cash order</td></tr>
+          <tr><td><b>Status</b></td><td>Where the stop is in the flow</td><td>Delivered · Next stop · Pending (colour-coded badge)</td></tr>
+        </tbody>
+      </table></div>
+
+      <p class="tbl-cap"><b>Table 2 — List controls</b></p>
+      <div class="twrap"><table>
+        <thead><tr><th>Control</th><th>What it does</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td><b>Search</b></td><td>Filters stops as you type</td><td>Matches customer, address, item, payment; placeholder "Search today's stops…"</td></tr>
+          <tr><td><b>Filters — All / Pending / Delivered</b></td><td>Quick status filter</td><td>Configured filter set for this screen; "All" clears the status filter</td></tr>
+          <tr><td><b>Facet filters</b></td><td>Auto-built from the data</td><td>Payment and Status become one-click facets when 2–14 distinct values exist</td></tr>
+          <tr><td><b>Sort</b></td><td>Order by any column</td><td>Click a header; multi-column sort supported</td></tr>
+          <tr><td><b>Export ▾</b></td><td>Download the current view</td><td>CSV (.csv), Excel (.xls) or PDF; respects the export permission where enforced</td></tr>
+          <tr><td><b>Pagination</b></td><td>Pages long routes</td><td>25 rows per page by default; removable filter chips above the table</td></tr>
+          <tr><td><b>Row → open stop</b></td><td>Opens the Delivery Detail screen</td><td>Tapping a stop drills into its detail / stop card (Screen 2)</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Tip</div><p>Use the <b>Pending</b> filter the moment you start driving — it hides everything you've already delivered so the top row is always your next stop.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ================= SCREEN 2 — DELIVERY DETAIL ================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Delivery Detail — confirm a stop</p><p class="sm">The single-stop screen: confirm the delivery and record the empties collected.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Let the executive finish one stop — verify the order and payment, confirm the milk was handed over, count returned bottles, add a remark and attach proof.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Delivery Executive</span> — only for a stop on this executive's own route</span>
+      <span class="m"><b>Path</b> <span class="navpath">Driver → Deliveries → (open a stop)</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Stop 3 · Priya N.</b> · "Flat 304, My Home Avatar, Narsingi"</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Panel · Confirm delivery</b><span>Item (500 ml × 1), Payment (₹70 COD), delivery-OTP entry, "Confirm delivered" button</span></div>
+          <div class="wf-cell"><b>Panel · Bottles &amp; remarks</b><span>Empties to collect, "Collected empty bottle" checkbox, Remarks box, "Capture proof photo" button</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 2 — labelled layout of the Delivery Detail screen (two panels)</div></div>
+
+      <p>The detail screen puts the two decisions the executive must make side by side: <b>did the milk get delivered</b> (left panel) and <b>what came back / anything to note</b> (right panel).</p>
+
+      <p class="tbl-cap"><b>Table 3 — Delivery Detail fields</b></p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Item (read-only)</td><td>Confirms what to hand over</td><td>Pack size × quantity</td><td class="t-opt">Read</td><td>From the subscription / order line item</td><td>500 ml × 1</td></tr>
+          <tr><td>Payment (read-only)</td><td>Whether to collect cash</td><td>Paid / COD ₹amount</td><td class="t-opt">Read</td><td>COD shown only for cash orders still pending</td><td>₹70 COD</td></tr>
+          <tr><td>Delivery OTP</td><td>Verifies handover to the right person</td><td>4-digit code</td><td class="t-opt">Opt.</td><td>Design element on this screen; the live app finalizes via the confirm sheet (see below)</td><td>4 2 9 1</td></tr>
+          <tr><td>Collected empty bottle</td><td>Marks that empties were picked up</td><td>Checkbox</td><td class="t-opt">Opt.</td><td>Feeds the bottle count written to the ledger on delivery</td><td>☑</td></tr>
+          <tr><td>Remarks</td><td>Free note about the drop</td><td>Short text</td><td class="t-opt">Opt.</td><td>Saved as <code>customerRemark</code>; max 400 characters via the API</td><td>"left with guard"</td></tr>
+        </tbody>
+      </table></div>
+
+      <p class="tbl-cap"><b>Table 4 — Delivery Detail buttons</b></p>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Confirm delivered</b></td><td>Marks this stop Delivered</td><td>POST <code>/api/delivery/stop/&lt;id&gt;</code> <code>action:"deliver"</code> → sets DELIVERED + <code>deliveredAt</code>, writes <code>bottlesIn</code>, posts the customer's bottle ledger and sends the "delivered" notification</td><td><span class="pill role">Delivery Executive</span>+</td></tr>
+          <tr><td><b>Capture proof photo</b></td><td>Attaches a proof-of-delivery image</td><td>Opens the camera (capture); the photo rides along with the confirm-delivery step</td><td><span class="pill role">Delivery Executive</span>+</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Note — how the live app confirms a delivery</div><p>In the production executive app, tapping <b>Mark delivered</b> opens a confirm sheet with three inputs: an optional <b>proof-of-delivery photo</b> (camera), an <b>empty-bottles collected</b> counter (0 … expected), and an optional <b>delivery-notes</b> box. Submitting posts <code>action:"deliver"</code> to the stop API. This is the real path that writes DELIVERED, so proof and the empties count are captured there.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ================= SCREEN 3 — LIVE STOP CARD ================= -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Stop card — the live executive app</p><p class="sm">The interactive card the executive works through on the road, backed by the live route API.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> The functional field screen: contact the customer, navigate, progress the status through the four stages, count bottles and report an issue — every tap syncing to the DOODLY backend.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Delivery Executive</span> — hard-scoped to the signed-in executive's route</span>
+      <span class="m"><b>Path</b> <span class="navpath">Delivery → Today → My Route</span></span></div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Good morning, {name}</b> · route · date · stop count · Availability pill · Live badge</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Summary KPIs</b><span>Assigned · Completed · Pending · Remaining stops · Bottles to collect · Distance left (km)</span></div>
+          <div class="wf-cell"><b>Route map + buttons</b><span>Start route · Open navigation · Refresh route</span></div>
+          <div class="wf-cell"><b>Stop card — header</b><span>Sequence, name, plan + bottle count, Paid / COD badge</span></div>
+          <div class="wf-cell"><b>Stop card — address</b><span>House/building/floor, street/area/pincode, landmark, block/wing/gate/door colour, delivery instruction</span></div>
+          <div class="wf-cell"><b>Stage stepper</b><span>Assigned → On the way → Reached → Delivered</span></div>
+          <div class="wf-cell"><b>Bottles row</b><span>Expected · collected · pending, with − / + counter</span></div>
+          <div class="wf-cell"><b>Contact row</b><span>Call · WhatsApp · SMS</span></div>
+          <div class="wf-cell"><b>Action row</b><span>Navigate (Walking/Bike/Scooter/Car) · Next stage / Mark delivered · Report issue</span></div>
+        </div>
+      </div><div class="wire-cap">Figure 3 — labelled layout of one interactive stop card in the live portal</div></div>
+
+      <p>The card fetches the executive's real route from <code>GET /api/delivery/my-route</code>. That route is scoped hard on the server: the role must be delivery executive (or a super admin testing), and only deliveries assigned to <em>their</em> driver record are returned. It defaults to today and, if today has no assignments, falls back to the most recent day that does, so the app always shows real work.</p>
+
+      <p class="tbl-cap"><b>Table 5 — Stop card actions</b></p>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Start route</b></td><td>Flips every "Assigned" stop to "On the way" and starts live GPS reporting</td><td>Per stop: <code>action:"status" status:"onway"</code>; begins pinging <code>/api/delivery/location</code> every ~30s</td><td><span class="pill role">Delivery Executive</span>+</td></tr>
+          <tr><td><b>Open navigation</b></td><td>Opens turn-by-turn to the next undelivered stop</td><td>Builds a Google Maps navigation URL from the stop's lat/lng</td><td><span class="pill role">Delivery Executive</span>+</td></tr>
+          <tr><td><b>Refresh route</b></td><td>Re-renders the list from current state</td><td>No write; re-reads local + live state</td><td><span class="pill role">Delivery Executive</span>+</td></tr>
+          <tr><td><b>Call / WhatsApp / SMS</b></td><td>Contacts the door contact</td><td>Native <code>tel:</code> / <code>wa.me</code> / <code>sms:</code> links — no server call</td><td><span class="pill role">Delivery Executive</span>+</td></tr>
+          <tr><td><b>Navigate (per stop)</b></td><td>Reveals Walking / Bike / Scooter / Car map links</td><td>Google Maps URL per travel mode from the stop's coordinates</td><td><span class="pill role">Delivery Executive</span>+</td></tr>
+          <tr><td><b>− / + bottles</b></td><td>Counts empties picked up</td><td>Clamped 0 … expected; saved locally, written on delivery</td><td><span class="pill role">Delivery Executive</span>+</td></tr>
+          <tr><td><b>On the way → Reached</b></td><td>Advances the delivery stage</td><td><code>action:"status"</code>; first "On the way" flip triggers the customer "out for delivery" notification</td><td><span class="pill role">Delivery Executive</span>+</td></tr>
+          <tr><td><b>Mark delivered</b></td><td>Completes the stop via the confirm sheet</td><td><code>action:"deliver"</code> → DELIVERED, <code>deliveredAt</code>, <code>bottlesIn</code>, remark, bottle ledger, "delivered" notification, audit</td><td><span class="pill role">Delivery Executive</span>+</td></tr>
+          <tr><td><b>Report issue</b></td><td>Raises a delivery problem to ops</td><td><code>action:"issue"</code> → creates a DeliveryIssue with type + priority + comments, audited</td><td><span class="pill role">Delivery Executive</span>+</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — one stop, start to finish</div>
+        <div class="wf-flow"><span>Assigned</span><span>Start route → On the way</span><span>Reached</span><span>Confirm sheet: photo · empties · notes</span><span>Mark delivered</span><span>Ledger + notify + audit</span></div>
+      </div><div class="wire-cap">Figure 4 — the four-stage delivery workflow and what completing it writes</div></div>
+
+      <p class="tbl-cap"><b>Table 6 — Stop-update request (POST <code>/api/delivery/stop/&lt;id&gt;</code>)</b></p>
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>action</td><td>Which update this is</td><td>status · deliver · issue</td><td class="t-req">Yes</td><td>Rejected if not one of the three</td><td>deliver</td></tr>
+          <tr><td>status</td><td>Advance the stage (action=status)</td><td>onway · reached</td><td class="t-opt">Cond.</td><td>Maps to ON_THE_WAY / REACHED</td><td>onway</td></tr>
+          <tr><td>bottles</td><td>Empties collected (action=deliver)</td><td>Integer 0–50</td><td class="t-opt">Opt.</td><td>&gt;0 writes a RETURNED bottle-ledger entry for the customer</td><td>2</td></tr>
+          <tr><td>notes</td><td>Delivery remark (action=deliver)</td><td>Text ≤ 400 chars</td><td class="t-opt">Opt.</td><td>Saved as <code>customerRemark</code></td><td>Left with guard</td></tr>
+          <tr><td>issueType</td><td>Kind of problem (action=issue)</td><td>Customer unavailable · Wrong address · Damaged bottle · Payment issue · Product issue · Delivery failed</td><td class="t-opt">Cond.</td><td>Mapped to the DeliveryIssue enum; unknown → DELIVERY_FAILED</td><td>Wrong address</td></tr>
+          <tr><td>priority</td><td>Issue urgency (action=issue)</td><td>Low · Medium · High</td><td class="t-opt">Opt.</td><td>Defaults to Medium</td><td>High</td></tr>
+          <tr><td>comments</td><td>Issue detail (action=issue)</td><td>Text ≤ 500 chars</td><td class="t-opt">Opt.</td><td>Stored on the DeliveryIssue</td><td>Gate locked, no answer</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Live location &amp; availability</div><p>While a route is running, the app reports GPS to <code>POST /api/delivery/location</code> every ~30 seconds (updating the driver's last-seen position for the admin route view and the customer's tracking map) and stops once every stop is Delivered. The availability pill toggles the executive's shift via <code>/api/driver/availability</code> — <b>Available</b> ↔ <b>Offline</b>. Only Available executives receive new auto-assignments, and an executive mid-trip cannot go offline until they finish or return to the dairy.</p></div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best Practice</div><p>Progress the stage honestly in real time — tap <b>On the way</b> when you leave for the stop and <b>Reached</b> when you arrive. The first "On the way" flip is what tells the customer their milk is coming, and the timestamps feed late-delivery monitoring against the 7:00 AM promise. Skipping straight to "Delivered" hides the trip from the people tracking it.</p></div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Warning — count the empties before you confirm</div><p>The bottle count you enter on the confirm sheet is written to the customer's bottle ledger as RETURNED and can affect their refundable deposit. Get it right before tapping <b>Mark delivered</b> — a delivered stop is completed and re-submitting does not change the recorded count.</p></div></div>
+
+    </div>
+  </div>
+
+  <!-- ================= TROUBLESHOOTING ================= -->
+  <h3 class="sub">Troubleshooting</h3>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>"No deliveries assigned for today"</td><td>No route has been assigned to this executive yet, or today has no stops</td><td>Wait for ops to assign a route; the app auto-falls back to the most recent assigned day if today is empty</td></tr>
+      <tr><td>Stops load but belong to someone else / a 403 on an action</td><td>The stop isn't on this executive's route</td><td>Only your own route is returned; open your own list — a stop off your route is rejected server-side</td></tr>
+      <tr><td>Cannot end the shift / availability won't turn off</td><td>An active trip is in progress (Assigned / Accepted / Out for delivery)</td><td>Finish the deliveries or mark returned to dairy, then toggle Availability</td></tr>
+      <tr><td>"Delivered" did not change the customer's bottle balance</td><td>The empties counter was left at 0, or the stop was already Delivered</td><td>Set the count on the confirm sheet before submitting; a stop can only post its ledger the first time it is delivered</td></tr>
+      <tr><td>Customer isn't getting the tracking / "on the way" alert</td><td>The stage was jumped straight to Delivered, so the first "On the way" flip never fired</td><td>Advance stages in order; the out-for-delivery notification sends on the first move to On the way</td></tr>
+      <tr><td>Navigation opens the wrong or no location</td><td>The address has no saved coordinates</td><td>Use the on-screen address / call the customer; ask ops to geocode the address for future runs</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- ================= FAQ ================= -->
+  <h3 class="sub">Frequently asked questions</h3>
+  <h4>Can I see yesterday's or another executive's deliveries here?</h4>
+  <p>You only ever see your <em>own</em> route. Today is the default; if today has nothing assigned, the app shows your most recent assigned day (marked as such) so the screen is never empty. Completed past days live under the separate History screen.</p>
+
+  <h4>What happens to the empty bottles I collect?</h4>
+  <p>The count you enter when confirming a delivery is written to that customer's bottle ledger as a RETURNED entry, which keeps their bottle balance and refundable deposit accurate. Bottles handed over are recorded as ISSUED.</p>
+
+  <h4>Do I have to enter the delivery OTP to complete a stop?</h4>
+  <p>The OTP box is a verification aid on the detail screen. In the live app, a stop is completed through the confirm sheet (optional proof photo, empties count, notes), which is what actually posts the delivery to the backend.</p>
+
+  <h4>What does "Report issue" do?</h4>
+  <p>It raises a delivery problem to operations — you pick a type (customer unavailable, wrong address, damaged bottle, payment issue, product issue, delivery failed), a priority and optional comments. It creates an auditable DeliveryIssue record so ops can follow up; the stop stays open.</p>
+
+  <div class="call danger"><span class="ci">⛔</span><div class="cbody"><div class="ctitle">Caution — Delivered is a committed record</div><p>Marking a stop Delivered stamps the time, writes the bottle ledger, notifies the customer and audits the action. It cannot be quietly undone from the field app — if you tapped it by mistake, tell ops so a supervisor can correct it in the admin Delivery Management screen.</p></div></div>
+
+</section>

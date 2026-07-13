@@ -1,0 +1,249 @@
+<section class="sheet" id="admin-reviews">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Growth · Customer Reviews</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Growth</span></div>
+  <h2 class="section-title">Customer Reviews</h2>
+  <p class="lead">See every product rating (1–5★) customers submit, moderate them one by one — approve, reject, hide, feature or reply — and rely on a hard server-side gate that lets <b>only approved, verified, 5★</b> reviews ever appear on the public website, with every action written to the audit trail.</p>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">One page, one moderation module</div><p>The whole module lives at one screen (<span class="navpath">/admin/reviews.html</span>, block type <code>reviewsAdmin</code>, mount <code>#reviewsAdminMount</code>, rendered by <code>assets/js/reviews.js</code> → <code>DOODLY_REVIEWS.mountAdmin</code>). It loads two calls in parallel — <code>GET /api/admin/reviews?view=analytics</code> and <code>GET /api/admin/reviews?view=list</code> — then paints a KPI strip and a single "All reviews" table with filters, search, per-row moderation buttons and a CSV export. Each part is documented below as its own screen.</p></div></div>
+
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">The public site is protected by policy, not by trust</div><p>Nothing you do in this module can accidentally leak an unfit review onto the storefront. The public feed (<code>GET /api/reviews/public</code>) hard-filters on the server to <code>status = APPROVED</code> <b>and</b> <code>rating = 5</code> <b>and</b> a linked delivered order (<code>orderId</code> set = verified purchase). Pending, rejected, hidden, unverified, or 1–4★ reviews can never be shown publicly, no matter what. This module is for <em>quality monitoring of everything</em>; the storefront only ever sees your best, verified five-star feedback.</p></div></div>
+
+  <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where it sits in the menu</div><p>Although this manual groups Reviews under <b>Growth</b>, in the live admin sidebar the link appears under the <b>Content</b> section: <span class="navpath">Admin → Content → Reviews</span>. The paths below use that real location.</p></div></div>
+
+  <!-- ============================================================ SCREEN 1 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Reviews dashboard — KPI strip</p><p class="sm">Platform-wide rating health at a glance, across every review (not just the public ones).</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Show, at the top of the page, seven read-only totals computed across <em>all</em> reviews in the database — every rating, every status — so you can judge overall satisfaction and spot a run of low scores before you moderate a single row.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Support</span> — anyone with <code>support:view</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Reviews</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>Customer Reviews</b> · "All ratings (1–5★) for quality monitoring — only APPROVED 5★ verified reviews appear on the public site."</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Total reviews</b><span>Count of every review ever submitted</span></div>
+          <div class="wf-cell"><b>Average rating</b><span>Mean of all ratings, shown as "X.X ★"</span></div>
+          <div class="wf-cell"><b>5★ reviews</b><span>How many five-star ratings exist</span></div>
+          <div class="wf-cell"><b>4★ reviews</b><span>How many four-star ratings exist</span></div>
+          <div class="wf-cell"><b>3★ reviews</b><span>How many three-star ratings exist</span></div>
+          <div class="wf-cell"><b>2★ reviews</b><span>How many two-star ratings exist</span></div>
+          <div class="wf-cell"><b>1★ reviews</b><span>How many one-star ratings exist</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the seven KPI cards, drawn from <code>GET /api/admin/reviews?view=analytics</code></div></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>KPI card</th><th>What it counts</th><th>How it is calculated (backend)</th><th>Format</th>
+      </tr></thead><tbody>
+        <tr><td><b>Total reviews</b></td><td>Every review on the platform, all statuses</td><td><code>db.review.count()</code></td><td>Whole number (Indian grouping)</td></tr>
+        <tr><td><b>Average rating</b></td><td>Overall mean satisfaction across all reviews</td><td><code>_avg.rating</code> over every review, rounded to 2 decimals; the card prints one decimal + a star, e.g. "4.6 ★"</td><td>Decimal + ★</td></tr>
+        <tr><td><b>5★ reviews</b></td><td>Number of five-star ratings</td><td><code>groupBy rating</code> → the count where <code>rating = 5</code></td><td>Whole number</td></tr>
+        <tr><td><b>4★ reviews</b></td><td>Number of four-star ratings</td><td>count where <code>rating = 4</code></td><td>Whole number</td></tr>
+        <tr><td><b>3★ reviews</b></td><td>Number of three-star ratings</td><td>count where <code>rating = 3</code></td><td>Whole number</td></tr>
+        <tr><td><b>2★ reviews</b></td><td>Number of two-star ratings</td><td>count where <code>rating = 2</code></td><td>Whole number</td></tr>
+        <tr><td><b>1★ reviews</b></td><td>Number of one-star ratings</td><td>count where <code>rating = 1</code></td><td>Whole number</td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">These cards are read-only and count everything</div><p>There are no buttons on the KPI strip. The counts include <b>pending, rejected and hidden</b> reviews too — this is a quality-monitoring view of the raw feedback, deliberately wider than what the public sees. The strip refreshes whenever the module (re)loads, which happens after every moderation action.</p></div></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">More analytics exist in the response than the strip shows</div><p>The analytics endpoint also returns a <b>per-product</b> breakdown (<code>byProduct</code>: count and average per product), a <b>6-month trend</b> (<code>monthly</code>: count and average per calendar month), and a <b>reply count</b> (<code>replied</code>). The current screen renders the totals and the 1–5 distribution; the extra fields are available in the API for reporting.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 2 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">All reviews — list, filters &amp; search</p><p class="sm">Every review in one table, filterable by status and rating, searchable, exportable.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Browse and narrow the full review list, read each customer's rating and words, see its moderation status, and act on it. This is the working surface of the module.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> Read: <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Support</span> (<code>support:view</code>). The per-row action buttons appear only with <code>support:edit</code>; a view-only role sees "view" in the Actions column instead.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Reviews → All reviews</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Panel — <b>All reviews</b> · Status filter · Rating filter · Search box · <b>Export CSV</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Status filter</b><span>All statuses / Pending / Approved / Rejected / Hidden</span></div>
+          <div class="wf-cell"><b>Rating filter</b><span>All ratings / 5★ / 4★ / 3★ / 2★ / 1★</span></div>
+          <div class="wf-cell"><b>Search</b><span>"Search name, email, review…" (debounced)</span></div>
+          <div class="wf-cell"><b>Export CSV</b><span>Downloads the currently listed rows</span></div>
+          <div class="wf-cell"><b>Reviews table</b><span>Customer · Rating · Review · Product · Status · Featured · Date · Actions</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the All reviews panel: three filters, a search box, the export button and the data table</div></div>
+
+      <h4>Table columns</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Column</th><th>What it shows</th><th>Backend source</th>
+      </tr></thead><tbody>
+        <tr><td><b>Customer</b></td><td>The reviewer's name in bold, with their email (or phone, if no email) underneath. Shows "—" if the name is missing.</td><td><code>user.name</code>, <code>user.email</code> / <code>user.phone</code></td></tr>
+        <tr><td><b>Rating</b></td><td>The star rating drawn as filled stars (1–5).</td><td><code>rating</code> (integer 1–5)</td></tr>
+        <tr><td><b>Review</b></td><td>The optional headline in bold (trimmed to 60 chars) then the comment text (trimmed to 140 chars). If a staff reply exists it shows on a second line as "↳ …" (trimmed to 120).</td><td><code>title</code>, <code>comment</code>, <code>reply</code></td></tr>
+        <tr><td><b>Product</b></td><td>The product reviewed — the order label, falling back to the product slug, then "—" (trimmed to 40 chars).</td><td><code>target</code> → <code>productSlug</code></td></tr>
+        <tr><td><b>Status</b></td><td>A colour-coded badge: <b>Pending</b> (amber), <b>Approved</b> (green), <b>Rejected</b> (red), <b>Hidden</b> (grey).</td><td><code>status</code></td></tr>
+        <tr><td><b>Featured</b></td><td>A "★" when the review is featured (sorts first publicly), otherwise "—".</td><td><code>featured</code></td></tr>
+        <tr><td><b>Date</b></td><td>When the review was submitted, formatted as "12 Jul 2026".</td><td><code>createdAt</code></td></tr>
+        <tr><td><b>Actions</b></td><td>Moderation buttons (see Screen 3) with edit rights; the word "view" with read-only rights.</td><td>—</td></tr>
+      </tbody></table></div>
+
+      <h4>Filters, search, sorting &amp; export</h4>
+      <div class="twrap"><table><thead><tr>
+        <th>Aspect</th><th>Behaviour (from the real code)</th>
+      </tr></thead><tbody>
+        <tr><td><b>Status filter</b></td><td>Dropdown: <b>All statuses</b> (default) plus Pending, Approved, Rejected, Hidden. Changing it re-queries the server (<code>&amp;status=…</code>, upper-cased) and repaints only the table rows.</td></tr>
+        <tr><td><b>Rating filter</b></td><td>Dropdown: <b>All ratings</b> (default) plus 5★, 4★, 3★, 2★, 1★. Changing it re-queries with <code>&amp;rating=…</code>.</td></tr>
+        <tr><td><b>Search</b></td><td>One search box matching <b>customer name, email, review comment or title</b> (case-insensitive, server-side). Typing is debounced ~300&nbsp;ms and re-queries with <code>&amp;q=…</code>; only the rows repaint.</td></tr>
+        <tr><td><b>Filter persistence</b></td><td>The chosen status, rating and search text are held in memory (<code>_f</code>) and survive a full module reload — so after you approve a row the list comes back showing the same filtered view.</td></tr>
+        <tr><td><b>Sorting</b></td><td>Fixed: newest first (<code>createdAt</code> descending). There are no clickable column sorts.</td></tr>
+        <tr><td><b>Pagination</b></td><td>None. The list requests up to <b>200</b> rows (the server caps any request at 500). Narrow with the filters and search rather than paging.</td></tr>
+        <tr><td><b>Export</b></td><td><b>Export CSV</b> downloads the rows <em>currently listed</em> (i.e. after your filters/search) as <code>reviews-YYYY-MM-DD.csv</code> with columns: Date, Customer, Email, Rating, Title, Comment, Product, Status, Featured, Reply. A toast confirms how many rows were exported.</td></tr>
+        <tr><td><b>Empty state</b></td><td>"No reviews match." when nothing fits the current filters/search.</td></tr>
+        <tr><td><b>Offline / no access</b></td><td>"Backend offline — the reviews admin needs the DOODLY API." if the API is unreachable; "You don't have permission to view customer reviews." if your role lacks <code>support:view</code>.</td></tr>
+      </tbody></table></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Fast triage recipe</div><p>Set the Status filter to <b>Pending</b> and Rating to <b>5★</b> to see exactly the queue that could go public with one click — the approved-verified-5★ candidates. Then switch Rating to <b>1★</b>/<b>2★</b> to work the follow-up queue for unhappy customers. The Export button captures whatever slice you're looking at, so you can share a filtered batch with the team.</p></div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">The server exposes more filters than the screen</div><p>The list endpoint also accepts <code>productSlug</code> and a <code>from</code>/<code>to</code> date range. The current screen wires up status, rating and free-text search; the extra parameters are available for API-driven reporting.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 3 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Moderate a review — row actions</p><p class="sm">Approve, reject, hide, feature/unfeature — the per-row buttons that decide what the public sees.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Change a review's moderation status or its featured flag. Only <b>approved + verified + 5★</b> reviews reach the storefront, so approving is what publishes; rejecting/hiding removes; featuring pushes to the front of the public list.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Support</span> — requires <code>support:edit</code>. A role with only <code>support:view</code> sees the review but no action buttons.</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Reviews → All reviews → (row) Actions</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Row actions — <b>Approve</b> · <b>Reject</b> · <b>Hide</b> · <b>Feature / Unfeature</b> · <b>Reply</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Approve</b><span>Shown only when the review isn't already approved</span></div>
+          <div class="wf-cell"><b>Reject</b><span>Marks the review rejected and un-features it</span></div>
+          <div class="wf-cell"><b>Hide</b><span>Marks the review hidden and un-features it</span></div>
+          <div class="wf-cell"><b>Feature / Unfeature</b><span>Toggles the featured flag (label flips)</span></div>
+          <div class="wf-cell"><b>Reply</b><span>Opens the reply dialog (Screen 4)</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the moderation buttons that appear in each row's Actions cell</div></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Approve</b></td><td>Publishes the review to the moderation "approved" set. Only shown when the current status is <em>not</em> already Approved. Toast: "Review approved ✓".</td><td><code>POST /api/admin/reviews</code> <code>{action:"approve"}</code> → sets <code>status = APPROVED</code>, stamps <code>moderatedBy</code>/<code>moderatedAt</code>. If status changed, the product's public star average is recomputed. Audited <code>review.approve</code>.</td><td><span class="pill role">support:edit</span></td></tr>
+        <tr><td><b>Reject</b></td><td>Marks the review rejected and clears its featured flag. Toast: "Review rejected".</td><td><code>{action:"reject"}</code> → <code>status = REJECTED</code>, <code>featured = false</code>, stamped. Product average recomputed if status changed. Audited <code>review.reject</code>.</td><td><span class="pill role">support:edit</span></td></tr>
+        <tr><td><b>Hide</b></td><td>Marks the review hidden and clears its featured flag — used when a review isn't outright rejected but shouldn't display. Toast: "Review hidden".</td><td><code>{action:"hide"}</code> → <code>status = HIDDEN</code>, <code>featured = false</code>, stamped. Product average recomputed if status changed. Audited <code>review.hide</code>.</td><td><span class="pill role">support:edit</span></td></tr>
+        <tr><td><b>Feature</b> / <b>Unfeature</b></td><td>Toggles whether the review sorts first on the public site. The button label reflects the current state — "Feature" when it isn't, "Unfeature" when it is. Toasts: "Marked as featured ★" / "Removed from featured".</td><td><code>{action:"feature"}</code> / <code>{action:"unfeature"}</code> → sets <code>featured</code> true/false, stamped. Status is unchanged, so the product average is <em>not</em> recomputed. Audited <code>review.feature</code> / <code>review.unfeature</code>.</td><td><span class="pill role">support:edit</span></td></tr>
+        <tr><td><b>Reply</b></td><td>Opens the reply modal to write a message shown to the customer (see Screen 4).</td><td>No write until you send from the modal.</td><td><span class="pill role">support:edit</span></td></tr>
+      </tbody></table></div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — moderating one review</div>
+        <div class="wf-flow"><span>Filter to Pending</span><span>Read the rating &amp; text</span><span>Approve / Reject / Hide</span><span>Optionally Feature</span><span>Server stamps moderator + recomputes product average</span><span>Action audited</span><span>Module reloads, KPIs &amp; rows refresh</span></div>
+      </div><div class="wire-cap">Figure — end-to-end path of a single moderation decision</div></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">Approving a 1–4★ review does not put its text on the storefront — but it <em>does</em> move the star average</div><p>The public <em>testimonial cards</em> only ever show 5★ reviews. However, the numeric <b>product rating and 1–5 distribution</b> shown on a product page are computed over <b>all approved, verified reviews of any rating</b>. So if you approve a verified 3★ review, that product's displayed average will drop accordingly (the stored <code>Product.ratingValue</code>/<code>ratingCount</code> are recomputed automatically). Approve honestly — approval is what makes a rating "count" toward the public score, even when the words stay private.</p></div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Every action is stamped and audited</div><p>Each moderation writes a moderator stamp — the acting role and user id (<code>moderatedBy</code>) plus a timestamp (<code>moderatedAt</code>) — onto the review, and appends an audit record such as <code>review.approve</code> whose target reads "<code>&lt;id&gt; (PENDING → APPROVED)</code>". You can always see who changed a review, from which status to which, and when, in <span class="navpath">Admin → System → Audit Logs</span>.</p></div></div>
+
+      <div class="call tip"><span class="ci">💡</span><div class="cbody"><div class="ctitle">Reject vs. Hide</div><p>Both remove a review from public display and un-feature it. Use <b>Reject</b> for feedback you've decided is not acceptable (spam, abuse, off-topic). Use <b>Hide</b> to temporarily pull down a genuine review (for example while you follow up with the customer) with the intent to reconsider. The distinction is captured in the audit and lets you filter the two apart later.</p></div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Nothing here is permanently deleted</div><p>There is no delete button. Rejecting or hiding only changes a review's status; the record — and the customer's original words — is kept. This is deliberate: feedback is never destroyed, so a decision can always be reviewed or reversed by approving the review again.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ SCREEN 4 -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Reply to a review (modal)</p><p class="sm">Write a response the customer will see against their review.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Thank a happy customer or respond to a concern. The reply is stored on the review and is shown to the customer; it also appears as the "↳ …" line under the review in this table.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> <span class="pill role">Admin</span> <span class="pill role">Support</span> — requires <code>support:edit</code></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → Content → Reviews → All reviews → (row) Reply</span></span></div>
+    <div class="spec-body">
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Modal — <b>Reply to review — {customer name}</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Original review</b><span>The customer's comment quoted for context (up to 200 chars)</span></div>
+          <div class="wf-cell"><b>Reply</b><span>Textarea "Reply shown to the customer" (up to 1000 chars), pre-filled with any existing reply</span></div>
+          <div class="wf-cell"><b>Message</b><span>Inline validation / error line</span></div>
+          <div class="wf-cell"><b>Cancel / Send reply</b><span>Ghost + primary buttons</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the reply dialog opened from a row's Reply button</div></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th>
+      </tr></thead><tbody>
+        <tr><td>Reply</td><td>The message shown to the customer against their review</td><td>Text, 1–1000 characters</td><td class="t-req">Yes</td><td>Client rejects an empty reply ("Write a reply first."). Server (Zod) trims and enforces 1–1000 chars; stores it on <code>reply</code> and sets <code>repliedAt</code>.</td><td>Thank you so much, Priya — glad you loved the creaminess! 🥛</td></tr>
+      </tbody></table></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th>
+      </tr></thead><tbody>
+        <tr><td><b>Send reply</b></td><td>Saves the reply; shows "Sending…", then closes and reloads the module. Toast: "Reply saved ✓".</td><td><code>POST /api/admin/reviews</code> <code>{action:"reply", reviewId, reply}</code> → sets <code>reply</code> + <code>repliedAt</code>, stamps the moderator. Audited <code>review.reply</code>. Status is unchanged (a reply doesn't publish a review).</td><td><span class="pill role">support:edit</span></td></tr>
+        <tr><td><b>Cancel</b></td><td>Closes the dialog without saving. Clicking the dark overlay also closes it.</td><td>None.</td><td><span class="pill role">support:view</span></td></tr>
+      </tbody></table></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Editing an existing reply</div><p>Opening Reply on a review that already has a response pre-fills the box with the current text, so sending again <b>overwrites</b> it. There's no separate "delete reply" button; to remove a reply, you'd replace it with new text.</p></div></div>
+
+      <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">A reply is customer-facing — write it like a public statement</div><p>Because the reply is shown to the customer (and travels with the review), keep it warm, specific and on-brand. For a complaint, acknowledge the issue and say what you'll do — don't argue in the reply. Pair a reply with the right status decision (Hide while you resolve, then Approve if it's a genuine 5★).</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ REFERENCE: WHERE REVIEWS COME FROM -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">How a review is born (reference)</p><p class="sm">The customer-side flow that fills this queue — for context, not a screen you operate.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Understand where the reviews you moderate come from, why they're all "verified", and why some of them ping you with an alert — so your moderation decisions make sense end to end.</span></div>
+    <div class="spec-meta"><span class="m"><b>Access</b> <span class="pill role">Super Admin</span> reference</span>
+      <span class="m"><b>Path</b> <span class="navpath">Customer → My Orders → Rate (source), then Admin → Content → Reviews</span></span></div>
+    <div class="spec-body">
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — review lifecycle</div>
+        <div class="wf-flow"><span>Customer's order is PAID &amp; DELIVERED</span><span>They write a rating + words from My Orders</span><span>Server verifies ownership &amp; delivery → saves as PENDING</span><span>Loyalty points awarded once per order</span><span>1–2★ alerts admins/support</span><span>You moderate here (approve / reject / hide / feature / reply)</span><span>Approved + verified + 5★ → public site</span></div>
+      </div><div class="wire-cap">Figure — from a delivered order to a published (or moderated) review</div></div>
+
+      <div class="twrap"><table><thead><tr>
+        <th>Fact</th><th>Detail (from <code>/api/account/reviews</code>)</th>
+      </tr></thead><tbody>
+        <tr><td><b>Who can review</b></td><td>Only the customer who owns a <b>paid, not-cancelled, delivered</b> order. The server never trusts the client — it re-checks ownership, payment and delivery before saving.</td></tr>
+        <tr><td><b>Why "verified"</b></td><td>Each review is linked to the specific delivered order (<code>orderId</code>), which is <b>unique</b> — one review per order — so every review here is a verified purchase.</td></tr>
+        <tr><td><b>One per product</b></td><td>Buying the same product again does not grant a second public review slot; the customer edits their existing one instead.</td></tr>
+        <tr><td><b>What they submit</b></td><td>A rating (1–5, required), an optional title (≤120 chars) and an optional comment (≤1000 chars). It's saved as <b>PENDING</b> — nothing is public until you approve.</td></tr>
+        <tr><td><b>Loyalty tie-in</b></td><td>Submitting a verified review awards DOODLY Pure Rewards points once per delivered order (idempotent), per the loyalty config's "Verified review" rate.</td></tr>
+        <tr><td><b>Low-rating alert</b></td><td>A <b>1★ or 2★</b> review sends an in-app notification to active Admins, Super Admins and Support: "⚠️ X★ review needs follow-up … review it in Admin → Reviews." The feedback is never auto-deleted.</td></tr>
+        <tr><td><b>Customer edits</b></td><td>If a customer edits their own review, it is <b>reset to PENDING</b>, un-featured, its moderation stamp cleared, and the product's public average recomputed — so an edited review re-enters your queue and never stays public un-reviewed.</td></tr>
+      </tbody></table></div>
+
+      <div class="call warn"><span class="ci">⚠️</span><div class="cbody"><div class="ctitle">An approved review can quietly go back to Pending</div><p>Because a customer editing their review resets it to <b>Pending</b>, a review you approved yesterday can reappear in the Pending queue today if they changed it. Re-moderate edited reviews; the audit shows the customer's <code>review.edit</code> event.</p></div></div>
+
+      <div class="call note"><span class="ci">ℹ️</span><div class="cbody"><div class="ctitle">Where approved 5★ reviews surface publicly</div><p>The homepage "What DOODLY families say" grid and each product page's "Ratings &amp; Reviews" section read <code>GET /api/reviews/public</code>. Names are <b>anonymised</b> (first name + last initial, e.g. "Vivek D."), featured reviews sort first, then newest. If there are none yet, the site shows an honest empty state — never demo data.</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ TROUBLESHOOTING -->
+  <h3>Troubleshooting</h3>
+  <div class="twrap"><table><thead><tr>
+    <th>Symptom</th><th>Likely cause</th><th>Fix</th>
+  </tr></thead><tbody>
+    <tr><td>"You don't have permission to view customer reviews."</td><td>Signed-in role lacks <code>support:view</code></td><td>Sign in as Super Admin, Admin or Support, or grant the role Customer Support access in <span class="navpath">Admin → System → Roles &amp; Permissions</span>.</td></tr>
+    <tr><td>The table shows reviews but no action buttons — just "view"</td><td>Role has <code>support:view</code> but not <code>support:edit</code></td><td>Expected read-only behaviour. Use an edit-capable role (Super Admin, Admin, Support) to moderate.</td></tr>
+    <tr><td>"Backend offline — the reviews admin needs the DOODLY API."</td><td>The Next.js API isn't reachable from the storefront</td><td>Confirm the backend is running and the API base URL is correct; reload the page.</td></tr>
+    <tr><td>An approved 5★ review isn't showing on the website</td><td>It isn't <em>verified</em> (no linked delivered order), or it's not featured and lower down the newest list, or caching</td><td>Only approved + <b>verified</b> (order-linked) + 5★ reviews publish. Check the Product column links a real order; consider Feature to pull it to the top; reload the storefront.</td></tr>
+    <tr><td>A product's average rating dropped after moderation</td><td>You approved a verified 1–4★ review, which now counts toward the public average</td><td>Expected — the average is computed over all approved verified reviews. If unintended, Hide or Reject the review to recompute it back out.</td></tr>
+    <tr><td>"Review not found." when acting on a row</td><td>The review was changed/removed in another tab, or a stale page</td><td>Reload the module so the list re-queries, then retry.</td></tr>
+    <tr><td>Nothing exports / CSV is empty</td><td>The current filters/search match no rows</td><td>Export uses the rows currently listed. Clear the filters or broaden the search, then Export CSV.</td></tr>
+    <tr><td>A previously approved review is back in Pending</td><td>The customer edited their own review, which resets it to Pending</td><td>Re-moderate it. The <code>review.edit</code> entry in Audit Logs confirms the customer changed it.</td></tr>
+  </tbody></table></div>
+
+  <!-- ============================================================ FAQ -->
+  <h3>Frequently asked questions</h3>
+  <h4>Why do I see 1–4★ reviews here if only 5★ ever go public?</h4>
+  <p>This module is for <b>quality monitoring of all feedback</b>, not just the public showcase. You need to read every rating to spot problems, follow up on unhappy customers and keep the product average honest. The public feed applies its own hard filter (approved + verified + 5★) on top.</p>
+
+  <h4>Can I permanently delete a review?</h4>
+  <p>No. There is no delete. You can Reject or Hide it (which removes it from public view and un-features it), but the record and the customer's words are always kept, so any decision can be reversed by approving again.</p>
+
+  <h4>Does replying to a review make it public?</h4>
+  <p>No. A reply is saved and shown to the customer, but it does not change the review's status. Publishing still requires the review to be Approved, verified and 5★.</p>
+
+  <h4>Who gets notified about a bad review?</h4>
+  <p>When a customer submits a 1★ or 2★ review, all active Admins, Super Admins and Support staff receive an in-app "needs follow-up" notification pointing back to this module. The review itself stays untouched until you moderate it.</p>
+
+  <h4>Which roles can moderate reviews?</h4>
+  <p>By default Super Admin, Admin and Support (Customer Support) — the roles that hold the <code>support</code> permission. Viewing needs <code>support:view</code>; approving, rejecting, hiding, featuring and replying need <code>support:edit</code>. You can adjust these in <span class="navpath">Admin → System → Roles &amp; Permissions</span>.</p>
+
+  <h4>How are customer names shown on the website?</h4>
+  <p>Anonymised. The public feed shows only the first name and the last initial (for example "Vivek D."), never the full name, email or phone. Full identity is visible only inside this internal module.</p>
+
+  <div class="call best"><span class="ci">✅</span><div class="cbody"><div class="ctitle">Best practice — a daily review routine</div><p>Once a day, open <span class="navpath">Admin → Content → Reviews</span> and: (1) filter to <b>1★/2★</b> and reply to or resolve each, hiding while you follow up; (2) filter to <b>Pending + 5★</b> and approve genuine ones, featuring the standout stories; (3) reject spam or abuse. Because everything is audited and nothing is deleted, you can always show exactly how each piece of feedback was handled.</p></div></div>
+</section>

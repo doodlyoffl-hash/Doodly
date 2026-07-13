@@ -1,0 +1,426 @@
+<section class="sheet" id="admin-gst">
+  <div class="runhead"><span class="rh-brand">DOODLY</span><span>Admin · Finance · GST Management</span></div>
+  <div class="secnum"><span class="n">§</span><span class="k">Admin · Finance</span></div>
+  <h2 class="section-title">GST Management</h2>
+  <p class="lead">One central, Super-Admin-controlled tax engine — create tax rates, assign them to products, let orders and invoices calculate GST automatically, and keep every historical invoice accurate even after a rate changes.</p>
+
+  <div class="call note">
+    <span class="ci">ℹ️</span>
+    <div class="cbody">
+      <div class="ctitle">What this module does, in plain words</div>
+      <p>Instead of writing tax percentages into the code, DOODLY treats every GST rate as a <b>configuration you edit on screen</b>. You make a rate once (say "Dairy 5%"), attach it to the products it applies to, and from then on every order, subscription renewal, B2B order and invoice looks up that rate and does the sum for you. The clever part: whenever money actually changes hands, the system <b>freezes a copy</b> of the rate used on that transaction. So if you raise "Dairy 5%" to 9% next year, last year's invoices still correctly read 5%. Nothing historical ever silently changes.</p>
+    </div>
+  </div>
+
+  <div class="call warn">
+    <span class="ci">⚠️</span>
+    <div class="cbody">
+      <div class="ctitle">Who can change what</div>
+      <p>Every admin who can reach this screen can <b>read</b> the rates, product assignments, reports and audit trail. But <b>only the Super Admin</b> can create, edit, enable/disable, set-default, assign, delete, or change settings. For everyone else the action buttons disappear and the page shows a <span class="pill role">Read-only</span> badge — <i>"Read-only · Super Admin manages GST"</i>. On the backend this is enforced by the <code>gst:config</code> permission, which only the Super Admin holds.</p>
+    </div>
+  </div>
+
+  <!-- ======================================================= LAYOUT OVERVIEW -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">GST Management — the five tabs</p><p class="sm">A single workspace split into GST Rates, Product GST, Reports, Audit and Settings.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give the Super Admin one place to define tax, apply it to the catalogue, watch what has been collected, and review who changed what.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> (full control) · <span class="pill role">Admin</span> <span class="pill role">Accountant</span> and other admin roles with reports access (view only)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → GST Management</span> (<span class="navpath">/admin/gst.html</span>)</span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Header — <b>GST Management</b> · tab bar · <b>Run tests</b> button (far right) + test result badge</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Tab: GST Rates</b><span>The master list of every tax rate — create, edit, enable/disable, set default, delete.</span></div>
+          <div class="wf-cell"><b>Tab: Product GST</b><span>Assign each catalogue product a rate (or mark it tax-exempt); shows the effective % and a ₹100 worked example.</span></div>
+          <div class="wf-cell"><b>Tab: Reports</b><span>Filtered totals of GST collected, drawn from the frozen transaction snapshots; export to CSV / Excel / PDF.</span></div>
+          <div class="wf-cell"><b>Tab: Audit</b><span>Every GST change with who, when and the previous → new value.</span></div>
+          <div class="wf-cell"><b>Tab: Settings</b><span>Default rate, place of supply, invoice display options and future-ready toggles.</span></div>
+          <div class="wf-cell"><b>Run tests</b><span>A built-in self-check (top-right) that runs the engine's own test harness and shows "N/N tests passed".</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — labelled layout of the GST Management workspace</div></div>
+
+      <div class="call tip">
+        <span class="ci">💡</span>
+        <div class="cbody">
+          <div class="ctitle">Tip — the "Run tests" button</div>
+          <p>At the top-right of every tab is a <b>Run tests</b> button. Clicking it runs the engine's own built-in checks (validation rules, the 5%-of-₹1000 = ₹50 sum, product resolution, and — most importantly — the "historical invoice stays unchanged after a rate edit" guarantee) and shows a green <b>N/N tests passed</b> badge. Hover the badge to see each check by name. It is a safe, read-only self-diagnostic: it snapshots your data, runs on a copy, and restores everything afterwards. Use it if you ever doubt the tax maths.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= SCREEN 1 : GST RATES -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Tab 1 — GST Rates</p><p class="sm">The master register of tax rates. Everything else points back to a row here.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Define and maintain the list of GST rates the business uses (for DOODLY: 0% for milk, 5% for dairy, 12% for ghee &amp; butter, 18% standard) — each with a name, percentage, tax type, effective dates and status.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> creates/edits; others see <i>View only</i></span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → GST Management → GST Rates</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Toolbar — <b>Search</b> · <b>Status</b> dropdown · <b>Create GST rate</b> (Super Admin) / Read-only badge</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Search box</b><span>Type to match a rate's name, tax type, percentage or ID.</span></div>
+          <div class="wf-cell"><b>Status filter</b><span>All statuses · Active · Inactive.</span></div>
+          <div class="wf-cell"><b>Rates table</b><span>GST Name · GST % · Tax Type · Status · Effective · Created By · Actions.</span></div>
+          <div class="wf-cell"><b>Row actions</b><span>Edit · Disable/Enable · Set default · Delete (Super Admin only).</span></div>
+          <div class="wf-cell"><b>Pager</b><span>10 rows per page, with "N rates" count and page ‹ x / y › controls.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the GST Rates tab</div></div>
+
+      <h4>The rates table — columns explained</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>What it shows</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><b>GST Name</b></td><td>The rate's label in bold, with its description underneath. A green <b>Default</b> badge appears on the fallback rate.</td><td>Sortable. This is the name that also appears in the Product GST and Settings dropdowns.</td></tr>
+          <tr><td><b>GST %</b></td><td>The percentage, shown as a highlighted pill (e.g. <code>5%</code>).</td><td>Sortable (numeric).</td></tr>
+          <tr><td><b>Tax Type</b></td><td>One of GST · CGST + SGST · IGST · CESS · Exempt.</td><td>"CGST + SGST" splits the calculated amount into two equal halves on invoices.</td></tr>
+          <tr><td><b>Status</b></td><td>Green <b>Active</b> or grey <b>Inactive</b> badge.</td><td>Sortable. Only active rates can be assigned to products or set as default.</td></tr>
+          <tr><td><b>Effective</b></td><td>The "effective from" date, and "→ until" if an end date is set.</td><td>Documentary — records when the rate applies.</td></tr>
+          <tr><td><b>Created By</b></td><td>The name of the person (or "System" for the seeded rates) who created the rate.</td><td>Read-only.</td></tr>
+          <tr><td><b>Actions</b></td><td>Edit · Disable/Enable · Set default · Delete — or <i>View only</i> for non-Super-Admins.</td><td>See the button table below.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Table behaviour</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Capability</th><th>How it works here</th></tr></thead>
+        <tbody>
+          <tr><td><b>Search</b></td><td>Live search box; matches across name, tax type, percentage and ID. Filters the list as you type.</td></tr>
+          <tr><td><b>Filters</b></td><td>Status dropdown: All statuses / Active / Inactive.</td></tr>
+          <tr><td><b>Sorting</b></td><td>Click the <b>GST Name</b>, <b>GST %</b> or <b>Status</b> headers to sort; an ▲/▼ arrow shows the direction. Click again to reverse.</td></tr>
+          <tr><td><b>Pagination</b></td><td>10 rates per page; footer shows the total count and ‹ page / pages › navigation.</td></tr>
+          <tr><td><b>Exports</b></td><td>None on this tab — exports live on the Reports tab.</td></tr>
+          <tr><td><b>Row actions</b></td><td>Edit, Disable/Enable, Set default, Delete (Super Admin). Non-Super-Admins see "View only".</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Row action buttons</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Create GST rate</b></td><td>Opens the create form (see below) to add a brand-new rate.</td><td><code>create()</code> — validates, assigns the next ID (GST-005, GST-006…), stamps creator + timestamps, logs <code>gst.create</code>.</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Edit</b> (pencil)</td><td>Opens the same form pre-filled to change any field of an existing rate.</td><td><code>update()</code> — re-validates, records the before → after and optional reason, logs <code>gst.edit</code>.</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Disable / Enable</b></td><td>Toggles a rate between Active and Inactive without deleting it.</td><td><code>setStatus()</code> — re-validates before re-activating; logs <code>gst.status</code> (e.g. "Dairy 5% → inactive").</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Set default</b></td><td>Makes this the fallback rate for any product that has no rate assigned. Only shown on non-default rows.</td><td><code>setDefault()</code> — only an <b>active</b> rate qualifies; clears the flag on all others, updates Settings, logs <code>gst.default</code>.</td><td><span class="pill role">Super Admin</span></td></tr>
+          <tr><td><b>Delete</b> (trash)</td><td>Permanently removes an unused rate after a confirmation prompt.</td><td><code>remove()</code> — <b>blocked</b> if the rate is assigned to any product or linked to any transaction; logs <code>gst.delete</code>.</td><td><span class="pill role">Super Admin</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call danger">
+        <span class="ci">⛔</span>
+        <div class="cbody">
+          <div class="ctitle">Caution — you cannot delete a rate that is in use</div>
+          <p>Deletion is deliberately protected. If a rate is <b>assigned to one or more products</b>, or <b>appears on any recorded transaction</b>, the delete is refused with a message like <i>"Cannot delete — this rate is linked to transactions. Deactivate it instead."</i> This safeguards your historical invoices. When a rate is retired, use <b>Disable</b> instead of Delete — it stops the rate being used going forward while preserving every past record. Only a rate that was never assigned and never used can be deleted, and even then a confirmation prompt ("This can't be undone.") appears first.</p>
+        </div>
+      </div>
+
+      <!-- ---------- CREATE / EDIT FORM ---------- -->
+      <h4>Create / Edit GST rate — the form</h4>
+      <p>Both "Create GST rate" and the row Edit button open the same pop-up dialog; the only difference is that Edit pre-fills the fields and adds a "Reason for change" box.</p>
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Dialog — <b>Create / Edit GST rate</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>GST name</b><span>Text — e.g. "Dairy 5%".</span></div>
+          <div class="wf-cell"><b>GST % · Tax type</b><span>Number 0–100, plus the tax-type dropdown.</span></div>
+          <div class="wf-cell"><b>Effective from · until</b><span>Two date pickers (until is optional).</span></div>
+          <div class="wf-cell"><b>Status · Description</b><span>Active/Inactive dropdown and a free-text description.</span></div>
+          <div class="wf-cell"><b>Reason for change</b><span>Edit only — captured into the audit trail.</span></div>
+          <div class="wf-cell"><b>Save</b><span>"Create rate" / "Save changes"; inline error line if validation fails.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Create / Edit GST rate dialog</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>GST name</b></td><td>The human label for the rate.</td><td>Free text.</td><td class="t-req">Yes</td><td>Must not be blank. Cannot duplicate the name of another <b>active</b> rate (case-insensitive).</td><td>Dairy 5%</td></tr>
+          <tr><td><b>GST %</b></td><td>The tax percentage applied to the taxable value.</td><td>Number, step 0.01.</td><td class="t-req">Yes</td><td>Must be a number, not negative, not over 100. Stored exactly; the sum is <code>round(subtotal × %)/100</code>.</td><td>5</td></tr>
+          <tr><td><b>Tax type</b></td><td>The kind of tax, controlling how it is presented.</td><td>GST · CGST + SGST · IGST · CESS · Exempt.</td><td class="t-req">Yes</td><td>Defaults to "GST". "CGST + SGST" splits the amount into two equal halves for the invoice.</td><td>GST</td></tr>
+          <tr><td><b>Effective from</b></td><td>The date the rate starts to apply.</td><td>Date.</td><td class="t-opt">Opt.</td><td>Defaults to today if left blank.</td><td>2026-04-01</td></tr>
+          <tr><td><b>Effective until</b></td><td>Optional end date for a temporary rate.</td><td>Date.</td><td class="t-opt">Opt.</td><td>If set, must be on or after "Effective from".</td><td>2027-03-31</td></tr>
+          <tr><td><b>Status</b></td><td>Whether the rate is usable now.</td><td>Active · Inactive.</td><td class="t-req">Yes</td><td>Only Active rates can be assigned or set as default. New rates default to Active.</td><td>Active</td></tr>
+          <tr><td><b>Description</b></td><td>A note explaining what the rate covers.</td><td>Free text (multi-line).</td><td class="t-opt">Opt.</td><td>Shown under the name in the rates table.</td><td>Curd, paneer, palkova and similar dairy.</td></tr>
+          <tr><td><b>Reason for change</b></td><td>Why you edited an existing rate (Edit only).</td><td>Free text.</td><td class="t-opt">Opt.</td><td>Appended to the audit entry — e.g. "reason: Budget 2026 revision".</td><td>Budget 2026 revision</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call warn">
+        <span class="ci">⚠️</span>
+        <div class="cbody">
+          <div class="ctitle">Validation you will meet</div>
+          <p>If the form can't be saved, a red line appears above the Save button with the exact reason:</p>
+          <ul>
+            <li><b>"GST name is required."</b> — the name box is empty.</li>
+            <li><b>"GST percentage must be a number."</b> — a non-number was typed.</li>
+            <li><b>"GST cannot be negative."</b> / <b>"GST cannot exceed 100%."</b> — the percentage is out of the 0–100 range.</li>
+            <li><b>"An active GST rate with this name already exists."</b> — you'd create a duplicate active name.</li>
+            <li><b>"'Effective until' must be after 'effective from'."</b> — the end date is earlier than the start.</li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= SCREEN 2 : PRODUCT GST -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Tab 2 — Product GST</p><p class="sm">Attach a rate to each product; unassigned products fall back to the default.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Decide, per product, which GST rate applies (or mark it tax-exempt). Orders, subscriptions, B2B and invoices then pick this up automatically — no per-order tax entry.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> assigns; others see the resolved rate as plain text</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → GST Management → Product GST</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Product GST — one row per catalogue product · fallback note ("Unassigned products fall back to <b>Milk GST (Nil)</b>")</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Product</b><span>The product name with its slug underneath.</span></div>
+          <div class="wf-cell"><b>GST Rate</b><span>A dropdown of every active rate, plus "Tax-exempt (0%)".</span></div>
+          <div class="wf-cell"><b>Effective %</b><span>The percentage that will actually be charged (or "Exempt").</span></div>
+          <div class="wf-cell"><b>Sample (per ₹100)</b><span>A worked example: ₹100 → GST → total.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Product GST assignment table</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Column</th><th>What it shows</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><b>Product</b></td><td>Product name (bold) and its internal slug (e.g. <code>ghee</code>).</td><td>The product list comes from the live catalogue.</td></tr>
+          <tr><td><b>GST Rate</b></td><td>Super Admin: a dropdown listing every <b>active</b> rate plus <b>Tax-exempt (0%)</b>. Others: the current rate as text.</td><td>Changing the dropdown saves instantly (<code>assign()</code>) and logs <code>gst.assign</code>.</td></tr>
+          <tr><td><b>Effective %</b></td><td>The resolved percentage — e.g. <code>12%</code>, or <b>Exempt</b>.</td><td>See the resolution rule below.</td></tr>
+          <tr><td><b>Sample (per ₹100)</b></td><td>A live worked example, e.g. "₹100 → GST ₹12 → ₹112".</td><td>Helps you sanity-check the choice at a glance.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">How a product's rate is decided (the resolution rule)</div>
+          <p>When any part of DOODLY needs a product's tax, it resolves the rate in this order:</p>
+          <ol>
+            <li>If the product is marked <b>Tax-exempt</b> → 0%, labelled "Tax-exempt".</li>
+            <li>Else if it is assigned to a rate that is currently <b>Active</b> → that rate is used.</li>
+            <li>Otherwise (unassigned, or assigned to a rate that has been disabled) → the <b>Default</b> rate is used.</li>
+          </ol>
+          <p>This is why disabling a rate is safe: any product still pointing at it quietly falls back to the default rather than breaking.</p>
+        </div>
+      </div>
+
+      <div class="diagram"><div class="wf">
+        <div class="wf-topbar">Workflow — how a rate reaches a customer's invoice</div>
+        <div class="wf-flow"><span>Super Admin creates a rate</span><span>Assigns it to a product</span><span>Customer orders that product</span><span>Engine resolves &amp; calculates GST</span><span>Amount + rate snapshotted onto the transaction</span><span>Appears on the invoice &amp; in Reports</span></div>
+      </div><div class="wire-cap">Figure — from rate definition to invoice line</div></div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= SCREEN 3 : REPORTS -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Tab 3 — Reports</p><p class="sm">GST collected, broken down by product, rate, date and invoice — with export.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Show how much GST has been collected over a chosen period, sliced several ways, so you can reconcile and file returns. All figures come from the frozen transaction snapshots, never from re-calculating current rates.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> plus admin roles with reports access</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → GST Management → Reports</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Reports — filter bar · KPI cards · breakdown panels · <b>Export ▾</b></div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Filter bar</b><span>From · To · Product · GST % · Clear · Export (CSV / Excel / PDF).</span></div>
+          <div class="wf-cell"><b>KPI cards</b><span>GST Collected · Taxable Value · Transactions · Tax Liability.</span></div>
+          <div class="wf-cell"><b>GST by Product</b><span>Taxable, GST and transaction count per product.</span></div>
+          <div class="wf-cell"><b>GST by Rate</b><span>The same totals grouped by the tax percentage.</span></div>
+          <div class="wf-cell"><b>GST by Date</b><span>Day-by-day taxable and GST.</span></div>
+          <div class="wf-cell"><b>GST by Invoice</b><span>Totals per invoice reference.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Reports tab</div></div>
+
+      <h4>Filters</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Filter</th><th>Purpose</th><th>Values</th></tr></thead>
+        <tbody>
+          <tr><td><b>From</b></td><td>Start of the reporting window.</td><td>Date picker.</td></tr>
+          <tr><td><b>To</b></td><td>End of the reporting window.</td><td>Date picker.</td></tr>
+          <tr><td><b>Product</b></td><td>Limit to a single product.</td><td>All · or any catalogue product.</td></tr>
+          <tr><td><b>GST %</b></td><td>Limit to one tax rate.</td><td>All · or any active percentage (0, 5, 12, 18…).</td></tr>
+          <tr><td><b>Clear</b></td><td>Reset every filter to show all transactions again.</td><td>Button.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>KPI cards</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Card</th><th>Meaning</th><th>How it is computed</th></tr></thead>
+        <tbody>
+          <tr><td><b>GST Collected</b></td><td>Total tax on the filtered transactions.</td><td>Sum of each snapshot's GST amount.</td></tr>
+          <tr><td><b>Taxable Value</b></td><td>Total pre-tax value those transactions were based on.</td><td>Sum of each snapshot's subtotal.</td></tr>
+          <tr><td><b>Transactions</b></td><td>How many transactions match the filters.</td><td>Row count.</td></tr>
+          <tr><td><b>Tax Liability</b></td><td>What you owe — equal to GST Collected here.</td><td>Same as GST Collected.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Breakdown panels</h4>
+      <p>Four grouped tables sit below the cards, each with the columns <b>key · Taxable · GST · Txns</b>: <b>GST by Product</b>, <b>GST by Rate</b>, <b>GST by Date</b> and <b>GST by Invoice</b>. They respect the same filters as the cards.</p>
+
+      <h4>Export</h4>
+      <div class="twrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Backend process</th><th>Permission</th></tr></thead>
+        <tbody>
+          <tr><td><b>Export ▾ → CSV</b></td><td>Downloads the filtered rows as a comma-separated file.</td><td>Builds a CSV with columns Invoice · Date · Product · Customer · Taxable · GST % · GST Amount; logs <code>gst.export</code>.</td><td><span class="pill role">Super Admin</span>+</td></tr>
+          <tr><td><b>Export ▾ → Excel</b></td><td>Downloads the same rows as an <code>.xls</code> workbook.</td><td>Same columns, HTML-table Excel format; logs <code>gst.export</code>.</td><td><span class="pill role">Super Admin</span>+</td></tr>
+          <tr><td><b>Export ▾ → PDF</b></td><td>Opens a print-ready GST report in a new tab and triggers Print → Save as PDF.</td><td>Renders a titled report with the collected total, count and timestamp; needs pop-ups allowed.</td><td><span class="pill role">Super Admin</span>+</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Why the report can show zero on a fresh production site</div>
+          <p>Reports are built from <b>real transaction snapshots</b> only. Sample GST transactions are never seeded on the live site — they exist only for local exploration. So a brand-new production environment correctly shows empty reports until real orders and invoices start recording GST. This is expected, not a bug. In the DB-backed backend the same figures are aggregated from the live <code>PaymentRecord</code>, <code>SubscriptionBilling</code> and <code>Invoice</code> ledgers (each carrying a <code>gstPaise</code> snapshot).</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= SCREEN 4 : AUDIT -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Tab 4 — Audit</p><p class="sm">A permanent record of every GST change — who, when, and previous → new.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Give finance and compliance a defensible trail: no tax rate can be quietly altered. Every mutation is written to the shared audit log automatically.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> plus admin roles that can reach the page (read-only)</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → GST Management → Audit</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Audit — filtered to GST changes only, newest first (up to 80 entries)</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Changed By</b><span>Who made the change.</span></div>
+          <div class="wf-cell"><b>Action</b><span>The action code, e.g. <code>gst.create</code>, <code>gst.edit</code>.</span></div>
+          <div class="wf-cell"><b>Detail</b><span>The target and, for edits, the previous → new value.</span></div>
+          <div class="wf-cell"><b>When</b><span>Local date &amp; time of the change.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the GST Audit tab</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Action code</th><th>Logged when…</th><th>Example detail</th></tr></thead>
+        <tbody>
+          <tr><td><code>gst.create</code></td><td>A new rate is created.</td><td>Dairy 5% · 5% (GST-002)</td></tr>
+          <tr><td><code>gst.edit</code></td><td>A rate is edited.</td><td>Dairy 5%: [5% · active · Dairy 5%] → [9% · active · Dairy 5%] · reason: Budget 2026 revision</td></tr>
+          <tr><td><code>gst.status</code></td><td>A rate is enabled or disabled.</td><td>Ghee &amp; Butter 12% → inactive</td></tr>
+          <tr><td><code>gst.default</code></td><td>The default rate is changed.</td><td>default → Standard 18%</td></tr>
+          <tr><td><code>gst.assign</code></td><td>A product is assigned a rate (or exempted).</td><td>paneer → Tax-exempt</td></tr>
+          <tr><td><code>gst.delete</code></td><td>An unused rate is deleted.</td><td>Temp Unused</td></tr>
+          <tr><td><code>gst.export</code></td><td>A report is exported.</td><td>CSV · 40 rows</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call best">
+        <span class="ci">✅</span>
+        <div class="cbody">
+          <div class="ctitle">Best Practice — always fill in "Reason for change"</div>
+          <p>When you edit a rate, take the extra second to type a reason (e.g. "GST Council notification 12/2026"). It is optional, but it is stored verbatim in the audit trail and turns a bare number change into a self-explaining compliance record your accountant and any future auditor will thank you for.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= SCREEN 5 : SETTINGS -->
+  <div class="spec">
+    <div class="spec-h"><p class="st">Tab 5 — Settings</p><p class="sm">Global tax defaults, place of supply, invoice display and future-ready toggles.</p></div>
+    <div class="spec-meta"><span class="m"><b>Purpose</b> Set the behaviours that apply across all products — the fallback rate, where supply is deemed to occur, how tax is shown on invoices, and switches for advanced tax models not yet enabled.</span></div>
+    <div class="spec-meta">
+      <span class="m"><b>Access</b> <span class="pill role">Super Admin</span> only edits; others see the same panel disabled with a read-only note</span>
+      <span class="m"><b>Path</b> <span class="navpath">Admin → System → GST Management → Settings</span></span>
+    </div>
+    <div class="spec-body">
+
+      <div class="wire"><div class="wf">
+        <div class="wf-topbar">Settings — defaults &amp; invoice options, plus a "Future-ready (roadmap)" panel</div>
+        <div class="wf-grid">
+          <div class="wf-cell"><b>Default GST rate</b><span>The fallback for unassigned products.</span></div>
+          <div class="wf-cell"><b>Place of supply</b><span>The state where supply is deemed to occur.</span></div>
+          <div class="wf-cell"><b>Show CGST/SGST split</b><span>Whether invoices break tax into two halves.</span></div>
+          <div class="wf-cell"><b>Prices are tax-inclusive</b><span>Whether displayed prices already include GST.</span></div>
+          <div class="wf-cell"><b>Future-ready toggles</b><span>Inter-state IGST · CESS · Location-based tax.</span></div>
+        </div>
+      </div><div class="wire-cap">Figure — the Settings tab</div></div>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Field</th><th>Purpose</th><th>Accepted values</th><th>Req.</th><th>Validation / backend</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Default GST rate</b></td><td>The rate applied to any product with no assignment.</td><td>Dropdown of active rates.</td><td class="t-req">Yes</td><td>Saving updates the default and re-flags the chosen rate; logs <code>gst.default</code>.</td><td>Milk GST (Nil) (0%)</td></tr>
+          <tr><td><b>Place of supply</b></td><td>The state used for tax purposes on invoices.</td><td>Free text.</td><td class="t-opt">Opt.</td><td>Stored as-is; drives future inter-state logic.</td><td>Andhra Pradesh</td></tr>
+          <tr><td><b>Show CGST/SGST split</b></td><td>Whether invoices show tax as two equal halves.</td><td>Checkbox (on/off).</td><td class="t-opt">Opt.</td><td>Presentation only; pairs with the "CGST + SGST" tax type.</td><td>On</td></tr>
+          <tr><td><b>Prices are tax-inclusive</b></td><td>Whether the prices customers see already contain GST.</td><td>Checkbox (on/off).</td><td class="t-opt">Opt.</td><td>Off by default (tax added on top).</td><td>Off</td></tr>
+          <tr><td><b>Inter-state IGST</b></td><td>Roadmap — enables IGST for inter-state billing.</td><td>Checkbox.</td><td class="t-opt">Opt.</td><td>Reserved for multi-jurisdiction billing; the engine already models the IGST tax type.</td><td>Off</td></tr>
+          <tr><td><b>CESS</b></td><td>Roadmap — enables an additional CESS component.</td><td>Checkbox.</td><td class="t-opt">Opt.</td><td>Reserved for future use.</td><td>Off</td></tr>
+          <tr><td><b>Location-based tax</b></td><td>Roadmap — varies tax by delivery location.</td><td>Checkbox.</td><td class="t-opt">Opt.</td><td>Reserved for future use.</td><td>Off</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="call note">
+        <span class="ci">ℹ️</span>
+        <div class="cbody">
+          <div class="ctitle">Settings save as you change them</div>
+          <p>There is no separate "Save" button on this tab — each control saves the moment you change it (and shows a "GST settings saved" confirmation). Changing the Default GST rate here has the same effect as clicking "Set default" on the Rates tab. The three roadmap toggles are placeholders for tax models that switch on when multi-jurisdiction billing is enabled; they are safe to leave off for a single-state operation like DOODLY today.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= HISTORICAL ACCURACY -->
+  <div class="call best">
+    <span class="ci">✅</span>
+    <div class="cbody">
+      <div class="ctitle">Best Practice — trust the snapshot, edit rates freely</div>
+      <p>The single most important thing to understand about this module: <b>editing a rate never rewrites history</b>. When a sale happens, the exact GST percentage, amount and the rate's ID are frozen onto that transaction. So the correct way to handle a rate change (e.g. the GST Council moves ghee from 12% to 5%) is simply to <b>Edit</b> the existing rate to the new percentage — past invoices keep their old figure, and every future sale uses the new one automatically. You never need to create a duplicate rate or worry about "closing off" the old one. The built-in test <i>"Historical txn keeps original GST % after rate change"</i> exists precisely to guarantee this.</p>
+    </div>
+  </div>
+
+  <!-- ======================================================= TROUBLESHOOTING -->
+  <h3>Troubleshooting</h3>
+  <div class="twrap"><table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>All the action buttons are gone; the page says "Read-only · Super Admin manages GST".</td><td>You are signed in as a role other than Super Admin.</td><td>GST changes are Super-Admin-only by design. Ask the Super Admin to make the change, or switch to the Super Admin role.</td></tr>
+      <tr><td>Delete is refused: "Cannot delete — this rate is linked to transactions / assigned to N product(s)."</td><td>The rate is in use, so deleting it would orphan history.</td><td>Use <b>Disable</b> instead of Delete. Re-assign the affected products to another rate first if you want it fully out of circulation.</td></tr>
+      <tr><td>"An active GST rate with this name already exists."</td><td>Another active rate already uses that name.</td><td>Rename the new rate, or disable the old one before reusing the name.</td></tr>
+      <tr><td>A product shows the wrong Effective % after you disabled its rate.</td><td>Disabling a rate makes assigned products fall back to the Default.</td><td>Assign the product to a different active rate on the Product GST tab, or re-enable the original.</td></tr>
+      <tr><td>Reports are empty on a live site.</td><td>No real GST transactions have been recorded yet (sample data is never seeded in production).</td><td>Expected — figures appear as orders and invoices start recording GST. Widen the From/To dates and click Clear to be sure no filter is hiding rows.</td></tr>
+      <tr><td>The PDF export doesn't open.</td><td>The browser blocked the new tab.</td><td>Allow pop-ups for the admin site, then click Export → PDF again (a "Allow pop-ups for PDF" message appears when blocked).</td></tr>
+      <tr><td>You can't set a rate as the default.</td><td>Only an <b>active</b> rate can be the default.</td><td>Enable the rate first, then use "Set default" (or the Settings dropdown).</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- ======================================================= FAQ -->
+  <h3>Frequently asked questions</h3>
+  <h4>If I change a rate, will old invoices change too?</h4>
+  <p>No. Every transaction freezes the GST percentage and amount at the moment of sale, so past invoices are unaffected. Only future sales use the new rate.</p>
+
+  <h4>How do I stop charging tax on a product?</h4>
+  <p>On the Product GST tab, set that product's rate to <b>Tax-exempt (0%)</b>. Its effective rate becomes "Exempt" and no GST is added on future orders.</p>
+
+  <h4>What happens to a product I never assigned a rate to?</h4>
+  <p>It uses the <b>Default</b> rate (shown at the top of the Product GST tab and set on the Rates or Settings tab). For DOODLY the seeded default is "Milk GST (Nil)" at 0%.</p>
+
+  <h4>Why can Admins and Accountants see this page but not change anything?</h4>
+  <p>Viewing helps finance reconcile and answer customer queries, but tax configuration carries compliance risk, so the ability to <i>change</i> rates is deliberately restricted to the Super Admin via the <code>gst:config</code> permission.</p>
+
+  <h4>What's the difference between "GST" and "CGST + SGST" tax types?</h4>
+  <p>Both charge the same total percentage. "CGST + SGST" simply splits that amount into two equal halves on the invoice (Central and State GST) — used for intra-state supply. The split display is also governed by the "Show CGST/SGST split" setting.</p>
+
+  <h4>Where do the four starting rates come from?</h4>
+  <p>DOODLY seeds four sensible dairy rates on first use: <b>Milk GST (Nil) 0%</b>, <b>Dairy 5%</b> (curd, paneer, palkova), <b>Ghee &amp; Butter 12%</b>, and <b>Standard 18%</b>. You can edit, disable or add to these at any time.</p>
+
+</section>
