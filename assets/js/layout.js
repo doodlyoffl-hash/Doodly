@@ -2107,11 +2107,30 @@
   }
   window.DOODLY_ADMIN.wireInvoicesAdminBackend = wireInvoicesAdminBackend;
 
-  // ---- Packing Workflow (admin/packing → today's deliveries, advance the packing stage) ----
-  function wirePackingBackend() {
+  // ---- Packing Workflow (admin/packing → a chosen day's deliveries, advance the packing stage) ----
+  var _packDate = "";
+  function buildPackDateBar(iso) {
+    var bar = document.getElementById("packDateBar"); if (!bar) return;
+    var today = istTodayISO();
+    var q = function (k, label, active) { return '<button class="btn ' + (active ? "btn-primary" : "btn-ghost") + ' sm" data-quick="' + k + '">' + label + "</button>"; };
+    bar.innerHTML =
+      '<div class="panel panel-pad" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px">' +
+        '<button class="btn btn-ghost sm" data-nav="prev" aria-label="Previous day">&larr;</button>' +
+        q("yesterday", "Yesterday", iso === shiftISO(today, -1)) + q("today", "Today", iso === today) + q("tomorrow", "Tomorrow", iso === shiftISO(today, 1)) +
+        '<label style="display:inline-flex;align-items:center;gap:6px;margin:0"><span aria-hidden="true">📅</span><input type="date" class="input" id="pk-date-input" value="' + iso + '" style="max-width:170px"></label>' +
+        '<button class="btn btn-ghost sm" data-nav="next" aria-label="Next day">&rarr;</button>' +
+        '<span class="strong" style="margin-left:auto">' + esc(delDateLabel(iso)) + "</span>" +
+      "</div>";
+    bar.querySelectorAll("[data-nav]").forEach(function (b) { b.addEventListener("click", function () { wirePackingBackend(shiftISO(iso, b.dataset.nav === "next" ? 1 : -1)); }); });
+    bar.querySelectorAll("[data-quick]").forEach(function (b) { b.addEventListener("click", function () { var k = b.dataset.quick; wirePackingBackend(k === "today" ? today : shiftISO(today, k === "tomorrow" ? 1 : -1)); }); });
+    var inp = bar.querySelector("#pk-date-input"); if (inp) inp.addEventListener("change", function () { if (inp.value) wirePackingBackend(inp.value); });
+  }
+  function wirePackingBackend(date) {
     if (!window.DOODLY_API) return;
     var host = document.getElementById("packingMount");
     if (!host) return;
+    var iso = date || _packDate || istTodayISO(); _packDate = iso;
+    buildPackDateBar(iso);
     var SEQ = ["PENDING", "PACKING", "PACKED", "READY"];
     var LBL = { PENDING: "Pending", PACKING: "Packing", PACKED: "Packed", READY: "Ready" };
     var COL = { PENDING: "grey", PACKING: "amber", PACKED: "green", READY: "green" };
@@ -2120,21 +2139,21 @@
     var nextOf = function (s) { var i = SEQ.indexOf(s); return i >= 0 && i < 3 ? SEQ[i + 1] : null; };
     host.innerHTML =
       '<div id="pk-stats" class="dl-an-kpis" style="margin-bottom:14px"></div>' +
-      '<div class="panel"><div class="panel-head"><h3>Today\'s deliveries to pack</h3><div><button class="btn btn-ghost sm" id="pk-packed">Mark selected Packed</button> <button class="btn btn-ghost sm" id="pk-ready">Mark selected Ready</button></div></div>' +
-      '<div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th><input type="checkbox" id="pk-all" aria-label="Select all"></th><th>Customer</th><th>Area</th><th>Slot</th><th>Bottles</th><th>Stage</th><th>Advance</th></tr></thead><tbody id="pk-body"><tr><td colspan="7" class="muted-sm">Loading…</td></tr></tbody></table></div></div></div>';
+      '<div class="panel"><div class="panel-head"><h3>Deliveries to pack — ' + esc(delDateLabel(iso)) + '</h3><div><button class="btn btn-ghost sm" id="pk-packed">Mark selected Packed</button> <button class="btn btn-ghost sm" id="pk-ready">Mark selected Ready</button></div></div>' +
+      '<div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th><input type="checkbox" id="pk-all" aria-label="Select all"></th><th>Customer</th><th>Area</th><th>Products</th><th>Slot</th><th>Bottles</th><th>Stage</th><th>Advance</th></tr></thead><tbody id="pk-body"><tr><td colspan="8" class="muted-sm">Loading…</td></tr></tbody></table></div></div></div>';
     var body = host.querySelector("#pk-body");
     var load = function () {
-      DOODLY_API.get("/api/admin/deliveries/packing").then(function (r) {
+      DOODLY_API.get("/api/admin/deliveries/packing?date=" + encodeURIComponent(iso)).then(function (r) {
         var items = r.items || [], counts = r.counts || {};
         host.querySelector("#pk-stats").innerHTML = STAGES.map(function (s) { return '<div class="dl-an-kpi"><div class="n">' + (counts[s[0]] || 0) + '</div><div class="l">' + s[1] + "</div></div>"; }).join("");
         body.innerHTML = items.length ? items.map(function (d) {
           var nx = nextOf(d.packingStatus);
           var adv = nx ? '<button class="btn btn-ghost sm pk-adv" data-id="' + d.id + '" data-status="' + nx + '">&rarr; ' + LBL[nx] + "</button>" : '<span class="muted-sm">Ready &check;</span>';
-          return "<tr><td><input type='checkbox' class='pk-chk' data-id='" + d.id + "'></td><td>" + esc(d.customer) + "</td><td>" + esc(d.area) + "</td><td>" + esc(d.slot) + "</td><td>" + d.bottles + "</td><td>" + pill(d.packingStatus) + "</td><td>" + adv + "</td></tr>";
-        }).join("") : '<tr><td colspan="7" class="muted-sm" style="text-align:center;padding:18px">No deliveries to pack today.</td></tr>';
-        bkBanner(host, "● Live — " + (r.total || 0) + " delivery(s) to pack today (" + DOODLY_API.base() + ").", "ok");
+          return "<tr><td><input type='checkbox' class='pk-chk' data-id='" + d.id + "'></td><td>" + esc(d.customer) + "</td><td>" + esc(d.area) + "</td><td>" + esc(d.products || "—") + "</td><td>" + esc(d.slot) + "</td><td>" + d.bottles + "</td><td>" + pill(d.packingStatus) + "</td><td>" + adv + "</td></tr>";
+        }).join("") : '<tr><td colspan="8" class="muted-sm" style="text-align:center;padding:18px">No deliveries to pack on ' + esc(delDateLabel(iso)) + '.</td></tr>';
+        bkBanner(host, "● Live — " + (r.total || 0) + " delivery(s) to pack on " + delDateLabel(iso) + " (" + DOODLY_API.base() + ").", "ok");
       }).catch(function (e) {
-        body.innerHTML = '<tr><td colspan="7" class="muted-sm" style="text-align:center;padding:18px">Couldn\'t load the packing board.</td></tr>';
+        body.innerHTML = '<tr><td colspan="8" class="muted-sm" style="text-align:center;padding:18px">Couldn\'t load the packing board.</td></tr>';
         bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + "." : e.code === "forbidden" ? "⚠ Your role can't manage packing (403)." : "⚠ " + (e.message || "Couldn't load."), "err");
       });
     };

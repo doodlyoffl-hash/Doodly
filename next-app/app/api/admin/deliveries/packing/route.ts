@@ -1,5 +1,6 @@
 /* /api/admin/deliveries/packing — the packing workflow board + advance action.
-   GET  → today's deliveries needing packing, grouped by stage (deliveries:view).
+   GET  → deliveries needing packing for a given IST day (?date=YYYY-MM-DD,
+          default today), grouped by stage (deliveries:view).
    POST → advance one ({ id, status }) or many ({ ids, status }) (deliveries:edit). */
 import { NextRequest } from "next/server";
 import { z } from "zod";
@@ -14,7 +15,8 @@ export const dynamic = "force-dynamic";
 
 export const GET = route("admin.deliveries.packing.board", async (req: NextRequest) => {
   requirePermission(req, "deliveries", "view");
-  return ok(await packingBoard());
+  const date = new URL(req.url).searchParams.get("date");
+  return ok(await packingBoard(date));
 });
 
 const postSchema = z.object({

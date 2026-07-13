@@ -8,6 +8,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { Errors } from "@/lib/http";
 import { audit } from "@/lib/auth/audit";
+import { istDayWindow } from "@/lib/delivery/stats";
 import type { ReqContext } from "@/lib/auth/request";
 import type { PackingStatus } from "@prisma/client";
 
@@ -41,12 +42,10 @@ export async function bulkAdvancePacking(deliveryIds: string[], status: PackingS
   return { updated: res.count, status };
 }
 
-/** Today's (IST) deliveries that still need packing, with their stage + counts. */
-export async function packingBoard() {
-  const IST = 5.5 * 60 * 60 * 1000;
-  const nowIST = new Date(Date.now() + IST);
-  const startMs = Date.UTC(nowIST.getUTCFullYear(), nowIST.getUTCMonth(), nowIST.getUTCDate()) - IST;
-  const start = new Date(startMs), end = new Date(startMs + 24 * 60 * 60 * 1000);
+/** Deliveries needing packing for a given IST day (default: today), with their
+    stage, the items to pack + counts. `dateStr` = "YYYY-MM-DD" (IST). */
+export async function packingBoard(dateStr?: string | null) {
+  const { start, end, iso } = istDayWindow(dateStr);
 
   const rows = await db.delivery.findMany({
     where: { date: { gte: start, lt: end }, status: { notIn: [...CLOSED] } },
@@ -55,20 +54,32 @@ export async function packingBoard() {
     select: {
       id: true, slot: true, packingStatus: true, status: true, bottleCount: true,
       address: { select: { area: true, city: true } },
-      subscription: { select: { user: { select: { name: true } }, address: { select: { area: true, city: true } } } },
-      order: { select: { user: { select: { name: true } } } },
+      subscription: {
+        select: {
+          user: { select: { name: true } }, address: { select: { area: true, city: true } },
+          items: { select: { qty: true, variant: { select: { label: true, product: { select: { name: true } } } } } },
+        },
+      },
+      order: { select: { user: { select: { name: true } }, items: { select: { productName: true, variantLabel: true, quantity: true } } } },
     },
   });
 
-  const items = rows.map((d) => ({
-    id: d.id,
-    customer: d.subscription?.user?.name ?? d.order?.user?.name ?? "—",
-    area: d.address?.area ?? d.address?.city ?? d.subscription?.address?.area ?? d.subscription?.address?.city ?? "—",
-    slot: d.slot ?? "—",
-    bottles: d.bottleCount,
-    packingStatus: d.packingStatus,
-    deliveryStatus: d.status,
-  }));
+  const items = rows.map((d) => {
+    const isSub = !!d.subscription;
+    const products = isSub
+      ? (d.subscription?.items ?? []).map((i) => `${i.variant.product?.name ? i.variant.product.name + " " : ""}${i.variant.label} ×${i.qty}`.trim()).join(", ")
+      : (d.order?.items ?? []).map((i) => `${i.productName}${i.variantLabel ? " " + i.variantLabel : ""} ×${i.quantity}`).join(", ");
+    return {
+      id: d.id,
+      customer: d.subscription?.user?.name ?? d.order?.user?.name ?? "—",
+      area: d.address?.area ?? d.address?.city ?? d.subscription?.address?.area ?? d.subscription?.address?.city ?? "—",
+      slot: d.slot ?? "—",
+      bottles: d.bottleCount,
+      products: products || "—",
+      packingStatus: d.packingStatus,
+      deliveryStatus: d.status,
+    };
+  });
   const counts = items.reduce<Record<string, number>>((acc, i) => { acc[i.packingStatus] = (acc[i.packingStatus] ?? 0) + 1; return acc; }, {});
-  return { items, counts, total: items.length };
+  return { date: iso, items, counts, total: items.length };
 }

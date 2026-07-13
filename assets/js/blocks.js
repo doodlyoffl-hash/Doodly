@@ -748,6 +748,7 @@ window.DOODLY_BLOCKS = (function () {
   R.scheduledAddressChanges = () => `<div class="reveal" id="sacMount"></div>`;
   R.invoicesAdmin = () => `<div class="reveal" id="invAdminMount"></div>`;
   R.packingBoard = () => `<div class="reveal" id="packingMount"></div>`;
+  R.packDateBar = () => `<div class="reveal" id="packDateBar"></div>`;
   R.deliveryDateBar = () => `<div class="reveal" id="delDateBar"></div>`;
   /* ---------- AI chat support management (built by assistant.js) ---------- */
   R.chatSupport = () => `<div class="reveal" id="chatSupportMount"></div>`;
