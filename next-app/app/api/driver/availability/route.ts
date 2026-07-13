@@ -49,5 +49,11 @@ export const POST = route("driver.availability.set", async (req: NextRequest) =>
   await db.assignmentLog.create({
     data: { action: "STATUS_CHANGE", driverId: d.id, actorId: userId, actorRole: "delivery_executive", note: `shift ${available ? "started → AVAILABLE" : "ended → OFFLINE"}` },
   }).catch(() => {});
-  return ok({ availability: next, available });
+  // Automatic assignment trigger: an executive starting their shift → sweep today's
+  // waiting deliveries onto the now-available executives (idempotent, MANUAL-aware).
+  let assignment: unknown = undefined;
+  if (available) {
+    try { const { runScheduledAutoAssignment } = await import("@/lib/assignment/service"); assignment = await runScheduledAutoAssignment({ actorRole: "system" }); } catch (e) { console.error("assign.onShiftStart", (e as Error)?.message); }
+  }
+  return ok({ availability: next, available, assignment });
 });

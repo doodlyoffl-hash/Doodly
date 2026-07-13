@@ -56,11 +56,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const TX = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30_000 } as const;
 
 // A delivery row joined with its address (for locality/geo) — used to build engine inputs.
-const deliveryInclude = { subscription: { include: { address: true } } } as const;
+// Prefer the delivery's own address snapshot (set for order-linked deliveries by the
+// Order→Delivery bridge, and pinned history), falling back to the live subscription address.
+const deliveryInclude = { address: true, subscription: { include: { address: true } } } as const;
 type DeliveryWithAddr = Prisma.DeliveryGetPayload<{ include: typeof deliveryInclude }>;
 
 function toDeliveryInput(d: DeliveryWithAddr): DeliveryInput {
-  const addr = d.subscription?.address;
+  const addr = d.address ?? d.subscription?.address;
   return {
     id: d.id,
     bottles: d.bottleCount ?? 1,
@@ -202,6 +204,52 @@ export async function runAutoAssignment(args: SlotArgs) {
       };
     }, TX),
   );
+}
+
+// ---------- AUTOMATIC TRIGGER (sweep) ----------
+
+/**
+ * Sweep-assign TODAY's (IST) unassigned SCHEDULED deliveries across every slot
+ * they use. This is the automatic trigger behind auto-assignment — fired when an
+ * executive starts their shift, and (optionally) by a morning cron. Idempotent
+ * (only claims SCHEDULED + unassigned deliveries) and strategy-aware (MANUAL →
+ * no-op, so an admin who wants to assign by hand isn't overridden).
+ */
+export async function runScheduledAutoAssignment(actor: Actor = { actorRole: "system" }) {
+  const strategy = await getAssignmentStrategy();
+  if (strategy === "MANUAL") return { ok: true, strategy, slots: 0, assigned: 0, queued: 0, message: "Manual mode — auto-assignment is off." };
+
+  // Today in IST (the business timezone) → the delivery day, regardless of the
+  // UTC hour the trigger fires at. Deliveries are date-stamped for their day.
+  const IST = 5.5 * 60 * 60 * 1000;
+  const nowIST = new Date(Date.now() + IST);
+  const startMs = Date.UTC(nowIST.getUTCFullYear(), nowIST.getUTCMonth(), nowIST.getUTCDate()) - IST;
+  const start = new Date(startMs), end = new Date(startMs + 24 * 60 * 60 * 1000);
+
+  const pending = await db.delivery.findMany({
+    where: { status: "SCHEDULED", assignment: null, queueEntry: null, date: { gte: start, lt: end } },
+    select: { date: true, slot: true },
+  });
+  if (!pending.length) return { ok: true, strategy, slots: 0, assigned: 0, queued: 0, message: "No deliveries to assign today." };
+
+  // Distinct (delivery-day, slot) pairs; runAutoAssignment day-ranges each date.
+  const seen = new Set<string>();
+  const combos: { date: Date; slot: string }[] = [];
+  for (const d of pending) {
+    const slot = d.slot || "06:00-08:00";
+    const dayKey = new Date(d.date.getFullYear(), d.date.getMonth(), d.date.getDate()).getTime();
+    const key = dayKey + "|" + slot;
+    if (!seen.has(key)) { seen.add(key); combos.push({ date: d.date, slot }); }
+  }
+
+  let assigned = 0, queued = 0;
+  const results: { slot: string; assigned: number; queued: number; executives: number }[] = [];
+  for (const c of combos) {
+    const r = await runAutoAssignment({ date: c.date, slot: c.slot, actorRole: actor.actorRole, actorId: actor.actorId });
+    assigned += r.assigned || 0; queued += r.queued || 0;
+    results.push({ slot: c.slot, assigned: r.assigned || 0, queued: r.queued || 0, executives: r.executives || 0 });
+  }
+  return { ok: true, strategy, slots: combos.length, assigned, queued, results };
 }
 
 // ---------- RETURN-TRIP CONTINUATION ----------
