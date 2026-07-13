@@ -28,12 +28,21 @@ const QUEUE_ALERT_THRESHOLD = 50; // bottles in queue that trigger an admin aler
 
 // ---------- helpers ----------
 
+const IST_MS = 5.5 * 60 * 60 * 1000;
+/* The IST calendar day that contains `date` (a Date instant, an ISO string, or a
+   "YYYY-MM-DD" string), expressed as a UTC [gte, lt) window. IST is the business
+   timezone; computing the window this way keeps the assignment day aligned with the
+   IST-dated Delivery records on both an IST dev box and a UTC server (Vercel). */
 function dayRange(date: Date | string) {
-  const d = new Date(date);
-  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { gte: start, lt: end };
+  const d = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(date + "T00:00:00Z") : new Date(date);
+  const ist = new Date(d.getTime() + IST_MS);
+  const startMs = Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()) - IST_MS;
+  return { gte: new Date(startMs), lt: new Date(startMs + 24 * 60 * 60 * 1000) };
+}
+/** "YYYY-MM-DD" (IST) for a UTC window start produced by dayRange(). */
+function isoOf(windowStart: Date): string {
+  const ist = new Date(windowStart.getTime() + IST_MS);
+  return `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, "0")}-${String(ist.getUTCDate()).padStart(2, "0")}`;
 }
 
 /** Retry a transaction on transient write-conflict / deadlock (P2034). */
@@ -215,22 +224,20 @@ export async function runAutoAssignment(args: SlotArgs) {
  * (only claims SCHEDULED + unassigned deliveries) and strategy-aware (MANUAL →
  * no-op, so an admin who wants to assign by hand isn't overridden).
  */
-export async function runScheduledAutoAssignment(actor: Actor = { actorRole: "system" }) {
+export async function runScheduledAutoAssignment(actor: Actor = { actorRole: "system" }, dateStr?: string | null) {
   const strategy = await getAssignmentStrategy();
   if (strategy === "MANUAL") return { ok: true, strategy, slots: 0, assigned: 0, queued: 0, message: "Manual mode — auto-assignment is off." };
 
-  // Today in IST (the business timezone) → the delivery day, regardless of the
-  // UTC hour the trigger fires at. Deliveries are date-stamped for their day.
-  const IST = 5.5 * 60 * 60 * 1000;
-  const nowIST = new Date(Date.now() + IST);
-  const startMs = Date.UTC(nowIST.getUTCFullYear(), nowIST.getUTCMonth(), nowIST.getUTCDate()) - IST;
-  const start = new Date(startMs), end = new Date(startMs + 24 * 60 * 60 * 1000);
+  // The chosen IST delivery day (default: today IST, the business timezone) →
+  // sweeps every slot that day's unassigned deliveries use, regardless of the UTC
+  // hour the trigger fires at. Deliveries are date-stamped for their IST day.
+  const { gte: start, lt: end } = dayRange(dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : new Date());
 
   const pending = await db.delivery.findMany({
     where: { status: "SCHEDULED", assignment: null, queueEntry: null, date: { gte: start, lt: end } },
     select: { date: true, slot: true },
   });
-  if (!pending.length) return { ok: true, strategy, slots: 0, assigned: 0, queued: 0, message: "No deliveries to assign today." };
+  if (!pending.length) return { ok: true, strategy, slots: 0, assigned: 0, queued: 0, message: "No deliveries to assign for that day." };
 
   // Distinct (delivery-day, slot) pairs; runAutoAssignment day-ranges each date.
   const seen = new Set<string>();
@@ -493,6 +500,7 @@ export async function getDashboard(args: { date?: Date | string; slot?: string }
   const assignedOrders = assignAgg._count;
   const unassignedOrders = Math.max(0, deliveryAgg._count - assignedOrders);
   return {
+    date: isoOf(range.gte),
     strategy: await getAssignmentStrategy(),
     totals: {
       orders: deliveryAgg._count,

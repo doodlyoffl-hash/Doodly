@@ -1736,6 +1736,24 @@
     bar.querySelectorAll("[data-quick]").forEach(function (b) { b.addEventListener("click", function () { var k = b.dataset.quick; wireDeliveriesBackend(k === "today" ? today : shiftISO(today, k === "tomorrow" ? 1 : -1)); }); });
     var inp = bar.querySelector("#del-date-input"); if (inp) inp.addEventListener("change", function () { if (inp.value) wireDeliveriesBackend(inp.value); });
   }
+  // Generic date bar (Prev / Yesterday / Today / Tomorrow / 📅 / Next) that calls
+  // onPick(newISO). Reused by the Auto Assignment + Routes boards.
+  function mountDateBar(barId, iso, onPick) {
+    var bar = document.getElementById(barId); if (!bar) return;
+    var today = istTodayISO();
+    var q = function (k, label, active) { return '<button class="btn ' + (active ? "btn-primary" : "btn-ghost") + ' sm" data-quick="' + k + '">' + label + "</button>"; };
+    bar.innerHTML =
+      '<div class="panel panel-pad" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px">' +
+        '<button class="btn btn-ghost sm" data-nav="prev" aria-label="Previous day">&larr;</button>' +
+        q("yesterday", "Yesterday", iso === shiftISO(today, -1)) + q("today", "Today", iso === today) + q("tomorrow", "Tomorrow", iso === shiftISO(today, 1)) +
+        '<label style="display:inline-flex;align-items:center;gap:6px;margin:0"><span aria-hidden="true">📅</span><input type="date" class="input" id="' + barId + '-input" value="' + iso + '" style="max-width:170px"></label>' +
+        '<button class="btn btn-ghost sm" data-nav="next" aria-label="Next day">&rarr;</button>' +
+        '<span class="strong" style="margin-left:auto">' + esc(delDateLabel(iso)) + "</span>" +
+      "</div>";
+    bar.querySelectorAll("[data-nav]").forEach(function (b) { b.addEventListener("click", function () { onPick(shiftISO(iso, b.dataset.nav === "next" ? 1 : -1)); }); });
+    bar.querySelectorAll("[data-quick]").forEach(function (b) { b.addEventListener("click", function () { var k = b.dataset.quick; onPick(k === "today" ? today : shiftISO(today, k === "tomorrow" ? 1 : -1)); }); });
+    var inp = bar.querySelector("#" + barId + "-input"); if (inp) inp.addEventListener("change", function () { if (inp.value) onPick(inp.value); });
+  }
   async function wireDeliveriesBackend(date) {
     if (!window.DOODLY_API) return;
     var iso = date || _delDate || istTodayISO(); _delDate = iso;
@@ -1911,24 +1929,27 @@
       dacToast(err.code === "forbidden" ? "Your role can't change the strategy (403)." : "Couldn't save strategy — " + (err.message || err.code || "error"));
     } finally { sel.disabled = false; }
   }
-  var _asgnBusy = false;
+  var _asgnBusy = false, _asgnDate = "";
   async function runRealAutoAssign(host) {
     if (_asgnBusy) return; _asgnBusy = true;
-    dacToast("Running auto-assignment against the database…");
+    var iso = _asgnDate || istTodayISO();
+    dacToast("Running auto-assignment for " + delDateLabel(iso) + "…");
     try {
-      var today = new Date(); today.setHours(0, 0, 0, 0);
-      var res = await DOODLY_API.post("/api/assignments/auto", { date: today.toISOString(), slot: "06:00-08:00" });
-      var d = await DOODLY_API.get("/api/assignments/dashboard");
+      // No slot → sweep every slot that day's unassigned deliveries use.
+      var res = await DOODLY_API.post("/api/assignments/auto", { date: iso });
+      var d = await DOODLY_API.get("/api/assignments/dashboard?date=" + encodeURIComponent(iso));
       _asgnLast = d;
       applyLiveAssignKpis(host, d);
-      dacToast("Auto-assignment: " + (res.assigned || 0) + " assigned, " + (res.queued || 0) + " queued (" + (res.executives || 0) + " exec).");
+      dacToast("Auto-assignment: " + (res.assigned || 0) + " assigned, " + (res.queued || 0) + " queued" + (res.message ? " — " + res.message : "") + ".");
     } catch (e) { dacToast(e.code === "forbidden" ? "Your role can't run auto-assignment (403)." : "Auto-assign failed — " + (e.message || e.code || "error")); }
     finally { _asgnBusy = false; }
   }
-  async function wireAssignmentBackend() {
+  async function wireAssignmentBackend(date) {
     if (!window.DOODLY_API) return;
     var host = document.getElementById("assignMount");
     if (!host) return;
+    var iso = date || _asgnDate || istTodayISO(); _asgnDate = iso;
+    mountDateBar("asgnDateBar", iso, wireAssignmentBackend);
     if (!host._bkAsgnBound) {
       host._bkAsgnBound = true;
       host.addEventListener("click", function (e) {
@@ -1941,7 +1962,7 @@
     }
     var ar = host.querySelector("#asAutoRef"); if (ar && ar.checked) { ar.checked = false; try { ar.dispatchEvent(new Event("change")); } catch (e0) {} }
     try {
-      var d = await DOODLY_API.get("/api/assignments/dashboard");
+      var d = await DOODLY_API.get("/api/assignments/dashboard?date=" + encodeURIComponent(iso));
       _asgnLast = d;
       if (!_asgnStrategy) {
         try { var sg = await DOODLY_API.get("/api/assignments/strategy"); _asgnStrategy = (sg && sg.strategy) || d.strategy || "EQUAL"; }
@@ -1949,7 +1970,7 @@
       }
       injectAssignLive(host);
       var t = d.totals || {}, ex = (d.executives || []).length;
-      bkBanner(host, "● Live — auto-assignment engine on the DOODLY database (" + DOODLY_API.base() + "): " + (t.orders || 0) + " order(s), " + ex + " executive(s) on trip, " + (t.queueCount || 0) + " queued. ⚡ Auto-assign runs against the DB.", "ok");
+      bkBanner(host, "● Live — auto-assignment for " + delDateLabel(iso) + " (" + DOODLY_API.base() + "): " + (t.orders || 0) + " order(s), " + ex + " executive(s) on trip, " + (t.queueCount || 0) + " queued. ⚡ Auto-assign runs against the DB for this date.", "ok");
     } catch (e) {
       bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing the local planner simulation." : e.code === "forbidden" ? "⚠ Your role can't run auto-assignment (403)." : "⚠ " + (e.message || "Couldn't load the assignment dashboard."), "err");
     }
@@ -2309,11 +2330,14 @@
     try { var dr = await DOODLY_API.get("/api/admin/drivers"); _rtDrivers = dr.drivers || []; } catch (e) { _rtDrivers = []; }
     try { var zr = await DOODLY_API.get("/api/admin/delivery/zones"); _rtZones = (zr && zr.zones) || []; } catch (e) { _rtZones = []; }
   }
-  async function wireRoutesBackend() {
+  var _rtDate = "";
+  async function wireRoutesBackend(date) {
     if (!window.DOODLY_API) return;
     var host = document.querySelector('.dt-host[data-dataset="routes"]');
+    var iso = date || _rtDate || istTodayISO(); _rtDate = iso;
+    mountDateBar("routesDateBar", iso, wireRoutesBackend);
     try {
-      var data = await DOODLY_API.get("/api/admin/routes");
+      var data = await DOODLY_API.get("/api/admin/routes?date=" + encodeURIComponent(iso));
       _rtRoutes = data.routes || [];
       var rows = _rtRoutes.map(function (r) { return { id: r.code && r.code !== "—" ? r.code : (r.name.split(" · ")[0] || r.name), zone: r.zone, driver: r.driver, stops: r.stops, litres: r.distanceKm != null ? r.distanceKm + " km" : (r.durationMin != null ? r.durationMin + " min" : "—"), status: r.status, _id: r.id }; });
       if (window.DOODLY_DATA) DOODLY_DATA.routes = rows;
@@ -2321,7 +2345,7 @@
       try { var st = await DOODLY_API.get("/api/admin/routes/stats"); renderRtStats(host, st); } catch (e2) {}
       loadRtLookups();
       try { mountRtOverview(); } catch (eov) {}
-      bkBanner(host, "● Live — " + rows.length + " route(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
+      bkBanner(host, "● Live — " + rows.length + " route(s) for " + delDateLabel(iso) + " (" + DOODLY_API.base() + ").", "ok");
     } catch (e) {
       bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live routes." : e.code === "forbidden" ? "⚠ Your role can't view routes (403)." : "⚠ " + (e.message || "Couldn't load routes."), "err");
     }

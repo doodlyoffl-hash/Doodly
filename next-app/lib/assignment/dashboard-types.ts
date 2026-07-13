@@ -30,6 +30,8 @@ export interface QueueChip {
 }
 
 export interface DashboardData {
+  /** The IST delivery day these aggregates cover ("YYYY-MM-DD"). */
+  date: string;
   /** Active auto-assignment strategy (EQUAL = Startup Mode, CAPACITY, AREA, MANUAL). */
   strategy: string;
   totals: {

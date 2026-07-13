@@ -10,6 +10,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { Errors } from "@/lib/http";
 import { orderByNearestNeighbor, haversineKm } from "@/lib/assignment/engine";
+import { istDayWindow } from "@/lib/delivery/stats";
 
 export interface Actor { actorId?: string; actorRole?: string; ip?: string }
 
@@ -35,9 +36,13 @@ const ROUTE_SELECT = {
   zone: { select: { name: true } }, driver: { select: { employeeId: true, user: { select: { name: true } } } }, _count: { select: { deliveries: true } },
 } as const;
 
-export async function listRoutes(q: { search?: string; status?: string; zoneId?: string; driverId?: string } = {}) {
+export async function listRoutes(q: { search?: string; status?: string; zoneId?: string; driverId?: string; date?: string } = {}) {
+  // Optional IST-day filter — routes are day-scoped (Route.date). No date → all days.
+  const dateWhere = q.date && /^\d{4}-\d{2}-\d{2}$/.test(q.date)
+    ? (() => { const { start, end } = istDayWindow(q.date); return { date: { gte: start, lt: end } }; })()
+    : {};
   const rows = await db.route.findMany({
-    where: q.status === "deleted" ? { NOT: { deletedAt: null } } : { deletedAt: null },
+    where: { ...(q.status === "deleted" ? { NOT: { deletedAt: null } } : { deletedAt: null }), ...dateWhere },
     orderBy: { date: "desc" }, take: 300, select: ROUTE_SELECT,
   });
   let items = rows.map(mapRoute);

@@ -15,8 +15,9 @@ export const dynamic = "force-dynamic";
 export const GET = route("admin.routes.list", async (req: NextRequest) => {
   requirePermission(req, "routes", "view");
   const sp = req.nextUrl.searchParams;
-  const res = await listRoutes({ search: sp.get("search") ?? undefined, status: sp.get("status") ?? undefined, zoneId: sp.get("zoneId") ?? undefined, driverId: sp.get("driverId") ?? undefined });
-  return ok({ routes: res.items, stats: res.stats });
+  const date = sp.get("date") ?? undefined;
+  const res = await listRoutes({ search: sp.get("search") ?? undefined, status: sp.get("status") ?? undefined, zoneId: sp.get("zoneId") ?? undefined, driverId: sp.get("driverId") ?? undefined, date });
+  return ok({ routes: res.items, stats: res.stats, date: date ?? null });
 });
 
 const createSchema = z.object({

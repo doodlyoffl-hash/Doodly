@@ -750,6 +750,8 @@ window.DOODLY_BLOCKS = (function () {
   R.packingBoard = () => `<div class="reveal" id="packingMount"></div>`;
   R.packDateBar = () => `<div class="reveal" id="packDateBar"></div>`;
   R.deliveryDateBar = () => `<div class="reveal" id="delDateBar"></div>`;
+  R.asgnDateBar = () => `<div class="reveal" id="asgnDateBar"></div>`;
+  R.routesDateBar = () => `<div class="reveal" id="routesDateBar"></div>`;
   /* ---------- AI chat support management (built by assistant.js) ---------- */
   R.chatSupport = () => `<div class="reveal" id="chatSupportMount"></div>`;
   /* ---------- Customer & User live cards (built by customer.js) ---------- */
