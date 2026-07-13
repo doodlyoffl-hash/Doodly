@@ -8,9 +8,11 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import type { OrderEventType, PaymentStatus, OrderType } from "@prisma/client";
 import { db } from "@/lib/db";
+import { sendInvoiceEmail } from "@/lib/auth/email";
 import type { OrderFulfilment, OrderListItem, OrderDetail } from "./types";
 
 const TX = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30_000 } as const;
+const STOREFRONT = (process.env.NEXT_PUBLIC_STOREFRONT_URL || "https://www.doodly.in").replace(/\/$/, "");
 const rupees = (p: number) => `₹${(p / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const num = (id: string) => `DOO-${id.slice(-6).toUpperCase()}`;
 
@@ -213,22 +215,66 @@ export async function rateOrder(userId: string, id: string, rating: number, comm
   }, TX);
 }
 
-export async function generateCustomerInvoice(userId: string, id: string) {
-  return db.$transaction(async (tx) => {
-    const order = await tx.order.findFirst({ where: { id, userId }, select: { id: true, taxPaise: true, invoice: { select: { number: true } } } });
-    if (!order) throw new Error("Order not found");
-    if (order.invoice) return { number: order.invoice.number };
+/**
+ * Ensure a B2C Invoice exists for a PAID order. System-callable (no userId
+ * scoping) so the payment webhook / verify callback / full-wallet checkout can
+ * auto-generate it. Idempotent — returns the existing invoice if present and
+ * no-ops for orders that aren't PAID yet. On first creation it emails the
+ * customer their invoice (non-blocking, transactional). Safe to fire from
+ * multiple paths (webhook + verify race).
+ */
+export async function ensureInvoiceForOrder(orderId: string): Promise<{ number: string; created: boolean } | null> {
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true, userId: true, status: true, taxPaise: true, totalPaise: true, createdAt: true,
+      invoice: { select: { number: true } },
+      user: { select: { name: true, email: true } },
+    },
+  });
+  if (!order) return null;
+  if (order.invoice) return { number: order.invoice.number, created: false };
+  if (order.status !== "PAID") return null;   // invoices are issued only once payment is confirmed
+
+  const number = await db.$transaction(async (tx) => {
+    // re-check inside the tx (webhook + verify can race)
+    const again = await tx.order.findUnique({ where: { id: orderId }, select: { invoice: { select: { number: true } } } });
+    if (again?.invoice) return again.invoice.number;
     const year = new Date().getFullYear();
     // continue past any seeded invoice numbers for the year
     const seqRow = await tx.counter.upsert({ where: { key: `invoice:${year}` }, create: { key: `invoice:${year}`, value: 1 }, update: { value: { increment: 1 } } });
     let seq = seqRow.value;
-    // skip collisions with pre-existing numbers
     for (let i = 0; i < 50; i++) {
-      const number = `DOODLY/${year}/${String(seq).padStart(5, "0")}`;
-      const clash = await tx.invoice.findUnique({ where: { number }, select: { id: true } });
-      if (!clash) { await tx.invoice.create({ data: { number, userId, orderId: id, gstPaise: order.taxPaise } }); return { number }; }
+      const n = `DOODLY/${year}/${String(seq).padStart(5, "0")}`;
+      const clash = await tx.invoice.findUnique({ where: { number: n }, select: { id: true } });
+      if (!clash) { await tx.invoice.create({ data: { number: n, userId: order.userId, orderId, gstPaise: order.taxPaise } }); return n; }
       seq = (await tx.counter.update({ where: { key: `invoice:${year}` }, data: { value: { increment: 1 } } })).value;
     }
     throw new Error("Could not allocate an invoice number.");
   }, TX);
+
+  // Email the invoice (non-blocking). Transactional document → send it; the
+  // sender no-ops safely if email isn't configured.
+  try {
+    if (order.user?.email) {
+      await sendInvoiceEmail(order.user.email, {
+        name: order.user.name,
+        invoiceNo: number,
+        amount: rupees(order.totalPaise),
+        date: order.createdAt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }),
+        downloadUrl: `${STOREFRONT}/account/invoices.html`,
+      });
+    }
+  } catch (e) { console.error("invoice.email", (e as Error)?.message); }
+
+  return { number, created: true };
+}
+
+/** Customer-initiated (self-scoped) invoice generation — POST /api/orders/[id] {action:"invoice"}. */
+export async function generateCustomerInvoice(userId: string, id: string) {
+  const order = await db.order.findFirst({ where: { id, userId }, select: { id: true } });
+  if (!order) throw new Error("Order not found");
+  const r = await ensureInvoiceForOrder(id);
+  if (!r) throw new Error("Your invoice will be ready once payment is confirmed.");
+  return { number: r.number };
 }

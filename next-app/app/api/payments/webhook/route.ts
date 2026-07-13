@@ -12,6 +12,7 @@ import { maybeAwardReferralForUser } from "@/lib/referrals/service";
 import { releaseCheckoutHolds } from "@/lib/checkout/service";
 import { notify, notifyOrderConfirmed } from "@/lib/notifications/dispatch";
 import { awardOrderPaid, earn } from "@/lib/loyalty/service";
+import { ensureInvoiceForOrder } from "@/lib/orders/service";
 
 export const runtime = "nodejs";
 
@@ -56,6 +57,8 @@ export async function POST(req: NextRequest) {
           await maybeAwardReferralForUser(op.userId, { actorRole: "system" });
           // DOODLY Pure Rewards: order + subscription points (idempotent; verify may also call this)
           await awardOrderPaid(op.userId, op.orderId);
+          // Auto-generate + email the B2C invoice now that the order is PAID (idempotent).
+          try { await ensureInvoiceForOrder(op.orderId); } catch (e) { console.error("invoice.ensure", (e as Error)?.message); }
         }
         const ledgerId = op ? await syncFromOrderPayment(op.id).catch(() => null) : null;
         await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: p.id, paymentId: ledgerId ?? undefined, processed: true }).catch(() => {});

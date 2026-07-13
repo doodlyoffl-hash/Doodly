@@ -2022,6 +2022,54 @@
   }
   window.DOODLY_ADMIN.wireScheduledAddressChangesBackend = wireScheduledAddressChangesBackend;
 
+  // ---- Customer Invoices (admin/invoices → live list from /api/admin/invoices; View / PDF) ----
+  function invAdminPdf(invId, num, download) {
+    var base = window.DOODLY_API ? DOODLY_API.base() : "";
+    var h = {}; try { var t = localStorage.getItem("doodly-token"); if (t) h["Authorization"] = "Bearer " + t; } catch (e) {}
+    // dev actor bridge (stripped in prod) so an admin session can download locally too
+    try { if (window.DOODLY_RBAC) { h["X-Doodly-Actor"] = DOODLY_RBAC.activeRole(); var cu = DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser(); if (cu && cu.id) h["X-Doodly-Actor-Id"] = cu.id; } } catch (e) {}
+    dacToast("Preparing the invoice PDF…");
+    fetch(base + "/api/invoices/" + encodeURIComponent(invId) + "/pdf" + (download ? "?dl=1" : ""), { headers: h, credentials: "include" })
+      .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.blob(); })
+      .then(function (blob) { var url = URL.createObjectURL(blob); if (download) { var a = document.createElement("a"); a.href = url; a.download = "DOODLY-invoice-" + (num || invId) + ".pdf"; a.click(); } else window.open(url, "_blank"); setTimeout(function () { URL.revokeObjectURL(url); }, 60000); })
+      .catch(function () { dacToast("Couldn't open the invoice PDF."); });
+  }
+  function wireInvoicesAdminBackend() {
+    if (!window.DOODLY_API) return;
+    var host = document.getElementById("invAdminMount");
+    if (!host) return;
+    var money = function (p) { return "₹" + Math.round((p || 0) / 100).toLocaleString("en-IN"); };
+    host.innerHTML =
+      '<div class="panel"><div class="panel-head"><h3>Customer Invoices</h3><input class="input" id="inv-q" placeholder="Search invoice # or customer…" style="max-width:240px"></div>' +
+      '<div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Invoice</th><th>Customer</th><th>Order</th><th>Amount</th><th>GST</th><th>Issued</th><th>Actions</th></tr></thead><tbody id="inv-body"><tr><td colspan="7" class="muted-sm">Loading…</td></tr></tbody></table></div></div></div>';
+    var body = host.querySelector("#inv-body");
+    var load = function () {
+      var q = (host.querySelector("#inv-q").value || "").trim();
+      DOODLY_API.get("/api/admin/invoices" + (q ? "?q=" + encodeURIComponent(q) : "")).then(function (r) {
+        var list = r.invoices || [];
+        body.innerHTML = list.length ? list.map(function (iv) {
+          var cust = (iv.user && (iv.user.name || iv.user.phone)) || "—";
+          var when = iv.issuedAt ? new Date(iv.issuedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+          var oref = iv.order ? "DOO-" + iv.order.id.slice(-6).toUpperCase() : "—";
+          var amt = iv.order ? money(iv.order.totalPaise) : "—";
+          return "<tr><td><span class='strong'>" + esc(iv.number) + "</span></td><td>" + esc(cust) + "</td><td>" + esc(oref) + "</td><td>" + amt + "</td><td>" + money(iv.gstPaise) + "</td><td>" + esc(when) + "</td><td><button class='btn btn-ghost sm inv-view' data-id='" + iv.id + "' data-num='" + esc(iv.number) + "'>View</button> <button class='btn btn-ghost sm inv-dl' data-id='" + iv.id + "' data-num='" + esc(iv.number) + "'>PDF</button></td></tr>";
+        }).join("") : '<tr><td colspan="7" class="muted-sm" style="text-align:center;padding:18px">No invoices yet — they appear automatically after each paid order.</td></tr>';
+        bkBanner(host, "● Live — " + (r.total || 0) + " invoice(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
+      }).catch(function (e) {
+        body.innerHTML = '<tr><td colspan="7" class="muted-sm" style="text-align:center;padding:18px">Couldn\'t load invoices.</td></tr>';
+        bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + "." : e.code === "forbidden" ? "⚠ Your role can't view invoices (403)." : "⚠ " + (e.message || "Couldn't load."), "err");
+      });
+    };
+    var deb; host.querySelector("#inv-q").addEventListener("input", function () { clearTimeout(deb); deb = setTimeout(load, 300); });
+    body.addEventListener("click", function (e) {
+      var v = e.target.closest && e.target.closest(".inv-view"), d = e.target.closest && e.target.closest(".inv-dl");
+      if (v) invAdminPdf(v.dataset.id, v.dataset.num, false);
+      else if (d) invAdminPdf(d.dataset.id, d.dataset.num, true);
+    });
+    load();
+  }
+  window.DOODLY_ADMIN.wireInvoicesAdminBackend = wireInvoicesAdminBackend;
+
   // ---- Drivers (admin/drivers → live list + dashboard + Add/Manage; reuses /api/admin/drivers*) ----
   var _drDrivers = [], _drZones = [];
   function drInitials(name) { return String(name || "").split(/\s+/).filter(Boolean).map(function (w) { return w[0]; }).slice(0, 2).join("").toUpperCase() || "?"; }
@@ -5152,6 +5200,7 @@
     if (route === "admin/drivers") return wireDriversBackend();
     if (route === "admin/late-deliveries") return wireLateDeliveriesBackend();
     if (route === "admin/scheduled-address-changes") return wireScheduledAddressChangesBackend();
+    if (route === "admin/invoices") return wireInvoicesAdminBackend();
     if (route === "admin/assignment") return wireAssignmentBackend();
     if (route === "admin/deliveries") return wireDeliveriesBackend();
     if (route === "admin/delivery-settings") return wireDeliverySettingsBackend();
@@ -5285,20 +5334,33 @@
         }
       }
     } catch (e) {}
-    // invoice download + page-head actions (real CSV / friendly feedback) — wired once
+    // invoice view/download + page-head actions — wired once
     if (!document.body.dataset.invWired) {
       document.body.dataset.invWired = "1";
       const dl = (name, csv) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
       const toast = (m) => { if (window.DOODLY_PINCODE && window.DOODLY_PINCODE.toast) window.DOODLY_PINCODE.toast(m); };
-      const brand = () => (window.DOODLY && window.DOODLY.brand) || {};
+      // Fetch the real backend invoice PDF WITH auth (Bearer token in prod, cookie in dev),
+      // then open it inline or save it. A plain <a> can't carry the auth header.
+      const invoicePdf = (invId, num, download) => {
+        var base = window.DOODLY_API ? DOODLY_API.base() : "";
+        var tok = null; try { tok = localStorage.getItem("doodly-token"); } catch (e) {}
+        var headers = tok ? { Authorization: "Bearer " + tok } : {};
+        toast("Preparing your invoice…");
+        fetch(base + "/api/invoices/" + encodeURIComponent(invId) + "/pdf" + (download ? "?dl=1" : ""), { headers: headers, credentials: "include" })
+          .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.blob(); })
+          .then((blob) => {
+            var url = URL.createObjectURL(blob);
+            if (download) { var a = document.createElement("a"); a.href = url; a.download = "DOODLY-invoice-" + (num || invId) + ".pdf"; a.click(); }
+            else { window.open(url, "_blank"); }
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+          })
+          .catch(() => toast("Couldn't open the invoice — please sign in and try again."));
+      };
       document.addEventListener("click", (e) => {
+        const invV = e.target.closest(".js-invoice-view");
+        if (invV) { invoicePdf(invV.dataset.invid, invV.dataset.num, false); return; }
         const inv = e.target.closest(".js-invoice-dl");
-        if (inv) {
-          const c = brand().company || {};
-          const rows = [["Document", brand().name + " — Tax Invoice"], ["Invoice", inv.dataset.inv], ["Date", inv.dataset.date], ["Seller", c.legalName || brand().name], ["GSTIN", c.gst || "—"], ["Registered address", c.address || ""], ["Amount (₹)", inv.dataset.amt], ["GST", inv.dataset.gst]];
-          dl("invoice-" + inv.dataset.inv + ".csv", rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n"));
-          return;
-        }
+        if (inv) { invoicePdf(inv.dataset.invid, inv.dataset.num, true); return; }
         const dm = e.target.closest(".js-delivery-manage");
         if (dm) { if (window.DOODLY_ADMIN && window.DOODLY_ADMIN.manageDelivery) window.DOODLY_ADMIN.manageDelivery(dm.dataset.delivery); return; }
         const drm = e.target.closest(".js-driver-manage");
@@ -5454,7 +5516,7 @@
     /* ---- orders / deliveries / invoices / bottle ledger / referrals ---- */
     if (orders) D.orders = orders.map((o) => ({ id: o.number || o.id, _id: o.id, date: fmtFull(o.createdAt), item: o.itemsSummary || "—", amount: Math.round((o.totalPaise || 0) / 100), status: ORD_STATUS(o) }));
     if (deliveries) D.deliveries = deliveries.map((dv) => ({ id: dv.orderRef || dv.planName || ("#" + String(dv.id).slice(-6).toUpperCase()), _id: dv.id, date: fmtRel(dv.date), time: dv.deliveredAt ? fmtTime(dv.deliveredAt) : (dv.slot || "—"), item: dv.itemsSummary || dv.planName || "—", driver: dv.driver ? dv.driver.name : "—", status: DEL_STATUS(dv.status) }));
-    if (invoices) D.invoices = invoices.map((iv) => ({ id: iv.number || iv.id, date: fmtFull(iv.issuedAt), amount: Math.round(((iv.order && iv.order.totalPaise) || 0) / 100), gst: "incl. GST", status: PAY_STATUS(iv.order && iv.order.status), pdfUrl: iv.pdfUrl || null }));
+    if (invoices) D.invoices = invoices.map((iv) => ({ id: iv.number || iv.id, _id: iv.id, date: fmtFull(iv.issuedAt), amount: Math.round(((iv.order && iv.order.totalPaise) || 0) / 100), gst: "incl. GST", status: PAY_STATUS(iv.order && iv.order.status), pdfUrl: iv.pdfUrl || null }));
     if (bottles && bottles.ledger) {
       const asc = bottles.ledger.slice().reverse(); let bal = 0;
       D.bottleLedger = asc.map((b) => {

@@ -10,6 +10,7 @@ import { maybeAwardReferralForUser } from "@/lib/referrals/service";
 import { syncFromOrderPayment } from "@/lib/payments/service";
 import { notifyOrderConfirmed } from "@/lib/notifications/dispatch";
 import { awardOrderPaid } from "@/lib/loyalty/service";
+import { ensureInvoiceForOrder } from "@/lib/orders/service";
 
 const num = (id: string) => `DOO-${id.slice(-6).toUpperCase()}`;
 
@@ -53,6 +54,8 @@ export async function POST(req: NextRequest) {
     await maybeAwardReferralForUser(payment.userId, { actorRole: "system" });
     // DOODLY Pure Rewards: order + subscription points (idempotent; webhook may also call this)
     await awardOrderPaid(payment.userId, payment.orderId);
+    // Auto-generate + email the B2C invoice now that the order is PAID (idempotent; webhook may also call this).
+    try { await ensureInvoiceForOrder(payment.orderId); } catch (e) { console.error("invoice.ensure", (e as Error)?.message); }
   }
 
   return NextResponse.json({ verified: true, cashback });

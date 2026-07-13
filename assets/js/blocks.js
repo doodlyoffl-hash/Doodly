@@ -131,7 +131,7 @@ window.DOODLY_BLOCKS = (function () {
       row:(r)=>[r.date, r.desc, `<span class="strong" style="color:${r.credit?'var(--leaf-600)':'var(--ink)'}">${r.amount}</span>`],
       empty: emptyState("wallet","No transactions yet","Your wallet credits, payments and refunds will appear here. Add money to get started.") },
     invoices: { title:"Invoices", cols:["Invoice","Date","Amount","Tax","Status",""],
-      row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.date, `<span class="strong">${inr(r.amount)}</span>`, r.gst, badge(r.status), `<a class="link" href="/invoice.html?id=${encodeURIComponent(r.id)}" aria-label="View invoice ${r.id}">${icon("eye",16)} View</a> <button class="link js-invoice-dl" data-inv="${r.id}" data-date="${r.date}" data-amt="${r.amount}" data-gst="${r.gst}" aria-label="Download invoice ${r.id}">${icon("download",16)}</button>`],
+      row:(r)=>[`<span class="cell-id">${r.id}</span>`, r.date, `<span class="strong">${inr(r.amount)}</span>`, r.gst, badge(r.status), (r._id ? `<button class="link js-invoice-view" data-invid="${r._id}" data-num="${r.id}" aria-label="View invoice ${r.id}">${icon("eye",16)} View</button> <button class="link js-invoice-dl" data-invid="${r._id}" data-num="${r.id}" aria-label="Download invoice ${r.id}">${icon("download",16)}</button>` : `<span class="muted-sm">—</span>`)],
       empty: emptyState("receipt","No invoices yet","Invoices are generated automatically after each paid order — you'll be able to view and download them here.",[["Browse products","/products.html",1]]) },
     referrals: { title:"Your referrals", cols:["Friend","Date","Status","Reward"],
       row:(r)=>[r.name, r.date, badge(r.status), `<span class="strong">${r.reward}</span>`],
@@ -746,6 +746,7 @@ window.DOODLY_BLOCKS = (function () {
   /* ---------- Late delivery monitoring (built by late.js) ---------- */
   R.lateDeliveries = () => `<div class="reveal" id="lateMount"></div>`;
   R.scheduledAddressChanges = () => `<div class="reveal" id="sacMount"></div>`;
+  R.invoicesAdmin = () => `<div class="reveal" id="invAdminMount"></div>`;
   /* ---------- AI chat support management (built by assistant.js) ---------- */
   R.chatSupport = () => `<div class="reveal" id="chatSupportMount"></div>`;
   /* ---------- Customer & User live cards (built by customer.js) ---------- */

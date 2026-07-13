@@ -249,6 +249,8 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
       number: base.number, amountPaise: totalPaise,
       firstDelivery: startDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
     });
+    // Auto-generate + email the B2C invoice now that the order is PAID (idempotent).
+    try { const { ensureInvoiceForOrder } = await import("@/lib/orders/service"); await ensureInvoiceForOrder(order.id); } catch (e) { console.error("invoice.ensure", (e as Error)?.message); }
     return { ...base, paid: true, method: "wallet", cashback };
   }
 
