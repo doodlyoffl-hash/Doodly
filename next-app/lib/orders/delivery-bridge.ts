@@ -15,6 +15,10 @@ import "server-only";
 import { db } from "@/lib/db";
 
 const IST_MS = 5.5 * 60 * 60 * 1000;
+// Canonical morning slot key used across the app (seed, the auto-assign sweep). A
+// delivery must carry a slot to be auto-assignable, so default to it when the order
+// didn't capture one (older / minimal orders).
+const DEFAULT_SLOT = "06:00-08:00";
 
 /* The next delivery day at IST midnight (expressed as a UTC Date). Used when a
    confirmed order has no stored delivery date so it still lands on the board on
@@ -67,7 +71,7 @@ export async function ensureDeliveryForOrder(orderId: string): Promise<{ deliver
     const addressId = await resolveAddressId(order.addressId ?? order.subscription.addressId, order.userId);
     if (!addressId) return null;
     const d = await db.delivery.create({
-      data: { subscriptionId: order.subscription.id, addressId, date, slot: order.deliverySlot, status: "SCHEDULED", bottleCount },
+      data: { subscriptionId: order.subscription.id, addressId, date, slot: order.deliverySlot ?? DEFAULT_SLOT, status: "SCHEDULED", bottleCount },
     });
     return { deliveryId: d.id, created: true };
   }
@@ -77,7 +81,7 @@ export async function ensureDeliveryForOrder(orderId: string): Promise<{ deliver
   const addressId = await resolveAddressId(order.addressId, order.userId);
   if (!addressId) return null;   // truly cannot deliver — no address anywhere on file
   const d = await db.delivery.create({
-    data: { orderId: order.id, addressId, date, slot: order.deliverySlot, status: "SCHEDULED", bottleCount },
+    data: { orderId: order.id, addressId, date, slot: order.deliverySlot ?? DEFAULT_SLOT, status: "SCHEDULED", bottleCount },
   });
   return { deliveryId: d.id, created: true };
 }

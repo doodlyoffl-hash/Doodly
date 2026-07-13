@@ -58,14 +58,14 @@ try {
       if (existing) { skippedExisting++; continue; }
       const addressId = await resolveAddressId(o.addressId ?? o.subscription.addressId, o.userId);
       if (!addressId) { skippedNoAddress++; rows.push([o.id.slice(-6), o.user?.name, "SUB", "NO-ADDRESS → skip"]); continue; }
-      if (CONFIRM) await db.delivery.create({ data: { subscriptionId: o.subscription.id, addressId, date, slot: o.deliverySlot, status: "SCHEDULED", bottleCount: 1 } });
+      if (CONFIRM) await db.delivery.create({ data: { subscriptionId: o.subscription.id, addressId, date, slot: o.deliverySlot ?? "06:00-08:00", status: "SCHEDULED", bottleCount: 1 } });
       created++; rows.push([o.id.slice(-6), o.user?.name, "SUB", `→ ${istISO(date)}`]);
       continue;
     }
 
     const addressId = await resolveAddressId(o.addressId, o.userId);
     if (!addressId) { skippedNoAddress++; rows.push([o.id.slice(-6), o.user?.name, o.type, "NO-ADDRESS → skip"]); continue; }
-    if (CONFIRM) await db.delivery.create({ data: { orderId: o.id, addressId, date, slot: o.deliverySlot, status: "SCHEDULED", bottleCount: 1 } });
+    if (CONFIRM) await db.delivery.create({ data: { orderId: o.id, addressId, date, slot: o.deliverySlot ?? "06:00-08:00", status: "SCHEDULED", bottleCount: 1 } });
     created++; rows.push([o.id.slice(-6), o.user?.name, o.type, `${o.payment?.method || "-"} → deliver ${istISO(date)}`]);
   }
 
