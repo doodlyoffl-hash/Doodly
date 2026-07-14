@@ -47,9 +47,9 @@ export async function ensureDeliveryForOrder(orderId: string): Promise<{ deliver
     where: { id: orderId },
     select: {
       id: true, status: true, addressId: true, deliveryDate: true, deliverySlot: true, userId: true,
+      stockUnits: true,
       payment: { select: { method: true } },
       delivery: { select: { id: true } },
-      items: { select: { quantity: true } },
       subscription: { select: { id: true, addressId: true, items: { select: { qty: true } } } },
     },
   });
@@ -59,12 +59,14 @@ export async function ensureDeliveryForOrder(orderId: string): Promise<{ deliver
   const confirmed = order.status === "PAID" || order.payment?.method === "CASH";
   if (!confirmed) return null;
 
-  // Physical bottles on this stop — drives the bottle ledger (ISSUED/RETURNED), the
-  // executive's carrying capacity and the "total bottles" KPIs. Must be the real
-  // quantity ordered, not one-per-stop. (Matches lib/subscriptions/deliveries.ts.)
+  // Physical bottles ON THIS STOP — drives the bottle ledger (ISSUED/RETURNED), the
+  // executive's carrying capacity and the "total bottles" KPIs.
+  // NB: OrderItem.quantity stores DAYS, not bottles (checkout writes `quantity: days`),
+  // so it must NOT be used here. Order.stockUnits is the bottles-per-delivery chosen at
+  // checkout; subscriptions carry it on SubscriptionItem.qty.
   const bottleCount = order.subscription
     ? Math.max(1, (order.subscription.items ?? []).reduce((s, i) => s + (i.qty || 0), 0))
-    : Math.max(1, (order.items ?? []).reduce((s, i) => s + (i.quantity || 0), 0));
+    : Math.max(1, order.stockUnits || 1);
   // Defensive fallbacks so a confirmed order never ends up without a delivery:
   // a date (its own, else the next delivery day) and an address (its own, else the
   // customer's saved default). Only skip when there is genuinely no address on file.

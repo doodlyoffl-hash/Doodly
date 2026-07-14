@@ -40,8 +40,8 @@ try {
     },
     select: {
       id: true, status: true, type: true, addressId: true, deliveryDate: true, deliverySlot: true, userId: true,
+      stockUnits: true,
       payment: { select: { method: true } },
-      items: { select: { quantity: true } },
       subscription: { select: { id: true, addressId: true, items: { select: { qty: true } } } },
       user: { select: { name: true } },
     },
@@ -49,9 +49,10 @@ try {
   });
 
   // Real physical bottles on the stop (drives the bottle ledger + exec capacity).
+  // NB: OrderItem.quantity is DAYS, not bottles — Order.stockUnits is the bottle count.
   const bottlesOf = (o) => o.subscription
     ? Math.max(1, (o.subscription.items ?? []).reduce((s, i) => s + (i.qty || 0), 0))
-    : Math.max(1, (o.items ?? []).reduce((s, i) => s + (i.quantity || 0), 0));
+    : Math.max(1, o.stockUnits || 1);
 
   let created = 0, skippedExisting = 0, skippedNoAddress = 0;
   const rows = [];
