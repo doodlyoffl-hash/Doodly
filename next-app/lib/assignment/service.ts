@@ -524,3 +524,173 @@ export async function getDashboard(args: { date?: Date | string; slot?: string }
     queue: queueItems,
   };
 }
+
+// ---------- ORDER-CENTRIC ASSIGNMENT VISIBILITY (admin Auto Assignment board) ----------
+
+const VISIBILITY_ADDR = { select: { houseNo: true, buildingName: true, floor: true, line1: true, line2: true, street: true, area: true, city: true, state: true, pincode: true } } as const;
+function fmtVisAddr(a: { houseNo?: string | null; buildingName?: string | null; floor?: string | null; line1?: string | null; line2?: string | null; street?: string | null; area?: string | null; city?: string | null; state?: string | null; pincode?: string | null } | null | undefined): string {
+  if (!a) return "—";
+  const structured = [a.houseNo, a.buildingName, a.floor, a.street].filter(Boolean);
+  const base = structured.length ? structured : [a.line1, a.line2].filter(Boolean);
+  const parts = [...base, a.area, a.city, a.state].filter(Boolean);
+  return (parts.join(", ") + (a.pincode ? " " + a.pincode : "")) || "—";
+}
+const ACCEPTED_DELIVERY = ["ACCEPTED", "PACKED", "OUT_FOR_DELIVERY", "ON_THE_WAY", "REACHED"];
+
+/** Every delivery for an IST day with its assigned executive, method, status and
+    the per-day summary — the data behind the admin Auto Assignment order table. */
+export async function listAssignmentOrders(dateStr?: string | null) {
+  const { gte: start, lt: end } = dayRange(dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : new Date());
+  const iso = isoOf(start);
+
+  const rows = await db.delivery.findMany({
+    where: { date: { gte: start, lt: end }, status: { not: "DELIVERED" } },
+    orderBy: [{ slot: "asc" }, { sequence: "asc" }, { date: "asc" }],
+    take: 1000,
+    select: {
+      id: true, orderId: true, date: true, status: true, bottleCount: true, slot: true,
+      address: VISIBILITY_ADDR,
+      driver: { select: { id: true, employeeId: true, user: { select: { name: true, phone: true } } } },
+      assignment: { select: { status: true, assignedAt: true, acceptedAt: true, locked: true, driverId: true } },
+      subscription: {
+        select: {
+          user: { select: { name: true, phone: true } }, address: VISIBILITY_ADDR,
+          items: { select: { qty: true, variant: { select: { label: true, product: { select: { name: true } } } } } },
+          order: { select: { id: true } },
+        },
+      },
+      order: { select: { user: { select: { name: true, phone: true } }, items: { select: { productName: true, variantLabel: true, quantity: true } } } },
+    },
+  });
+
+  // Latest assign-type log per delivery → assignment method + reassignment detection.
+  const ids = rows.map((r) => r.id);
+  const logs = ids.length
+    ? await db.assignmentLog.findMany({
+        where: { deliveryId: { in: ids }, action: { in: ["AUTO_ASSIGN", "MANUAL_ASSIGN", "REASSIGN", "UNASSIGN"] } },
+        orderBy: { createdAt: "desc" }, select: { deliveryId: true, action: true },
+      })
+    : [];
+  const lastAction = new Map<string, string>();
+  for (const l of logs) { if (l.deliveryId && !lastAction.has(l.deliveryId)) lastAction.set(l.deliveryId, l.action); }
+
+  const availableExecutives = await db.driver.count({ where: { active: true, execStatus: { availability: { in: ["AVAILABLE", "RETURNED_TO_DAIRY"] } } } });
+
+  let autoAssigned = 0, manualAssignments = 0, unassigned = 0, totalBottles = 0;
+  const orders = rows.map((d) => {
+    const isSub = !!d.subscription;
+    const user = d.subscription?.user ?? d.order?.user ?? null;
+    const addr = d.address ?? d.subscription?.address ?? null;
+    const oid = d.orderId ?? d.subscription?.order?.id ?? null;
+    const qty = isSub
+      ? (d.subscription?.items ?? []).reduce((a, i) => a + i.qty, 0)
+      : (d.order?.items ?? []).reduce((a, i) => a + i.quantity, 0);
+    const products = isSub
+      ? (d.subscription?.items ?? []).map((i) => `${i.variant.product?.name ? i.variant.product.name + " " : ""}${i.variant.label} ×${i.qty}`.trim()).join(", ")
+      : (d.order?.items ?? []).map((i) => `${i.productName}${i.variantLabel ? " " + i.variantLabel : ""} ×${i.quantity}`).join(", ");
+
+    const asn = d.assignment;
+    const la = lastAction.get(d.id);
+    const method = !asn ? null : la === "MANUAL_ASSIGN" ? "Manual" : la === "REASSIGN" ? "Reassigned" : "Auto";
+    let status: string;
+    if (!asn || !d.driver) { status = "Pending Assignment"; unassigned++; }
+    else if (asn.status === "CANCELLED" || d.status === "FAILED" || d.status === "SKIPPED") status = "Cancelled";
+    else if (asn.status === "ACCEPTED" || ACCEPTED_DELIVERY.includes(d.status)) status = "Accepted by Executive";
+    else if (la === "REASSIGN") { status = "Reassigned"; autoAssigned++; }
+    else if (la === "MANUAL_ASSIGN") { status = "Manually Assigned"; manualAssignments++; }
+    else { status = "Auto Assigned"; autoAssigned++; }
+    totalBottles += d.bottleCount;
+
+    return {
+      deliveryId: d.id,
+      orderRef: oid ? "DOO-" + oid.slice(-6).toUpperCase() : "—",
+      customer: user?.name ?? "—",
+      mobile: user?.phone ?? "—",
+      address: fmtVisAddr(addr),
+      pincode: addr?.pincode ?? "—",
+      products: products || "—",
+      qty,
+      bottles: d.bottleCount,
+      deliveryDate: iso,
+      slot: d.slot ?? "—",
+      executive: d.driver ? { driverId: d.driver.id, name: d.driver.user?.name ?? "—", employeeId: d.driver.employeeId ?? "—", mobile: d.driver.user?.phone ?? "—" } : null,
+      assignedAt: asn?.assignedAt?.toISOString() ?? null,
+      method,
+      status,
+      locked: asn?.locked ?? false,
+    };
+  });
+
+  const totalOrders = orders.length;
+  const assignedCount = totalOrders - unassigned;
+  const summary = {
+    totalOrders,
+    availableExecutives,
+    autoAssigned,
+    manualAssignments,
+    unassigned,
+    completionPct: totalOrders ? Math.round((assignedCount / totalOrders) * 100) : 0,
+    totalBottles,
+  };
+  return { date: iso, summary, orders };
+}
+
+/** Executive detail for the click-through panel (name, IDs, live load, capacity). */
+export async function executiveDetail(driverId: string, dateStr?: string | null) {
+  const { gte: start, lt: end } = dayRange(dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : new Date());
+  const driver = await db.driver.findUnique({
+    where: { id: driverId },
+    select: {
+      id: true, employeeId: true, vehicleNo: true, active: true, lat: true, lng: true,
+      user: { select: { name: true, phone: true } },
+      capacity: { select: { maxBottles: true } },
+      execStatus: { select: { availability: true, assignedBottles: true, lastChangedAt: true } },
+    },
+  });
+  if (!driver) return null;
+  const assigns = await db.deliveryAssignment.findMany({ where: { driverId, date: { gte: start, lt: end } }, select: { bottles: true } });
+  const todaysOrders = assigns.length;
+  const totalBottles = assigns.reduce((a, x) => a + x.bottles, 0);
+  const capacity = driver.capacity?.maxBottles ?? BOTTLE_CAPACITY;
+  const availability = driver.execStatus?.availability ?? "OFFLINE";
+  return {
+    driverId: driver.id,
+    name: driver.user?.name ?? driver.employeeId ?? driver.id,
+    employeeId: driver.employeeId ?? "—",
+    mobile: driver.user?.phone ?? "—",
+    vehicleNo: driver.vehicleNo ?? "—",
+    availability,
+    todaysOrders,
+    totalBottles,
+    capacity,
+    remaining: Math.max(0, capacity - totalBottles),
+    onShift: availability !== "OFFLINE" && availability !== "BREAK",
+    shiftSince: driver.execStatus?.lastChangedAt?.toISOString() ?? null,
+    lat: driver.lat ?? null,
+    lng: driver.lng ?? null,   // live location (future-ready)
+    date: isoOf(start),
+  };
+}
+
+/** Full assignment history for one delivery (audit trail of every change). */
+export async function assignmentHistory(deliveryId: string) {
+  const logs = await db.assignmentLog.findMany({
+    where: { deliveryId },
+    orderBy: { createdAt: "asc" },
+    select: { action: true, driverId: true, fromDriverId: true, toDriverId: true, actorRole: true, note: true, createdAt: true },
+  });
+  const driverIds = [...new Set(logs.flatMap((l) => [l.driverId, l.fromDriverId, l.toDriverId]).filter(Boolean) as string[])];
+  const drivers = driverIds.length
+    ? await db.driver.findMany({ where: { id: { in: driverIds } }, select: { id: true, employeeId: true, user: { select: { name: true } } } })
+    : [];
+  const nameOf = (id: string | null) => { if (!id) return null; const d = drivers.find((x) => x.id === id); return d ? (d.user?.name ?? d.employeeId ?? id.slice(-6)) : id.slice(-6); };
+  return logs.map((l) => ({
+    action: l.action,
+    at: l.createdAt.toISOString(),
+    actorRole: l.actorRole ?? "system",
+    driver: nameOf(l.driverId),
+    from: nameOf(l.fromDriverId),
+    to: nameOf(l.toDriverId),
+    note: l.note ?? null,
+  }));
+}

@@ -68,11 +68,12 @@ window.DOODLY_ACCOUNT = (function () {
       var items = (d.items || []).map(function (i) { return rows(esc(i.quantity + "× " + i.productName + (i.variantLabel ? " " + i.variantLabel : "")), inr(i.lineTotalPaise)); }).join("");
       var money = rows("Subtotal", inr(d.subtotalPaise)) + (d.discountPaise ? rows("Discount", "− " + inr(d.discountPaise)) : "") + (d.depositPaise ? rows("Bottle deposit (refundable)", inr(d.depositPaise)) : "") + rows("<b>Total</b>", "<b>" + inr(d.totalPaise) + "</b>");
       var timeline = (d.timeline || []).map(function (t) { return '<div class="acc-tl"><span class="acc-tl-dot"></span><div><b>' + esc(t.title) + "</b>" + (t.note ? '<div class="muted-sm">' + esc(t.note) + "</div>" : "") + '<div class="muted-sm">' + fmtDT(t.createdAt) + "</div></div></div>"; }).join("");
-      var status = d.cancelled ? "Cancelled" : (FUL_LABEL[d.fulfilment] || d.fulfilment);
+      var dl = d.delivery || d.deliveryInfo || null;   // API returns `delivery`; prefer its friendly stage
+      var status = d.cancelled ? "Cancelled" : ((dl && dl.stage) ? dl.stage : (FUL_LABEL[d.fulfilment] || d.fulfilment));
       var cancellable = !d.cancelled && ["OUT_FOR_DELIVERY", "ARRIVING", "DELIVERED"].indexOf(d.fulfilment) < 0;
       m.ov.querySelector(".dac-body").innerHTML =
         '<div class="deflist">' + rows("Status", "<b>" + esc(status) + "</b> · payment " + esc(d.paymentStatus)) + rows("Placed", fmtDT(d.createdAt)) +
-        (d.deliveryInfo && d.deliveryInfo.date ? rows("Delivery", fmtD(d.deliveryInfo.date) + (d.deliveryInfo.slot ? " · " + esc(d.deliveryInfo.slot) : "")) : "") +
+        (dl && dl.date ? rows("Delivery", fmtD(dl.date) + (dl.slot ? " · " + esc(dl.slot) : "")) : "") +
         (d.invoice ? rows("Invoice", esc(d.invoice.number)) : "") + "</div>" +
         '<p class="exp-block-h" style="margin:12px 0 6px">Items</p><div class="deflist">' + items + money + "</div>" +
         '<p class="exp-block-h" style="margin:12px 0 6px">Timeline</p><div class="acc-tls">' + (timeline || '<p class="muted-sm">No events yet.</p>') + "</div>" +

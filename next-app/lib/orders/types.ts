@@ -23,6 +23,8 @@ export interface OrderListItem {
   invoiceNumber: string | null;
   deliveryDate: string | null;
   deliverySlot: string | null;
+  /** Customer-friendly delivery stage (e.g. "Delivery Executive Assigned") — no exec personal details. */
+  deliveryStage: string | null;
 }
 
 export interface OrdersListResponse {
@@ -56,7 +58,7 @@ export interface OrderDetail {
   totalPaise: number;
   items: { id: string; productName: string; variantLabel: string | null; quantity: number; unitPricePaise: number; lineTotalPaise: number }[];
   timeline: OrderTimelineEvent[];
-  delivery: { status: string; date: string; slot: string | null; deliveredAt: string | null; driverName: string | null; driverPhone: string | null; address: { line1: string; line2: string | null; city: string; pincode: string; lat: number | null; lng: number | null } | null } | null;
+  delivery: { status: string; stage: string; assigned: boolean; date: string; slot: string | null; deliveredAt: string | null; driverName: string | null; driverPhone: string | null; address: { line1: string; line2: string | null; city: string; pincode: string; lat: number | null; lng: number | null } | null } | null;
   payment: { method: string; status: string; amountPaise: number } | null;
   invoice: { number: string; issuedAt: string } | null;
   walletTxns: { id: string; type: string; kind: string; amountPaise: number; description: string | null; createdAt: string }[];

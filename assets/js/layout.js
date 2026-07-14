@@ -1940,6 +1940,7 @@
       var d = await DOODLY_API.get("/api/assignments/dashboard?date=" + encodeURIComponent(iso));
       _asgnLast = d;
       applyLiveAssignKpis(host, d);
+      renderAsgnOrders(iso);
       dacToast("Auto-assignment: " + (res.assigned || 0) + " assigned, " + (res.queued || 0) + " queued" + (res.message ? " — " + res.message : "") + ".");
     } catch (e) { dacToast(e.code === "forbidden" ? "Your role can't run auto-assignment (403)." : "Auto-assign failed — " + (e.message || e.code || "error")); }
     finally { _asgnBusy = false; }
@@ -1974,8 +1975,118 @@
     } catch (e) {
       bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — showing the local planner simulation." : e.code === "forbidden" ? "⚠ Your role can't run auto-assignment (403)." : "⚠ " + (e.message || "Couldn't load the assignment dashboard."), "err");
     }
+    renderAsgnOrders(iso);
   }
   window.DOODLY_ADMIN.wireAssignmentBackend = wireAssignmentBackend;
+
+  // ---- Auto Assignment: order-centric visibility table (who each order is assigned to) ----
+  var ASGN_STATUS_COL = {
+    "Pending Assignment": "amber", "Auto Assigned": "green", "Manually Assigned": "blue",
+    "Accepted by Executive": "green", "Reassigned": "amber", "Cancelled": "red",
+  };
+  function asgnStatusBadge(s) { return '<span class="badge ' + (ASGN_STATUS_COL[s] || "grey") + '">' + esc(s) + "</span>"; }
+  function asgnMethodBadge(m) { return m ? '<span class="badge ' + (m === "Manual" ? "blue" : m === "Reassigned" ? "amber" : "grey") + '" style="opacity:.9">' + esc(m) + "</span>" : '<span class="muted-sm">—</span>'; }
+  function fmtTime(iso) { if (!iso) return "—"; try { return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return "—"; } }
+  function asgnModal(title, bodyHtml) {
+    if (window.dacStyles) dacStyles();
+    var ov = document.createElement("div"); ov.className = "dac-ov";
+    ov.innerHTML = '<div class="dac-modal" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="dac-head"><h3>' + esc(title) + '</h3><button class="dac-x" type="button" aria-label="Close">&times;</button></div><div class="dac-body">' + bodyHtml + "</div></div>";
+    document.body.appendChild(ov);
+    var close = function () { ov.remove(); };
+    ov.addEventListener("click", function (e) { if (e.target === ov) close(); });
+    ov.querySelector(".dac-x").addEventListener("click", close);
+    return { ov: ov, close: close, body: ov.querySelector(".dac-body") };
+  }
+  function renderAsgnOrders(iso) {
+    if (!window.DOODLY_API) return;
+    var host = document.getElementById("asgnOrdersMount");
+    if (!host) return;
+    host.innerHTML = '<div id="ao-summary" class="dl-an-kpis" style="margin:18px 0 14px"></div>' +
+      '<div class="panel"><div class="panel-head"><h3>Order assignments — ' + esc(delDateLabel(iso)) + '</h3><span class="muted-sm" id="ao-count"></span></div>' +
+      '<div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Order</th><th>Customer</th><th>Delivery address</th><th>Products</th><th>Qty</th><th>Bottles</th><th>Delivery date</th><th>Delivery Executive</th><th>Assigned</th><th>Method</th><th>Status</th><th>Manage</th></tr></thead><tbody id="ao-body"><tr><td colspan="12" class="muted-sm">Loading…</td></tr></tbody></table></div></div></div>';
+    var body = host.querySelector("#ao-body");
+    DOODLY_API.get("/api/assignments/orders?date=" + encodeURIComponent(iso)).then(function (r) {
+      var s = r.summary || {}, orders = r.orders || [];
+      var cards = [["Total orders", s.totalOrders || 0], ["Available execs", s.availableExecutives || 0], ["Auto assigned", s.autoAssigned || 0], ["Manual", s.manualAssignments || 0], ["Unassigned", s.unassigned || 0], ["Completion", (s.completionPct || 0) + "%"], ["Total bottles", s.totalBottles || 0]];
+      host.querySelector("#ao-summary").innerHTML = cards.map(function (c) { return '<div class="dl-an-kpi"><div class="n">' + c[1] + '</div><div class="l">' + c[0] + "</div></div>"; }).join("");
+      host.querySelector("#ao-count").textContent = orders.length + " order(s)";
+      body.innerHTML = orders.length ? orders.map(function (o) {
+        var exec = o.executive
+          ? '<a href="#" class="ao-exec" data-driver="' + o.executive.driverId + '"><b>' + esc(o.executive.name) + "</b></a><div class='muted-sm'>" + esc(o.executive.employeeId) + " · " + esc(o.executive.mobile) + "</div>"
+          : '<span class="muted-sm">—</span>';
+        return "<tr><td><b>" + esc(o.orderRef) + "</b></td>" +
+          "<td>" + esc(o.customer) + "<div class='muted-sm'>" + esc(o.mobile) + "</div></td>" +
+          "<td style='max-width:230px'>" + esc(o.address) + "</td>" +
+          "<td>" + esc(o.products) + "</td><td>" + o.qty + "</td><td>" + o.bottles + "</td>" +
+          "<td>" + esc(o.deliveryDate) + "<div class='muted-sm'>" + esc(o.slot) + "</div></td>" +
+          "<td>" + exec + "</td><td>" + fmtTime(o.assignedAt) + "</td><td>" + asgnMethodBadge(o.method) + "</td><td>" + asgnStatusBadge(o.status) + "</td>" +
+          "<td><button class='btn btn-ghost sm ao-manage' data-id='" + o.deliveryId + "' data-cust='" + esc(o.customer) + "' data-driver='" + (o.executive ? o.executive.driverId : "") + "'>Manage</button></td></tr>";
+      }).join("") : '<tr><td colspan="12" class="muted-sm" style="text-align:center;padding:18px">No orders for ' + esc(delDateLabel(iso)) + '.</td></tr>';
+    }).catch(function (e) {
+      body.innerHTML = '<tr><td colspan="12" class="muted-sm" style="text-align:center;padding:18px">' + (e.code === "forbidden" ? "Your role can't view assignments (403)." : esc(e.message || "Couldn't load assignments.")) + "</td></tr>";
+    });
+    if (!host._aoBound) {
+      host._aoBound = true;
+      host.addEventListener("click", function (e) {
+        var ex = e.target.closest && e.target.closest(".ao-exec");
+        if (ex) { e.preventDefault(); openExecModal(ex.dataset.driver, _asgnDate); return; }
+        var mg = e.target.closest && e.target.closest(".ao-manage");
+        if (mg) { openReassignModal(mg.dataset.id, mg.dataset.cust, mg.dataset.driver, _asgnDate); }
+      });
+    }
+  }
+  function openExecModal(driverId, iso) {
+    if (!driverId) return;
+    var m = asgnModal("Delivery Executive", '<p class="muted-sm">Loading…</p>');
+    DOODLY_API.get("/api/assignments/executive/" + encodeURIComponent(driverId) + "?date=" + encodeURIComponent(iso || istTodayISO())).then(function (x) {
+      var row = function (k, v) { return "<div style='display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--line,#eef2ef)'><span class='muted-sm'>" + k + "</span><b>" + v + "</b></div>"; };
+      var loc = (x.lat != null && x.lng != null) ? esc(x.lat.toFixed(4)) + ", " + esc(x.lng.toFixed(4)) : "Not available yet";
+      m.body.innerHTML =
+        "<div style='font-size:1.1rem;font-weight:700;margin-bottom:2px'>" + esc(x.name) + "</div>" +
+        "<div class='muted-sm' style='margin-bottom:12px'>" + esc(x.employeeId) + " · " + esc(x.vehicleNo || "—") + "</div>" +
+        row("Mobile", esc(x.mobile)) + row("Availability", '<span class="badge ' + (x.availability === "AVAILABLE" ? "green" : x.availability === "OFFLINE" || x.availability === "BREAK" ? "grey" : "blue") + '">' + esc(x.availability) + "</span>") +
+        row("Today's assigned orders", x.todaysOrders) + row("Total bottles assigned", x.totalBottles) +
+        row("Remaining capacity", x.remaining + " / " + x.capacity) + row("Current shift", x.onShift ? "On shift" + (x.shiftSince ? " since " + fmtTime(x.shiftSince) : "") : "Off shift") +
+        row("Live location", loc);
+    }).catch(function (e) { m.body.innerHTML = '<p class="dac-err">' + esc(e.message || "Couldn't load the executive.") + "</p>"; });
+  }
+  function openReassignModal(deliveryId, customer, currentDriver, iso) {
+    var m = asgnModal("Manage assignment — " + (customer || ""), '<p class="muted-sm">Loading…</p>');
+    Promise.all([
+      DOODLY_API.get("/api/assignments/dashboard?date=" + encodeURIComponent(iso || istTodayISO())).catch(function () { return { executives: [] }; }),
+      DOODLY_API.get("/api/assignments/history?deliveryId=" + encodeURIComponent(deliveryId)).catch(function () { return { history: [] }; }),
+    ]).then(function (res) {
+      var execs = (res[0].executives || []), hist = (res[1].history || []);
+      var opts = execs.map(function (e) { return '<option value="' + e.driverId + '"' + (e.driverId === currentDriver ? " selected" : "") + '>' + esc(e.name) + " (" + esc(e.availability || "") + ")</option>"; }).join("");
+      var histHtml = hist.length ? hist.map(function (h) {
+        var who = h.action === "REASSIGN" ? (esc(h.from || "—") + " → " + esc(h.to || "—")) : h.action === "UNASSIGN" ? ("removed from " + esc(h.from || "—")) : esc(h.driver || h.to || "—");
+        return "<div style='display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--line,#eef2ef)'><span class='muted-sm' style='min-width:64px'>" + fmtTime(h.at) + "</span><span><b>" + esc(h.action.replace(/_/g, " ")) + "</b> — " + who + " <span class='muted-sm'>(" + esc(h.actorRole) + ")</span></span></div>";
+      }).join("") : '<p class="muted-sm">No assignment history yet.</p>';
+      m.body.innerHTML =
+        '<label class="dac-f"><span>Reassign to executive</span><select class="input" id="ra-sel">' + (opts || '<option value="">No executives available</option>') + "</select></label>" +
+        '<div style="display:flex;gap:10px;margin:12px 0">' +
+          '<button class="btn btn-primary sm" id="ra-reassign">Reassign</button>' +
+          '<button class="btn btn-ghost sm" id="ra-remove">Remove assignment</button>' +
+        "</div>" +
+        '<p class="dac-err" id="ra-err"></p>' +
+        '<h4 style="margin:14px 0 6px;font-size:.95rem">Assignment history</h4>' + histHtml;
+      var err = m.body.querySelector("#ra-err");
+      var act = function (payload, okMsg) {
+        DOODLY_API.post("/api/assignments/override", payload).then(function () {
+          dacToast(okMsg); m.close(); renderAsgnOrders(_asgnDate); wireAssignmentBackend(_asgnDate);
+        }).catch(function (e) { err.textContent = e.code === "forbidden" ? "Your role can't change assignments (403)." : (e.message || "Couldn't update assignment."); });
+      };
+      m.body.querySelector("#ra-reassign").addEventListener("click", function () {
+        var to = m.body.querySelector("#ra-sel").value; if (!to) { err.textContent = "Pick an executive."; return; }
+        if (currentDriver) act({ action: "reassign", deliveryId: deliveryId, toDriverId: to, force: true }, "Order reassigned.");
+        else act({ action: "manual", deliveryId: deliveryId, driverId: to }, "Order assigned.");
+      });
+      m.body.querySelector("#ra-remove").addEventListener("click", function () {
+        if (!currentDriver) { err.textContent = "This order isn't assigned."; return; }
+        act({ action: "unassign", deliveryId: deliveryId }, "Assignment removed.");
+      });
+    });
+  }
 
   // ---- Late Deliveries (admin/late-deliveries → live SLA-based detection overlay + SLA config) ----
   // late.js (DOODLY_LATE) is a localStorage monitor. The real detection reuses Delivery +

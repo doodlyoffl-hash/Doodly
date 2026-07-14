@@ -36,6 +36,18 @@ function fulfilmentFrom(cancelledAt: Date | null, events: { type: OrderEventType
   return (deliveryStatus && map[deliveryStatus]) || "PROCESSING";
 }
 
+// Customer-facing delivery stage — a friendly label that never exposes the executive's
+// personal details (the spec: once assigned, the customer just sees that an executive is
+// on it). Extensible toward live tracking later.
+const DELIVERY_STAGE: Record<string, string> = {
+  SCHEDULED: "Order confirmed", ASSIGNED: "Delivery Executive Assigned", ACCEPTED: "Preparing your order",
+  PACKED: "Packed & ready", OUT_FOR_DELIVERY: "Out for delivery", ON_THE_WAY: "Out for delivery",
+  REACHED: "Arriving now", DELIVERED: "Delivered", FAILED: "Delivery attempt failed", SKIPPED: "Skipped",
+};
+function customerDeliveryStage(status?: string | null): string {
+  return (status && DELIVERY_STAGE[status]) || "Processing";
+}
+
 // ---------- list ----------
 
 export type SortKey = "newest" | "oldest" | "amount_desc" | "amount_asc" | "delivery";
@@ -95,6 +107,7 @@ export async function listCustomerOrders(userId: string, args: {
     invoiceNumber: o.invoice?.number ?? null,
     deliveryDate: o.delivery?.date.toISOString() ?? null,
     deliverySlot: o.delivery?.slot ?? null,
+    deliveryStage: o.delivery ? customerDeliveryStage(o.delivery.status) : null,
   }));
   return { orders, total, limit, offset };
 }
@@ -132,7 +145,9 @@ export async function getCustomerOrderDetail(userId: string, id: string): Promis
     items: o.items.map((i) => ({ id: i.id, productName: i.productName, variantLabel: i.variantLabel, quantity: i.quantity, unitPricePaise: i.unitPricePaise, lineTotalPaise: i.lineTotalPaise })),
     timeline: o.events.map((e) => ({ id: e.id, type: e.type, title: e.title, note: e.note, createdAt: e.createdAt.toISOString() })),
     delivery: o.delivery ? {
-      status: o.delivery.status, date: o.delivery.date.toISOString(), slot: o.delivery.slot, deliveredAt: o.delivery.deliveredAt?.toISOString() ?? null,
+      status: o.delivery.status, stage: customerDeliveryStage(o.delivery.status),
+      assigned: !!o.delivery.driver && o.delivery.status !== "DELIVERED",
+      date: o.delivery.date.toISOString(), slot: o.delivery.slot, deliveredAt: o.delivery.deliveredAt?.toISOString() ?? null,
       driverName: o.delivery.driver?.user.name ?? null, driverPhone: o.delivery.driver?.user.phone ?? null,
       address: addr ? { line1: addr.line1, line2: addr.line2, city: addr.city, pincode: addr.pincode, lat: addr.lat, lng: addr.lng } : null,
     } : null,
