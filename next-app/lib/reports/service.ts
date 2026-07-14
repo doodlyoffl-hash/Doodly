@@ -8,6 +8,7 @@
    ============================================================= */
 import "server-only";
 import { db } from "@/lib/db";
+import { slaPromiseMin, deliveredOnTime } from "@/lib/delivery/late";
 
 export interface ReportRange { from?: string | Date; to?: string | Date }
 
@@ -48,7 +49,7 @@ export async function reportsOverview(rangeIn: ReportRange = {}) {
   // ---- headline aggregates (batch 1) ----
   const [
     revAll, revToday, revMonth, revRange, ordersByStatus, ordersByType, gstPaid,
-    subsByStatus, totalCustomers, newCustInRange, activeCustAgg,
+    subsByStatus, totalCustomers, newCustInRange, activeCustAgg, payingCustAgg,
   ] = await Promise.all([
     db.order.aggregate({ where: { status: "PAID" }, _sum: { totalPaise: true }, _count: { _all: true } }),
     db.order.aggregate({ where: { status: "PAID", createdAt: { gte: todayStart } }, _sum: { totalPaise: true } }),
@@ -61,6 +62,8 @@ export async function reportsOverview(rangeIn: ReportRange = {}) {
     db.user.count({ where: { role: "CUSTOMER" } }),
     db.user.count({ where: { role: "CUSTOMER", createdAt: { gte: from, lte: to } } }),
     db.order.findMany({ where: { status: "PAID", createdAt: { gte: d30 } }, select: { userId: true }, distinct: ["userId"] }),
+    // Customers who have EVER paid — the correct CLV denominator.
+    db.order.findMany({ where: { status: "PAID" }, select: { userId: true }, distinct: ["userId"] }),
   ]);
 
   // ---- finance + growth aggregates (batch 2) ----
@@ -80,13 +83,15 @@ export async function reportsOverview(rangeIn: ReportRange = {}) {
   ]);
 
   // ---- trend raw rows (batch 3) ----
-  const [ordersInRange, procInRange, walletUsageRange, custSince6mo, subsSince6mo, deliveriesByStatus] = await Promise.all([
+  const [ordersInRange, procInRange, walletUsageRange, custSince6mo, subsSince6mo, deliveriesByStatus, deliveredRows] = await Promise.all([
     db.order.findMany({ where: { status: "PAID", createdAt: { gte: from, lte: to } }, select: { createdAt: true, totalPaise: true } }),
     db.procurement.findMany({ where: { collectedAt: { gte: from, lte: to } }, select: { collectedAt: true, litres: true } }),
     db.walletTxn.findMany({ where: { type: "DEBIT", kind: "usage", createdAt: { gte: from, lte: to } }, select: { createdAt: true, amountPaise: true } }),
     db.user.findMany({ where: { role: "CUSTOMER", createdAt: { gte: sixMoAgo } }, select: { createdAt: true } }),
     db.subscription.findMany({ where: { createdAt: { gte: sixMoAgo } }, select: { createdAt: true } }),
     db.delivery.groupBy({ by: ["status"], _count: { _all: true } }),
+    // Punctuality needs timestamps, not just status counts.
+    db.delivery.findMany({ where: { status: "DELIVERED" }, select: { date: true, deliveredAt: true } }),
   ]);
 
   // ---- product/category/ops/procurement detail (batch 4) ----
@@ -138,7 +143,11 @@ export async function reportsOverview(rangeIn: ReportRange = {}) {
     customerRetentionRate: retentionRate,
     churnRate,
     aovPaise,
-    clvPaise: activeCustAgg.length ? Math.round(totalRevenue / Math.max(1, totalCustomers)) : 0, // future-ready proxy
+    // CLV = lifetime revenue per PAYING customer. Dividing by every registered user made this
+    // ARPU-over-all-signups (10x understated when only 1 in 10 signups buys), and the
+    // `activeCustAgg.length ?` gate zeroed it out entirely after 30 quiet days despite years
+    // of history.
+    clvPaise: payingCustAgg.length ? Math.round(totalRevenue / payingCustAgg.length) : 0,
     walletUsagePaise: walletUsed._sum.amountPaise ?? 0,
     referralGrowthCount: referralAgg._count,
     referralGrowthPaise: referralAgg._sum.amountPaise ?? 0,
@@ -197,6 +206,9 @@ export async function reportsOverview(rangeIn: ReportRange = {}) {
   const qFail = (qualityAgg as never as { passed: boolean; _count: { _all: number } }[]).find((q) => !q.passed)?._count._all ?? 0;
   const bottlesOut = bottleAgg._sum.bottlesOut ?? 0, bottlesIn = bottleAgg._sum.bottlesIn ?? 0;
 
+  // Punctuality against the configured SLA promise, anchored to each delivery's own IST day.
+  const promiseMin = await slaPromiseMin();
+  const onTimeCount = deliveredRows.filter((d) => deliveredOnTime(d.deliveredAt, d.date, promiseMin)).length;
   const deliveredCount = deliveryStatus["DELIVERED"] ?? 0;
   const failedCount = deliveryStatus["FAILED"] ?? 0;
   const totalDeliveries = Object.values(deliveryStatus).reduce((s, n) => s + (n as number), 0);
@@ -224,8 +236,12 @@ export async function reportsOverview(rangeIn: ReportRange = {}) {
     },
     operations: {
       deliveries: { total: totalDeliveries, delivered: deliveredCount, failed: failedCount, pending: totalDeliveries - deliveredCount - failedCount, byStatus: deliveryStatus },
-      onTimeRate: totalDeliveries ? Math.round((deliveredCount / totalDeliveries) * 1000) / 10 : 0,
-      lateDeliveries: failedCount,
+      // Was deliveredCount / ALL deliveries (every status, all-time — including stops merely
+      // SCHEDULED for tomorrow), and "DELIVERED" says nothing about punctuality: 100 perfectly
+      // on-time deliveries plus 50 scheduled read 66.7%, dropping further every time tomorrow
+      // was planned. And FAILED is not "late". Now measured against the SLA promise.
+      onTimeRate: deliveredRows.length ? Math.round((onTimeCount / deliveredRows.length) * 1000) / 10 : 0,
+      lateDeliveries: deliveredRows.length - onTimeCount,
       driverPerformance: driverPerf,
       bottleReturnRate: bottlesOut ? Math.round((bottlesIn / bottlesOut) * 1000) / 10 : 0,
       bottlesOut, bottlesIn,

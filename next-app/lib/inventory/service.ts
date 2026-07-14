@@ -79,9 +79,12 @@ export async function inventoryOverview(): Promise<{ items: InvItem[]; stats: In
 
   const stats: InvStats = {
     totalItems: items.length,
-    totalUnits: items.reduce((s, i) => s + i.stock, 0),
-    availableUnits: items.reduce((s, i) => s + i.available, 0),
-    reservedUnits: items.reduce((s, i) => s + i.reserved, 0),
+    // Count BOTTLES only. `items` deliberately mixes variants (bottles) with materials whose
+    // unit is "litre" or "piece", so one cross-unit sum ("21,500 units") had no physical
+    // meaning — adding a litre of milk moved the same number as adding a bottle.
+    totalUnits: items.reduce((s, i) => s + (i.kind === "variant" ? i.stock : 0), 0),
+    availableUnits: items.reduce((s, i) => s + (i.kind === "variant" ? i.available : 0), 0),
+    reservedUnits: items.reduce((s, i) => s + (i.kind === "variant" ? i.reserved : 0), 0),
     lowStock: items.filter((i) => i.status[1] === "Low" || i.status[1] === "Reorder").length,
     outOfStock: items.filter((i) => i.status[1] === "Out of stock").length,
     inventoryValuePaise: items.reduce((s, i) => s + i.valuePaise, 0),

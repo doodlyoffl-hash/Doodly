@@ -89,15 +89,34 @@ export async function decideLeave(id: string, action: "approve" | "reject", opts
   const attStatus = LEAVE_TO_ATTENDANCE[lr.type] ?? "PAID_LEAVE";
   await db.$transaction(async (tx) => {
     await tx.leaveRequest.update({ where: { id }, data: { status: "APPROVED", hrId: actor.actorId ?? null, hrAt: new Date(), managerAt: lr.managerAt ?? new Date() } });
-    // balance (skip LOSS_OF_PAY)
-    if (lr.type !== "LOSS_OF_PAY") {
-      const bal = await tx.leaveBalance.findUnique({ where: { employeeId_year_type: { employeeId: lr.employeeId, year, type: lr.type } } });
-      if (bal) await tx.leaveBalance.update({ where: { id: bal.id }, data: { used: bal.used + lr.days } });
-      else await tx.leaveBalance.create({ data: { employeeId: lr.employeeId, year, type: lr.type, allotted: DEFAULT_ALLOTMENT[lr.type] ?? 0, used: lr.days } });
-    }
-    // mark attendance for each leave day
-    for (let t = lr.startDate.getTime(); t <= lr.endDate.getTime(); t += 86_400_000) {
+
+    // LeaveRequest.days is a raw inclusive CALENDAR count, and the attendance loop below used
+    // to overwrite every date in the span. So a Fri→Mon casual leave debited 4 days from a
+    // 12-day allotment (only 2 are working days) and rewrote Sat/Sun's WEEKLY_OFF rows to
+    // PAID_LEAVE — roughly 40% of the yearly entitlement evaporating into weekends.
+    // Skip days already marked WEEKLY_OFF / HOLIDAY: don't charge them, don't overwrite them.
+    const nonWorking = await tx.attendance.findMany({
+      where: { employeeId: lr.employeeId, date: { gte: DAY(lr.startDate), lte: DAY(lr.endDate) }, status: { in: ["WEEKLY_OFF", "HOLIDAY"] } },
+      select: { date: true },
+    });
+    const skip = new Set(nonWorking.map((a) => DAY(a.date).getTime()));
+
+    const leaveDates: Date[] = [];
+    for (let t = DAY(lr.startDate).getTime(); t <= DAY(lr.endDate).getTime(); t += 86_400_000) {
       const date = DAY(new Date(t));
+      if (!skip.has(date.getTime())) leaveDates.push(date);
+    }
+    const chargeableDays = leaveDates.length;
+    if (chargeableDays !== lr.days) await tx.leaveRequest.update({ where: { id }, data: { days: chargeableDays } });
+
+    // balance (skip LOSS_OF_PAY)
+    if (lr.type !== "LOSS_OF_PAY" && chargeableDays > 0) {
+      const bal = await tx.leaveBalance.findUnique({ where: { employeeId_year_type: { employeeId: lr.employeeId, year, type: lr.type } } });
+      if (bal) await tx.leaveBalance.update({ where: { id: bal.id }, data: { used: bal.used + chargeableDays } });
+      else await tx.leaveBalance.create({ data: { employeeId: lr.employeeId, year, type: lr.type, allotted: DEFAULT_ALLOTMENT[lr.type] ?? 0, used: chargeableDays } });
+    }
+    // mark attendance only on the working days of the leave
+    for (const date of leaveDates) {
       await tx.attendance.upsert({ where: { employeeId_date: { employeeId: lr.employeeId, date } }, create: { employeeId: lr.employeeId, date, status: attStatus, note: `Leave ${lr.code}`, correctedById: actor.actorId ?? null }, update: { status: attStatus, note: `Leave ${lr.code}` } });
     }
   });

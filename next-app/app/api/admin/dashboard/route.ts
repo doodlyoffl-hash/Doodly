@@ -21,10 +21,19 @@ export const GET = route("admin.dashboard", async (req: NextRequest) => {
   const now = new Date();
   const from = new Date(now.getTime() - DAYS * 86400000);
 
-  const [orders, payments, deliveries, newCusts, totalCustomers, activeSubs, pausedSubs, farmers, routes, activeExecs, outstandingAgg, bizOrders] = await Promise.all([
+  const [orders, payments, deliveries, variants, procurements, newCusts, totalCustomers, activeSubs, pausedSubs, farmers, routes, activeExecs, outstandingAgg, bizOrders] = await Promise.all([
     db.order.findMany({ where: { createdAt: { gte: from } }, select: { createdAt: true, status: true, cancelledAt: true, taxPaise: true } }),
     db.payment.findMany({ where: { status: "PAID", createdAt: { gte: from } }, select: { createdAt: true, amountPaise: true } }),
-    db.delivery.findMany({ where: { date: { gte: from } }, select: { date: true, status: true, bottlesIn: true } }),
+    db.delivery.findMany({
+      where: { date: { gte: from } },
+      select: {
+        date: true, status: true, bottlesIn: true, bottleCount: true,
+        subscription: { select: { items: { select: { qty: true, variant: { select: { ml: true } } } } } },
+        order: { select: { items: { select: { productSlug: true, variantLabel: true } } } },
+      },
+    }),
+    db.variant.findMany({ select: { label: true, ml: true, product: { select: { slug: true } } } }),
+    db.procurement.findMany({ where: { collectedAt: { gte: from }, accepted: true }, select: { collectedAt: true, litres: true } }).catch(() => []),
     db.user.findMany({ where: { role: "CUSTOMER", deletedAt: null, createdAt: { gte: from } }, select: { createdAt: true } }),
     db.user.count({ where: { role: "CUSTOMER", deletedAt: null } }),
     db.subscription.count({ where: { status: "ACTIVE" } }),
@@ -56,7 +65,22 @@ export const GET = route("admin.dashboard", async (req: NextRequest) => {
     d.gst += rupees(o.taxPaise || 0);
   });
   payments.forEach((p) => { const d = rec(istDate(p.createdAt)); d.revenue += rupees(p.amountPaise); d.paymentsReceived += rupees(p.amountPaise); });
-  deliveries.forEach((dv) => { const d = rec(istDate(dv.date)); d.deliveries++; if (dv.status === "DELIVERED") { d.deliveriesCompleted++; d.milkDelivered++; } else if (dv.status === "FAILED") d.deliveriesFailed++; d.bottlesReturned += dv.bottlesIn || 0; });
+  // milkDelivered was incremented by 1 PER DELIVERY — a duplicate of deliveriesCompleted that
+  // couldn't tell 40 x 500 ml (20 L) from 40 x 1 L (40 L). Same bug class as lib/delivery/stats.ts.
+  // Now: bottles on the stop x the real bottle size. milkCollected was hard-zero; fill it from
+  // accepted Procurement litres.
+  const normLabel = (x?: string | null) => (x ?? "").toLowerCase().replace(/\s+/g, "");
+  const mlByKey = new Map<string, number>();
+  for (const v of variants) if (v.product?.slug) mlByKey.set(`${v.product.slug}|${normLabel(v.label)}`, v.ml);
+  const litresOf = (dv: (typeof deliveries)[number]) => {
+    const subItems = dv.subscription?.items ?? [];
+    if (subItems.length) return subItems.reduce((s, i) => s + (i.variant?.ml ?? 1000) * i.qty, 0) / 1000;
+    const oi = (dv.order?.items ?? [])[0];
+    const ml = oi ? (mlByKey.get(`${oi.productSlug}|${normLabel(oi.variantLabel)}`) ?? 1000) : 1000;
+    return (ml * (dv.bottleCount || 1)) / 1000;
+  };
+  deliveries.forEach((dv) => { const d = rec(istDate(dv.date)); d.deliveries++; if (dv.status === "DELIVERED") { d.deliveriesCompleted++; d.milkDelivered += litresOf(dv); } else if (dv.status === "FAILED") d.deliveriesFailed++; d.bottlesReturned += dv.bottlesIn || 0; });
+  procurements.forEach((p) => { const d = rec(istDate(p.collectedAt)); d.milkCollected += p.litres; });
   newCusts.forEach((u) => { rec(istDate(u.createdAt)).newCustomers++; });
 
   const series = Object.values(map).sort((a, b) => (a.date < b.date ? -1 : 1));

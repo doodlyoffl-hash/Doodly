@@ -128,7 +128,8 @@ export async function getBusinessProfile(id: string) {
     }),
     db.businessOrder.aggregate({ where: { businessId: id, status: { not: "CANCELLED" } }, _count: true, _sum: { totalPaise: true, paidPaise: true } }),
     db.businessOrder.findFirst({ where: { businessId: id, status: { in: ["DELIVERED", "COMPLETED"] } }, orderBy: { deliveryDate: "desc" }, select: { deliveryDate: true } }),
-    db.businessOrderItem.groupBy({ by: ["productName"], where: { order: { businessId: id, status: { not: "CANCELLED" } } }, _sum: { quantity: true }, orderBy: { _sum: { quantity: "desc" } }, take: 3 }),
+    // group by UNIT as well — quantities in Litres / KG / Bottles / Tubs are not addable.
+    db.businessOrderItem.groupBy({ by: ["productName", "unit"], where: { order: { businessId: id, status: { not: "CANCELLED" } } }, _sum: { quantity: true }, orderBy: { _sum: { quantity: "desc" } }, take: 3 }),
   ]);
 
   const totalRevenue = agg._sum.totalPaise ?? 0;
@@ -142,7 +143,7 @@ export async function getBusinessProfile(id: string) {
       avgDailyQty: 0, // computed client-side from items if needed
       lastOrderAt: orders[0]?.createdAt ?? null,
       lastDeliveryAt: lastDelivered?.deliveryDate ?? null,
-      preferredProducts: items.map((i) => ({ name: i.productName, qty: i._sum.quantity ?? 0 })),
+      preferredProducts: items.map((i) => ({ name: i.productName, qty: i._sum.quantity ?? 0, unit: i.unit })),
     },
     orders,
   };
@@ -388,7 +389,8 @@ export async function b2bReports(args: { from?: string; to?: string } = {}) {
   const [agg, byBusiness, byProduct, outstandingAgg, statusCounts] = await Promise.all([
     db.businessOrder.aggregate({ where, _count: true, _sum: { totalPaise: true, paidPaise: true } }),
     db.businessOrder.groupBy({ by: ["businessId"], where, _count: true, _sum: { totalPaise: true }, orderBy: { _sum: { totalPaise: "desc" } }, take: 10 }),
-    db.businessOrderItem.groupBy({ by: ["productName"], where: { order: where }, _sum: { quantity: true, lineTotalPaise: true }, orderBy: { _sum: { lineTotalPaise: "desc" } }, take: 10 }),
+    // group by UNIT as well — "Curd 17" from 10 KG + 5 L + 2 Tubs is a meaningless number.
+    db.businessOrderItem.groupBy({ by: ["productName", "unit"], where: { order: where }, _sum: { quantity: true, lineTotalPaise: true }, orderBy: { _sum: { lineTotalPaise: "desc" } }, take: 10 }),
     db.businessOrder.aggregate({ where: { status: { notIn: ["CANCELLED"] } }, _sum: { totalPaise: true, paidPaise: true } }),
     db.businessOrder.groupBy({ by: ["status"], where, _count: true }),
   ]);
@@ -404,7 +406,7 @@ export async function b2bReports(args: { from?: string; to?: string } = {}) {
     outstandingPaise: (outstandingAgg._sum.totalPaise ?? 0) - (outstandingAgg._sum.paidPaise ?? 0),
     statusCounts: Object.fromEntries(statusCounts.map((s) => [s.status, s._count])),
     topBusinesses: byBusiness.map((b) => ({ code: nameById.get(b.businessId)?.code, name: nameById.get(b.businessId)?.name, orders: b._count, revenuePaise: b._sum.totalPaise ?? 0 })),
-    topProducts: byProduct.map((p) => ({ name: p.productName, qty: p._sum.quantity ?? 0, revenuePaise: p._sum.lineTotalPaise ?? 0 })),
+    topProducts: byProduct.map((p) => ({ name: p.productName, qty: p._sum.quantity ?? 0, unit: p.unit, revenuePaise: p._sum.lineTotalPaise ?? 0 })),
   };
 }
 

@@ -103,15 +103,23 @@ export async function farmerDetail(id: string) {
     where: { farmerId: id }, orderBy: { collectedAt: "desc" }, take: 60,
     select: { id: true, collectedAt: true, litres: true, fatPct: true, snfPct: true, lactometer: true, temperatureC: true, batchNo: true, accepted: true, amountPaise: true, paidAt: true, qualityTest: { select: { passed: true, rejectReason: true } } },
   });
-  const totalLitres = procs.reduce((a, p) => a + p.litres, 0);
-  const avg = (k: "fatPct" | "snfPct") => procs.length ? +(procs.reduce((a, p) => a + p[k], 0) / procs.length).toFixed(2) : 0;
+  // Money + volume must span EVERY collection, not just the 60 shown. The list view and
+  // settleFarmer() both work over all rows, so the detail page was showing a smaller "pending"
+  // than the Settle button actually pays out — the operator approved a number they never saw.
+  const [allAgg, unpaidAgg, paidAgg] = await Promise.all([
+    db.procurement.aggregate({ where: { farmerId: id }, _sum: { litres: true }, _avg: { fatPct: true, snfPct: true } }),
+    db.procurement.aggregate({ where: { farmerId: id, paidAt: null }, _sum: { amountPaise: true } }),
+    db.procurement.aggregate({ where: { farmerId: id, paidAt: { not: null } }, _sum: { amountPaise: true } }),
+  ]);
+  const totalLitres = allAgg._sum.litres ?? 0;
+  const avg = (k: "fatPct" | "snfPct") => +((k === "fatPct" ? allAgg._avg.fatPct : allAgg._avg.snfPct) ?? 0).toFixed(2);
   const collections = procs.map((p) => ({
     id: p.id, date: p.collectedAt.toISOString().slice(0, 10), litres: p.litres, fatPct: p.fatPct, snfPct: p.snfPct,
     lactometer: p.lactometer, temperatureC: p.temperatureC, batchNo: p.batchNo, accepted: p.accepted, amountPaise: p.amountPaise,
     paid: !!p.paidAt, quality: p.qualityTest ? (p.qualityTest.passed ? "Pass" : "Fail") : "—",
   }));
-  const pendingPaise = procs.filter((p) => !p.paidAt).reduce((a, p) => a + p.amountPaise, 0);
-  const paidPaise = procs.filter((p) => p.paidAt).reduce((a, p) => a + p.amountPaise, 0);
+  const pendingPaise = unpaidAgg._sum.amountPaise ?? 0;
+  const paidPaise = paidAgg._sum.amountPaise ?? 0;
   return {
     id: f.id, name: f.name, owner: f.owner, phone: f.phone, altPhone: f.altPhone, village: f.village, mandal: f.mandal,
     district: f.district, state: f.state, pincode: f.pincode, route: f.route, center: f.center, milkType: MILK_TYPE,

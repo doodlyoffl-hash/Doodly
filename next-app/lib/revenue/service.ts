@@ -69,7 +69,9 @@ export async function revenueDashboard(rangeIn: RevRange = {}) {
     db.walletTxn.aggregate({ where: { type: "DEBIT", kind: "usage" }, _sum: { amountPaise: true } }),
     db.paymentRefund.aggregate({ _sum: { amountPaise: true }, _count: true }),
     db.subscription.count({ where: { status: "ACTIVE" } }),
-    db.businessOrder.aggregate({ _sum: { totalPaise: true, paidPaise: true }, _count: true }),
+    // Exclude CANCELLED — every other B2B aggregation does, and counting them left a
+    // cancelled Rs.1,00,000 order sitting in "B2B billed" and "outstanding" forever.
+    db.businessOrder.aggregate({ where: { status: { not: "CANCELLED" } }, _sum: { totalPaise: true, paidPaise: true }, _count: true }),
     db.paymentRecord.groupBy({ by: ["method"], _sum: { netPaise: true }, _count: { _all: true } }),
     db.order.findMany({ where: { ...PAID, createdAt: { gte: from, lte: to } }, select: { createdAt: true, totalPaise: true } }),
     db.order.groupBy({ by: ["userId"], where: PAID, _count: { _all: true } }),
@@ -187,7 +189,10 @@ export async function listRevenueRecords(f: RevFilters = {}) {
         user: { select: { id: true, name: true, phone: true } },
         invoice: { select: { number: true } },
         payment: { select: { method: true, status: true } },
-        items: { select: { productName: true, quantity: true }, take: 3 },
+        // NOTE: no `take` — the quantity total below sums this array. It used to be take:3
+        // (for the "A, B, C +2" label), so a 5-item order reported only the first 3 items'
+        // quantities. The label still slices to 3; the sum needs them all.
+        items: { select: { productName: true, quantity: true } },
         _count: { select: { items: true } },
       },
     }),

@@ -212,7 +212,7 @@ export async function softDeleteEmployee(id: string, actor: Actor, ctx?: NextReq
 // ---------------------------------------------------------------- HR dashboard KPIs
 export async function hrDashboard() {
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const [total, active, onLeave, resigned, byDept, byType, presentToday, advancesOutstanding, payslipsDraft] = await Promise.all([
+  const [total, active, onLeave, resigned, byDept, byType, presentToday, absentToday, advancesOutstanding, payslipsDraft] = await Promise.all([
     db.employeeProfile.count({ where: { deletedAt: null } }),
     db.employeeProfile.count({ where: { deletedAt: null, status: "ACTIVE" } }),
     db.employeeProfile.count({ where: { deletedAt: null, status: "ON_LEAVE" } }),
@@ -220,11 +220,15 @@ export async function hrDashboard() {
     db.employeeProfile.groupBy({ by: ["department"], where: { deletedAt: null }, _count: { _all: true } }),
     db.employeeProfile.groupBy({ by: ["employmentType"], where: { deletedAt: null }, _count: { _all: true } }),
     db.attendance.count({ where: { date: today, status: { in: ["PRESENT", "HALF_DAY", "WFH"] } } }),
+    // Absent = actually marked ABSENT. Deriving it as (active - present - onLeave) counted
+    // WEEKLY_OFF / HOLIDAY / PAID_LEAVE / SICK_LEAVE as absence — on a Sunday with everyone
+    // on weekly-off it reported 100% absenteeism.
+    db.attendance.count({ where: { date: today, status: "ABSENT" } }),
     db.salaryAdvance.aggregate({ where: { status: { in: ["APPROVED"] } }, _sum: { remainingPaise: true } }),
     db.payslip.count({ where: { status: "DRAFT" } }),
   ]);
   return {
-    kpis: { total, active, onLeave, resigned, presentToday, absentToday: Math.max(0, active - presentToday - onLeave), payslipsPending: payslipsDraft, advancesOutstandingPaise: advancesOutstanding._sum.remainingPaise ?? 0 },
+    kpis: { total, active, onLeave, resigned, presentToday, absentToday, payslipsPending: payslipsDraft, advancesOutstandingPaise: advancesOutstanding._sum.remainingPaise ?? 0 },
     byDepartment: byDept.map((d) => ({ department: d.department, count: d._count._all })).sort((a, b) => b.count - a.count),
     byType: byType.map((d) => ({ type: d.employmentType, count: d._count._all })),
   };

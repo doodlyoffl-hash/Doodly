@@ -50,7 +50,10 @@ async function computeOne(employeeId: string, month: string, extras: { bonusPais
   const proration = days > 0 ? paidDays / days : 1;
   const pr = (p: number) => Math.round(p * proration);
   const basic = pr(s.basicPaise), hra = pr(s.hraPaise), conveyance = pr(s.conveyancePaise), special = pr(s.specialPaise), otherEarn = pr(s.otherEarnPaise);
-  const hourlyBasic = s.basicPaise / (days * 8);
+  // Hourly rate must come from actual working days, not CALENDAR days: dividing by `days`
+  // made the same 10 h of overtime pay Rs.1,339 in February and Rs.1,210 in March.
+  const workingDays = Math.max(1, days - weeklyOff - holiday);
+  const hourlyBasic = s.basicPaise / (workingDays * 8);
   const overtimePay = Math.round((overtimeMins / 60) * hourlyBasic * 1.5);
   const bonus = Math.max(0, extras.bonusPaise ?? 0), incentive = Math.max(0, extras.incentivePaise ?? 0);
   const gross = basic + hra + conveyance + special + otherEarn + overtimePay + bonus + incentive;
