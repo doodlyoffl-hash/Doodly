@@ -27,22 +27,44 @@ export function istDayWindow(dateStr?: string | null): { start: Date; end: Date;
   return { start, end, iso };
 }
 
+/* Volume helpers — "Milk required" must reflect the ACTUAL bottle sizes ordered
+   (a 500 ml order is 0.5 L, not 1 L). Subscription items link straight to
+   Variant.ml; OrderItem only stores a variantLabel string, so resolve it against
+   the variant catalogue (falling back to parsing the label). */
+const normLabel = (s?: string | null) => (s ?? "").toLowerCase().replace(/\s+/g, "");
+function parseMl(label?: string | null): number | null {
+  const s = normLabel(label);
+  let m = s.match(/^([\d.]+)ml$/);
+  if (m) return Math.round(parseFloat(m[1]));
+  m = s.match(/^([\d.]+)(?:l|ltr|litre|liter|litres|liters)$/);
+  if (m) return Math.round(parseFloat(m[1]) * 1000);
+  return null;
+}
+
 export async function deliveryStats(dateStr?: string | null) {
   const { start, end, iso } = istDayWindow(dateStr);
   const dayIsPast = end.getTime() <= Date.now();
-  const [rows, drivers, zones] = await Promise.all([
+  const [rows, drivers, zones, variants] = await Promise.all([
     db.delivery.findMany({
       where: { date: { gte: start, lt: end } },
       select: {
         id: true, status: true, date: true, deliveredAt: true, bottleCount: true, bottlesIn: true, driverId: true,
         driver: { select: { id: true, rating: true, user: { select: { name: true } } } },
         route: { select: { zone: { select: { name: true } } } },
+        subscription: { select: { items: { select: { qty: true, variant: { select: { ml: true } } } } } },
+        order: { select: { items: { select: { productSlug: true, variantLabel: true, quantity: true } } } },
       },
       orderBy: { date: "desc" }, take: 2000,
     }),
     db.driver.findMany({ select: { id: true, active: true, rating: true, user: { select: { name: true } } } }),
     db.deliveryZone.count(),
+    db.variant.findMany({ select: { label: true, ml: true, product: { select: { slug: true } } } }),
   ]);
+
+  const mlByKey = new Map<string, number>();
+  for (const v of variants) if (v.product?.slug) mlByKey.set(`${v.product.slug}|${normLabel(v.label)}`, v.ml);
+  const mlOfOrderItem = (slug: string, label: string | null) =>
+    mlByKey.get(`${slug}|${normLabel(label)}`) ?? parseMl(label) ?? 1000;   // last resort: 1 L/bottle
 
   const cnt = (f: (r: (typeof rows)[number]) => boolean) => rows.reduce((a, r) => a + (f(r) ? 1 : 0), 0);
   const total = rows.length;
@@ -62,6 +84,17 @@ export async function deliveryStats(dateStr?: string | null) {
   const bottleCollectionPct = deliveredRows.length ? Math.round((collectedCount / deliveredRows.length) * 100) : 0;
   const bottlesPending = deliveredRows.reduce((a, r) => a + Math.max(0, (r.bottleCount || 0) - (r.bottlesIn || 0)), 0);
   const totalBottles = rows.reduce((a, r) => a + (r.bottleCount || 0), 0);
+  // Actual volume to dispatch: subscription items carry Variant.ml; one-time order
+  // items resolve their label against the catalogue. Only fall back to 1 L/bottle
+  // when a delivery has no item detail at all (legacy rows).
+  const totalMl = rows.reduce((a, r) => {
+    const subItems = r.subscription?.items ?? [];
+    if (subItems.length) return a + subItems.reduce((s, i) => s + (i.variant?.ml ?? 1000) * i.qty, 0);
+    const ordItems = r.order?.items ?? [];
+    if (ordItems.length) return a + ordItems.reduce((s, i) => s + mlOfOrderItem(i.productSlug, i.variantLabel) * i.quantity, 0);
+    return a + (r.bottleCount || 0) * 1000;
+  }, 0);
+  const milkLitres = Math.round((totalMl / 1000) * 100) / 100;
   const activeExecutives = new Set(rows.filter((r) => r.driverId).map((r) => r.driverId)).size || drivers.filter((d) => d.active).length;
   const avgRating = drivers.length ? +(drivers.reduce((a, d) => a + (d.rating || 0), 0) / drivers.length).toFixed(1) : 0;
   const completionPct = total ? Math.round((delivered / total) * 100) : 0;
@@ -91,7 +124,7 @@ export async function deliveryStats(dateStr?: string | null) {
     kpis: {
       total, scheduled, assigned, outForDelivery, delivered, failed, pending, unassigned, delayed,
       bottlesCollected, bottlesPending, bottleCollectionPct, activeExecutives, zones,
-      totalBottles, milkLitres: totalBottles, avgRating, completionPct, avgTimeMin,
+      totalBottles, milkLitres, avgRating, completionPct, avgTimeMin,
     },
     executives,
   };
