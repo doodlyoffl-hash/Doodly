@@ -268,7 +268,9 @@ export async function recordManualPayment(args: RecordArgs, actor: Actor) {
     await logPaymentEvent(tx, created.id, "SUCCESS", `Manual payment recorded (${args.method})`, { amountPaise: args.amountPaise, reference: args.reference ?? null }, actor);
     // optionally mark the linked order/billing paid
     if (args.markPaid && args.orderId) await tx.order.update({ where: { id: args.orderId }, data: { status: "PAID" } }).catch(() => {});
-    if (args.markPaid && args.billingId) await tx.subscriptionBilling.update({ where: { id: args.billingId }, data: { paymentStatus: "PAID", amountPaidPaise: args.amountPaise } }).catch(() => {});
+    // SubscriptionBilling.totalPaise is already NET of wallet, so amountPaidPaise must be too —
+    // using the gross amount double-counted the wallet (also reported under wallet.usedPaise).
+    if (args.markPaid && args.billingId) await tx.subscriptionBilling.update({ where: { id: args.billingId }, data: { paymentStatus: "PAID", amountPaidPaise: net } }).catch(() => {});
     return created;
   });
   return { id: rec.id, code: rec.code };

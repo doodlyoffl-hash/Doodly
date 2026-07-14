@@ -196,16 +196,21 @@ export async function cancelCustomerOrder(userId: string, id: string) {
     await logEvent(tx, id, "CANCELLED", "Order cancelled", "Cancelled by you");
 
     // refund a paid order to the wallet
-    if (order.status === "PAID" && order.totalPaise > 0) {
+    // Refund only what was actually COLLECTED. Order.totalPaise is gross: the coupon
+    // discount is stored separately and was never paid, so refunding totalPaise handed the
+    // customer their discount back as spendable cash (buy with a coupon → cancel → keep it).
+    // walletAppliedPaise stays in: that was a real debit from their wallet.
+    const refundPaise = Math.max(0, order.totalPaise - (order.couponDiscountPaise ?? 0));
+    if (order.status === "PAID" && refundPaise > 0) {
       const user = await tx.user.findUnique({ where: { id: userId }, select: { walletPaise: true } });
-      const balanceAfterPaise = (user?.walletPaise ?? 0) + order.totalPaise;
+      const balanceAfterPaise = (user?.walletPaise ?? 0) + refundPaise;
       await tx.user.update({ where: { id: userId }, data: { walletPaise: balanceAfterPaise } });
       await tx.walletTxn.create({
-        data: { userId, orderId: id, type: "CREDIT", kind: "refund", amountPaise: order.totalPaise, balanceAfterPaise,
+        data: { userId, orderId: id, type: "CREDIT", kind: "refund", amountPaise: refundPaise, balanceAfterPaise,
           reference: `WTX-RF${id.slice(-7).toUpperCase()}`, description: `Refund for order ${num(id)}`, reason: "refund" },
       });
       await tx.order.update({ where: { id }, data: { status: "REFUNDED" } });
-      await logEvent(tx, id, "REFUND", "Refunded to wallet", `${rupees(order.totalPaise)} credited to your wallet`);
+      await logEvent(tx, id, "REFUND", "Refunded to wallet", `${rupees(refundPaise)} credited to your wallet`);
     }
     return { ok: true };
   }, TX);

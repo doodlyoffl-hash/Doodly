@@ -56,16 +56,16 @@ export async function revenueDashboard(rangeIn: RevRange = {}) {
     revTotal, revToday, revWeek, revMonth, revYear, revRange, byType, grossAgg,
     pending, refundedOrders, walletUsed, refundsAgg, activeSubs, b2bAgg, methodDist, trendRows, segNewRepeat,
   ] = await Promise.all([
-    db.order.aggregate({ where: PAID, _sum: { totalPaise: true }, _count: { _all: true } }),
-    db.order.aggregate({ where: { ...PAID, createdAt: { gte: todayStart } }, _sum: { totalPaise: true } }),
-    db.order.aggregate({ where: { ...PAID, createdAt: { gte: startOfDay(weekAgo) } }, _sum: { totalPaise: true } }),
-    db.order.aggregate({ where: { ...PAID, createdAt: { gte: monthStart } }, _sum: { totalPaise: true }, _count: { _all: true } }),
-    db.order.aggregate({ where: { ...PAID, createdAt: { gte: yearStart } }, _sum: { totalPaise: true } }),
-    db.order.aggregate({ where: { ...PAID, createdAt: { gte: from, lte: to } }, _sum: { totalPaise: true }, _count: { _all: true } }),
-    db.order.groupBy({ by: ["type"], where: PAID, _sum: { totalPaise: true }, _count: { _all: true } }),
+    db.order.aggregate({ where: PAID, _sum: { totalPaise: true, couponDiscountPaise: true }, _count: { _all: true } }),
+    db.order.aggregate({ where: { ...PAID, createdAt: { gte: todayStart } }, _sum: { totalPaise: true, couponDiscountPaise: true } }),
+    db.order.aggregate({ where: { ...PAID, createdAt: { gte: startOfDay(weekAgo) } }, _sum: { totalPaise: true, couponDiscountPaise: true } }),
+    db.order.aggregate({ where: { ...PAID, createdAt: { gte: monthStart } }, _sum: { totalPaise: true, couponDiscountPaise: true }, _count: { _all: true } }),
+    db.order.aggregate({ where: { ...PAID, createdAt: { gte: yearStart } }, _sum: { totalPaise: true, couponDiscountPaise: true } }),
+    db.order.aggregate({ where: { ...PAID, createdAt: { gte: from, lte: to } }, _sum: { totalPaise: true, couponDiscountPaise: true }, _count: { _all: true } }),
+    db.order.groupBy({ by: ["type"], where: PAID, _sum: { totalPaise: true, couponDiscountPaise: true }, _count: { _all: true } }),
     db.order.aggregate({ where: PAID, _sum: { subtotalPaise: true, discountPaise: true, taxPaise: true, deliveryPaise: true } }),
-    db.order.aggregate({ where: { status: "PENDING" }, _sum: { totalPaise: true }, _count: { _all: true } }),
-    db.order.aggregate({ where: { status: "REFUNDED" }, _sum: { totalPaise: true }, _count: { _all: true } }),
+    db.order.aggregate({ where: { status: "PENDING" }, _sum: { totalPaise: true, couponDiscountPaise: true }, _count: { _all: true } }),
+    db.order.aggregate({ where: { status: "REFUNDED" }, _sum: { totalPaise: true, couponDiscountPaise: true }, _count: { _all: true } }),
     db.walletTxn.aggregate({ where: { type: "DEBIT", kind: "usage" }, _sum: { amountPaise: true } }),
     db.paymentRefund.aggregate({ _sum: { amountPaise: true }, _count: true }),
     db.subscription.count({ where: { status: "ACTIVE" } }),
@@ -76,7 +76,13 @@ export async function revenueDashboard(rangeIn: RevRange = {}) {
   ]);
 
   const sumType = (t: string) => (byType as never as { type: string; _sum: { totalPaise: number | null } }[]).find((r) => r.type === t)?._sum.totalPaise ?? 0;
-  const totalRevenue = revTotal._sum.totalPaise ?? 0;
+  // Revenue = what was actually collected. Order.totalPaise is GROSS: the coupon discount
+  // is stored separately and never reached us, so summing totalPaise booked phantom revenue
+  // (and it appeared in neither `discountsPaise`, which is the PLAN discount only).
+  // Wallet-applied amounts stay in — that cash was collected earlier at recharge.
+  const net = (a: { _sum: { totalPaise: number | null; couponDiscountPaise?: number | null } }) =>
+    (a._sum.totalPaise ?? 0) - (a._sum.couponDiscountPaise ?? 0);
+  const totalRevenue = net(revTotal);
   const paidCount = revTotal._count._all || 0;
   const gross = grossAgg._sum.subtotalPaise ?? 0;
   const discounts = grossAgg._sum.discountPaise ?? 0;
@@ -85,19 +91,19 @@ export async function revenueDashboard(rangeIn: RevRange = {}) {
   const b2bCollected = b2bAgg._sum.paidPaise ?? 0;
   const b2bBilled = b2bAgg._sum.totalPaise ?? 0;
   const subsRevenue = sumType("SUBSCRIPTION");
-  const monthSubs = await db.order.aggregate({ where: { ...PAID, type: "SUBSCRIPTION", createdAt: { gte: monthStart } }, _sum: { totalPaise: true } });
+  const monthSubs = await db.order.aggregate({ where: { ...PAID, type: "SUBSCRIPTION", createdAt: { gte: monthStart } }, _sum: { totalPaise: true, couponDiscountPaise: true } });
   const mrr = monthSubs._sum.totalPaise ?? 0; // proxy: this-month subscription revenue
 
   const repeat = (segNewRepeat as never as { _count: { _all: number } }[]).filter((g) => g._count._all > 1).length;
   const oneTimers = (segNewRepeat as never as { _count: { _all: number } }[]).length - repeat;
 
   const kpis = {
-    todayRevenuePaise: revToday._sum.totalPaise ?? 0,
-    weekRevenuePaise: revWeek._sum.totalPaise ?? 0,
-    monthRevenuePaise: revMonth._sum.totalPaise ?? 0,
-    yearRevenuePaise: revYear._sum.totalPaise ?? 0,
+    todayRevenuePaise: net(revToday),
+    weekRevenuePaise: net(revWeek),
+    monthRevenuePaise: net(revMonth),
+    yearRevenuePaise: net(revYear),
     totalRevenuePaise: totalRevenue,
-    rangeRevenuePaise: revRange._sum.totalPaise ?? 0,
+    rangeRevenuePaise: net(revRange),
     subscriptionRevenuePaise: subsRevenue,
     oneTimeRevenuePaise: sumType("ONE_TIME"),
     trialRevenuePaise: sumType("SAMPLE"),

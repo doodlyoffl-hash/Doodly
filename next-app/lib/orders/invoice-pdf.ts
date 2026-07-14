@@ -33,6 +33,7 @@ export async function renderCustomerInvoicePdfById(invoiceId: string): Promise<{
         select: {
           id: true, type: true, createdAt: true,
           subtotalPaise: true, discountPaise: true, depositPaise: true, taxPaise: true, deliveryPaise: true, totalPaise: true,
+          couponCode: true, couponDiscountPaise: true, walletAppliedPaise: true,
           items: { select: { productName: true, variantLabel: true, quantity: true, unitPricePaise: true, lineTotalPaise: true } },
         },
       },
@@ -120,9 +121,16 @@ export async function renderCustomerInvoicePdfById(invoiceId: string): Promise<{
   if (inv.order.deliveryPaise > 0) totRow("Delivery", rs(inv.order.deliveryPaise));
   if (inv.order.depositPaise > 0) totRow("Bottle deposit (refundable)", rs(inv.order.depositPaise));
   totRow("GST", rs(inv.gstPaise));
+  // The coupon was never collected — showing totalPaise as "TOTAL PAID" overstated receipts
+  // on every coupon order, so the tax document didn't reconcile with the payment ledger.
+  if (inv.order.couponDiscountPaise > 0) {
+    totRow("Coupon" + (inv.order.couponCode ? " (" + inv.order.couponCode + ")" : ""), "- " + rs(inv.order.couponDiscountPaise), false, GREEN);
+  }
   page.drawRectangle({ x: colRate - 40, y: y + 6, width: colAmt - (colRate - 40) - 8 + 8, height: 0.8, color: LINE });
   y -= 6;
-  totRow("TOTAL PAID", rs(inv.order.totalPaise), true, FOREST);
+  const paidPaise = Math.max(0, inv.order.totalPaise - (inv.order.couponDiscountPaise ?? 0));
+  totRow("TOTAL PAID", rs(paidPaise), true, FOREST);
+  if (inv.order.walletAppliedPaise > 0) totRow("(paid from wallet)", rs(inv.order.walletAppliedPaise));
 
   // ---- footer ----
   const gstin = process.env.DOODLY_GSTIN;
