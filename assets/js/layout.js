@@ -2016,8 +2016,8 @@
           : '<span class="muted-sm">—</span>';
         return "<tr><td><b>" + esc(o.orderRef) + "</b></td>" +
           "<td>" + esc(o.customer) + "<div class='muted-sm'>" + esc(o.mobile) + "</div></td>" +
-          "<td style='max-width:230px'>" + esc(o.address) + "</td>" +
-          "<td>" + esc(o.products) + "</td><td>" + o.qty + "</td><td>" + o.bottles + "</td>" +
+          "<td style='white-space:normal;word-break:break-word;min-width:180px;max-width:250px'>" + esc(o.address) + "</td>" +
+          "<td style='white-space:normal;min-width:140px;max-width:220px'>" + esc(o.products) + "</td><td>" + o.qty + "</td><td>" + o.bottles + "</td>" +
           "<td>" + esc(o.deliveryDate) + "<div class='muted-sm'>" + esc(o.slot) + "</div></td>" +
           "<td>" + exec + "</td><td>" + fmtTime(o.assignedAt) + "</td><td>" + asgnMethodBadge(o.method) + "</td><td>" + asgnStatusBadge(o.status) + "</td>" +
           "<td><button class='btn btn-ghost sm ao-manage' data-id='" + o.deliveryId + "' data-cust='" + esc(o.customer) + "' data-driver='" + (o.executive ? o.executive.driverId : "") + "'>Manage</button></td></tr>";
