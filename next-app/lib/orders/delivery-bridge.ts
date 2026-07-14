@@ -49,7 +49,8 @@ export async function ensureDeliveryForOrder(orderId: string): Promise<{ deliver
       id: true, status: true, addressId: true, deliveryDate: true, deliverySlot: true, userId: true,
       payment: { select: { method: true } },
       delivery: { select: { id: true } },
-      subscription: { select: { id: true, addressId: true } },
+      items: { select: { quantity: true } },
+      subscription: { select: { id: true, addressId: true, items: { select: { qty: true } } } },
     },
   });
   if (!order) return null;
@@ -58,7 +59,12 @@ export async function ensureDeliveryForOrder(orderId: string): Promise<{ deliver
   const confirmed = order.status === "PAID" || order.payment?.method === "CASH";
   if (!confirmed) return null;
 
-  const bottleCount = 1;   // one delivery stop (capacity unit)
+  // Physical bottles on this stop — drives the bottle ledger (ISSUED/RETURNED), the
+  // executive's carrying capacity and the "total bottles" KPIs. Must be the real
+  // quantity ordered, not one-per-stop. (Matches lib/subscriptions/deliveries.ts.)
+  const bottleCount = order.subscription
+    ? Math.max(1, (order.subscription.items ?? []).reduce((s, i) => s + (i.qty || 0), 0))
+    : Math.max(1, (order.items ?? []).reduce((s, i) => s + (i.quantity || 0), 0));
   // Defensive fallbacks so a confirmed order never ends up without a delivery:
   // a date (its own, else the next delivery day) and an address (its own, else the
   // customer's saved default). Only skip when there is genuinely no address on file.

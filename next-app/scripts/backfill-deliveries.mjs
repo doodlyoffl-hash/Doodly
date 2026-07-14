@@ -41,32 +41,39 @@ try {
     select: {
       id: true, status: true, type: true, addressId: true, deliveryDate: true, deliverySlot: true, userId: true,
       payment: { select: { method: true } },
-      subscription: { select: { id: true, addressId: true } },
+      items: { select: { quantity: true } },
+      subscription: { select: { id: true, addressId: true, items: { select: { qty: true } } } },
       user: { select: { name: true } },
     },
     orderBy: { createdAt: "asc" },
   });
+
+  // Real physical bottles on the stop (drives the bottle ledger + exec capacity).
+  const bottlesOf = (o) => o.subscription
+    ? Math.max(1, (o.subscription.items ?? []).reduce((s, i) => s + (i.qty || 0), 0))
+    : Math.max(1, (o.items ?? []).reduce((s, i) => s + (i.quantity || 0), 0));
 
   let created = 0, skippedExisting = 0, skippedNoAddress = 0;
   const rows = [];
 
   for (const o of orders) {
     const date = o.deliveryDate ?? nextDeliveryDateIST();
+    const bottleCount = bottlesOf(o);
 
     if (o.subscription) {
       const existing = await db.delivery.findFirst({ where: { subscriptionId: o.subscription.id }, select: { id: true } });
       if (existing) { skippedExisting++; continue; }
       const addressId = await resolveAddressId(o.addressId ?? o.subscription.addressId, o.userId);
       if (!addressId) { skippedNoAddress++; rows.push([o.id.slice(-6), o.user?.name, "SUB", "NO-ADDRESS → skip"]); continue; }
-      if (CONFIRM) await db.delivery.create({ data: { subscriptionId: o.subscription.id, addressId, date, slot: o.deliverySlot ?? "06:00-08:00", status: "SCHEDULED", bottleCount: 1 } });
-      created++; rows.push([o.id.slice(-6), o.user?.name, "SUB", `→ ${istISO(date)}`]);
+      if (CONFIRM) await db.delivery.create({ data: { subscriptionId: o.subscription.id, addressId, date, slot: o.deliverySlot ?? "06:00-08:00", status: "SCHEDULED", bottleCount } });
+      created++; rows.push([o.id.slice(-6), o.user?.name, "SUB", `${bottleCount} bottle(s) → ${istISO(date)}`]);
       continue;
     }
 
     const addressId = await resolveAddressId(o.addressId, o.userId);
     if (!addressId) { skippedNoAddress++; rows.push([o.id.slice(-6), o.user?.name, o.type, "NO-ADDRESS → skip"]); continue; }
-    if (CONFIRM) await db.delivery.create({ data: { orderId: o.id, addressId, date, slot: o.deliverySlot ?? "06:00-08:00", status: "SCHEDULED", bottleCount: 1 } });
-    created++; rows.push([o.id.slice(-6), o.user?.name, o.type, `${o.payment?.method || "-"} → deliver ${istISO(date)}`]);
+    if (CONFIRM) await db.delivery.create({ data: { orderId: o.id, addressId, date, slot: o.deliverySlot ?? "06:00-08:00", status: "SCHEDULED", bottleCount } });
+    created++; rows.push([o.id.slice(-6), o.user?.name, o.type, `${o.payment?.method || "-"} · ${bottleCount} bottle(s) → deliver ${istISO(date)}`]);
   }
 
   console.log(`Confirmed orders missing a delivery: ${orders.length}`);
