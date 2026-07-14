@@ -3,6 +3,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { approveBatch, rejectBatch } from "@/lib/quality/service";
 import { ok, parseBody, route, Errors } from "@/lib/http";
 import { requirePermission } from "@/lib/auth/authorize";
 import { reqContext } from "@/lib/auth/request";
@@ -25,11 +26,11 @@ export const PATCH = route("admin.procurement.update", async (req: NextRequest, 
   const role = requirePermission(req, "procurement", "edit");
   const body = await parseBody(req, patchSchema);
   if (!(await db.procurement.findUnique({ where: { id: params.id }, select: { id: true } }))) throw Errors.notFound("Batch not found.");
-  const procurement = await db.procurement.update({
-    where: { id: params.id },
-    data: { accepted: body.accepted },
-    select: { id: true, accepted: true },
-  });
+  // Go through the canonical setAccepted() so the MILK_RAW inventory moves with the flag —
+  // a bare procurement.update() left rejected litres sitting in raw-milk stock forever.
+  const procurement = body.accepted
+    ? await approveBatch(params.id, { actorRole: role })
+    : await rejectBatch(params.id, { actorRole: role });
   await audit({ actorRole: role, action: body.accepted ? "procurement.accept" : "procurement.reject", target: procurement.id, ctx: reqContext(req) });
   return ok({ procurement });
 });

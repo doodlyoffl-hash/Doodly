@@ -7,6 +7,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { b2bProductBySlug } from "./catalog";
 import { BusinessSchema, OrderSchema } from "./validation";
 import {
   formatBusinessCode, formatOrderCode, formatInvoiceNumber, computeOrderTotals, lineTotalPaise,
@@ -149,6 +150,42 @@ export async function getBusinessProfile(id: string) {
 
 // ---------- orders ----------
 
+/* The price MUST be resolved server-side from the (product, unit) pair.
+   The admin UI prefills a price for the product's PRIMARY unit (milk = ₹66/Litre) and does
+   not recompute it when the unit is switched, and the API previously accepted `unit` and
+   `unitPricePaise` as independent free values — so ordering 20 "Bottles" of milk billed
+   20 × ₹66 = ₹1,320 for what is 10 L (₹660 at the agreed rate). Double the money, driven
+   purely by the unit label.
+   Order of authority: the business's negotiated BusinessPricing row for that exact unit
+   (highest applicable quantity slab) → the catalogue default, but ONLY for the primary unit
+   → otherwise refuse, rather than silently reuse a price meant for a different unit. */
+async function resolveUnitPricePaise(
+  tx: Prisma.TransactionClient,
+  businessId: string,
+  item: { productSlug: string; productName: string; unit: string; quantity: number },
+): Promise<number> {
+  const now = new Date();
+  const negotiated = await tx.businessPricing.findFirst({
+    where: {
+      businessId, productSlug: item.productSlug, unit: item.unit,
+      active: true, deletedAt: null,
+      minQty: { lte: Math.max(1, Math.floor(item.quantity)) },
+      effectiveFrom: { lte: now },
+      OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: now } }],
+    },
+    orderBy: { minQty: "desc" },   // the most specific slab wins
+    select: { b2bPricePaise: true },
+  });
+  if (negotiated) return negotiated.b2bPricePaise;
+
+  const cat = b2bProductBySlug(item.productSlug);
+  if (cat && item.unit === cat.primaryUnit && cat.defaultPricePaise > 0) return cat.defaultPricePaise;
+
+  throw new Error(
+    `No B2B price is set for ${item.productName} in ${item.unit}. Add a price for that unit in B2B Pricing (the catalogue default only covers ${cat?.primaryUnit ?? "the primary unit"}).`,
+  );
+}
+
 export async function createOrder(raw: unknown, actor: Actor) {
   const data = OrderSchema.parse(raw);
   return withRetry(() =>
@@ -156,9 +193,14 @@ export async function createOrder(raw: unknown, actor: Actor) {
       const biz = await tx.business.findUnique({ where: { id: data.businessId }, select: { paymentTerm: true, discountBps: true, deletedAt: true, active: true } });
       if (!biz || biz.deletedAt || !biz.active) throw new Error("Business not found or inactive");
 
+      // Server-authoritative pricing — never trust the client's unitPricePaise.
+      const priced = await Promise.all(
+        data.items.map(async (i) => ({ ...i, unitPricePaise: await resolveUnitPricePaise(tx, data.businessId, i) })),
+      );
+
       const discountBps = data.discountBps ?? biz.discountBps;
       const taxBps = data.taxBps ?? 0;
-      const totals = computeOrderTotals(data.items.map((i) => ({ unitPricePaise: i.unitPricePaise, quantity: i.quantity })), { discountBps, taxBps });
+      const totals = computeOrderTotals(priced.map((i) => ({ unitPricePaise: i.unitPricePaise, quantity: i.quantity })), { discountBps, taxBps });
       const year = new Date(data.deliveryDate).getFullYear() || new Date().getFullYear();
       const code = formatOrderCode(year, await nextSeq(tx, `b2border:${year}`));
 
@@ -167,7 +209,7 @@ export async function createOrder(raw: unknown, actor: Actor) {
           code, businessId: data.businessId, deliveryDate: new Date(data.deliveryDate), deliveryTime: data.deliveryTime,
           deliveryNotes: clean(data.deliveryNotes), ...totals, paymentTerm: biz.paymentTerm,
           paymentStatus: derivePaymentStatus(totals.totalPaise, 0, biz.paymentTerm), remarks: clean(data.remarks), createdById: actor.actorId,
-          items: { create: data.items.map((i) => ({ productSlug: i.productSlug, productName: i.productName, quantity: i.quantity, unit: i.unit, unitPricePaise: i.unitPricePaise, lineTotalPaise: lineTotalPaise(i.unitPricePaise, i.quantity) })) },
+          items: { create: priced.map((i) => ({ productSlug: i.productSlug, productName: i.productName, quantity: i.quantity, unit: i.unit, unitPricePaise: i.unitPricePaise, lineTotalPaise: lineTotalPaise(i.unitPricePaise, i.quantity) })) },
         },
         include: { items: true, business: { select: { code: true, name: true } } },
       });

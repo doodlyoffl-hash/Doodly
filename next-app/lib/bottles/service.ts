@@ -54,10 +54,15 @@ export interface FleetKpis {
 
 // ---------------------------------------------------------------- overview
 export async function bottleFleetOverview() {
-  const [stock, byEvent, byDeposit] = await Promise.all([
+  // Deposits are CHARGED on the order (Order.depositPaise) — nothing ever writes a
+  // BottleLedger DEPOSIT_CHARGED row outside the seed, so deriving "held" from the ledger
+  // made this KPI structurally always Rs.0 while a real refundable liability accrued.
+  // Mirror the source of truth used by refundBottleDeposit(): paid deposits minus refunds.
+  const [stock, byEvent, byDeposit, chargedAgg] = await Promise.all([
     db.bottleStock.findMany(),
     db.bottleLedger.groupBy({ by: ["event"], _sum: { qty: true } }),
     db.bottleLedger.groupBy({ by: ["event"], _sum: { amountPaise: true } }),
+    db.order.aggregate({ where: { status: "PAID" }, _sum: { depositPaise: true } }),
   ]);
 
   const caps = new Map<number, Record<BottleStage, number>>();
@@ -71,7 +76,7 @@ export async function bottleFleetOverview() {
   const evQty = (e: string) => byEvent.find((g) => g.event === e)?._sum.qty ?? 0;
   const evDep = (e: string) => byDeposit.find((g) => g.event === e)?._sum.amountPaise ?? 0;
   const pendingReturn = Math.max(0, evQty("ISSUED") - evQty("RETURNED") - evQty("LOST"));
-  const depositsHeldPaise = Math.max(0, evDep("DEPOSIT_CHARGED") - evDep("DEPOSIT_REFUNDED"));
+  const depositsHeldPaise = Math.max(0, (chargedAgg._sum.depositPaise ?? 0) - evDep("DEPOSIT_REFUNDED"));
 
   const available = sumStage("AVAILABLE"), inCirculation = sumStage("IN_CIRCULATION"),
     awaitingCollection = sumStage("AWAITING_COLLECTION"), cleaning = sumStage("CLEANING"),

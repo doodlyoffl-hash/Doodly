@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const GET = route("bottles.list", async (req: NextRequest) => {
   const userId = requireUserId(req);
 
-  const [ledger, groups, deposit] = await Promise.all([
+  const [ledger, groups, depositCharged, depositRefunded] = await Promise.all([
     db.bottleLedger.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
@@ -19,7 +19,12 @@ export const GET = route("bottles.list", async (req: NextRequest) => {
       select: { id: true, event: true, qty: true, amountPaise: true, note: true, createdAt: true, delivery: { select: { date: true } } },
     }),
     db.bottleLedger.groupBy({ by: ["event"], where: { userId }, _sum: { qty: true, amountPaise: true } }),
-    db.bottleLedger.aggregate({ where: { userId, event: "DEPOSIT_CHARGED" }, _sum: { amountPaise: true } }),
+    // Deposit held = deposits actually paid on this customer's orders MINUS refunds already
+    // given back. Reading only DEPOSIT_CHARGED ignored refunds (and nothing writes that
+    // event anyway), so a fully-refunded customer still showed a balance and could claim it
+    // again. Same formula as refundBottleDeposit() in lib/wallet/service.ts.
+    db.order.aggregate({ where: { userId, status: "PAID" }, _sum: { depositPaise: true } }),
+    db.bottleLedger.aggregate({ where: { userId, event: "DEPOSIT_REFUNDED" }, _sum: { amountPaise: true } }),
   ]);
 
   const qty = (e: string) => groups.find((g) => g.event === e)?._sum.qty ?? 0;
@@ -30,7 +35,7 @@ export const GET = route("bottles.list", async (req: NextRequest) => {
     summary: {
       issued, returned, lost,
       pending: Math.max(0, issued - returned - lost),
-      depositPaise: deposit._sum.amountPaise ?? 0,
+      depositPaise: Math.max(0, (depositCharged._sum.depositPaise ?? 0) - (depositRefunded._sum.amountPaise ?? 0)),
     },
   });
 });

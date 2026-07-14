@@ -9,6 +9,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { Errors } from "@/lib/http";
+import { approveBatch, rejectBatch } from "@/lib/quality/service";
 
 export interface Actor { actorId?: string; actorRole?: string; ip?: string }
 export const MILK_TYPE = "A2 Buffalo";
@@ -159,10 +160,18 @@ export type ProcBulkAction = "accept" | "reject" | "markPaid" | "markDue";
 export async function bulkProcurement(args: { action: ProcBulkAction; ids: string[] }, _actor: Actor) {
   const ids = [...new Set((args.ids || []).filter(Boolean))];
   if (!ids.length) throw Errors.badRequest("Select at least one record.");
+  // Accept/reject MUST go through setAccepted() (quality service): it is idempotent and moves
+  // the MILK_RAW InventoryItem by ±litres in a transaction. Flipping `accepted` with a bare
+  // updateMany left raw-milk stock desynced forever (a rejected 200 L batch kept its 200 L on
+  // hand) and could even double-count it if the batch was later re-approved from Quality.
+  if (args.action === "accept" || args.action === "reject") {
+    const fn = args.action === "accept" ? approveBatch : rejectBatch;
+    let count = 0;
+    for (const id of ids) { await fn(id, _actor); count++; }
+    return { action: args.action, count };
+  }
   let data: Record<string, unknown>;
   switch (args.action) {
-    case "accept": data = { accepted: true }; break;
-    case "reject": data = { accepted: false }; break;
     case "markPaid": data = { paidAt: new Date() }; break;
     case "markDue": data = { paidAt: null }; break;
     default: throw Errors.badRequest("Unknown bulk action.");

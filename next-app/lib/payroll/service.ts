@@ -55,9 +55,20 @@ async function computeOne(employeeId: string, month: string, extras: { bonusPais
   const bonus = Math.max(0, extras.bonusPaise ?? 0), incentive = Math.max(0, extras.incentivePaise ?? 0);
   const gross = basic + hra + conveyance + special + otherEarn + overtimePay + bonus + incentive;
 
-  // advance recovery (planned; actually deducted from the advance ledger at markPaid)
+  // Advance recovery (planned here; the SalaryAdvance ledger is only decremented at markPaid).
+  // Because the ledger lags, any recovery already committed on the employee's OTHER unpaid
+  // payslips must be netted off — otherwise generating February before January is PAID plans
+  // the SAME installment twice: both payslips dock the employee, but at PAID the ledger only
+  // has enough left to recover once. A ₹5,000 advance would take ₹10,000 out of their pay.
   const advances = await db.salaryAdvance.findMany({ where: { employeeId, status: "APPROVED", remainingPaise: { gt: 0 } } });
-  const advanceRecover = advances.reduce((sum, a) => sum + Math.min(a.installmentPaise, a.remainingPaise), 0);
+  const plannedInstalment = advances.reduce((sum, a) => sum + Math.min(a.installmentPaise, a.remainingPaise), 0);
+  const totalRemaining = advances.reduce((sum, a) => sum + a.remainingPaise, 0);
+  const committedAgg = await db.payslip.aggregate({
+    where: { employeeId, status: { in: ["DRAFT", "FINALIZED"] }, ...(existing ? { NOT: { id: existing.id } } : {}) },
+    _sum: { advanceRecoverPaise: true },
+  });
+  const alreadyCommitted = committedAgg._sum.advanceRecoverPaise ?? 0;
+  const advanceRecover = Math.max(0, Math.min(plannedInstalment, totalRemaining - alreadyCommitted));
 
   const deductions = s.ptPaise + s.otherDeductPaise + advanceRecover;
   const net = Math.max(0, gross - deductions);

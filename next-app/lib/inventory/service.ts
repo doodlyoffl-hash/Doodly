@@ -57,7 +57,9 @@ export async function inventoryOverview(): Promise<{ items: InvItem[]; stats: In
   const items: InvItem[] = [];
   for (const v of variants) {
     const available = v.stock - v.reservedStock;
-    const unitPaise = v.dailyPaise ?? v.fixedPaise ?? 0;
+    // fixedPaise is the TOTAL price of a fixedDays pack (trial: Rs.200 for 3 bottles), not a
+    // per-bottle price — using it raw valued each trial bottle at the whole pack price (3x).
+    const unitPaise = v.dailyPaise ?? (v.fixedPaise != null && v.fixedDays ? Math.round(v.fixedPaise / v.fixedDays) : v.fixedPaise ?? 0);
     items.push({
       id: v.id, kind: "variant", productId: v.productId, sku: v.sku ?? "—",
       name: `${v.product.name} ${v.label}`.trim(), unit: `${v.ml} ml`,
