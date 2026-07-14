@@ -36,8 +36,10 @@ export async function POST(req: NextRequest) {
       { type: variant.type, ml: variant.ml, dailyPaise: variant.dailyPaise, fixedPaise: variant.fixedPaise, fixedDays: variant.fixedDays },
       plan ? { days: plan.days, discountBps: plan.discountBps } : undefined,
     );
-    // subscriptions carry a refundable glass-bottle deposit per bottle
-    amountPaise = q.totalPaise + (variant.type === "SUBSCRIPTION" ? bottleDepositPaise * bottles : 0);
+    // quote() prices ONE bottle per delivery — scale the milk line by the bottles ordered
+    // (same fix as lib/checkout/service.ts; without it a multi-bottle order is charged for one).
+    // Subscriptions carry a refundable glass-bottle deposit per bottle.
+    amountPaise = q.totalPaise * bottles + (variant.type === "SUBSCRIPTION" ? bottleDepositPaise * bottles : 0);
   } catch {
     return NextResponse.json({ error: "Could not price this selection" }, { status: 422 });
   }

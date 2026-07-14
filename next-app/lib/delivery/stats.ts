@@ -27,6 +27,28 @@ export function istDayWindow(dateStr?: string | null): { start: Date; end: Date;
   return { start, end, iso };
 }
 
+/** IST midnight of the IST calendar day CONTAINING `d`, as a UTC instant. Use this to
+ *  anchor an SLA promise time to a delivery's own day. Deliveries are stamped at IST
+ *  midnight, so Date.prototype.setHours() (process-local = UTC on Vercel) lands on the
+ *  wrong day and must never be used for this. */
+export function istDayStart(d: Date): Date {
+  const ist = new Date(d.getTime() + IST_MS);
+  return new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()) - IST_MS);
+}
+
+/** Today's IST day as inclusive bounds `[s, e]` (e = 23:59:59.999 IST), matching the
+ *  `gte/lte` filters used by the drivers / routes / pincodes dashboards. */
+export function istTodayBounds(): { s: Date; e: Date; iso: string } {
+  const { start, end, iso } = istDayWindow();
+  return { s: start, e: new Date(end.getTime() - 1), iso };
+}
+
+/** The IST calendar date of an instant as "YYYY-MM-DD". (`toISOString().slice(0,10)`
+ *  gives the UTC date, which is the PREVIOUS day for anything stamped at IST midnight.) */
+export function istISO(d: Date): string {
+  return new Date(d.getTime() + IST_MS).toISOString().slice(0, 10);
+}
+
 /* Volume helpers — "Milk required" must reflect the ACTUAL bottle sizes ordered
    (a 500 ml order is 0.5 L, not 1 L). Subscription items link straight to
    Variant.ml; OrderItem only stores a variantLabel string, so resolve it against
@@ -56,7 +78,7 @@ export async function deliveryStats(dateStr?: string | null) {
       },
       orderBy: { date: "desc" }, take: 2000,
     }),
-    db.driver.findMany({ select: { id: true, active: true, rating: true, user: { select: { name: true } } } }),
+    db.driver.findMany({ where: { deletedAt: null }, select: { id: true, active: true, rating: true, user: { select: { name: true } } } }),
     db.deliveryZone.count(),
     db.variant.findMany({ select: { label: true, ml: true, product: { select: { slug: true } } } }),
   ]);
@@ -80,23 +102,29 @@ export async function deliveryStats(dateStr?: string | null) {
 
   const deliveredRows = rows.filter((r) => r.status === "DELIVERED");
   const bottlesCollected = rows.reduce((a, r) => a + (r.bottlesIn || 0), 0);
-  const collectedCount = deliveredRows.filter((r) => (r.bottlesIn || 0) > 0).length;
-  const bottleCollectionPct = deliveredRows.length ? Math.round((collectedCount / deliveredRows.length) * 100) : 0;
+  // % of BOTTLES returned — the neighbouring KPIs (bottlesCollected/bottlesPending) are
+  // bottle counts, so counting whole stops read "100% collected" when 1 of 10 came back.
   const bottlesPending = deliveredRows.reduce((a, r) => a + Math.max(0, (r.bottleCount || 0) - (r.bottlesIn || 0)), 0);
+  const bottleCollectionPct = (bottlesCollected + bottlesPending) ? Math.round((bottlesCollected / (bottlesCollected + bottlesPending)) * 100) : 0;
   const totalBottles = rows.reduce((a, r) => a + (r.bottleCount || 0), 0);
-  // Actual volume to dispatch: subscription items carry Variant.ml; one-time order
-  // items resolve their label against the catalogue. Only fall back to 1 L/bottle
-  // when a delivery has no item detail at all (legacy rows).
+  // Actual volume to dispatch THIS DAY: bottles on the stop × the bottle size.
+  // Subscription items carry qty (bottles per delivery) + Variant.ml directly.
+  // For a one-time order the per-delivery bottle count is Delivery.bottleCount —
+  // NOT OrderItem.quantity, which is the order-level total (days × bottles).
+  // Fall back to 1 L/bottle only when there's no item detail at all (legacy rows).
   const totalMl = rows.reduce((a, r) => {
     const subItems = r.subscription?.items ?? [];
     if (subItems.length) return a + subItems.reduce((s, i) => s + (i.variant?.ml ?? 1000) * i.qty, 0);
-    const ordItems = r.order?.items ?? [];
-    if (ordItems.length) return a + ordItems.reduce((s, i) => s + mlOfOrderItem(i.productSlug, i.variantLabel) * i.quantity, 0);
+    const oi = (r.order?.items ?? [])[0];
+    if (oi) return a + mlOfOrderItem(oi.productSlug, oi.variantLabel) * (r.bottleCount || 1);
     return a + (r.bottleCount || 0) * 1000;
   }, 0);
   const milkLitres = Math.round((totalMl / 1000) * 100) / 100;
-  const activeExecutives = new Set(rows.filter((r) => r.driverId).map((r) => r.driverId)).size || drivers.filter((d) => d.active).length;
-  const avgRating = drivers.length ? +(drivers.reduce((a, d) => a + (d.rating || 0), 0) / drivers.length).toFixed(1) : 0;
+  // No `|| fleetSize` fallback: zero executives working is a real answer, not "unknown".
+  const activeExecutives = new Set(rows.filter((r) => r.driverId).map((r) => r.driverId)).size;
+  // Fleet rating over ACTIVE drivers — a soft-deleted/fired driver must not weigh it down.
+  const ratedDrivers = drivers.filter((d) => d.active);
+  const avgRating = ratedDrivers.length ? +(ratedDrivers.reduce((a, d) => a + (d.rating || 0), 0) / ratedDrivers.length).toFixed(1) : 0;
   const completionPct = total ? Math.round((delivered / total) * 100) : 0;
 
   const mins = (r: (typeof rows)[number]) => r.deliveredAt ? (r.deliveredAt.getTime() - r.date.getTime()) / 60000 : NaN;

@@ -8,6 +8,8 @@ import "server-only";
 import { db } from "@/lib/db";
 import { Errors } from "@/lib/http";
 import { hashPassword } from "@/lib/auth/password";
+import { istTodayBounds } from "@/lib/delivery/stats";
+import { slaPromiseMin, deliveredOnTime } from "@/lib/delivery/late";
 
 export interface Actor { actorId?: string; actorRole?: string; ip?: string }
 
@@ -28,8 +30,9 @@ const statusMeta = (bucket: string, active: boolean, userStatus: string): [strin
 };
 
 function dayBounds() {
-  const s = new Date(); s.setHours(0, 0, 0, 0);
-  const e = new Date(); e.setHours(23, 59, 59, 999);
+  // IST, not process-local: deliveries are stamped at IST midnight, so setHours() (UTC on
+  // Vercel) selected the WRONG DAY — "today" showed tomorrow's stops and missed today's.
+  const { s, e } = istTodayBounds();
   return { s, e };
 }
 
@@ -95,6 +98,7 @@ function statsFrom(items: { active: boolean; bucket: string }[]) {
 
 export async function driverStats() {
   const { s, e } = dayBounds();
+  const promiseMin = await slaPromiseMin();
   const [drivers, today] = await Promise.all([
     db.driver.findMany({ where: { deletedAt: null }, select: { active: true, rating: true, user: { select: { status: true } }, execStatus: { select: { availability: true } } } }),
     db.delivery.findMany({ where: { date: { gte: s, lte: e } }, select: { status: true, deliveredAt: true, date: true, driverId: true } }),
@@ -116,8 +120,11 @@ export async function driverStats() {
     leave: drivers.filter((d) => bucket(d.execStatus?.availability) === "leave").length,
     suspended: drivers.filter((d) => d.user.status === "LOCKED").length,
     assignedToday, completedToday, pending, avgTimeMin,
-    onTimePct: doneToday.length ? Math.round((doneToday.filter((d) => d.deliveredAt).length / doneToday.length) * 100) : 100,
-    avgRating: drivers.length ? +(drivers.reduce((a, d) => a + d.rating, 0) / drivers.length).toFixed(1) : 0,
+    // On time = delivered BEFORE the SLA promise, not merely "has a deliveredAt" (every
+    // DELIVERED row has one, so this KPI could previously only ever read 100%).
+    onTimePct: doneToday.length ? Math.round((doneToday.filter((d) => deliveredOnTime(d.deliveredAt, d.date, promiseMin)).length / doneToday.length) * 100) : 100,
+    // Fleet rating = the drivers actually on the fleet (deactivating one must repair it).
+    avgRating: (() => { const act = drivers.filter((d) => d.active); return act.length ? +(act.reduce((a, d) => a + d.rating, 0) / act.length).toFixed(1) : 0; })(),
   };
 }
 

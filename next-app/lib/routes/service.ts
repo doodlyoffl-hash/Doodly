@@ -10,7 +10,8 @@ import "server-only";
 import { db } from "@/lib/db";
 import { Errors } from "@/lib/http";
 import { orderByNearestNeighbor, haversineKm } from "@/lib/assignment/engine";
-import { istDayWindow } from "@/lib/delivery/stats";
+import { istDayWindow, istTodayBounds } from "@/lib/delivery/stats";
+import { slaPromiseMin, deliveredOnTime } from "@/lib/delivery/late";
 
 export interface Actor { actorId?: string; actorRole?: string; ip?: string }
 
@@ -69,8 +70,9 @@ export async function listRoutes(q: { search?: string; status?: string; zoneId?:
 }
 
 export async function routeStats() {
-  const s = new Date(); s.setHours(0, 0, 0, 0);
-  const e = new Date(); e.setHours(23, 59, 59, 999);
+  // IST day, not process-local (setHours = UTC on Vercel → wrong day's deliveries).
+  const { s, e } = istTodayBounds();
+  const promiseMin = await slaPromiseMin();
   const [routes, today] = await Promise.all([
     db.route.findMany({ where: { deletedAt: null }, select: { active: true, date: true, driverId: true, zoneId: true, distanceKm: true, durationMin: true, _count: { select: { deliveries: true } } } }),
     db.delivery.findMany({ where: { date: { gte: s, lte: e } }, select: { status: true, deliveredAt: true, date: true, routeId: true } }),
@@ -88,7 +90,9 @@ export async function routeStats() {
     scheduledDeliveries: routes.reduce((a, r) => a + r._count.deliveries, 0),
     avgDistanceKm: withDist.length ? +(withDist.reduce((a, r) => a + (r.distanceKm ?? 0), 0) / withDist.length).toFixed(1) : 0,
     avgDurationMin: withDur.length ? Math.round(withDur.reduce((a, r) => a + (r.durationMin ?? 0), 0) / withDur.length) : 0,
-    onTimePct: done.length ? Math.round((done.filter((d) => d.deliveredAt).length / done.length) * 100) : 100,
+    // On time = met the SLA promise, not merely "has a deliveredAt" (which is always true
+    // for DELIVERED, so this KPI could only ever read 100%).
+    onTimePct: done.length ? Math.round((done.filter((d) => deliveredOnTime(d.deliveredAt, d.date, promiseMin)).length / done.length) * 100) : 100,
   };
 }
 
@@ -173,7 +177,10 @@ export async function optimizeRoute(id: string, _actor: Actor) {
   const ordered = orderByNearestNeighbor(pts);
   let distanceKm = 0;
   for (let i = 1; i < ordered.length; i++) {
-    if (ordered[i - 1].lat != null && ordered[i].lat != null) distanceKm += haversineKm(ordered[i - 1], ordered[i]);
+    // Guard BOTH coords: haversineKm returns Infinity if any of lat/lng is null, and a
+    // half-geocoded stop would persist Infinity km/min onto the Route (poisoning fleet avgs).
+    const leg = haversineKm(ordered[i - 1], ordered[i]);
+    if (Number.isFinite(leg)) distanceKm += leg;
   }
   distanceKm = Math.round(distanceKm * 10) / 10;
   const durationMin = Math.round(distanceKm / 20 * 60 + ordered.length * 3); // ~20 km/h + 3 min/stop

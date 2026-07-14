@@ -170,7 +170,12 @@ export async function runAutoAssignment(args: SlotArgs) {
         });
         await tx.executiveStatus.update({
           where: { driverId: a.executiveId },
-          data: { availability: "ASSIGNED", currentTripId: trip.id, assignedBottles: a.bottles },
+          // INCREMENT, don't overwrite: the engine already subtracted the executive's
+          // existing load (toExecutiveInput passes `used = assignedBottles`, engine plans
+          // against `capacity - used`), so `a.bottles` is only what THIS run added.
+          // Overwriting discarded the prior load, so remainingCapacity() over-reported free
+          // space and a driver could be loaded past their van capacity.
+          data: { availability: "ASSIGNED", currentTripId: trip.id, assignedBottles: { increment: a.bottles } },
         });
         await tx.assignmentLog.createMany({
           data: a.deliveryIds.map((id) => ({
@@ -465,7 +470,9 @@ export async function getDashboard(args: { date?: Date | string; slot?: string }
       select: { deliveryId: true, driverId: true, bottles: true, sequence: true, locked: true, status: true, area: true },
       orderBy: { sequence: "asc" },
     }),
-    db.executiveStatus.findMany({ include: { driver: { include: { user: { select: { name: true } }, capacity: true } } } }),
+    // Only real, on-fleet executives — a deactivated/soft-deleted driver keeps whatever
+    // availability was last on file and was being counted as free capacity.
+    db.executiveStatus.findMany({ where: { driver: { active: true, deletedAt: null } }, include: { driver: { include: { user: { select: { name: true } }, capacity: true } } } }),
     db.deliveryAssignment.count({ where: { date: range, status: "COMPLETED", ...slotWhere } }),
     db.driver.count({ where: { active: true } }),
     db.assignmentQueue.findMany({
@@ -663,7 +670,10 @@ export async function executiveDetail(driverId: string, dateStr?: string | null)
     todaysOrders,
     totalBottles,
     capacity,
-    remaining: Math.max(0, capacity - totalBottles),
+    // capacity is per-TRIP; the live trip load is execStatus.assignedBottles (reset on return
+    // to the dairy). totalBottles is the whole DAY across trips, so using it here contradicted
+    // remainingCapacity() and showed a returned driver as full.
+    remaining: Math.max(0, capacity - (driver.execStatus?.assignedBottles ?? 0)),
     onShift: availability !== "OFFLINE" && availability !== "BREAK",
     shiftSince: driver.execStatus?.lastChangedAt?.toISOString() ?? null,
     lat: driver.lat ?? null,

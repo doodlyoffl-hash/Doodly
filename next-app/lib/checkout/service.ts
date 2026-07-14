@@ -74,11 +74,18 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
   // bottle on your first order"). (Was SUBSCRIPTION-only, which undercharged the trial:
   // the page showed the deposit but the gateway didn't collect it.)
   const depositPaise = pricing.depositPaise * bottles;
-  const totalPaise = q.totalPaise + depositPaise;
+  // quote() prices ONE bottle per delivery (dailyPaise × days) — it takes no quantity.
+  // Scale the milk line by the bottles ordered, or a multi-bottle order is charged for a
+  // single bottle while the subscription is created with qty: bottles, stock is decremented
+  // by bottles, and renewal billing (billing/service.ts: Σ qty × dailyPaise) charges the
+  // full amount from cycle 2 — i.e. only the first cycle leaked.
+  const productPaise = q.totalPaise * bottles;
+  const productDiscountPaise = q.discountPaise * bottles;
+  const totalPaise = productPaise + depositPaise;
   // AutoPay is a recurring mandate — only for real subscription plans, strictly opt-in.
   // When on, coupon/wallet (one-time discounts) don't apply; the plan bills automatically.
   const wantsAutopay = !!input.autopay && !!plan && plan.days > 1 && variant.type === "SUBSCRIPTION";
-  const subtotalPaise = q.totalPaise + q.discountPaise;
+  const subtotalPaise = productPaise + productDiscountPaise;
   if (totalPaise <= 0) throw Errors.badRequest("Invalid order amount.");
   const days = variant.type === "TRIAL" ? (variant.fixedDays ?? 1) : (plan?.days ?? 1);
 
@@ -165,7 +172,7 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     const order = await tx.order.create({
       data: {
         userId, type: orderType,
-        subtotalPaise, discountPaise: q.discountPaise, depositPaise, taxPaise: 0, deliveryPaise: 0, totalPaise,
+        subtotalPaise, discountPaise: productDiscountPaise, depositPaise, taxPaise: 0, deliveryPaise: 0, totalPaise,
         couponCode: couponCode || null, couponDiscountPaise, walletAppliedPaise,
         status: "PENDING",
         addressId, deliveryDate: startDate, deliverySlot: slot,   // delivery details → become a Delivery on payment
@@ -173,8 +180,13 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
         items: {
           create: [{
             productSlug: variant.productSlug, productName: variant.productName,
-            variantLabel: variant.label, quantity: days,
-            unitPricePaise: Math.round(q.totalPaise / days), lineTotalPaise: q.totalPaise,
+            variantLabel: variant.label,
+            // TOTAL bottles on the order (bottles per delivery × delivery days) so the
+            // invoice line reconciles: unitPrice × quantity == lineTotal. NB: this is an
+            // order-level total — per-delivery bottles live on Delivery.bottleCount.
+            quantity: days * bottles,
+            unitPricePaise: Math.round(productPaise / Math.max(1, days * bottles)),
+            lineTotalPaise: productPaise,
           }],
         },
       },

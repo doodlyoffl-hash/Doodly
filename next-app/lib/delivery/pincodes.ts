@@ -7,6 +7,7 @@
    ============================================================= */
 import "server-only";
 import { db } from "@/lib/db";
+import { istTodayBounds } from "@/lib/delivery/stats";
 import { Errors } from "@/lib/http";
 
 export interface Actor { actorId?: string; actorRole?: string; ip?: string }
@@ -27,8 +28,8 @@ function mapPin(p: {
 }
 
 export async function listPincodes(q: { search?: string; status?: "active" | "inactive" | "deleted"; zoneId?: string } = {}) {
-  const startToday = new Date(); startToday.setHours(0, 0, 0, 0);
-  const endToday = new Date(); endToday.setHours(23, 59, 59, 999);
+  // IST day, not process-local (setHours = UTC on Vercel → counts the wrong day).
+  const { s: startToday, e: endToday } = istTodayBounds();
   const rows = await db.serviceablePincode.findMany({
     where: q.status === "deleted" ? { NOT: { deletedAt: null } } : { deletedAt: null },
     include: { zone: { select: { id: true, name: true } } },

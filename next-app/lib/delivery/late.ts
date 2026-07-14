@@ -9,6 +9,7 @@ import "server-only";
 import type { IssueType, IssuePriority } from "@prisma/client";
 import { db } from "@/lib/db";
 import { Errors } from "@/lib/http";
+import { istDayStart, istTodayBounds, istISO } from "@/lib/delivery/stats";
 
 export interface Actor { actorId?: string; actorRole?: string; ip?: string }
 
@@ -21,12 +22,28 @@ async function sla() {
   return { promiseTime: cfg.slaPromiseTime, graceMin: cfg.slaGraceMin, promiseMin: parseHHMM(cfg.slaPromiseTime) + cfg.slaGraceMin };
 }
 
+/** The configured SLA promise (minutes after IST midnight, incl. grace). */
+export async function slaPromiseMin(): Promise<number> {
+  return (await sla()).promiseMin;
+}
+/** True when a delivery met the SLA. "On time" means delivered BEFORE the promise instant
+ *  of its own IST day — not merely "has a deliveredAt timestamp" (every DELIVERED row has
+ *  one, which is why the drivers/routes dashboards could only ever report 100%). */
+export function deliveredOnTime(deliveredAt: Date | null, date: Date, promiseMin: number): boolean {
+  if (!deliveredAt) return false;
+  return deliveredAt.getTime() <= istDayStart(date).getTime() + promiseMin * 60000;
+}
+
 export interface LateFilters { search?: string; exec?: string; status?: string; from?: string; to?: string }
 
 export async function lateOverview(q: LateFilters = {}) {
   const s = await sla();
   const now = new Date();
-  const windowStart = new Date(); windowStart.setDate(windowStart.getDate() - 30); windowStart.setHours(0, 0, 0, 0);
+  // IST-anchored windows. Deliveries are stamped at IST midnight, so setHours() (which
+  // resolves in the process timezone — UTC on Vercel) lands on the wrong day and made
+  // every open stop look late by ~18.5 h.
+  const today = istTodayBounds();
+  const windowStart = new Date(today.s.getTime() - 30 * 24 * 60 * 60 * 1000);
 
   const rows = await db.delivery.findMany({
     where: { date: { gte: windowStart } },
@@ -40,11 +57,9 @@ export async function lateOverview(q: LateFilters = {}) {
     orderBy: { date: "desc" }, take: 500,
   });
 
-  const startToday = new Date(); startToday.setHours(0, 0, 0, 0);
-  const endToday = new Date(); endToday.setHours(23, 59, 59, 999);
-
   const items = rows.map((d) => {
-    const promise = new Date(d.date); promise.setHours(0, 0, 0, 0); promise.setMinutes(s.promiseMin);
+    // The SLA promise is <promiseMin> minutes after IST midnight OF THE DELIVERY'S OWN DAY.
+    const promise = new Date(istDayStart(d.date).getTime() + s.promiseMin * 60000);
     const cust = d.subscription?.user ?? d.order?.user ?? null;
     const addr = d.subscription?.address ?? null;
     let late = false, pending = false, delayMin = 0, statusLabel = "Scheduled";
@@ -57,7 +72,7 @@ export async function lateOverview(q: LateFilters = {}) {
       late = true; pending = true; delayMin = Math.round((now.getTime() - promise.getTime()) / 60000); statusLabel = "Pending · late";
     }
     return {
-      id: d.id, orderId: d.orderId, subscriptionId: d.subscriptionId, date: d.date.toISOString().slice(0, 10), status: d.status, statusLabel, late, pending, delayMin,
+      id: d.id, orderId: d.orderId, subscriptionId: d.subscriptionId, date: istISO(d.date), status: d.status, statusLabel, late, pending, delayMin,
       customer: cust?.name ?? "—", customerId: cust?.id ?? "", mobile: cust?.phone ?? "",
       area: addr?.city ?? "—", pincode: addr?.pincode ?? "", route: d.route?.name ?? "—", zone: d.route?.zone?.name ?? "—",
       exec: d.driver?.user?.name ?? "—", execId: d.driverId ?? "",
@@ -92,7 +107,7 @@ export async function lateOverview(q: LateFilters = {}) {
   if (q.status === "escalated") list = list.filter((i) => (i as Record<string, unknown>).escalated);
 
   // dashboard stats
-  const todayItems = items.filter((i) => { const dd = new Date(i.date + "T00:00:00"); return dd >= startToday && dd <= endToday; });
+  const todayItems = items.filter((i) => i.date === today.iso);   // i.date is the IST "YYYY-MM-DD"
   const deliveredLate = lateItems.filter((i) => !i.pending);
   const avgDelay = deliveredLate.length ? Math.round(deliveredLate.reduce((a, i) => a + i.delayMin, 0) / deliveredLate.length) : 0;
   const stats = {
