@@ -1025,6 +1025,10 @@ window.DOODLY_BLOCKS = (function () {
         <div class="fm-who">${esc(f.who)} · <span class="muted">${esc(f.years)}</span></div>
       </div>
     </article>`;
+    // No profiles yet -> render nothing at all. The heading promises "Tap a farm to
+    // hear their story", so an empty grid under it reads as broken. Better to omit
+    // the section until there are real farms to show than to ship a dead invitation.
+    if (!farms.length) return "";
     return `<section class="reveal"><div class="wrap">
       <div class="ab-band-head" data-cms="farmers.meet"><p class="kicker" data-cms-field="eyebrow">Meet the farms</p><h2 class="ab-h" data-cms-field="heading">The families behind every bottle.</h2><p class="fm-sub" data-cms-field="text">We work with a small circle of family-run buffalo farms — every one visited, tested and known by name. Tap a farm to hear their story.</p></div>
       <div class="fm-grid">${farms.map(card).join("")}</div>
