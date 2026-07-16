@@ -1754,6 +1754,68 @@
     bar.querySelectorAll("[data-quick]").forEach(function (b) { b.addEventListener("click", function () { var k = b.dataset.quick; onPick(k === "today" ? today : shiftISO(today, k === "tomorrow" ? 1 : -1)); }); });
     var inp = bar.querySelector("#" + barId + "-input"); if (inp) inp.addEventListener("change", function () { if (inp.value) onPick(inp.value); });
   }
+  // ---- Delivery Calendar (admin/delivery-calendar → real per-IST-day delivery counts) ----
+  // Reuses the existing .cal/.dow/.day CSS. Clicking a day opens that day's Delivery
+  // Management board, so the calendar and the date bar share one source of truth.
+  var _calMonth = "";
+  function calMonthIso(d) { return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0"); }
+  function shiftMonth(iso, n) { var p = iso.split("-").map(Number); var d = new Date(Date.UTC(p[0], p[1] - 1 + n, 1)); return calMonthIso(d); }
+  function monthLabel(iso) { try { return new Date(iso + "-01T00:00:00").toLocaleDateString("en-IN", { month: "long", year: "numeric" }); } catch (e) { return iso; } }
+  function wireDeliveryCalendarBackend(month) {
+    if (!window.DOODLY_API) return;
+    var host = document.getElementById("delCalMount");
+    if (!host) return;
+    var iso = month || _calMonth || istTodayISO().slice(0, 7); _calMonth = iso;
+    host.innerHTML = '<div class="panel panel-pad"><p class="muted-sm">Loading ' + esc(monthLabel(iso)) + "…</p></div>";
+    DOODLY_API.get("/api/admin/deliveries/calendar?month=" + encodeURIComponent(iso)).then(function (r) {
+      var byDay = {}; (r.days || []).forEach(function (d) { byDay[d.date] = d; });
+      var t = r.totals || {};
+      var p = iso.split("-").map(Number), y = p[0], m = p[1] - 1;
+      var first = new Date(Date.UTC(y, m, 1)).getUTCDay();
+      var nDays = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+      var stat = function (n, l) { return '<div class="dl-an-kpi"><div class="n">' + n + '</div><div class="l">' + l + "</div></div>"; };
+      var cells = "";
+      for (var i = 0; i < first; i++) cells += '<div class="day muted"></div>';
+      for (var d = 1; d <= nDays; d++) {
+        var key = y + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+        var x = byDay[key];
+        var cls = "day", inner = String(d), title = key;
+        if (x) {
+          // amber when the day still needs action (unassigned), else mint
+          cls += x.unassigned > 0 ? " paused" : " deliver";
+          title = key + " — " + x.total + " delivery(s), " + x.completed + " completed, " + x.unassigned + " unassigned, " + x.bottles + " bottles, " + x.litres + " L";
+          inner += '<span class="d-dot"></span><div style="font-size:.62rem;font-weight:700;line-height:1.25;margin-top:2px">' + x.total + (x.unassigned > 0 ? ' <span style="color:#a9791b">!' + x.unassigned + "</span>" : "") + "</div>";
+        }
+        cells += '<div class="' + cls + '"' + (x ? ' role="button" tabindex="0" style="cursor:pointer"' : "") + ' data-day="' + key + '" title="' + esc(title) + '">' + inner + "</div>";
+      }
+      host.innerHTML =
+        '<div id="dc-stats" class="dl-an-kpis" style="margin-bottom:14px">' +
+          stat(t.total || 0, "Total deliveries") + stat(t.assigned || 0, "Assigned") + stat(t.pending || 0, "Pending") +
+          stat(t.completed || 0, "Completed") + stat(t.unassigned || 0, "Unassigned") + stat((t.litres || 0) + " L", "Milk") +
+        "</div>" +
+        '<div class="panel panel-pad">' +
+          '<div class="row-between" style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">' +
+            '<h3 style="margin:0;font-family:Fraunces,serif;color:var(--forest)">' + esc(monthLabel(iso)) + "</h3>" +
+            '<div style="display:flex;gap:6px"><button class="btn btn-ghost sm" data-mv="-1" aria-label="Previous month">&lsaquo;</button>' +
+              '<button class="btn btn-ghost sm" data-mv="0">This month</button>' +
+              '<button class="btn btn-ghost sm" data-mv="1" aria-label="Next month">&rsaquo;</button></div>' +
+          "</div>" +
+          '<div class="cal">' + ["S", "M", "T", "W", "T", "F", "S"].map(function (x2) { return '<div class="dow">' + x2 + "</div>"; }).join("") + cells + "</div>" +
+          '<div class="chart-legend" style="margin-top:12px"><span style="color:var(--leaf-600)">● Deliveries scheduled</span><span style="color:#a9791b">● Needs assignment</span><span class="muted-sm">Click a day to open its delivery board</span></div>' +
+        "</div>";
+      host.querySelectorAll("[data-mv]").forEach(function (b) {
+        b.addEventListener("click", function () { var n = Number(b.dataset.mv); wireDeliveryCalendarBackend(n === 0 ? istTodayISO().slice(0, 7) : shiftMonth(iso, n)); });
+      });
+      host.querySelectorAll(".day[data-day][role=button]").forEach(function (c) {
+        c.addEventListener("click", function () { location.href = "/admin/deliveries.html?date=" + c.dataset.day; });
+      });
+      bkBanner(host, "● Live — " + (t.total || 0) + " delivery(s) in " + monthLabel(iso) + " (" + DOODLY_API.base() + ").", "ok");
+    }).catch(function (e) {
+      host.innerHTML = '<div class="panel panel-pad muted-sm">' + (e.code === "forbidden" ? "Your role can't view the delivery calendar (403)." : esc(e.message || "Couldn't load the calendar.")) + "</div>";
+    });
+  }
+  window.DOODLY_ADMIN.wireDeliveryCalendarBackend = wireDeliveryCalendarBackend;
+
   // ---- Daily Operations Cut-Off alert (Step 5: "Tomorrow's Deliveries Are Ready") ----
   // Loading this board also LAZILY FIRES the cut-off server-side when the IST clock is past
   // the configured time and it hasn't run for tomorrow yet — so an admin opening Delivery
@@ -5550,7 +5612,9 @@
     if (route === "admin/invoices") return wireInvoicesAdminBackend();
     if (route === "admin/packing") return wirePackingBackend();
     if (route === "admin/assignment") return wireAssignmentBackend();
-    if (route === "admin/deliveries") return wireDeliveriesBackend();
+    if (route === "admin/delivery-calendar") return wireDeliveryCalendarBackend();
+    // ?date=YYYY-MM-DD deep-links a specific day (the Delivery Calendar links here).
+    if (route === "admin/deliveries") { var qd = null; try { qd = new URLSearchParams(location.search).get("date"); } catch (e) {} return wireDeliveriesBackend(qd && /^\d{4}-\d{2}-\d{2}$/.test(qd) ? qd : undefined); }
     if (route === "admin/delivery-settings") return wireDeliverySettingsBackend();
     if (route === "admin/serviceable-areas") return wireServiceableAreasBackend();
     if (route === "admin/bottle-inventory") return wireBottlesBackend();
