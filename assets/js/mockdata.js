@@ -223,14 +223,15 @@ window.DOODLY_DATA = (function () {
     ],
 
     /* ---- blog ---- */
-    posts: [
-      { emoji: "🥛", cat: "Nutrition", title: "Why A2 buffalo milk is easier to digest", excerpt: "The science behind A2 beta-casein and what it means for your gut.", meta: "5 min · 24 Jun 2026" },
-      { emoji: "♻️", cat: "Sustainability", title: "The journey of a DOODLY glass bottle", excerpt: "From our hub to your door and back — sterilised and reused.", meta: "4 min · 18 Jun 2026" },
-      { emoji: "🌾", cat: "Our farmers", title: "Meet the Lakshmaiah family farm", excerpt: "Three generations of buffalo farming on the edge of Shamirpet.", meta: "6 min · 11 Jun 2026" },
-      { emoji: "❄️", cat: "Quality", title: "How rapid chilling locks in freshness", excerpt: "Why the first 30 minutes after milking matter most.", meta: "3 min · 04 Jun 2026" },
-      { emoji: "🍮", cat: "Recipes", title: "Festive kova from fresh A2 milk", excerpt: "A slow-reduced sweet base for your Diwali mithai.", meta: "7 min · 28 May 2026" },
-      { emoji: "📦", cat: "Product", title: "Building a subscription you can pause anytime", excerpt: "How vacation mode and emergency skip actually work.", meta: "4 min · 20 May 2026" },
-    ],
+    // Demo blog posts REMOVED (production honesty) — same call as the demo
+    // testimonials in data.js. The blog grid is backend-driven: real posts come
+    // from /api/blog via wireBlog(), with an honest empty state until then.
+    // The removed mocks were not safe to ship: one was a health claim ("Why A2
+    // buffalo milk is easier to digest ... what it means for your gut"), and one
+    // invented a named farming family ("the Lakshmaiah family farm ... Shamirpet")
+    // that does not exist — we source from farms around Pamuru. We never invent
+    // a person, and we never claim what the milk does to your body.
+    posts: [],
   };
 
   /* =====================================================================

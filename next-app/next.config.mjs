@@ -2,6 +2,20 @@
 
 const isDev = process.env.NODE_ENV !== "production";
 
+/* This deployment serves a COMPLETE customer storefront that duplicates doodly.in
+   page-for-page, on a different codebase. Two indexable copies of the same content
+   compete with each other in search and split whatever authority either one earns,
+   so this one stays out of the index until that's resolved one way or the other.
+
+   Deliberately an X-Robots-Tag header, not a robots.txt Disallow: a disallowed URL
+   cannot be crawled, so Google never sees the directive and any URL already indexed
+   lingers as a bare link. Noindex only works if the crawler is still allowed IN to
+   read it — app/robots.ts therefore keeps `allow: "/"` on purpose. Don't "tidy" that
+   into a Disallow; it would strand exactly the URLs this is meant to remove.
+
+   Flip with INDEXABLE=true in the Vercel env if this ever becomes the real site. */
+const indexable = process.env.INDEXABLE === "true";
+
 /* Content-Security-Policy — pragmatic baseline that allows the third parties
    DOODLY uses (Razorpay, Google Maps, GA4, Clarity, Meta Pixel, Cloudinary,
    Supabase). 'unsafe-inline'/'unsafe-eval' are needed for Next's bootstrap +
@@ -31,6 +45,7 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "X-DNS-Prefetch-Control", value: "on" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self), payment=(self \"https://checkout.razorpay.com\"), browsing-topics=()" },
+  ...(indexable ? [] : [{ key: "X-Robots-Tag", value: "noindex, nofollow" }]),
 ];
 
 const nextConfig = {

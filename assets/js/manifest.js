@@ -169,15 +169,13 @@ window.DOODLY_MANIFEST = (function () {
     "blog/read": { surface:"public", title:"DOODLY Journal", blocks:[
       { type:"blogReader" },
     ]},
-    "blog/why-a2": { surface:"public", title:"Why A2 buffalo milk is easier to digest", blocks:[
-      { type:"innerHero", eyebrow:"Nutrition · 5 min", title:"Why A2 buffalo milk is easier to digest", text:"The science behind A2 beta-casein and what it means for your gut." },
-      { type:"prose", sections:[
-        { h:"What is A2 milk?", p:["A2 milk contains only the A2 type of beta-casein protein, rather than the A1 type found in much mixed-herd milk. Many people find A2 milk gentler on digestion."] },
-        { h:"Why buffalo milk?", p:["DOODLY sources naturally A2 buffalo milk, which is also richer in fat and protein — creamier chai, thicker curd, better paneer."] },
-        { h:"The freshness factor", p:["Even the best milk loses something when it sits. Chilled within minutes and delivered same-morning, DOODLY keeps the taste intact."] },
-      ]},
-      { type:"ctaBand", title:"Taste it tomorrow morning." },
-    ]},
+    // "blog/why-a2" REMOVED 2026-07-17 — the article's thesis was a health claim
+    // ("Why A2 buffalo milk is easier to digest", filed under Nutrition, citing
+    // "the science" and "your gut"). It could not be reworded: delete the claim
+    // and there is no article. FSSAI/ASCI require substantiation for the claim,
+    // not for the hedge ("many people find"), and we hold no such evidence.
+    // blog/why-a2.html deleted with it; /blog/why-a2.html now 404s by design.
+    // We describe what the milk IS, never what it does to your body.
 
     "contact": { surface:"public", title:"Contact Us", hero:{ eyebrow:"Contact", title:"We'd love to hear from you.", text:"Questions about milk, delivery, or your subscription? Reach out — we usually reply within a few hours." }, blocks:[
       { type:"columns", cols:2, items:[

@@ -61,10 +61,10 @@ window.DOODLY_HELP = (function () {
       { q: "What products do you offer?", a: "A2 Buffalo Milk is live today. Buffalo Pot Curd, Malai Paneer, Palkova and Buffalo Ghee are coming soon — you'll see them in the catalogue marked “Coming soon”." },
     ]},
     { id: "products", icon: "bottle", title: "Products", faqs: [
-      { q: "What is A2 Buffalo Milk?", a: "Milk that contains only the A2 type of beta-casein protein, which many people find gentler on digestion. DOODLY's buffalo milk is naturally A2 and richer in fat and protein — creamier chai, thicker curd." },
+      { q: "What is A2 Buffalo Milk?", a: "A1 and A2 are two forms of the protein in milk, differing by a single amino acid. Buffalo milk is naturally the A2 type — so DOODLY is A2 buffalo milk. We don't make health claims about it; we'd rather you judge it on how fresh it tastes." },
       { q: "Why glass bottles?", a: "Glass keeps milk fresher and tastes cleaner than plastic, and it's fully reusable. We run a closed glass loop — sterilise, fill, deliver, collect, repeat." },
-      { q: "Are there preservatives?", a: "Never. No preservatives, no added water, no chemicals — just pure buffalo milk, delivered fast enough that it doesn't need them." },
-      { q: "How fresh is the milk?", a: "Collected each morning, chilled to 4°C within minutes, and delivered the same morning. It goes from farm to your fridge without ever warming up." },
+      { q: "Are there preservatives?", a: "Never. No preservatives, no added water, nothing added at all — what we bottle is what was milked, delivered fast enough that it doesn't need them." },
+      { q: "How fresh is the milk?", a: "Collected the previous evening, chilled to 4°C, driven through the night, and delivered before 7 the next morning — about 12 hours from farm to door. It goes from farm to your fridge without ever warming up." },
     ]},
     { id: "delivery", icon: "truck", title: "Delivery", faqs: [
       { q: "What are the delivery timings?", a: "One delivery run every morning — your milk arrives before 7:00 AM. No slots to choose; it's always fresh and always early." },

@@ -1,7 +1,16 @@
 import type { MetadataRoute } from "next";
 import { products } from "@/config/catalogue";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yourdomain.com";
+// Falls back to doodly.in rather than a placeholder we don't own (see config/site.ts).
+//
+// ⚠️ This sitemap describes THIS deployment's routes, which are extensionless
+// (/products, /about). doodly.in serves .html paths (/products.html) — they are not
+// interchangeable, so with the fallback in play these URLs would not resolve there.
+// It doesn't currently matter: this deployment is noindex and app/robots.ts no longer
+// advertises a sitemap while that's true. But if you set INDEXABLE=true, also set
+// NEXT_PUBLIC_SITE_URL to THIS deployment's own domain — not doodly.in — or you'll be
+// handing Google a list of 404s.
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.doodly.in";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();

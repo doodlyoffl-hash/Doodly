@@ -953,7 +953,7 @@ window.DOODLY_BLOCKS = (function () {
     const values = [["heart", "Honesty", "We tell you the farm, the date, and the truth — no fine print."], ["award", "Quality first", "If a batch doesn't pass, it doesn't ship. No exceptions."], ["users", "Fair to farmers", "Transparent rates, paid on time, every time."], ["leaf", "Kind to the planet", "A closed glass loop and a short, local supply chain."]];
     return `<div class="ab-page">
       <section class="reveal"><div class="wrap ab-narrow">
-        ${sec("about.story", "", `<p class="kicker" data-cms-field="eyebrow">Our story</p><h2 class="ab-h" data-cms-field="heading">Good milk, the way it used to be.</h2><div class="ab-rich" data-cms-field="html"><p>DOODLY began with a simple frustration: genuinely fresh, honest milk had become impossible to find in the city. Cartons sat for weeks. Labels made promises the milk couldn't keep. So we went back to the source — to family-run buffalo farms on the edge of the city — and rebuilt the chain from scratch, in glass, delivered before breakfast.</p></div>`)}
+        ${sec("about.story", "", `<p class="kicker" data-cms-field="eyebrow">Our story</p><h2 class="ab-h" data-cms-field="heading">Good milk, the way it used to be.</h2><div class="ab-rich" data-cms-field="html"><p>DOODLY works with a small circle of family-run buffalo farms around Pamuru, in Andhra Pradesh. No middlemen, no milk pooled from a hundred anonymous herds. Collected at dusk, chilled to 4&deg;C, driven through the night, and bottled in glass before dawn &mdash; on your step before 7.</p></div>`)}
         <div class="ab-two">
           ${sec("about.mission", "ab-panel", `<div class="ab-ic">${ic("target", 20)}</div><h3 data-cms-field="heading">Our mission</h3><div data-cms-field="html"><p>Make farm-fresh, chemical-free milk the default for every family — delivered daily, priced fairly, and packaged without plastic.</p></div>`)}
           ${sec("about.vision", "ab-panel", `<div class="ab-ic">${ic("eye", 20)}</div><h3 data-cms-field="heading">Our vision</h3><div data-cms-field="html"><p>A short, transparent supply chain where you know the farm your milk came from — and farmers earn a fair, predictable income.</p></div>`)}
@@ -997,14 +997,22 @@ window.DOODLY_BLOCKS = (function () {
   // Interactive farmer profile cards — click / Enter to reveal the farm's story & numbers.
   R.farmerCards = (s) => {
     const esc = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-    const farms = (s && s.farms) || [
-      { em: "🌾", name: "Lakshmaiah Farm", place: "Shamirpet", herd: "24 buffaloes", years: "Partner since 2021", fat: "7.2% fat", rate: "₹64 / L", quote: "“Three generations have milked this herd. DOODLY was the first to test our milk and pay us what it's actually worth.”", who: "Ramulu Lakshmaiah, 2nd-generation farmer" },
-      { em: "🐃", name: "Yadamma Dairy", place: "Medchal", herd: "31 buffaloes", years: "Partner since 2020", fat: "7.4% fat", rate: "₹65 / L", quote: "“We used to sell to whoever showed up. Now we have a fixed morning pickup and money in the bank the same week.”", who: "Yadamma & family" },
-      { em: "🌱", name: "Narsimha Farm", place: "Shamirpet", herd: "18 buffaloes", years: "Partner since 2022", fat: "7.0% fat", rate: "₹63 / L", quote: "“They helped me improve my cattle feed. My milk quality went up and so did my rate.”", who: "Narsimha Reddy" },
-      { em: "🥛", name: "Ellamma Collective", place: "Toopran", herd: "27 buffaloes", years: "Partner since 2021", fat: "7.3% fat", rate: "₹64 / L", quote: "“Fair weighing, no deductions, no excuses. That's why we stayed.”", who: "Ellamma, women-led collective" },
-      { em: "🍃", name: "Bhoomaiah Farm", place: "Gundlapochampally", herd: "22 buffaloes", years: "Partner since 2023", fat: "7.1% fat", rate: "₹63 / L", quote: "“The quality report comes to my phone every morning. I know exactly what I delivered.”", who: "Bhoomaiah G." },
-      { em: "🐄", name: "Saraswati Dairy", place: "Medchal", herd: "29 buffaloes", years: "Partner since 2020", fat: "7.5% fat", rate: "₹66 / L", quote: "“Steady demand means I can plan for my family. That peace of mind is everything.”", who: "Saraswati Devi" },
-    ];
+    // Demo farmers REMOVED 2026-07-17 (production honesty) — same call as the demo
+    // testimonials in data.js, and more urgent. The six defaults here were INVENTED
+    // PEOPLE with INVENTED QUOTES attributed to them by name ("Ramulu Lakshmaiah,
+    // 2nd-generation farmer" and five more), sitting under the heading "We know
+    // every farm by name". Every village named (Shamirpet, Medchal, Toopran,
+    // Gundlapochampally) is near Hyderabad in Telangana; DOODLY sources from farms
+    // around Pamuru, Andhra Pradesh — ~200 km away, a different state.
+    //
+    // We never invent a person, and we never put words in a farmer's mouth. For a
+    // brand whose promise is "Every Bottle Has a Story", a fabricated farmer is the
+    // one thing we do not survive being caught doing.
+    //
+    // Real profiles go here only once the Pamuru farmers have been asked and have
+    // consented to be named and photographed. Until then this renders empty, and an
+    // empty section is the honest state. Pass real farms via s.farms.
+    const farms = (s && s.farms) || [];
     const card = (f, i) => `<article class="fm-card reveal" style="--i:${i}">
       <button type="button" class="fm-card-btn" aria-expanded="false">
         <span class="fm-av" aria-hidden="true">${f.em}</span>
@@ -1017,6 +1025,10 @@ window.DOODLY_BLOCKS = (function () {
         <div class="fm-who">${esc(f.who)} · <span class="muted">${esc(f.years)}</span></div>
       </div>
     </article>`;
+    // No profiles yet -> render nothing at all. The heading promises "Tap a farm to
+    // hear their story", so an empty grid under it reads as broken. Better to omit
+    // the section until there are real farms to show than to ship a dead invitation.
+    if (!farms.length) return "";
     return `<section class="reveal"><div class="wrap">
       <div class="ab-band-head" data-cms="farmers.meet"><p class="kicker" data-cms-field="eyebrow">Meet the farms</p><h2 class="ab-h" data-cms-field="heading">The families behind every bottle.</h2><p class="fm-sub" data-cms-field="text">We work with a small circle of family-run buffalo farms — every one visited, tested and known by name. Tap a farm to hear their story.</p></div>
       <div class="fm-grid">${farms.map(card).join("")}</div>
@@ -1036,7 +1048,7 @@ window.DOODLY_BLOCKS = (function () {
     ];
     return `<div class="ab-page fm-page">
       <section class="reveal"><div class="wrap ab-narrow">
-        ${sec("farmers.intro", "", `<p class="kicker" data-cms-field="eyebrow">Our farmers</p><h2 class="ab-h" data-cms-field="heading">We know every farm by name.</h2><div class="ab-rich" data-cms-field="html"><p>DOODLY doesn't buy from a faceless collection network. We work directly with a small circle of family-run buffalo farms on the edge of the city — no middlemen, no milk pooled from a hundred anonymous herds. We visit them, we test every batch, and we pay them fairly and on time. When the supply chain is short and honest, everyone wins: the farmer earns more, and you drink milk that's fresher and cleaner.</p></div>`)}
+        ${sec("farmers.intro", "", `<p class="kicker" data-cms-field="eyebrow">Our farmers</p><h2 class="ab-h" data-cms-field="heading">We know every farm by name.</h2><div class="ab-rich" data-cms-field="html"><p>DOODLY doesn't buy from a faceless collection network. We work directly with a small circle of family-run buffalo farms around Pamuru, in Andhra Pradesh &mdash; no middlemen, no milk pooled from a hundred anonymous herds. We visit them, we test every batch, and we pay them fairly and on time. When the supply chain is short and honest, the farmer earns more and the milk reaches you faster.</p></div>`)}
       </div></section>
 
       <section class="reveal ab-band"><div class="wrap">
@@ -1070,7 +1082,7 @@ window.DOODLY_BLOCKS = (function () {
       </div></section>
 
       <section class="reveal"><div class="wrap ab-narrow">
-        ${sec("farmers.join", "fm-join", `<p class="kicker" data-cms-field="eyebrow">Become a partner farm</p><h2 class="ab-h" data-cms-field="heading">Run a buffalo farm near Hyderabad?</h2><div class="ab-rich" data-cms-field="html"><p>If you keep a healthy buffalo herd and care about clean, honest milk, we'd love to talk. Fair rates, on-time weekly payments and steady demand — no middlemen in between.</p></div><div class="fm-join-cta"><a class="btn btn-primary" href="/contact.html">${ic("phone", 16)} Talk to our procurement team</a></div>`)}
+        ${sec("farmers.join", "fm-join", `<p class="kicker" data-cms-field="eyebrow">Become a partner farm</p><h2 class="ab-h" data-cms-field="heading">Run a buffalo farm near Pamuru?</h2><div class="ab-rich" data-cms-field="html"><p>If you keep a healthy buffalo herd and care about clean, honest milk, we'd love to talk. Fair rates, on-time weekly payments and steady demand — no middlemen in between.</p></div><div class="fm-join-cta"><a class="btn btn-primary" href="/contact.html">${ic("phone", 16)} Talk to our procurement team</a></div>`)}
       </div></section>
     </div>`;
   };

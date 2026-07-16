@@ -16,12 +16,21 @@ import { RegisterSW } from "@/components/pwa/RegisterSW";
 const display = Fraunces({ subsets: ["latin"], axes: ["opsz"], variable: "--font-display", display: "swap" });
 const sans = Hanken_Grotesk({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yourdomain.com";
+// This is metadataBase — it generates every canonical and og:url on the site. The
+// fallback was "https://yourdomain.com", a placeholder we don't own, and
+// NEXT_PUBLIC_SITE_URL is unset in Vercel, so that is what actually shipped: every
+// page told Google its canonical lived on a stranger's parked domain, and every
+// shared link previewed as theirs. See config/site.ts.
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.doodly.in";
+
+// Mirrors next.config.mjs: this deployment duplicates doodly.in page-for-page, so it
+// stays out of the index until that's resolved. Flip with INDEXABLE=true.
+const indexable = process.env.INDEXABLE === "true";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: { default: "DOODLY — Fresh A2 Buffalo Milk, Delivered Daily", template: "%s · DOODLY" },
-  description: "Pure A2 buffalo milk from local farms — chilled within minutes, bottled in glass, and delivered to your door by 7 AM. Subscribe and save.",
+  description: "A2 buffalo milk from family-run farms around Pamuru — collected at dusk, driven through the night, bottled in glass, and at your door by 7 AM. Subscribe and save.",
   applicationName: "DOODLY",
   keywords: ["A2 buffalo milk", "fresh milk delivery", "glass bottle milk", "milk subscription", "Vijayawada milk", "farm fresh milk", "DOODLY"],
   authors: [{ name: "DOODLY" }],
@@ -40,10 +49,17 @@ export const metadata: Metadata = {
     title: "DOODLY — Fresh A2 Buffalo Milk, Delivered Daily",
     description: "Pure A2 buffalo milk in returnable glass bottles, at your door by 7 AM.",
   },
-  robots: {
-    index: true, follow: true,
-    googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1, "max-video-preview": -1 },
-  },
+  robots: indexable
+    ? {
+        index: true, follow: true,
+        googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1, "max-video-preview": -1 },
+      }
+    : {
+        // Duplicate of doodly.in — keep it out of search. Belt-and-braces with the
+        // X-Robots-Tag header in next.config.mjs; either alone would do the job.
+        index: false, follow: false,
+        googleBot: { index: false, follow: false },
+      },
   // Search Console verification (set NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION in Vercel).
   verification: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION } : undefined,
 };
