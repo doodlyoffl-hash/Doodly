@@ -955,7 +955,7 @@ window.DOODLY_BLOCKS = (function () {
       <section class="reveal"><div class="wrap ab-narrow">
         ${sec("about.story", "", `<p class="kicker" data-cms-field="eyebrow">Our story</p><h2 class="ab-h" data-cms-field="heading">Good milk, the way it used to be.</h2><div class="ab-rich" data-cms-field="html"><p>DOODLY is built on a simple idea: milk you can trace. We work directly with a small circle of family-run buffalo farms &mdash; no middlemen, no milk pooled from a hundred anonymous herds. Every batch is tested, kept cold through the chain, and bottled in glass. Fresh, honest milk &mdash; the way it used to be.</p></div>`)}
         <div class="ab-two">
-          ${sec("about.mission", "ab-panel", `<div class="ab-ic">${ic("target", 20)}</div><h3 data-cms-field="heading">Our mission</h3><div data-cms-field="html"><p>Make farm-fresh, chemical-free milk the default for every family — delivered daily, priced fairly, and packaged without plastic.</p></div>`)}
+          ${sec("about.mission", "ab-panel", `<div class="ab-ic">${ic("target", 20)}</div><h3 data-cms-field="heading">Our mission</h3><div data-cms-field="html"><p>Make genuinely fresh milk the default for every family — nothing added, delivered daily, priced fairly, and packaged without plastic.</p></div>`)}
           ${sec("about.vision", "ab-panel", `<div class="ab-ic">${ic("eye", 20)}</div><h3 data-cms-field="heading">Our vision</h3><div data-cms-field="html"><p>A short, transparent supply chain where you know the farm your milk came from — and farmers earn a fair, predictable income.</p></div>`)}
         </div>
       </div></section>
