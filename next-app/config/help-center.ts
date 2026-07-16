@@ -25,7 +25,7 @@ export interface HelpFaq { id: string; category: HelpCategoryId; question: strin
 export const HELP_FAQS: HelpFaq[] = [
   // ---- Getting Started ----
   { id: "what-is-doodly", category: "getting-started", question: "What is DOODLY?", keywords: ["about", "brand", "a2", "milk"],
-    answer: "DOODLY delivers pure A2 buffalo milk from local farms in Vijayawada — collected at dawn, chilled within minutes, bottled in glass, and at your door within 12 hours. No preservatives, no adulteration. Just honest milk." },
+    answer: "DOODLY delivers A2 buffalo milk from a small circle of family-run farms around Pamuru, Andhra Pradesh — collected at dusk, chilled to 4°C, driven through the night, bottled in glass, and at your door within about 12 hours. No preservatives, nothing added. Just honest milk." },
   { id: "first-order", category: "getting-started", question: "How do I place my first order?", keywords: ["order", "start", "trial", "buy"],
     answer: "Pick a product, choose a bottle size, select a plan (or the ₹200 trial pack), choose your delivery start date, add your address, and check out. Your first delivery arrives the next morning by 7 AM if you order before the 8 PM cut-off." },
   { id: "how-subscriptions-work", category: "getting-started", question: "How do subscriptions work?", keywords: ["subscription", "plan", "daily", "recurring"],
@@ -34,14 +34,14 @@ export const HELP_FAQS: HelpFaq[] = [
     answer: "A2 Buffalo Milk is live now. Buffalo Pot Curd, Malai Paneer, Buffalo Ghee and Palkova are launching soon — all made from the same single-source A2 milk." },
 
   // ---- Products ----
-  { id: "what-is-a2", category: "products", question: "What is A2 Buffalo Milk?", keywords: ["a2", "beta casein", "digest", "protein"],
-    answer: "A2 milk contains only the A2 type of beta-casein protein, which many people find easier to digest than regular A1 milk. DOODLY is 100% A2 buffalo milk — naturally rich and creamy." },
+  { id: "what-is-a2", category: "products", question: "What is A2 Buffalo Milk?", keywords: ["a2", "beta casein", "protein"],
+    answer: "A1 and A2 are two forms of the protein in milk, differing by a single amino acid. Buffalo milk is naturally the A2 type — so DOODLY is A2 buffalo milk. We don't make health claims about it; we'd rather you judge it on how fresh it tastes." },
   { id: "why-glass", category: "products", question: "Why glass bottles?", keywords: ["glass", "bottle", "plastic", "packaging"],
     answer: "Glass keeps milk fresh with zero taste transfer and no plastic. Our bottles are sterilised and returnable with a small refundable deposit — premium and planet-friendly." },
   { id: "preservatives", category: "products", question: "Are there any preservatives?", keywords: ["preservatives", "adulteration", "pure", "chemicals"],
     answer: "Never. No preservatives, no added water, no adulteration. Every batch is quality-checked for fat, SNF and purity before it's bottled." },
   { id: "how-fresh", category: "products", question: "How fresh is the milk?", keywords: ["fresh", "12 hours", "chilled", "collection"],
-    answer: "Milk is collected at dawn, snap-chilled to 4°C within minutes, bottled the same morning, and delivered within 12 hours — at your door by 7 AM." },
+    answer: "Milk is collected at dusk near Pamuru, snap-chilled to 4°C, driven through the night, and bottled before dawn — delivered within about 12 hours, at your door by 7 AM." },
 
   // ---- Delivery ----
   { id: "delivery-timings", category: "delivery", question: "What are the delivery timings?", keywords: ["timing", "slot", "morning", "7 am"],

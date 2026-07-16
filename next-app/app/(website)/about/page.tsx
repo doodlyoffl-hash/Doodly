@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 
 const VALUES = [
   ["Honesty", "No preservatives, no added water, no adulteration. What you taste is exactly what the buffalo gave."],
-  ["Freshness", "Collected at dawn, chilled in minutes, delivered within 12 hours. Never warehoused."],
+  ["Freshness", "Collected at dusk, chilled to 4°C, driven through the night, delivered within about 12 hours. Never warehoused."],
   ["Transparency", "You know the farm your milk came from. Short supply chain, real names, real families."],
   ["Sustainability", "Returnable glass bottles, zero single-use plastic, and fair pay for local farmers."],
 ];

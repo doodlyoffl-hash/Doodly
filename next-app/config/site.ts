@@ -7,9 +7,16 @@ export const SITE = {
   name: "DOODLY",
   legalName: "SUBADHAAM MILK DAIRY Pvt. Ltd.",
   tagline: "Fresh A2 Buffalo Milk, delivered daily.",
-  url: process.env.NEXT_PUBLIC_SITE_URL || "https://yourdomain.com",
+  // NEXT_PUBLIC_SITE_URL is not set in Vercel, so this fallback is what ships.
+  // It was "https://yourdomain.com" — a placeholder we don't own — which meant every
+  // page declared <link rel="canonical" href="https://yourdomain.com"> and og:url to
+  // match: we were telling Google the real version of our pages lives on a stranger's
+  // parked domain, and any shared link previewed as theirs. Pointing the fallback at
+  // doodly.in also resolves the duplicate-content split between this deployment and
+  // the static site in doodly.in's favour. Still set NEXT_PUBLIC_SITE_URL properly.
+  url: process.env.NEXT_PUBLIC_SITE_URL || "https://www.doodly.in",
   description:
-    "Pure A2 buffalo milk from local farms in Vijayawada — chilled within minutes, bottled in glass, and delivered to your door within 12 hours. No preservatives, no adulteration.",
+    "A2 buffalo milk from family-run farms around Pamuru — collected at dusk, chilled to 4°C, driven through the night, bottled in glass, and delivered in Vijayawada within about 12 hours. No preservatives, nothing added.",
   city: "Vijayawada",
   region: "Andhra Pradesh",
   country: "IN",
@@ -37,18 +44,18 @@ export const TRUST_BADGES = [
 ] as const;
 
 export const BENEFITS = [
-  { icon: "drop", title: "Farm Fresh", text: "Single-source A2 buffalo milk, collected at dawn from farms we know by name." },
-  { icon: "snow", title: "Chilled Immediately", text: "Snap-chilled to 4°C within minutes of milking to lock in freshness." },
-  { icon: "muscle", title: "Protein Rich", text: "Naturally high in A2 beta-casein protein — easier to digest, great for all ages." },
+  { icon: "drop", title: "Farm Fresh", text: "Single-source A2 buffalo milk, collected at dusk from farms we know by name." },
+  { icon: "snow", title: "Chilled Immediately", text: "Snap-chilled to 4°C within minutes of collection to lock in freshness." },
+  { icon: "drop", title: "A2 by Nature", text: "Buffalo milk is naturally A2 — that's the breed, not a process." },
   { icon: "bottle", title: "Glass Bottles", text: "Returnable, sterilised glass — zero plastic, no taste transfer." },
   { icon: "truck", title: "12-Hour Delivery", text: "From the farm to your doorstep within 12 hours — at your door by 7 AM." },
-  { icon: "leaf", title: "No Chemicals", text: "No preservatives, no adulteration, no added water. Just honest milk." },
+  { icon: "leaf", title: "Nothing Added", text: "No preservatives, no added water. What we bottle is what was milked." },
 ] as const;
 
 export const STEPS = [
-  { n: "01", title: "Local Farmer", text: "Trusted family farms milk healthy desi buffaloes at dawn.", icon: "farmer" },
-  { n: "02", title: "Collection", text: "Milk is collected and quality-checked the same morning.", icon: "can" },
-  { n: "03", title: "4°C Chilling", text: "Snap-chilled within minutes to preserve every nutrient.", icon: "snow" },
+  { n: "01", title: "Local Farmer", text: "Trusted family farms milk healthy desi buffaloes at dusk.", icon: "farmer" },
+  { n: "02", title: "Collection", text: "Milk is collected and quality-checked the same evening.", icon: "can" },
+  { n: "03", title: "4°C Chilling", text: "Snap-chilled within minutes to slow bacterial growth.", icon: "snow" },
   { n: "04", title: "Glass Bottling", text: "Filled into sterilised, returnable glass bottles.", icon: "bottle" },
   { n: "05", title: "Delivery", text: "At your door within 12 hours — fresh by 7 AM.", icon: "truck" },
 ] as const;
@@ -73,8 +80,8 @@ export const TESTIMONIALS = [
 ] as const;
 
 export const FAQS = [
-  { q: "What is A2 buffalo milk?", a: "A2 milk contains only the A2 type of beta-casein protein, which many people find easier to digest than regular A1 milk. DOODLY is 100% A2 buffalo milk." },
-  { q: "How fresh is the milk?", a: "Milk is collected at dawn, chilled to 4°C within minutes, bottled the same morning, and delivered within 12 hours — at your door by 7 AM." },
+  { q: "What is A2 buffalo milk?", a: "A1 and A2 are two forms of the protein in milk, differing by a single amino acid. Buffalo milk is naturally the A2 type — so DOODLY is A2 buffalo milk. We don't make health claims about it; we'd rather you judge it on how fresh it tastes." },
+  { q: "How fresh is the milk?", a: "Milk is collected at dusk near Pamuru, chilled to 4°C, driven through the night, and bottled before dawn — delivered within about 12 hours, at your door by 7 AM." },
   { q: "Do you deliver in Vijayawada?", a: "Yes — we deliver across Vijayawada and Tadepalli. Enter your pincode at checkout to confirm availability in your area." },
   { q: "Are the glass bottles returnable?", a: "Absolutely. Bottles are sterilised and returnable with a small refundable deposit — zero plastic, no taste transfer." },
   { q: "Can I pause or cancel my subscription?", a: "Anytime, in one tap from your dashboard. Pause for a vacation, skip a day, or cancel — no questions asked." },

@@ -31,7 +31,7 @@ export function Footer() {
           <div className="max-w-sm">
             <Image src="/logo.png" alt="DOODLY" width={130} height={48} className="h-9 w-auto brightness-0 invert" />
             <p className="mt-5 text-sm leading-relaxed text-white/70">
-              DOODLY delivers pure A2 buffalo milk from local farms in {SITE.city} — collected at dawn, chilled instantly, bottled in glass, and at your door within 12 hours. No preservatives. No adulteration. Just honest milk.
+              DOODLY delivers A2 buffalo milk from a small circle of family-run farms around Pamuru — collected at dusk, chilled to 4°C, driven through the night, bottled in glass, and at your door within about 12 hours. No preservatives. Nothing added. Just honest milk.
             </p>
             <DoodlyButton variant="footer" />
             <div className="mt-6">

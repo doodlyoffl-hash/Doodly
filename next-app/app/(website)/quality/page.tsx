@@ -25,7 +25,7 @@ export default function QualityPage() {
       <PageHeader
         eyebrow="Quality &amp; safety"
         title="Purity you can taste — and verify."
-        sub="Every bottle passes through the same uncompromising checks, from the farm at dawn to your doorstep by morning."
+        sub="Every bottle passes through the same uncompromising checks, from the evening milking to your doorstep by morning."
       />
       <section className="mx-auto max-w-[1100px] px-5 py-16">
         <Stagger className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
