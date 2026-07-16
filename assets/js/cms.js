@@ -85,6 +85,17 @@ window.DOODLY_CMS = (function () {
     });
     if (data.html != null) { var h = host.querySelector('[data-cms-field="html"]'); if (h) h.innerHTML = data.html; }
   }
+  /* QUARANTINED KEYS — do not hydrate these from the database.
+     These CmsBlock rows still carry pre-compliance copy (an invented founder
+     story, the banned word "chemical-free", "near Hyderabad" geography) and
+     repeated admin attempts to update them have not landed. Until the rows are
+     deleted or corrected in the DB, the reviewed in-code copy in blocks.js is
+     authoritative for these sections — including the founder's own rewrites,
+     which the DB overlay was silently masking. Remove a key from this list
+     only after verifying the DB row is actually fixed:
+       curl "https://doodly-backendstore.vercel.app/api/cms/page?prefix=about" */
+  var QUARANTINE = { "about.story": 1, "about.mission": 1, "farmers.intro": 1, "farmers.join": 1 };
+
   function hydratePage() {
     var API = window.DOODLY_API;
     if (!API || !API.get) return;
@@ -95,6 +106,7 @@ window.DOODLY_CMS = (function () {
     Object.keys(prefixes).forEach(function (prefix) {
       API.get("/api/cms/page?prefix=" + encodeURIComponent(prefix)).then(function (r) {
         (r && r.blocks || []).forEach(function (block) {
+          if (QUARANTINE[block.key]) return;
           applyFields(document.querySelector('[data-cms="' + block.key + '"]'), block.data);
         });
       }).catch(function () {});
