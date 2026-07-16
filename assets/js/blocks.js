@@ -749,6 +749,7 @@ window.DOODLY_BLOCKS = (function () {
   R.invoicesAdmin = () => `<div class="reveal" id="invAdminMount"></div>`;
   R.packingBoard = () => `<div class="reveal" id="packingMount"></div>`;
   R.packDateBar = () => `<div class="reveal" id="packDateBar"></div>`;
+  R.opsCutoffAlert = () => `<div class="reveal" id="opsCutoffMount"></div>`;
   R.deliveryDateBar = () => `<div class="reveal" id="delDateBar"></div>`;
   R.asgnDateBar = () => `<div class="reveal" id="asgnDateBar"></div>`;
   R.assignmentOrders = () => `<div class="reveal" id="asgnOrdersMount"></div>`;

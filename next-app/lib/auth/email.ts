@@ -52,6 +52,7 @@ export const sendTrialPack = (to: string, d: Parameters<typeof T.trialPack>[0]) 
 export const sendWalletCredit = (to: string, d: Parameters<typeof T.walletCredit>[0]) => fire(to, T.walletCredit(d));
 export const sendReferralReward = (to: string, d: Parameters<typeof T.referralReward>[0]) => fire(to, T.referralReward(d));
 export const sendDeliveryTomorrow = (to: string, d: Parameters<typeof T.deliveryTomorrow>[0]) => fire(to, T.deliveryTomorrow(d));
+export const sendOpsDailySummary = (to: string, d: Parameters<typeof T.opsDailySummary>[0]) => fire(to, T.opsDailySummary(d));
 export const sendOutForDelivery = (to: string, d: Parameters<typeof T.outForDelivery>[0]) => fire(to, T.outForDelivery(d));
 export const sendDelivered = (to: string, d: Parameters<typeof T.delivered>[0]) => fire(to, T.delivered(d));
 export const sendBottleReturn = (to: string, d: Parameters<typeof T.bottleReturn>[0]) => fire(to, T.bottleReturn(d));

@@ -1754,10 +1754,93 @@
     bar.querySelectorAll("[data-quick]").forEach(function (b) { b.addEventListener("click", function () { var k = b.dataset.quick; onPick(k === "today" ? today : shiftISO(today, k === "tomorrow" ? 1 : -1)); }); });
     var inp = bar.querySelector("#" + barId + "-input"); if (inp) inp.addEventListener("change", function () { if (inp.value) onPick(inp.value); });
   }
+  // ---- Daily Operations Cut-Off alert (Step 5: "Tomorrow's Deliveries Are Ready") ----
+  // Loading this board also LAZILY FIRES the cut-off server-side when the IST clock is past
+  // the configured time and it hasn't run for tomorrow yet — so an admin opening Delivery
+  // Management in the evening prepares tomorrow + notifies ops, on any hosting plan.
+  function wireOpsCutoffAlert() {
+    if (!window.DOODLY_API) return;
+    var host = document.getElementById("opsCutoffMount");
+    if (!host) return;
+    DOODLY_API.get("/api/admin/ops/cutoff").then(function (r) {
+      var s = r.summary || {}, m = r.missed || {}, cfg = r.config || {};
+      var ready = !!r.ready, past = !!r.pastCutoff;
+      var risks = (m.confirmedNotAssigned || 0) + (m.assignedNotPacked || 0) + (m.packedNotDispatched || 0) + (m.ordersWithoutDelivery || 0);
+      var tone = ready ? "green" : past ? "amber" : "grey";
+      var title = ready ? "Tomorrow's deliveries are ready" : past ? "Preparing tomorrow's deliveries…" : "Tomorrow's delivery batch";
+      var stat = function (n, l) { return '<div class="dl-an-kpi"><div class="n">' + n + '</div><div class="l">' + l + "</div></div>"; };
+      host.innerHTML =
+        '<div class="panel" style="margin-bottom:14px;border-left:4px solid var(--leaf-600,#1FAE66)">' +
+          '<div class="panel-head"><h3>' + (ready ? "✅ " : past ? "⏳ " : "📦 ") + esc(title) + " — " + esc(delDateLabel(r.date)) + "</h3>" +
+            '<div><span class="badge ' + tone + '">' + (ready ? "Prepared " + (r.lastRunAt ? "at " + fmtTime(r.lastRunAt) : "") : past ? "Cut-off passed" : "Cut-off " + esc(cfg.cutoffTime || "20:00")) + "</span></div></div>" +
+          '<div class="panel-pad">' +
+            '<div class="dl-an-kpis" style="margin-bottom:12px">' +
+              stat(s.totalOrders || 0, "Total orders") + stat(m.assignedNotPacked || 0, "Pending packing") +
+              stat(m.confirmedNotAssigned || 0, "Awaiting assignment") + stat(s.totalBottles || 0, "Total bottles") +
+              stat((s.milkLitres || 0) + " L", "Milk required") + stat(s.totalCustomers || 0, "Customers") +
+            "</div>" +
+            (risks > 0
+              ? '<div class="badge amber" style="margin-bottom:10px">⚠ ' + risks + " order(s) need attention" + ((m.ordersWithoutDelivery || 0) ? " · " + m.ordersWithoutDelivery + " confirmed order(s) with no delivery" : "") + "</div>"
+              : '<div class="badge green" style="margin-bottom:10px">No unassigned or at-risk orders</div>') +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+              '<button class="btn btn-primary sm" id="oc-view">View delivery list</button>' +
+              '<a class="btn btn-ghost sm" href="/admin/assignment.html">Run auto assignment</a>' +
+              '<a class="btn btn-ghost sm" href="/admin/packing.html">Print packing list</a>' +
+              '<button class="btn btn-ghost sm" id="oc-run">' + (ready ? "Re-run now" : "Run cut-off now") + "</button>" +
+              '<button class="btn btn-ghost sm" id="oc-cfg">Settings</button>' +
+            "</div>" +
+          "</div></div>";
+      var v = host.querySelector("#oc-view"); if (v) v.addEventListener("click", function () { wireDeliveriesBackend(r.date); });
+      var run = host.querySelector("#oc-run");
+      if (run) run.addEventListener("click", function () {
+        run.disabled = true; dacToast("Running the cut-off…");
+        DOODLY_API.post("/api/admin/ops/cutoff", { action: "run" })
+          .then(function (x) { dacToast("Cut-off done — " + (x.summary ? x.summary.totalOrders + " order(s), " + x.notified.emails + " email(s)" : "prepared") + "."); wireOpsCutoffAlert(); })
+          .catch(function (e) { run.disabled = false; dacToast(e.code === "forbidden" ? "Your role can't run the cut-off (403)." : (e.message || "Cut-off failed.")); });
+      });
+      var c = host.querySelector("#oc-cfg"); if (c) c.addEventListener("click", function () { openCutoffConfig(cfg); });
+    }).catch(function (e) {
+      host.innerHTML = e.code === "forbidden" ? "" : '<div class="panel panel-pad muted-sm" style="margin-bottom:14px">Couldn\'t load the cut-off status — ' + esc(e.message || e.code || "error") + "</div>";
+    });
+  }
+  window.DOODLY_ADMIN.wireOpsCutoffAlert = wireOpsCutoffAlert;
+
+  // Super-Admin config (Step 12): cut-off time, recipients, enable/disable — no code changes.
+  function openCutoffConfig(cfg) {
+    var m = asgnModal("Daily cut-off settings", "<p class='muted-sm'>Loading…</p>");
+    m.body.innerHTML =
+      '<label class="dac-f"><span>Cut-off time (IST, 24h)</span><input class="input" id="oc-time" value="' + esc(cfg.cutoffTime || "20:00") + '" placeholder="20:00"></label>' +
+      '<label class="dac-f" style="margin-top:10px"><span>Extra email recipients (comma-separated)</span><input class="input" id="oc-emails" value="' + esc((cfg.emailRecipients || []).join(", ")) + '" placeholder="ops@doodly.in, dispatch@doodly.in"></label>' +
+      '<p class="muted-sm" style="margin:4px 0 0">Every active Admin / Super Admin / Operations user is always emailed.</p>' +
+      '<label class="dac-f" style="margin-top:10px"><span>WhatsApp recipients (comma-separated, with country code)</span><input class="input" id="oc-wa" value="' + esc((cfg.whatsappRecipients || []).join(", ")) + '" placeholder="+919876543210"></label>' +
+      '<div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap">' +
+        '<label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="oc-en"' + (cfg.enabled !== false ? " checked" : "") + '> Enabled</label>' +
+        '<label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="oc-wae"' + (cfg.whatsappEnabled !== false ? " checked" : "") + '> WhatsApp</label>' +
+        '<label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="oc-roles"' + (cfg.notifyRoles !== false ? " checked" : "") + '> In-app alert</label>' +
+      "</div>" +
+      '<p class="dac-err" id="oc-err"></p>' +
+      '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px"><button class="btn btn-primary sm" id="oc-save">Save settings</button></div>';
+    var err = m.body.querySelector("#oc-err");
+    m.body.querySelector("#oc-save").addEventListener("click", function () {
+      var list = function (s) { return String(s || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean); };
+      DOODLY_API.post("/api/admin/ops/cutoff", {
+        action: "config",
+        cutoffTime: m.body.querySelector("#oc-time").value.trim(),
+        emailRecipients: list(m.body.querySelector("#oc-emails").value),
+        whatsappRecipients: list(m.body.querySelector("#oc-wa").value),
+        enabled: m.body.querySelector("#oc-en").checked,
+        whatsappEnabled: m.body.querySelector("#oc-wae").checked,
+        notifyRoles: m.body.querySelector("#oc-roles").checked,
+      }).then(function () { dacToast("Cut-off settings saved."); m.close(); wireOpsCutoffAlert(); })
+        .catch(function (e) { err.textContent = e.code === "forbidden" ? "Only a Super Admin can change these settings." : (e.message || "Couldn't save."); });
+    });
+  }
+
   async function wireDeliveriesBackend(date) {
     if (!window.DOODLY_API) return;
     var iso = date || _delDate || istTodayISO(); _delDate = iso;
     buildDeliveryDateBar(iso);
+    wireOpsCutoffAlert();
     var host = document.querySelector('.dt-host[data-dataset="adminDeliveries"]');
     try {
       var stats = await DOODLY_API.get("/api/admin/deliveries/stats?date=" + iso);

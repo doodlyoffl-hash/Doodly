@@ -303,4 +303,39 @@ export function promo(d: { name?: string | null; emoji?: string; title: string; 
   return { subject: d.title, html, text: `${hi(d.name)} ${d.title}. ${d.ctaLabel}: ${url(d.ctaHref)}` };
 }
 
-export const TEMPLATES = { welcome, verifyEmail, loginOtp, orderConfirmation, paymentSuccess, paymentFailed, subscriptionActivated, trialPack, walletCredit, referralReward, deliveryTomorrow, outForDelivery, delivered, bottleReturn, invoiceEmail, passwordReset, supportTicket, puzzleChallenge, promo };
+/* ---------- Operations: daily cut-off delivery summary (internal, to ops/admin) ---------- */
+export interface OpsSummaryData {
+  dmy: string;
+  summary: {
+    totalOrders: number; totalCustomers: number; milkLitres: number; totalBottles: number; glassBottlesRequired: number;
+    subscriptionOrders: number; oneTimeOrders: number; trialOrders: number; b2bOrders: number;
+    paymentSummary: { paid: number; pending: number; cod: number }; pendingPayments: { count: number; amountPaise: number };
+    bottleDepositsPaise: number; specialNotes: { customer: string; note: string }[];
+    areaBreakdown: { area: string; orders: number; bottles: number }[];
+  };
+  missed: { confirmedNotAssigned: number; assignedNotPacked: number; packedNotDispatched: number; overdue: number; ordersWithoutDelivery: number };
+}
+export function opsDailySummary(d: OpsSummaryData): Email {
+  const s = d.summary, m = d.missed;
+  const rs = (p: number) => "₹" + Math.round(p / 100).toLocaleString("en-IN");
+  const risks = m.confirmedNotAssigned + m.assignedNotPacked + m.packedNotDispatched + m.overdue + m.ordersWithoutDelivery;
+  const warnCard = risks > 0
+    ? card(`${heading("⚠ Needs attention")}${infoRow("Confirmed, not assigned", String(m.confirmedNotAssigned))}${infoRow("Assigned, not packed", String(m.assignedNotPacked))}${infoRow("Packed, not dispatched", String(m.packedNotDispatched))}${m.ordersWithoutDelivery ? infoRow("Orders without a delivery", String(m.ordersWithoutDelivery)) : ""}`, { bg: "#FFF7ED" })
+    : card(`${para("✅ No unassigned or at-risk orders — the day is fully prepared.")}`);
+  const notes = s.specialNotes.length
+    ? card(`${heading("Special delivery notes")}${s.specialNotes.slice(0, 12).map((n) => infoRow(esc(n.customer), esc(n.note))).join("")}`)
+    : "";
+  const html = compose(`Tomorrow's delivery summary — ${d.dmy}`, [
+    hero({ emoji: "📦", title: "Tomorrow's delivery summary", subtitle: `Delivery day ${d.dmy} — review before dispatch.` }),
+    card(`${heading("At a glance")}${infoRow("Total orders", String(s.totalOrders))}${infoRow("Customers", String(s.totalCustomers))}${infoRow("Milk required", `${s.milkLitres} L`)}${infoRow("Total bottles", String(s.totalBottles))}${infoRow("Glass bottles required", String(s.glassBottlesRequired), true)}`),
+    card(`${heading("Order mix")}${infoRow("Subscription", String(s.subscriptionOrders))}${infoRow("One-time", String(s.oneTimeOrders))}${infoRow("Trial", String(s.trialOrders))}${infoRow("B2B", String(s.b2bOrders))}`),
+    card(`${heading("Payments")}${infoRow("Prepaid", String(s.paymentSummary.paid))}${infoRow("COD", String(s.paymentSummary.cod))}${infoRow("Pending", `${s.pendingPayments.count} · ${rs(s.pendingPayments.amountPaise)}`)}${infoRow("Bottle deposits held", rs(s.bottleDepositsPaise), true)}`),
+    warnCard,
+    notes,
+    card(`<div style="text-align:center">${button("Open Delivery Management", url("/admin/deliveries.html"))}</div>`),
+  ]);
+  const text = `DOODLY — Tomorrow's Delivery Summary (${d.dmy})\nOrders: ${s.totalOrders} | Customers: ${s.totalCustomers} | Milk: ${s.milkLitres} L | Bottles: ${s.totalBottles}\nSubscription ${s.subscriptionOrders} · One-time ${s.oneTimeOrders} · Trial ${s.trialOrders} · B2B ${s.b2bOrders}\nUnassigned: ${m.confirmedNotAssigned} | Not packed: ${m.assignedNotPacked}\nReview: ${url("/admin/deliveries.html")}`;
+  return { subject: `DOODLY — Tomorrow's Delivery Summary (${d.dmy})`, html, text };
+}
+
+export const TEMPLATES = { welcome, verifyEmail, loginOtp, orderConfirmation, paymentSuccess, paymentFailed, subscriptionActivated, trialPack, walletCredit, referralReward, deliveryTomorrow, outForDelivery, delivered, bottleReturn, invoiceEmail, passwordReset, supportTicket, puzzleChallenge, promo, opsDailySummary };

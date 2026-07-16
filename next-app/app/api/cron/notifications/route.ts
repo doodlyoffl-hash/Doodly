@@ -69,7 +69,12 @@ async function handle(req: NextRequest) {
   // has been applied, so newly-generated deliveries use the current address).
   const { generateUpcomingDeliveries } = await import("@/lib/subscriptions/deliveries");
   const subDeliveries = await generateUpcomingDeliveries().catch(() => ({ subscriptions: 0, created: 0, subsTouched: 0 }));
-  return NextResponse.json({ ok: true, ...result, whatsapp, autopay, addressChanges, addressChangeReminders, subDeliveries });
+  // Daily operations cut-off — safety net: if the evening cut-off never ran (no admin
+  // logged in, no dedicated 20:00 cron on this plan), prepare tomorrow's delivery cycle +
+  // notify ops now, before the morning run. Idempotent (once per delivery day).
+  const { maybeRunCutoff } = await import("@/lib/ops/cutoff");
+  const cutoff = await maybeRunCutoff({ source: "cron" }).catch(() => ({ ran: false, reason: "error", date: "" }));
+  return NextResponse.json({ ok: true, ...result, whatsapp, autopay, addressChanges, addressChangeReminders, subDeliveries, cutoff });
 }
 
 export const GET = handle;
