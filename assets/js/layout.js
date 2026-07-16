@@ -1785,12 +1785,15 @@
             '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
               '<button class="btn btn-primary sm" id="oc-view">View delivery list</button>' +
               '<a class="btn btn-ghost sm" href="/admin/assignment.html">Run auto assignment</a>' +
-              '<a class="btn btn-ghost sm" href="/admin/packing.html">Print packing list</a>' +
+              '<button class="btn btn-ghost sm" id="oc-pack">Print packing list</button>' +
+              '<button class="btn btn-ghost sm" id="oc-xls">Export report</button>' +
               '<button class="btn btn-ghost sm" id="oc-run">' + (ready ? "Re-run now" : "Run cut-off now") + "</button>" +
               '<button class="btn btn-ghost sm" id="oc-cfg">Settings</button>' +
             "</div>" +
           "</div></div>";
       var v = host.querySelector("#oc-view"); if (v) v.addEventListener("click", function () { wireDeliveriesBackend(r.date); });
+      var pk = host.querySelector("#oc-pack"); if (pk) pk.addEventListener("click", function () { exportPackingList(r.date, "pdf"); });
+      var xl = host.querySelector("#oc-xls"); if (xl) xl.addEventListener("click", function () { exportPackingList(r.date, "xls"); });
       var run = host.querySelector("#oc-run");
       if (run) run.addEventListener("click", function () {
         run.disabled = true; dacToast("Running the cut-off…");
@@ -2354,7 +2357,7 @@
     var nextOf = function (s) { var i = SEQ.indexOf(s); return i >= 0 && i < 3 ? SEQ[i + 1] : null; };
     host.innerHTML =
       '<div id="pk-stats" class="dl-an-kpis" style="margin-bottom:14px"></div>' +
-      '<div class="panel"><div class="panel-head"><h3>Deliveries to pack — ' + esc(delDateLabel(iso)) + '</h3><div><button class="btn btn-ghost sm" id="pk-packed">Mark selected Packed</button> <button class="btn btn-ghost sm" id="pk-ready">Mark selected Ready</button></div></div>' +
+      '<div class="panel"><div class="panel-head"><h3>Deliveries to pack — ' + esc(delDateLabel(iso)) + '</h3><div><button class="btn btn-ghost sm" id="pk-pdf">' + icon("download", 14) + ' Packing list PDF</button> <button class="btn btn-ghost sm" id="pk-xls">Excel</button> <button class="btn btn-ghost sm" id="pk-csv">CSV</button> <button class="btn btn-ghost sm" id="pk-packed">Mark selected Packed</button> <button class="btn btn-ghost sm" id="pk-ready">Mark selected Ready</button></div></div>' +
       '<div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th><input type="checkbox" id="pk-all" aria-label="Select all"></th><th>Customer</th><th>Area</th><th>Products</th><th>Slot</th><th>Bottles</th><th>Stage</th><th>Advance</th></tr></thead><tbody id="pk-body"><tr><td colspan="8" class="muted-sm">Loading…</td></tr></tbody></table></div></div></div>';
     var body = host.querySelector("#pk-body");
     var load = function () {
@@ -2382,9 +2385,34 @@
     host.querySelector("#pk-all").addEventListener("change", function (e) { host.querySelectorAll(".pk-chk").forEach(function (c) { c.checked = e.target.checked; }); });
     host.querySelector("#pk-packed").addEventListener("click", function () { var ids = selected(); ids.length ? advance(ids, "PACKED") : dacToast("Select deliveries first."); });
     host.querySelector("#pk-ready").addEventListener("click", function () { var ids = selected(); ids.length ? advance(ids, "READY") : dacToast("Select deliveries first."); });
+    host.querySelector("#pk-pdf").addEventListener("click", function () { exportPackingList(iso, "pdf"); });
+    host.querySelector("#pk-xls").addEventListener("click", function () { exportPackingList(iso, "xls"); });
+    host.querySelector("#pk-csv").addEventListener("click", function () { exportPackingList(iso, "csv"); });
     load();
   }
   window.DOODLY_ADMIN.wirePackingBackend = wirePackingBackend;
+
+  /* Packing-list export (PDF / Excel / CSV). The file comes from the backend, which may be a
+     different origin in production, so a plain <a href> would arrive unauthenticated (403).
+     Fetch it WITH the auth headers and download the blob — same pattern as invAdminPdf(). */
+  function exportPackingList(iso, format) {
+    var base = window.DOODLY_API ? DOODLY_API.base() : "";
+    var h = {}; try { var t = localStorage.getItem("doodly-token"); if (t) h["Authorization"] = "Bearer " + t; } catch (e) {}
+    try { if (window.DOODLY_RBAC) { h["X-Doodly-Actor"] = DOODLY_RBAC.activeRole(); var cu = DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser(); if (cu && cu.id) h["X-Doodly-Actor-Id"] = cu.id; } } catch (e) {}
+    var ext = format === "xls" ? "xls" : format === "csv" ? "csv" : "pdf";
+    dacToast("Preparing the packing list (" + ext.toUpperCase() + ")…");
+    fetch(base + "/api/admin/deliveries/packing/export?date=" + encodeURIComponent(iso) + "&format=" + ext, { headers: h, credentials: "include" })
+      .then(function (r) { if (!r.ok) throw new Error(r.status === 403 ? "Your role can't export the packing list (403)." : "Export failed (" + r.status + ")"); return r.blob(); })
+      .then(function (blob) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a"); a.href = url; a.download = "DOODLY_Packing_List_" + iso + "." + ext;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+        dacToast("Packing list downloaded (" + ext.toUpperCase() + ").");
+      })
+      .catch(function (e) { dacToast(e.message || "Couldn't export the packing list."); });
+  }
+  window.DOODLY_ADMIN.exportPackingList = exportPackingList;
 
   // ---- Drivers (admin/drivers → live list + dashboard + Add/Manage; reuses /api/admin/drivers*) ----
   var _drDrivers = [], _drZones = [];
