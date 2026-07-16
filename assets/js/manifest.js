@@ -76,7 +76,7 @@ window.DOODLY_MANIFEST = (function () {
       { type:"testimonialGrid" }, { type:"faqSection" }, { type:"downloadApp" }, { type:"ctaBand" },
     ]},
 
-    "about": { surface:"public", title:"About Us", hero:{ eyebrow:"Our story", title:"Fresh milk, the way it used to be.", text:"DOODLY began with a simple frustration — good, honest milk had become impossible to find in the city. So we went back to the source, and rebuilt the chain in glass, delivered before breakfast." }, blocks:[
+    "about": { surface:"public", title:"About Us", hero:{ eyebrow:"Our story", title:"Fresh milk, the way it used to be.", text:"DOODLY is built on a simple idea: milk you can trace. A small circle of family-run farms, every batch tested, kept cold through the chain, bottled in glass — at your door before 7." }, blocks:[
       { type:"aboutPage" },
       { type:"cardGrid", cols:3, cards:[
         { ic:"factory", title:"Our dairy", text:"Infrastructure, chilling and quality standards.", link:"Explore", href:"/dairy.html" },
@@ -89,7 +89,7 @@ window.DOODLY_MANIFEST = (function () {
     "dairy": { surface:"public", title:"Our Dairy", hero:{ eyebrow:"Our dairy", title:"Where freshness is engineered.", text:"Rapid chilling, sterile glass bottling, and batch-level testing — the infrastructure that keeps DOODLY honest." }, blocks:[
       { type:"split", eyebrow:"Infrastructure", title:"A cold chain that never breaks.", p:["Milk is snap-cooled to 4°C within minutes of collection and stays cold all the way to your door."], bullets:["Bulk milk coolers at collection","Insulated same-morning transport","Sterilised glass-bottling line"], media:"❄️" },
       { type:"split", rev:true, eyebrow:"Quality standards", title:"Tested before it's trusted.", p:["Every batch is checked for fat, SNF, temperature and adulteration before it is ever bottled."], bullets:["Lactometer + fat/SNF on each batch","Adulteration screening","Reject-and-return if it fails"], media:"🧪" },
-      { type:"kpis", items:[{n:"4°C",l:"Cold chain"},{n:"<30 min",l:"To chilling"},{n:"100%",l:"Batch tested"},{n:"Glass",l:"Packaging"}] },
+      { type:"kpis", items:[{n:"4°C",l:"Cold chain"},{n:"~12 hrs",l:"Farm to door"},{n:"100%",l:"Batch tested"},{n:"Glass",l:"Packaging"}] },
       { type:"cardGrid", cols:2, cards:[
         { ic:"beaker", title:"Quality & safety", text:"See our testing process and reports.", link:"View", href:"/quality.html" },
         { ic:"bottle", title:"Bottle return program", text:"How our reusable glass loop works.", link:"Learn", href:"/bottle-return.html" },
