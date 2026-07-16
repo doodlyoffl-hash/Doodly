@@ -139,7 +139,7 @@ window.DOODLY_DATA = (function () {
     ],
 
     farmers: [
-      { id: "F-118", name: "Lakshmi Dairy Farm", owner: "G. Lakshmaiah", village: "Shamirpet", litres: "180 L/day", fat: "7.8%", status: ["green","Verified"] },
+      { id: "F-118", name: "Demo Farm A", owner: "Demo Owner", village: "Demo Village", litres: "180 L/day", fat: "7.8%", status: ["green","Verified"] },
       { id: "F-104", name: "Sri Venkateshwara Farm", owner: "K. Naidu", village: "Shankarpally", litres: "210 L/day", fat: "8.1%", status: ["green","Verified"] },
       { id: "F-097", name: "Green Meadows", owner: "M. Reddy", village: "Chevella", litres: "150 L/day", fat: "7.5%", status: ["amber","Review"] },
       { id: "F-088", name: "Gokul Buffalo Farm", owner: "S. Yadav", village: "Moinabad", litres: "120 L/day", fat: "7.9%", status: ["green","Verified"] },
