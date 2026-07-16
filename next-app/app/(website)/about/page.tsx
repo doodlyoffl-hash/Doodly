@@ -7,7 +7,7 @@ import { SITE } from "@/config/site";
 
 export const metadata: Metadata = {
   title: "About DOODLY",
-  description: "DOODLY is a Vijayawada-born dairy brand delivering pure A2 buffalo milk in glass bottles — a short, transparent supply chain from local farms to your door.",
+  description: "DOODLY is a Vijayawada dairy brand delivering A2 buffalo milk in glass bottles — a short, transparent supply chain from family-run farms around Pamuru to your door.",
   alternates: { canonical: "/about" },
 };
 

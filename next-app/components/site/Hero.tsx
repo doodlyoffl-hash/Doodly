@@ -45,7 +45,7 @@ export function Hero() {
             initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.12 }}
             className="mt-6 max-w-md text-lg leading-relaxed text-ink-2"
           >
-            Pure A2 buffalo milk from local farms — chilled within minutes, bottled in glass, and at your door within 12 hours.
+            A2 buffalo milk from family-run farms around Pamuru — collected at dusk, driven through the night, bottled in glass, and at your door within about 12 hours.
           </motion.p>
 
           <motion.div

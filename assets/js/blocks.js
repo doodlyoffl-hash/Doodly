@@ -471,7 +471,14 @@ window.DOODLY_BLOCKS = (function () {
           <span class="fresh-badge"><span class="fb-dot"></span>Fresh Every Morning</span>
           <span class="eyebrow">${d.brand.promise}</span>
           <h1 class="display">Fresh Milk.<br><em>Delivered Daily.</em></h1>
-          <p class="lead">Pure A2 buffalo milk from local farms — chilled within minutes of milking, bottled in glass, and at your door before breakfast.</p>
+          <!-- The 5-second value proposition — the most-read sentence on the site.
+               Was: "from local farms — chilled within minutes of milking". Both were
+               wrong: the farms are ~200km away around Pamuru ("hyperlocal" describes
+               our DELIVERY, never farm proximity), and "within minutes of milking"
+               starts a clock at the udder that nobody has ever measured. Leads with
+               the night drive instead — true, specific, and the one thing no
+               competitor can copy. -->
+          <p class="lead">A2 buffalo milk from family-run farms around Pamuru — collected at dusk, driven through the night, bottled in glass, and on your step before 7.</p>
           <div class="hero-cta">
             <a href="/subscriptions.html" class="btn btn-primary btn-lg">Subscribe now</a>
             <a href="/products.html" class="btn btn-ghost btn-lg">Explore products</a>

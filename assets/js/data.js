@@ -226,7 +226,7 @@ window.DOODLY = {
 
   /* ---- Static marketing content -------------------------- */
   why: [
-    { icon: "leaf",     title: "Fresh from local farms",  text: "Single-source A2 buffalo milk from farmers we know by name." },
+    { icon: "leaf",     title: "Farmers we know by name", text: "Single-source A2 buffalo milk from a small circle of family-run farms around Pamuru." },
     { icon: "clock",    title: "Collected daily",         text: "Milked last evening, driven through the night, never pooled." },
     { icon: "snow",     title: "Instant chilling",        text: "Cooled to 4°C within minutes of milking to lock in freshness." },
     { icon: "bottle",   title: "Glass bottles",           text: "No plastic taint. Sterilised, sealed, and returnable." },
