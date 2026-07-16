@@ -9,7 +9,7 @@
 window.DOODLY_UNFOLD = (function () {
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
   var brand = function () { return (window.DOODLY && window.DOODLY.brand) || {}; };
-  var origin = function () { try { return location.origin && location.origin.indexOf("http") === 0 ? location.origin : "https://yourdomain.com"; } catch (e) { return "https://yourdomain.com"; } };
+  var origin = function () { try { return location.origin && location.origin.indexOf("http") === 0 ? location.origin : "https://www.doodly.in"; } catch (e) { return "https://www.doodly.in"; } };
 
   var SECTIONS = [
     { id: "market-reality", label: "Market Reality" },
@@ -35,7 +35,11 @@ window.DOODLY_UNFOLD = (function () {
         { emoji: "❄️", title: "4°C Chilling" }, { emoji: "🍶", title: "Glass Bottling" }, { emoji: "🌅", title: "Morning Delivery" },
       ],
       productsHeading: "Our Premium Collection", productsSub: "Made from the same single-source A2 milk.",
-      trustLines: ["For kids who need strength.", "For parents who value honesty.", "For grandparents who know real taste."],
+      // "For kids who need strength." was here — removed. It claims the milk supplies
+      // strength to children: a nutrition claim about child growth, which is the most
+      // heavily policed category FSSAI has, and one we hold no evidence for. The line
+      // now names who's at the table instead of what the milk does to them.
+      trustLines: ["For the youngest at the table.", "For parents who value honesty.", "For grandparents who know real taste."],
       trustClose: ["DOODLY is dairy you can trust—", "at every age, every day."],
       connectPunch: ["Real dairy doesn't need loud claims.", "It needs integrity."],
       channels: [

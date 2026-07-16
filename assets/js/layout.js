@@ -2813,8 +2813,8 @@
       '<div class="dac-card" role="dialog" aria-modal="true" aria-label="Register farmer">' +
         '<div class="dac-hd"><h3>Register farmer</h3><button class="dac-x" type="button" aria-label="Close">&times;</button></div>' +
         '<form class="dac-bd" autocomplete="off">' +
-          '<div class="dac-row"><label class="dac-f"><span>Farm name <i class="req">*</i></span><input class="input" id="fa-name" placeholder="Lakshmi Dairy Farm"></label>' +
-            '<label class="dac-f"><span>Owner</span><input class="input" id="fa-owner" placeholder="G. Lakshmaiah"></label></div>' +
+          '<div class="dac-row"><label class="dac-f"><span>Farm name <i class="req">*</i></span><input class="input" id="fa-name" placeholder="Farm name"></label>' +
+            '<label class="dac-f"><span>Owner</span><input class="input" id="fa-owner" placeholder="Owner name"></label></div>' +
           '<div class="dac-row"><label class="dac-f"><span>Mobile <i class="req">*</i></span><input class="input" id="fa-phone" placeholder="+91…"></label>' +
             '<label class="dac-f"><span>Alt. contact</span><input class="input" id="fa-alt" placeholder="+91…"></label></div>' +
           '<div class="dac-row"><label class="dac-f"><span>Village <i class="req">*</i></span><input class="input" id="fa-village" placeholder="Kankipadu"></label>' +

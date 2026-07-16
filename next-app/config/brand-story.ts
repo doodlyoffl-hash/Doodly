@@ -72,7 +72,12 @@ export const BRAND_STORY = {
 
   trust: {
     lines: [
-      "For kids who need strength.",
+      // "For kids who need strength." was here — removed, same as assets/js/unfold.js.
+      // It claims the milk supplies strength to children: a nutrition claim about child
+      // growth, the most heavily policed category FSSAI has, and one we hold no evidence
+      // for. Names who's at the table now, not what the milk does to them. Note the
+      // punch line two blocks down: "Real dairy doesn't need loud claims."
+      "For the youngest at the table.",
       "For parents who value honesty.",
       "For grandparents who know real taste.",
     ],
