@@ -6049,3 +6049,109 @@
     try { wireGlobalAuth(); } catch (e) {}
   })();
 })();
+
+/* =============================================================
+   DOODLY — Attribution & analytics (ported from the Growth OS
+   reference implementation in Website/index.html — see
+   01-Brand-Foundation/08-Live-Site-Compliance-Fixes.md there).
+   Three jobs, all inert until configured:
+   1. FIRST-TOUCH UTM CAPTURE — ?utm_* / ?src on any landing page
+      is persisted once (localStorage "doodly-attrib", 90 days),
+      so a visitor from an ad who subscribes three pages later
+      still carries the source. Without this, ad spend cannot be
+      attributed and CAC cannot be computed.
+   2. WHATSAPP PRE-FILL — every wa.me link gets the stored source
+      appended to its prefilled text ("via: meta / trial-june"),
+      closing the loop from click to conversation.
+   3. META PIXEL + GA4 — injected ONLY when an ID is present in
+      DOODLY.brand.integrations (metaPixelId / gaMeasurementId).
+      Empty IDs (the current state) load nothing and call no one.
+      PageView on load; Lead + whatsapp_click on any wa.me click.
+   NOTE: client-side only. Set up the Conversions API server-side
+   for reliable attribution once ad spend starts.
+   ============================================================= */
+(function () {
+  var DAYS90 = 90 * 24 * 60 * 60 * 1000;
+  function ids() { return (window.DOODLY && DOODLY.brand && DOODLY.brand.integrations) || {}; }
+
+  // 1 · first-touch capture (never overwrite an earlier source)
+  var attrib = null;
+  try {
+    var stored = JSON.parse(localStorage.getItem("doodly-attrib") || "null");
+    if (stored && stored._ts && (Date.now() - stored._ts) > DAYS90) stored = null;
+    var qp = new URLSearchParams(location.search), fresh = {};
+    ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "src"].forEach(function (k) {
+      var v = qp.get(k); if (v) fresh[k] = v.slice(0, 80);
+    });
+    if (!stored && Object.keys(fresh).length) {
+      fresh._ts = Date.now();
+      localStorage.setItem("doodly-attrib", JSON.stringify(fresh));
+      stored = fresh;
+    }
+    attrib = stored;
+  } catch (e) {}
+
+  function sourceTag() {
+    if (!attrib) return "";
+    return [attrib.utm_source || attrib.src, attrib.utm_campaign].filter(Boolean).join(" / ");
+  }
+
+  // 2 · decorate wa.me links + fire Lead on click (delegated: survives re-renders)
+  function decorate(a) {
+    try {
+      var tag = sourceTag(); if (!tag) return;
+      var u = new URL(a.href);
+      var txt = u.searchParams.get("text") || "Hi DOODLY! I'd like to know more.";
+      // Idempotent by CONTENT, not by a flag: the chrome rewrites a.href after
+      // mounting, which would wipe the decoration while a dataset flag kept us
+      // from ever re-applying it. Checking the text itself survives rewrites.
+      if (txt.indexOf("(via:") !== -1) return;
+      u.searchParams.set("text", txt + "\n\n(via: " + tag + ")");
+      a.href = u.toString();
+    } catch (e) {}
+  }
+  function sweep() { document.querySelectorAll('a[href*="wa.me/"]').forEach(decorate); }
+  document.addEventListener("DOMContentLoaded", sweep);
+  // The chrome (incl. the WhatsApp button) mounts asynchronously, so a fixed timer
+  // races it and loses. Observe instead: decorate whatever appears, debounced per frame.
+  try {
+    var pending = false;
+    new MutationObserver(function () {
+      if (pending) return; pending = true;
+      // setTimeout, NOT requestAnimationFrame: rAF never fires in a hidden
+      // document (background tab, prerender), which would silently disable
+      // decoration exactly where it can't be seen failing.
+      setTimeout(function () { pending = false; sweep(); }, 50);
+    }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["href"] });
+  } catch (e) {}
+  document.addEventListener("click", function (e) {
+    var a = e.target && e.target.closest && e.target.closest('a[href*="wa.me/"]');
+    if (!a) return;
+    decorate(a);
+    try { if (window.fbq) fbq("track", "Lead"); } catch (err) {}
+    try { if (window.gtag) gtag("event", "whatsapp_click", { event_category: "engagement", source: sourceTag() || "direct" }); } catch (err) {}
+  }, true);
+
+  // 3 · Meta Pixel — no-op while metaPixelId is ""
+  try {
+    var px = ids().metaPixelId;
+    if (px) {
+      !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+      t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+      fbq("init", px); fbq("track", "PageView");
+    }
+  } catch (e) {}
+
+  // 3b · GA4 — no-op while gaMeasurementId is ""
+  try {
+    var ga = ids().gaMeasurementId;
+    if (ga) {
+      var s = document.createElement("script"); s.async = true;
+      s.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(ga);
+      document.head.appendChild(s);
+      window.dataLayer = window.dataLayer || []; window.gtag = function () { dataLayer.push(arguments); };
+      gtag("js", new Date()); gtag("config", ga);
+    }
+  } catch (e) {}
+})();
