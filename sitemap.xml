@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- doodly.in public pages. Kept by hand: add a line when a public route is
+     added to assets/js/manifest.js (surface:"public"), remove it when one goes.
+     Utility shells (search, invoice, download, blog/read) are excluded on purpose. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://www.doodly.in/</loc><lastmod>2026-07-17</lastmod><priority>1.0</priority></url>
+  <url><loc>https://www.doodly.in/products.html</loc><lastmod>2026-07-17</lastmod><priority>0.9</priority></url>
+  <url><loc>https://www.doodly.in/subscriptions.html</loc><lastmod>2026-07-17</lastmod><priority>0.9</priority></url>
+  <url><loc>https://www.doodly.in/about.html</loc><lastmod>2026-07-17</lastmod><priority>0.7</priority></url>
+  <url><loc>https://www.doodly.in/farmers.html</loc><lastmod>2026-07-17</lastmod><priority>0.7</priority></url>
+  <url><loc>https://www.doodly.in/quality.html</loc><lastmod>2026-07-17</lastmod><priority>0.7</priority></url>
+  <url><loc>https://www.doodly.in/dairy.html</loc><lastmod>2026-07-17</lastmod><priority>0.6</priority></url>
+  <url><loc>https://www.doodly.in/delivery.html</loc><lastmod>2026-07-17</lastmod><priority>0.6</priority></url>
+  <url><loc>https://www.doodly.in/puzzle.html</loc><lastmod>2026-07-17</lastmod><priority>0.6</priority></url>
+  <url><loc>https://www.doodly.in/bottle-return.html</loc><lastmod>2026-07-17</lastmod><priority>0.5</priority></url>
+  <url><loc>https://www.doodly.in/doodly.html</loc><lastmod>2026-07-17</lastmod><priority>0.5</priority></url>
+  <url><loc>https://www.doodly.in/unfold-pure.html</loc><lastmod>2026-07-17</lastmod><priority>0.5</priority></url>
+  <url><loc>https://www.doodly.in/blog.html</loc><lastmod>2026-07-17</lastmod><priority>0.5</priority></url>
+  <url><loc>https://www.doodly.in/team.html</loc><lastmod>2026-07-17</lastmod><priority>0.4</priority></url>
+  <url><loc>https://www.doodly.in/careers.html</loc><lastmod>2026-07-17</lastmod><priority>0.4</priority></url>
+  <url><loc>https://www.doodly.in/contact.html</loc><lastmod>2026-07-17</lastmod><priority>0.4</priority></url>
+  <url><loc>https://www.doodly.in/faq.html</loc><lastmod>2026-07-17</lastmod><priority>0.4</priority></url>
+  <url><loc>https://www.doodly.in/help.html</loc><lastmod>2026-07-17</lastmod><priority>0.4</priority></url>
+  <url><loc>https://www.doodly.in/products/paneer.html</loc><lastmod>2026-07-17</lastmod><priority>0.3</priority></url>
+  <url><loc>https://www.doodly.in/puzzle-terms.html</loc><lastmod>2026-07-17</lastmod><priority>0.2</priority></url>
+  <url><loc>https://www.doodly.in/referral-policy.html</loc><lastmod>2026-07-17</lastmod><priority>0.2</priority></url>
+  <url><loc>https://www.doodly.in/shipping.html</loc><lastmod>2026-07-17</lastmod><priority>0.2</priority></url>
+</urlset>

@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /account/
+Disallow: /delivery/
+Disallow: /driver/
+Disallow: /login/
+Disallow: /checkout.html
+Disallow: /search.html
+Disallow: /invoice.html
+
+Sitemap: https://www.doodly.in/sitemap.xml
