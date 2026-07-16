@@ -1731,10 +1731,14 @@
         '<label style="display:inline-flex;align-items:center;gap:6px;margin:0"><span aria-hidden="true">📅</span><input type="date" class="input" id="del-date-input" value="' + iso + '" style="max-width:170px"></label>' +
         '<button class="btn btn-ghost sm" data-nav="next" aria-label="Next day">&rarr;</button>' +
         '<span class="strong" style="margin-left:auto">' + esc(delDateLabel(iso)) + "</span>" +
+        '<button class="btn btn-ghost sm" id="del-man-pdf" title="Delivery manifest for this day (PDF)">' + icon("download", 14) + " Manifest</button>" +
+        '<button class="btn btn-ghost sm" id="del-man-xls" title="Delivery manifest for this day (Excel)">Excel</button>' +
       "</div>";
     bar.querySelectorAll("[data-nav]").forEach(function (b) { b.addEventListener("click", function () { wireDeliveriesBackend(shiftISO(iso, b.dataset.nav === "next" ? 1 : -1)); }); });
     bar.querySelectorAll("[data-quick]").forEach(function (b) { b.addEventListener("click", function () { var k = b.dataset.quick; wireDeliveriesBackend(k === "today" ? today : shiftISO(today, k === "tomorrow" ? 1 : -1)); }); });
     var inp = bar.querySelector("#del-date-input"); if (inp) inp.addEventListener("change", function () { if (inp.value) wireDeliveriesBackend(inp.value); });
+    var mp = bar.querySelector("#del-man-pdf"); if (mp) mp.addEventListener("click", function () { exportManifest(iso, "pdf"); });
+    var mx = bar.querySelector("#del-man-xls"); if (mx) mx.addEventListener("click", function () { exportManifest(iso, "xls"); });
   }
   // Generic date bar (Prev / Yesterday / Today / Tomorrow / 📅 / Next) that calls
   // onPick(newISO). Reused by the Auto Assignment + Routes boards.
@@ -1848,6 +1852,7 @@
               '<button class="btn btn-primary sm" id="oc-view">View delivery list</button>' +
               '<a class="btn btn-ghost sm" href="/admin/assignment.html">Run auto assignment</a>' +
               '<button class="btn btn-ghost sm" id="oc-pack">Print packing list</button>' +
+              '<button class="btn btn-ghost sm" id="oc-man">Delivery manifest</button>' +
               '<button class="btn btn-ghost sm" id="oc-xls">Export report</button>' +
               '<button class="btn btn-ghost sm" id="oc-run">' + (ready ? "Re-run now" : "Run cut-off now") + "</button>" +
               '<button class="btn btn-ghost sm" id="oc-cfg">Settings</button>' +
@@ -1855,7 +1860,8 @@
           "</div></div>";
       var v = host.querySelector("#oc-view"); if (v) v.addEventListener("click", function () { wireDeliveriesBackend(r.date); });
       var pk = host.querySelector("#oc-pack"); if (pk) pk.addEventListener("click", function () { exportPackingList(r.date, "pdf"); });
-      var xl = host.querySelector("#oc-xls"); if (xl) xl.addEventListener("click", function () { exportPackingList(r.date, "xls"); });
+      var mn = host.querySelector("#oc-man"); if (mn) mn.addEventListener("click", function () { exportManifest(r.date, "pdf"); });
+      var xl = host.querySelector("#oc-xls"); if (xl) xl.addEventListener("click", function () { exportOpsReport("manifest", r.date, "xls"); });
       var run = host.querySelector("#oc-run");
       if (run) run.addEventListener("click", function () {
         run.disabled = true; dacToast("Running the cut-off…");
@@ -2454,27 +2460,35 @@
   }
   window.DOODLY_ADMIN.wirePackingBackend = wirePackingBackend;
 
-  /* Packing-list export (PDF / Excel / CSV). The file comes from the backend, which may be a
+  /* Ops report export (PDF / Excel / CSV). The file comes from the backend, which may be a
      different origin in production, so a plain <a href> would arrive unauthenticated (403).
      Fetch it WITH the auth headers and download the blob — same pattern as invAdminPdf(). */
-  function exportPackingList(iso, format) {
+  var OPS_REPORTS = {
+    packing: { path: "/api/admin/deliveries/packing/export", name: "DOODLY_Packing_List", label: "packing list" },
+    manifest: { path: "/api/admin/deliveries/manifest/export", name: "DOODLY_Delivery_Manifest", label: "delivery manifest" },
+  };
+  function exportOpsReport(kind, iso, format) {
+    var cfg = OPS_REPORTS[kind]; if (!cfg) return;
     var base = window.DOODLY_API ? DOODLY_API.base() : "";
     var h = {}; try { var t = localStorage.getItem("doodly-token"); if (t) h["Authorization"] = "Bearer " + t; } catch (e) {}
     try { if (window.DOODLY_RBAC) { h["X-Doodly-Actor"] = DOODLY_RBAC.activeRole(); var cu = DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser(); if (cu && cu.id) h["X-Doodly-Actor-Id"] = cu.id; } } catch (e) {}
     var ext = format === "xls" ? "xls" : format === "csv" ? "csv" : "pdf";
-    dacToast("Preparing the packing list (" + ext.toUpperCase() + ")…");
-    fetch(base + "/api/admin/deliveries/packing/export?date=" + encodeURIComponent(iso) + "&format=" + ext, { headers: h, credentials: "include" })
-      .then(function (r) { if (!r.ok) throw new Error(r.status === 403 ? "Your role can't export the packing list (403)." : "Export failed (" + r.status + ")"); return r.blob(); })
+    dacToast("Preparing the " + cfg.label + " (" + ext.toUpperCase() + ")…");
+    fetch(base + cfg.path + "?date=" + encodeURIComponent(iso) + "&format=" + ext, { headers: h, credentials: "include" })
+      .then(function (r) { if (!r.ok) throw new Error(r.status === 403 ? "Your role can't export this report (403)." : "Export failed (" + r.status + ")"); return r.blob(); })
       .then(function (blob) {
         var url = URL.createObjectURL(blob);
-        var a = document.createElement("a"); a.href = url; a.download = "DOODLY_Packing_List_" + iso + "." + ext;
+        var a = document.createElement("a"); a.href = url; a.download = cfg.name + "_" + iso + "." + ext;
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
-        dacToast("Packing list downloaded (" + ext.toUpperCase() + ").");
+        dacToast(cfg.label.charAt(0).toUpperCase() + cfg.label.slice(1) + " downloaded (" + ext.toUpperCase() + ").");
       })
-      .catch(function (e) { dacToast(e.message || "Couldn't export the packing list."); });
+      .catch(function (e) { dacToast(e.message || "Couldn't export the " + cfg.label + "."); });
   }
+  function exportPackingList(iso, format) { exportOpsReport("packing", iso, format); }
+  function exportManifest(iso, format) { exportOpsReport("manifest", iso, format); }
   window.DOODLY_ADMIN.exportPackingList = exportPackingList;
+  window.DOODLY_ADMIN.exportManifest = exportManifest;
 
   // ---- Drivers (admin/drivers → live list + dashboard + Add/Manage; reuses /api/admin/drivers*) ----
   var _drDrivers = [], _drZones = [];
