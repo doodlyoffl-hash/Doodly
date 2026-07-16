@@ -31,7 +31,7 @@ window.DOODLY_TOUR = (function () {
 
   /* ---------- the 8 steps (content-driven) ---------- */
   var STEPS = [
-    { ic: "bottle", emoji: "🥛", title: "Choose your product", body: "Start by selecting <b>A2 Buffalo Milk</b> — naturally easier to digest and richer in taste. More dairy (curd, paneer, ghee, palkova) is on the way.", art: "products", cta: { label: "Browse products", href: "/products.html" } },
+    { ic: "bottle", emoji: "🥛", title: "Choose your product", body: "Start by selecting <b>A2 Buffalo Milk</b> — naturally A2, bottled in glass. More dairy (curd, paneer, ghee, palkova) is on the way.", art: "products", cta: { label: "Browse products", href: "/products.html" } },
     { ic: "size", emoji: "🍶", title: "Choose your bottle", body: "Pick the size that fits your home — <b>300ml</b> to try, <b>500ml</b> for a small family, or <b>1000ml</b> for daily chai, curd and more.", art: "sizes" },
     { ic: "refresh", emoji: "🔁", title: "Choose your subscription", body: "Go one-off with <b>Single Pour</b>, or save more with <b>7-Day Fresh Start</b>, <b>30-Day Morning Ritual</b> and <b>90-Day Nourish Plan</b>. Longer plans = bigger savings.", art: "savings" },
     { ic: "calendar", emoji: "📅", title: "Pick your start date", body: "Choose when your first delivery should arrive. Order before <b>8:00 PM</b> to qualify for next-morning delivery — after that, it starts the following morning.", art: "cutoff" },

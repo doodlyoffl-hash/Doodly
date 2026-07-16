@@ -173,9 +173,9 @@ window.DOODLY = {
       // DESCRIPTION (rich)
       description: {
         short: "Single-source, chilled within minutes, bottled in glass.",
-        long: "Pure A2 buffalo milk from a small circle of family-run farms we know by name. Collected at dawn, snap-chilled to 4°C within minutes, tested for fat, SNF and purity, then bottled in sterilised returnable glass the same morning — at your door before breakfast.",
-        story: "DOODLY began with one frustration: honest, fresh milk had become impossible to find in the city. So we went back to the source — a handful of trusted buffalo farms on the edge of Hyderabad, no middlemen, no pooling.",
-        benefits: ["Naturally A2 — easier on most stomachs", "Richer in fat & protein for creamier chai", "No preservatives, no dilution, ever", "Returnable glass keeps it colder and cleaner"],
+        long: "Pure A2 buffalo milk from a small circle of family-run farms we know by name. Collected at dusk, snap-chilled to 4°C within minutes, tested for fat, SNF and purity, driven through the night, then bottled in sterilised returnable glass before dawn — at your door before breakfast.",
+        story: "DOODLY milk comes from a small circle of family-run buffalo farms around Pamuru, Andhra Pradesh. Single-source, no middlemen, no pooling.",
+        benefits: ["Naturally A2 — that's the breed, not a process", "Collected last evening, at your door before 7", "No preservatives, no dilution, ever", "Returnable glass keeps it colder and cleaner"],
         usage: "Shake gently before use. Lovely in chai, coffee, badam milk, curd and paneer.",
         storage: "Keep refrigerated at 4°C. Best consumed within 2 days of delivery.",
         ingredients: "100% A2 buffalo milk. Nothing added.",
@@ -201,7 +201,7 @@ window.DOODLY = {
       ],
 
       // AVAILABILITY
-      availability: { cities: ["Hyderabad"], slots: ["Before 7:00 AM"],
+      availability: { cities: ["Vijayawada", "Tadepalli"], slots: ["Before 7:00 AM"],
                       launchDate: "2026-04-01", endDate: null, inventoryStatus: "In stock" },
 
       // SEO
@@ -227,15 +227,15 @@ window.DOODLY = {
   /* ---- Static marketing content -------------------------- */
   why: [
     { icon: "leaf",     title: "Fresh from local farms",  text: "Single-source A2 buffalo milk from farmers we know by name." },
-    { icon: "clock",    title: "Collected daily",         text: "Milked at dawn, never stored overnight, never pooled." },
+    { icon: "clock",    title: "Collected daily",         text: "Milked last evening, driven through the night, never pooled." },
     { icon: "snow",     title: "Instant chilling",        text: "Cooled to 4°C within minutes of milking to lock in freshness." },
     { icon: "bottle",   title: "Glass bottles",           text: "No plastic taint. Sterilised, sealed, and returnable." },
-    { icon: "shield",   title: "No preservatives",        text: "No chemicals, no additives, no shelf-life games." },
-    { icon: "drop",     title: "A2 protein",              text: "Naturally A2 buffalo milk — easier on most stomachs." },
+    { icon: "shield",   title: "Nothing added",           text: "No preservatives, no additives. What we bottle is what was milked." },
+    { icon: "drop",     title: "A2 by nature",            text: "Buffalo milk is naturally A2 — that's the breed, not a process." },
   ],
 
   steps: [
-    { n: "01", title: "Farmer collection", text: "Milk is collected fresh at the farm each morning." },
+    { n: "01", title: "Farmer collection", text: "Milk is collected fresh at the farm every evening." },
     { n: "02", title: "Quality testing",   text: "Fat, SNF and lactometer checks on every batch." },
     { n: "03", title: "Rapid chilling",    text: "Snap-cooled to 4°C to halt bacterial growth." },
     { n: "04", title: "Glass bottling",    text: "Filled and sealed in sterilised glass bottles." },
@@ -248,8 +248,8 @@ window.DOODLY = {
   testimonials: [],
 
   faqs: [
-    { q: "What makes A2 buffalo milk different?", a: "DOODLY milk comes from buffalo breeds whose milk is naturally A2 — many people find it easier to digest than ordinary mixed-herd milk. It's also richer in fat and protein." },
-    { q: "How fresh is the milk, really?", a: "It's milked at dawn, chilled to 4°C within minutes, bottled the same morning, and delivered to you before breakfast — usually within hours of leaving the farm." },
+    { q: "What makes A2 buffalo milk different?", a: "A1 and A2 are two forms of the protein in milk, differing by a single amino acid. Buffalo milk is naturally the A2 type — so DOODLY is A2 buffalo milk. We don't make health claims about it; we'd rather you judge it on how fresh it tastes, and we're happy to show you exactly how it reaches you." },
+    { q: "How fresh is the milk, really?", a: "It's collected at dusk near Pamuru, chilled to 4°C, and driven through the night — about 12 hours from the farm to your door, and it's on your step before 7." },
     { q: "Why glass bottles?", a: "Glass doesn't leach anything into your milk and keeps it colder for longer. We collect the empties on your next delivery, sterilise them, and reuse them — better for you and the planet." },
     { q: "How does the bottle deposit work?", a: "A small refundable deposit is added per bottle on your first order. Return your empties and the deposit stays in your wallet. Your dashboard tracks every bottle issued and returned." },
     { q: "Can I pause or skip deliveries?", a: "Anytime, from your dashboard. Pause for a trip with Vacation Mode, skip tomorrow with one tap, or add an extra bottle when guests are over." },

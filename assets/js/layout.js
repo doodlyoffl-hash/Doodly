@@ -297,7 +297,7 @@
             ${contactCol}
           </div>
         </div>
-        <div class="footer-bottom"><span>&copy; ${new Date().getFullYear()} ${(window.DOODLY&&window.DOODLY.brand&&window.DOODLY.brand.company&&window.DOODLY.brand.company.legalName)||"DOODLY"} &middot; Fresh from local farmers.</span><span>No preservatives &middot; No chemicals &middot; 100% glass</span></div>
+        <div class="footer-bottom"><span>&copy; ${new Date().getFullYear()} ${(window.DOODLY&&window.DOODLY.brand&&window.DOODLY.brand.company&&window.DOODLY.brand.company.legalName)||"DOODLY"} &middot; Fresh from farmers we know by name.</span><span>No preservatives &middot; Nothing added &middot; 100% glass</span></div>
       </div>
       <div class="footer-scene" aria-hidden="true">${scene}</div>
     </footer>`;
@@ -5146,8 +5146,8 @@
         { q: "What is DOODLY?", a: "DOODLY delivers farm-fresh, naturally A2 buffalo milk in reusable glass bottles — chilled within minutes of milking and at your door before breakfast." },
         { q: "How do I place my first order?", a: "Pick a product, choose a bottle size and plan, set your start date and address, and check out. The whole flow takes under a minute." } ] },
       { id: "products", title: "Products", faqs: [
-        { q: "What is A2 buffalo milk?", a: "Milk that contains only the A2 type of beta-casein protein, which many people find gentler on digestion. DOODLY's buffalo milk is naturally A2 and richer in fat and protein." },
-        { q: "Are there any preservatives?", a: "Never. No preservatives, no added water, no chemicals — just pure buffalo milk, delivered fast enough that it doesn't need them." } ] },
+        { q: "What is A2 buffalo milk?", a: "A1 and A2 are two forms of the protein in milk, differing by a single amino acid. Buffalo milk is naturally the A2 type — so DOODLY is A2 buffalo milk. We don't make health claims about it; we'd rather you judge it on how fresh it tastes." },
+        { q: "Are there any preservatives?", a: "Never. No preservatives, no added water, nothing added at all — what we bottle is what was milked, delivered fast enough that it doesn't need them." } ] },
       { id: "delivery", title: "Delivery", faqs: [
         { q: "What are the delivery timings?", a: "Fresh morning delivery, at your door before breakfast. You can pick a preferred slot during checkout." },
         { q: "How do I track my delivery?", a: "A live status banner shows your order from Confirmed to Delivered, with your executive and ETA — plus Delivery Tracking in your dashboard." } ] },
@@ -5332,9 +5332,9 @@
 
   // Trust marquee → click a quality promise to open an educational explainer.
   var DQ_CONTENT = {
-    preservatives: { emoji: "🥛", title: "No Preservatives", lead: "Not a single preservative goes into DOODLY milk — because it never needs one.", points: ["Milk reaches you within about 12 hours of milking, chilled to 4°C the whole way.", "A short, local farm-to-door chain keeps it fresh without any chemicals.", "What's in the bottle is milk — and only milk."] },
-    adulterants: { emoji: "✅", title: "No Adulterants", lead: "No added water, starch, detergent or synthetic milk — ever. Just 100% pure buffalo milk.", points: ["Every batch is lab-checked for fat, SNF and purity before it's bottled.", "Adulteration screening catches anything that shouldn't be there.", "If a batch doesn't pass, it doesn't ship — it goes back."] },
-    antibiotics: { emoji: "🌿", title: "No Antibiotics", lead: "Healthy, well-cared-for buffaloes mean milk with no antibiotic residue.", points: ["Our herds aren't routinely dosed with antibiotics like industrial dairies.", "Animal health is managed with proper nutrition and clean conditions.", "Cleaner for the animals — and safer for your family."] },
+    preservatives: { emoji: "🥛", title: "No Preservatives", lead: "Not a single preservative goes into DOODLY milk — because it never needs one.", points: ["Milk reaches you about 12 hours after it's collected, chilled to 4°C the whole way.", "A short farm-to-door chain keeps it fresh without anything added.", "What's in the bottle is milk — and only milk."] },
+    adulterants: { emoji: "✅", title: "Tested Every Batch", lead: "Every batch is checked for fat, SNF and adulteration before it's bottled.", points: ["No added water, starch, detergent or synthetic milk — ever.", "Adulteration screening catches anything that shouldn't be there.", "If a batch doesn't pass, it doesn't ship — it goes back."] },
+    antibiotics: { emoji: "🌿", title: "No Antibiotics", lead: "Our herds aren't routinely dosed with antibiotics.", points: ["Animal health is managed with proper nutrition and clean conditions.", "We buy from a small circle of farms we know by name.", "Milked gently, kept clean, treated well."] },
     hormones: { emoji: "🐃", title: "No Induced Hormones", lead: "We never use oxytocin or artificial hormones to force milk let-down.", points: ["Our buffaloes are milked gently and naturally.", "No injections to push yield at the animal's expense.", "Milk the way it's meant to be — honest and humane."] },
   };
   function openDqModal(key) {
