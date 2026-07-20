@@ -26,6 +26,9 @@ import { broadcastOpsWhatsApp, type WaDelivery } from "@/lib/ops/whatsapp";
 const CFG_KEY = "ops.cutoff";
 const IST_MS = 5.5 * 60 * 60 * 1000;
 const CLOSED: DeliveryStatus[] = ["DELIVERED", "FAILED", "SKIPPED"];
+/** WhatsApp rejects an empty variable, so the manifest slot always carries something.
+    Only reachable when AUTH_SECRET is unset (nothing can be signed). */
+const MANIFEST_FALLBACK = "unavailable — open the DOODLY Admin Panel";
 
 export interface CutoffConfig {
   enabled: boolean;
@@ -351,7 +354,8 @@ export async function sendTestWhatsAppSummary(actor?: { actorId?: string; actorR
     dmy, s.totalOrders, s.totalCustomers, s.milkLitres, s.totalBottles,
     s.subscriptionOrders, s.oneTimeOrders, s.trialOrders, s.b2bOrders,
     s.paymentSummary.paid, s.pendingPayments.count, m.confirmedNotAssigned,
-  ], { retries: Math.max(0, cfg.whatsappRetries ?? 2), extra: (link ? `📄 Full manifest:\n${link}\n` : "") + "(This is a TEST from the DOODLY Admin Panel.)" });
+    link ?? MANIFEST_FALLBACK,
+  ], { retries: Math.max(0, cfg.whatsappRetries ?? 2), extra: "(This is a TEST from the DOODLY Admin Panel.)" });
   await audit({
     userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system",
     action: "ops.whatsapp.test",
@@ -439,10 +443,11 @@ async function dispatchNotifications(cfg: CutoffConfig, s: DeliverySummary, m: M
         dmy, s.totalOrders, s.totalCustomers, s.milkLitres, s.totalBottles,
         s.subscriptionOrders, s.oneTimeOrders, s.trialOrders, s.b2bOrders,
         s.paymentSummary.paid, s.pendingPayments.count, m.confirmedNotAssigned,
+        // Variable, not appended text — see the note on OPS_TEMPLATES.
+        link ?? MANIFEST_FALLBACK,
       ];
       waLog = await broadcastOpsWhatsApp("daily_delivery_summary", cfg.whatsappRecipients, vars, {
         retries: Math.max(0, cfg.whatsappRetries ?? 2),
-        extra: link ? `📄 Full manifest (customers, addresses, notes):\n${link}\n(link expires in 3 days)` : undefined,
       });
       whatsapp = waLog.filter((x) => x.status === "SENT").length;
     } catch (e) { log.error("ops.cutoff", "whatsapp send failed", { err: (e as Error)?.message }); }

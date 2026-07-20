@@ -22,7 +22,11 @@ import { log } from "@/lib/logger";
  *  {"daily_delivery_summary":{"name":"daily_delivery_summary","lang":"en","header":0}} */
 export const OPS_TEMPLATES = {
   daily_delivery_summary: {
-    vars: ["date", "totalOrders", "customers", "litres", "bottles", "subscription", "oneTime", "trial", "b2b", "paid", "pending", "awaitingAssignment"],
+    // NB: the manifest link is variable 13, NOT trailing free text. Once an event is
+    // mapped to an approved template the provider sends ONLY the variables and drops
+    // msg.text (lib/notifications/providers.ts) — a link appended as text would
+    // silently vanish the day the template goes live.
+    vars: ["date", "totalOrders", "customers", "litres", "bottles", "subscription", "oneTime", "trial", "b2b", "paid", "pending", "awaitingAssignment", "manifestLink"],
     text: (v: string[]) =>
       `🥛 DOODLY – Tomorrow's Delivery Summary\n\n` +
       `📅 Delivery Date: ${v[0]}\n\n` +
@@ -31,6 +35,7 @@ export const OPS_TEMPLATES = {
       `🔄 Subscription Orders: ${v[5]}\n🛒 One-Time Orders: ${v[6]}\n🧪 Trial Orders: ${v[7]}\n🏢 B2B Orders: ${v[8]}\n\n` +
       `💰 Paid Orders: ${v[9]}\n⌛ Pending Payments: ${v[10]}\n\n` +
       `🚚 Ready for Auto Assignment: ${v[11]}\n\n` +
+      `📄 Full manifest: ${v[12]}\n\n` +
       `Please review today's operations in the DOODLY Admin Panel.\n\n— DOODLY Operations`,
   },
   new_order_alert: {
