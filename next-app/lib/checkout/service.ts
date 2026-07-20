@@ -294,6 +294,8 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     try { const { ensureDeliveryForOrder } = await import("@/lib/orders/delivery-bridge"); await ensureDeliveryForOrder(order.id); } catch (e) { console.error("delivery.ensure", (e as Error)?.message); }
     // Inventory: decrement the filled-bottle stock now that the order is PAID (idempotent).
     try { const { commitOrderStock } = await import("@/lib/inventory/order-stock"); await commitOrderStock(order.id); } catch (e) { console.error("stock.commit", (e as Error)?.message); }
+    // Ops WhatsApp: tell the team an order landed (this path never reaches the gateway).
+    try { const { notifyNewOrder } = await import("@/lib/ops/events"); await notifyNewOrder(order.id); } catch (e) { console.error("ops.newOrder", (e as Error)?.message); }
     return { ...base, paid: true, method: "wallet", cashback };
   }
 
@@ -311,6 +313,8 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     try { const { ensureDeliveryForOrder } = await import("@/lib/orders/delivery-bridge"); await ensureDeliveryForOrder(order.id); } catch (e) { console.error("delivery.ensure", (e as Error)?.message); }
     // Inventory: decrement the filled-bottle stock (COD is confirmed at placement; idempotent).
     try { const { commitOrderStock } = await import("@/lib/inventory/order-stock"); await commitOrderStock(order.id); } catch (e) { console.error("stock.commit", (e as Error)?.message); }
+    // Ops WhatsApp: COD is confirmed at placement, so the team needs to know now.
+    try { const { notifyNewOrder } = await import("@/lib/ops/events"); await notifyNewOrder(order.id); } catch (e) { console.error("ops.newOrder", (e as Error)?.message); }
     return { ...base, paid: false, method: "cod" };
   }
 

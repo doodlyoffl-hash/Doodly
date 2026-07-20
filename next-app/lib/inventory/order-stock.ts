@@ -18,6 +18,9 @@ async function alertLowStock(v: { label: string; stock: number; lowStockThreshol
     const body = v.stock <= 0 ? `${v.label} is OUT OF STOCK — restock in Admin → Inventory.` : `${v.label} is low on stock — ${v.stock} left.`;
     for (const a of admins) await notify(a.id, { title: "Inventory alert", body });
   } catch { /* non-blocking */ }
+  // Same event, second channel: ops rarely have the panel open when stock runs out
+  // before a dispatch. Extends this alert rather than adding a competing one.
+  try { const { notifyLowInventory } = await import("@/lib/ops/events"); await notifyLowInventory(v); } catch { /* non-blocking */ }
 }
 
 export async function commitOrderStock(orderId: string): Promise<{ committed: boolean } | null> {

@@ -54,7 +54,11 @@ export async function POST(req: NextRequest) {
         // whichever of webhook / verify wins the race fires the notification.
         if (op?.orderId) {
           const flip = await db.order.updateMany({ where: { id: op.orderId, status: { not: "PAID" } }, data: { status: "PAID" } }).catch(() => ({ count: 0 }));
-          if (flip.count > 0) { try { await notifyOrderConfirmed(op.userId, { number: num(op.orderId) }); } catch { /* non-blocking */ } }
+          if (flip.count > 0) {
+            try { await notifyOrderConfirmed(op.userId, { number: num(op.orderId) }); } catch { /* non-blocking */ }
+            // Ops WhatsApp — inside the flip guard so webhook+verify can't double-send.
+            try { const { notifyNewOrder } = await import("@/lib/ops/events"); await notifyNewOrder(op.orderId); } catch { /* non-blocking */ }
+          }
           // referral reward — credit the referrer if this buyer now has a qualifying subscription (idempotent, non-blocking)
           await maybeAwardReferralForUser(op.userId, { actorRole: "system" });
           // DOODLY Pure Rewards: order + subscription points (idempotent; verify may also call this)

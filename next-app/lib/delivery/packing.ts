@@ -29,7 +29,19 @@ export async function advancePacking(deliveryId: string, status: PackingStatus, 
   if ((CLOSED as readonly string[]).includes(del.status)) throw Errors.badRequest("This delivery is already completed — nothing to pack.");
   await db.delivery.update({ where: { id: deliveryId }, data: { packingStatus: status, ...packedData(status, actor) } });
   await audit({ userId: actor.actorId ?? null, actorRole: actor.actorRole ?? "system", action: `delivery.packing.${status.toLowerCase()}`, target: deliveryId, ctx: actor.ctx });
+  await announcePackingIfDone([deliveryId], status);
   return { id: deliveryId, packingStatus: status };
+}
+
+/** Packing has no "day complete" event, so we detect the edge after each advance:
+    once nothing is left PENDING/PACKING for that day, ops get the dispatch summary.
+    Only worth checking when a stop actually reached a finished stage. */
+async function announcePackingIfDone(ids: string[], status: PackingStatus) {
+  if (status !== "PACKED" && status !== "READY") return;
+  try {
+    const { notifyPackingCompleteIfDone } = await import("@/lib/ops/events");
+    await notifyPackingCompleteIfDone(ids);
+  } catch { /* non-blocking — packing must never fail on an alert */ }
 }
 
 /** Advance MANY deliveries at once (skips already-completed ones). */
@@ -39,6 +51,7 @@ export async function bulkAdvancePacking(deliveryIds: string[], status: PackingS
     data: { packingStatus: status, ...packedData(status, actor) },
   });
   await audit({ userId: actor.actorId ?? null, actorRole: actor.actorRole ?? "system", action: `delivery.packing.bulk.${status.toLowerCase()}`, target: `${res.count} deliveries`, ctx: actor.ctx });
+  if (res.count > 0) await announcePackingIfDone(deliveryIds, status);
   return { updated: res.count, status };
 }
 

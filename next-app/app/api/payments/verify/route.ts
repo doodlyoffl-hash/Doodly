@@ -47,7 +47,11 @@ export async function POST(req: NextRequest) {
     // Flip only if not already PAID (webhook may have won the race) so the
     // confirmation notification fires exactly once per order.
     const flip = await db.order.updateMany({ where: { id: payment.orderId, status: { not: "PAID" } }, data: { status: "PAID" } }).catch(() => ({ count: 0 }));
-    if (flip.count > 0) { try { await notifyOrderConfirmed(payment.userId, { number: num(payment.orderId) }); } catch { /* non-blocking */ } }
+    if (flip.count > 0) {
+      try { await notifyOrderConfirmed(payment.userId, { number: num(payment.orderId) }); } catch { /* non-blocking */ }
+      // Ops WhatsApp — inside the flip guard so webhook+verify can't double-send.
+      try { const { notifyNewOrder } = await import("@/lib/ops/events"); await notifyNewOrder(payment.orderId); } catch { /* non-blocking */ }
+    }
     // Sync this gateway payment into the unified Payments ledger (best-effort).
     await syncFromOrderPayment(payment.id).catch((e) => console.error("payment.ledgerSync", (e as Error)?.message));
     try { cashback = await creditTrialCashback({ userId: payment.userId }); }

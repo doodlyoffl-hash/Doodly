@@ -261,6 +261,14 @@ export async function runScheduledAutoAssignment(actor: Actor = { actorRole: "sy
     assigned += r.assigned || 0; queued += r.queued || 0;
     results.push({ slot: c.slot, assigned: r.assigned || 0, queued: r.queued || 0, executives: r.executives || 0 });
   }
+  // Outside the per-slot transactions (which retry on serialization conflicts) —
+  // an alert sent in there would replay on every retry. Silent when nothing was
+  // assigned: this sweep also runs on every executive shift-start.
+  try {
+    const { notifyAutoAssignmentComplete } = await import("@/lib/ops/events");
+    await notifyAutoAssignmentComplete({ dateIso: isoOf(start), assigned });
+  } catch { /* non-blocking */ }
+
   return { ok: true, strategy, slots: combos.length, assigned, queued, results };
 }
 

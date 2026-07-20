@@ -38,11 +38,17 @@ export interface CutoffConfig {
   lastDispatch: WaDelivery[];      // delivery-confirmation log for the last summary
   lastRunDate: string | null;      // IST "YYYY-MM-DD" the cut-off last prepared (idempotency)
   lastRunAt: string | null;        // ISO timestamp of the last run
+  // --- the six event-driven ops alerts (lib/ops/events.ts) share this recipient
+  //     list and master switch; each can be silenced independently. ---
+  events?: Record<string, boolean>;        // per-event on/off (default: all on)
+  eventEscalatedAt?: Record<string, string>; // last in-app escalation per event (throttle)
+  packingSummaryDate?: string | null;      // IST day whose packing completion was announced
 }
 const DEFAULTS: CutoffConfig = {
   enabled: true, cutoffTime: "20:00", emailRecipients: [], notifyRoles: true,
   whatsappEnabled: true, whatsappRecipients: [], whatsappRetries: 2, lastDispatch: [],
   lastRunDate: null, lastRunAt: null,
+  events: {}, eventEscalatedAt: {}, packingSummaryDate: null,
 };
 
 /** Log/display numbers partially masked — an audit trail shouldn't leak full numbers. */
@@ -55,6 +61,13 @@ function maskNumber(n: string): string {
 export async function getCutoffConfig(): Promise<CutoffConfig> {
   const row = await db.appSetting.findUnique({ where: { key: CFG_KEY } });
   return { ...DEFAULTS, ...((row?.value as Partial<CutoffConfig>) ?? {}) };
+}
+/** Shared config writer, exported for the event layer (lib/ops/events.ts) so its
+ *  per-event state lives beside the cut-off's rather than in a second setting.
+ *  Read-modify-write: it merges over the CURRENT value, so it can't clobber
+ *  `lastDispatch` (the summary's delivery-confirmation log). */
+export async function patchOpsConfig(patch: Partial<CutoffConfig>, updatedBy?: string | null) {
+  return patchConfig(patch, updatedBy);
 }
 async function patchConfig(patch: Partial<CutoffConfig>, updatedBy?: string | null) {
   const cur = await getCutoffConfig();
@@ -74,6 +87,15 @@ export async function setCutoffConfig(patch: Partial<CutoffConfig>, actor?: { ac
   if (patch.emailRecipients !== undefined) clean.emailRecipients = (patch.emailRecipients ?? []).map((s) => String(s).trim().toLowerCase()).filter((s) => /.+@.+\..+/.test(s)).slice(0, 20);
   if (patch.whatsappRetries !== undefined) clean.whatsappRetries = Math.max(0, Math.min(5, Math.floor(Number(patch.whatsappRetries) || 0)));
   if (patch.whatsappRecipients !== undefined) clean.whatsappRecipients = (patch.whatsappRecipients ?? []).map((s) => String(s).replace(/[^\d+]/g, "")).filter(Boolean).slice(0, 20);
+  if (patch.events !== undefined) {
+    // Merge (not replace) so toggling one alert can't silently reset the others,
+    // and drop unknown keys so a typo can't disable a real alert by accident.
+    const { OPS_EVENT_DEFAULTS } = await import("@/lib/ops/events");
+    const cur = await getCutoffConfig();
+    const merged: Record<string, boolean> = { ...(cur.events ?? {}) };
+    for (const [k, v] of Object.entries(patch.events)) if (k in OPS_EVENT_DEFAULTS) merged[k] = !!v;
+    clean.events = merged;
+  }
   const next = await patchConfig(clean, actor?.actorId);
   await audit({ userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system", action: "ops.cutoff.config", target: `${CFG_KEY} · ${JSON.stringify(clean).slice(0, 180)}` });
   return next;
@@ -86,7 +108,7 @@ export function nextDeliveryDayIso(): string {
   const t = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1));
   return t.toISOString().slice(0, 10);
 }
-function istTodayIso(): string { return istNow().toISOString().slice(0, 10); }
+export function istTodayIso(): string { return istNow().toISOString().slice(0, 10); }
 function istMinutesNow(): number { const n = istNow(); return n.getUTCHours() * 60 + n.getUTCMinutes(); }
 function cutoffMinutes(hhmm: string): number { const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm); return m ? Number(m[1]) * 60 + Number(m[2]) : 1200; }
 
@@ -254,6 +276,7 @@ export interface CutoffResult {
   summary: DeliverySummary;
   missed: MissedReport;
   notified?: { emails: number; whatsapp: number; adminsAlerted: boolean };
+  dayClose?: { date: string; delivered: number; pending: number; failed: number; alertedMissed: boolean };
 }
 
 export async function runDailyCutoff(opts: { force?: boolean; date?: string; actor?: { actorId?: string; actorRole?: string } } = {}): Promise<CutoffResult> {
@@ -275,6 +298,16 @@ export async function runDailyCutoff(opts: { force?: boolean; date?: string; act
   let notified: { emails: number; whatsapp: number; adminsAlerted: boolean; waLog: WaDelivery[] } = { emails: 0, whatsapp: 0, adminsAlerted: false, waLog: [] };
   try { notified = await dispatchNotifications(cfg, summary, missed); } catch (e) { log.error("ops.cutoff", "notify failed", { err: (e as Error)?.message }); }
 
+  // The cut-off is also the day CLOSING, so it's the honest moment to report how
+  // today actually went and to flag stops that never completed. Riding this run
+  // (rather than a third cron) keeps us inside the Hobby 2-cron cap, and the
+  // once-a-day idempotency guard above means it can't re-announce.
+  let dayClose: CutoffResult["dayClose"];
+  try {
+    const { notifyDayClose } = await import("@/lib/ops/events");
+    dayClose = await notifyDayClose(istTodayIso());
+  } catch (e) { log.error("ops.cutoff", "day-close alert failed", { err: (e as Error)?.message }); }
+
   // Persist the per-recipient delivery-confirmation log alongside the idempotency marker,
   // so the status poller can upgrade SENT → DELIVERED/READ and admins can see failures.
   await patchConfig({ lastRunDate: target, lastRunAt: new Date().toISOString(), lastDispatch: notified.waLog }, opts.actor?.actorId);
@@ -284,7 +317,7 @@ export async function runDailyCutoff(opts: { force?: boolean; date?: string; act
     target: `${target} · ${summary.totalOrders} orders · ${summary.totalBottles} bottles · ${summary.milkLitres}L · bridged ${prepared.bridged} · unassigned ${missed.confirmedNotAssigned} · emails ${notified.emails} · wa ${notified.whatsapp}`,
   });
 
-  return { ok: true, date: target, prepared, summary, missed, notified };
+  return { ok: true, date: target, prepared, summary, missed, notified, dayClose };
 }
 
 /** Fire the cut-off automatically when it's due and hasn't run for tomorrow yet.

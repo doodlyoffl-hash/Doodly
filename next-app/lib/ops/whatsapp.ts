@@ -83,6 +83,12 @@ export async function sendOpsWhatsApp(
 ): Promise<WaDelivery> {
   const def = OPS_TEMPLATES[key];
   const v = vars.map((x) => String(x ?? ""));
+  // Variables are POSITIONAL — a caller passing the wrong count would silently
+  // render "undefined" into an approved template (and Superfone rejects a
+  // template whose variable count doesn't match). Say so loudly instead.
+  if (v.length !== def.vars.length) {
+    log.warn("ops.whatsapp", "variable count mismatch", { key, got: v.length, expected: def.vars.length, expects: def.vars.join(",") });
+  }
   const body = def.text(v) + (opts.extra ? `\n\n${opts.extra}` : "");
   const retries = Math.max(0, opts.retries ?? 2);
   const tpl = superfoneTemplateFor(key);

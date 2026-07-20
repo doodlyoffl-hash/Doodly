@@ -1895,6 +1895,16 @@
       '<p class="muted-sm" style="margin:4px 0 0">Every active Admin / Super Admin / Operations user is always emailed.</p>' +
       '<label class="dac-f" style="margin-top:10px"><span>WhatsApp recipients (comma-separated, with country code)</span><input class="input" id="oc-wa" value="' + esc((cfg.whatsappRecipients || []).join(", ")) + '" placeholder="+919876543210"></label>' +
       '<label class="dac-f" style="margin-top:10px"><span>Retries per recipient on failure (0-5)</span><input class="input" id="oc-retry" type="number" min="0" max="5" value="' + (cfg.whatsappRetries == null ? 2 : cfg.whatsappRetries) + '" style="max-width:120px"></label>' +
+      // Which operational alerts go out on WhatsApp, rendered from the server's own
+      // list so a new alert appears here without a frontend change.
+      ((cfg.events || []).length
+        ? '<div style="margin-top:14px"><span class="muted-sm" style="display:block;margin-bottom:6px">WhatsApp alerts</span>' +
+          '<div style="display:flex;gap:10px 16px;flex-wrap:wrap">' +
+          (cfg.events || []).map(function (ev) {
+            return '<label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" class="oc-ev" data-key="' + esc(ev.key) + '"' + (ev.enabled !== false ? " checked" : "") + "> " + esc(ev.label) + "</label>";
+          }).join("") +
+          '</div><p class="muted-sm" style="margin:6px 0 0">The nightly delivery summary is always sent when WhatsApp is on.</p></div>'
+        : "") +
       '<div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap">' +
         '<label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="oc-en"' + (cfg.enabled !== false ? " checked" : "") + '> Enabled</label>' +
         '<label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="oc-wae"' + (cfg.whatsappEnabled !== false ? " checked" : "") + '> WhatsApp</label>' +
@@ -1907,8 +1917,11 @@
     var err = m.body.querySelector("#oc-err");
     m.body.querySelector("#oc-save").addEventListener("click", function () {
       var list = function (s) { return String(s || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean); };
+      var events = {};
+      Array.prototype.forEach.call(m.body.querySelectorAll(".oc-ev"), function (c) { events[c.getAttribute("data-key")] = c.checked; });
       DOODLY_API.post("/api/admin/ops/cutoff", {
         action: "config",
+        events: events,
         cutoffTime: m.body.querySelector("#oc-time").value.trim(),
         emailRecipients: list(m.body.querySelector("#oc-emails").value),
         whatsappRecipients: list(m.body.querySelector("#oc-wa").value),

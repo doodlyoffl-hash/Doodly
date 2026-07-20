@@ -10,6 +10,7 @@ import { ok, parseBody, route, Errors } from "@/lib/http";
 import { requirePermission } from "@/lib/auth/authorize";
 import { readUserId, readRole } from "@/lib/auth/identity";
 import { getCutoffStatus, maybeRunCutoff, runDailyCutoff, getCutoffConfig, setCutoffConfig, sendTestWhatsAppSummary } from "@/lib/ops/cutoff";
+import { OPS_EVENT_DEFAULTS, OPS_EVENT_LABEL } from "@/lib/ops/events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +21,11 @@ export const GET = route("admin.ops.cutoff.status", async (req: NextRequest) => 
   const triggered = await maybeRunCutoff({ source: "admin_dashboard" }).catch(() => ({ ran: false, reason: "error", date: "" }));
   const status = await getCutoffStatus();
   const config = await getCutoffConfig();
-  return ok({ ...status, triggered, config: { enabled: config.enabled, cutoffTime: config.cutoffTime, emailRecipients: config.emailRecipients, whatsappEnabled: config.whatsappEnabled, whatsappRecipients: config.whatsappRecipients, whatsappRetries: config.whatsappRetries, notifyRoles: config.notifyRoles } });
+  // The six event alerts, each resolved to its effective on/off state + label, so the
+  // settings UI renders straight from the server's own list of what exists.
+  const events = (Object.keys(OPS_EVENT_DEFAULTS) as (keyof typeof OPS_EVENT_DEFAULTS)[])
+    .map((k) => ({ key: k, label: OPS_EVENT_LABEL[k], enabled: config.events?.[k] ?? OPS_EVENT_DEFAULTS[k] }));
+  return ok({ ...status, triggered, config: { enabled: config.enabled, cutoffTime: config.cutoffTime, emailRecipients: config.emailRecipients, whatsappEnabled: config.whatsappEnabled, whatsappRecipients: config.whatsappRecipients, whatsappRetries: config.whatsappRetries, notifyRoles: config.notifyRoles, events } });
 });
 
 const bodySchema = z.discriminatedUnion("action", [
@@ -35,6 +40,7 @@ const bodySchema = z.discriminatedUnion("action", [
     whatsappRecipients: z.array(z.string()).optional(),
     whatsappRetries: z.number().optional(),
     notifyRoles: z.boolean().optional(),
+    events: z.record(z.string(), z.boolean()).optional(),
   }),
 ]);
 
