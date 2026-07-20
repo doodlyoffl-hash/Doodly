@@ -31,6 +31,7 @@ export const GET = route("admin.ops.cutoff.status", async (req: NextRequest) => 
 const bodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("run") }),
   z.object({ action: z.literal("test-whatsapp") }),
+  z.object({ action: z.literal("check-templates") }),
   z.object({
     action: z.literal("config"),
     enabled: z.boolean().optional(),
@@ -51,6 +52,13 @@ export const POST = route("admin.ops.cutoff.action", async (req: NextRequest) =>
     requirePermission(req, "deliveries", "edit");
     const r = await runDailyCutoff({ force: true, actor });
     return ok(r);
+  }
+  if (body.action === "check-templates") {
+    // Read-only: lists the account's approved templates and compares them with what
+    // the code sends. Never sends a message, so `view` is enough.
+    requirePermission(req, "deliveries", "view");
+    const { checkOpsTemplates } = await import("@/lib/ops/whatsapp");
+    return ok(await checkOpsTemplates());
   }
   if (body.action === "test-whatsapp") {
     requirePermission(req, "deliveries", "edit");

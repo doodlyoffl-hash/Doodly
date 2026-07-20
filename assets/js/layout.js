@@ -1916,8 +1916,12 @@
         '<label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="oc-roles"' + (cfg.notifyRoles !== false ? " checked" : "") + '> In-app alert</label>' +
       "</div>" +
       '<p class="dac-err" id="oc-err"></p>' +
+      '<div id="oc-tpl" style="margin-top:10px"></div>' +
       '<div style="display:flex;justify-content:space-between;gap:10px;margin-top:12px;flex-wrap:wrap">' +
-        '<button class="btn btn-ghost sm" id="oc-test">Test WhatsApp summary</button>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+          '<button class="btn btn-ghost sm" id="oc-chk">Check templates</button>' +
+          '<button class="btn btn-ghost sm" id="oc-test">Test WhatsApp summary</button>' +
+        "</div>" +
         '<button class="btn btn-primary sm" id="oc-save">Save settings</button></div>';
     var err = m.body.querySelector("#oc-err");
     m.body.querySelector("#oc-save").addEventListener("click", function () {
@@ -1936,6 +1940,33 @@
         notifyRoles: m.body.querySelector("#oc-roles").checked,
       }).then(function () { dacToast("Cut-off settings saved."); m.close(); wireOpsCutoffAlert(); })
         .catch(function (e) { err.textContent = e.code === "forbidden" ? "Only a Super Admin can change these settings." : (e.message || "Couldn't save."); });
+    });
+    // Read-only diagnosis: what Meta approved vs what the code sends. A language or
+    // parameter-count mismatch is otherwise invisible until a real send fails with an
+    // opaque provider 500 — which is exactly how this button came to exist.
+    var cb = m.body.querySelector("#oc-chk"), tpl = m.body.querySelector("#oc-tpl");
+    if (cb) cb.addEventListener("click", function () {
+      cb.disabled = true; err.textContent = ""; tpl.innerHTML = '<p class="muted-sm">Checking templates…</p>';
+      DOODLY_API.post("/api/admin/ops/cutoff", { action: "check-templates" })
+        .then(function (x) {
+          var rows = x.rows || [], bad = rows.filter(function (r) { return !r.ok; });
+          if (x.error) { tpl.innerHTML = '<p class="dac-err">' + esc(x.error) + "</p>"; return; }
+          tpl.innerHTML =
+            '<div class="badge ' + (bad.length ? "amber" : "green") + '" style="margin-bottom:6px">' +
+              (bad.length ? "⚠ " + bad.length + " of " + rows.length + " need attention" : "✅ All " + rows.length + " templates are approved and match") + "</div>" +
+            '<div style="max-height:210px;overflow:auto">' + rows.map(function (r) {
+              var acc = r.account ? esc(r.account.status + " · " + r.account.language + " · " + r.account.params + " var") : "—";
+              return '<div style="display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px solid var(--line,#eee)">' +
+                '<span>' + (r.ok ? "✅" : "⚠") + "</span>" +
+                '<div style="flex:1;min-width:0"><code style="font-size:11px">' + esc(r.key) + "</code> " +
+                  '<span class="muted-sm">sends ' + r.expects + " var · account: " + acc + "</span>" +
+                  (r.issue ? '<div class="dac-err" style="margin:2px 0 0">' + esc(r.issue) + "</div>" : "") +
+                  (r.fix ? '<div class="muted-sm" style="word-break:break-all">→ ' + esc(r.fix) + "</div>" : "") +
+                "</div></div>";
+            }).join("") + "</div>";
+        })
+        .catch(function (e) { tpl.innerHTML = ""; err.textContent = e.message || "Couldn't check the templates."; })
+        .finally(function () { cb.disabled = false; });
     });
     var tb = m.body.querySelector("#oc-test");
     if (tb) tb.addEventListener("click", function () {

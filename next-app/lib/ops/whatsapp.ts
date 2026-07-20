@@ -14,7 +14,7 @@
    ============================================================= */
 import "server-only";
 import { sendWhatsApp } from "@/lib/notifications/providers";
-import { superfone, superfoneTemplateFor } from "@/lib/notifications/superfone";
+import { superfone, superfoneTemplateFor, superfoneListTemplates } from "@/lib/notifications/superfone";
 import { log } from "@/lib/logger";
 
 /** Canonical ops event keys. Map each to an approved template name via
@@ -128,6 +128,80 @@ export async function sendOpsWhatsApp(
   }
   log.warn("ops.whatsapp", "all attempts failed", { key, to: to.slice(-4), error: lastErr });
   return { to, status: "FAILED", messageId: null, sentAt: null, attempts: retries + 1, error: (lastErr || "unknown").slice(0, 300), via };
+}
+
+// ---------------------------------------------------------------- diagnostics
+export interface TemplateCheck {
+  key: OpsTemplateKey;
+  label: string;
+  expects: number;                                   // parameters the code sends
+  mapped: { name: string; lang: string; header: number } | null;
+  account: { status: string; language: string; params: number; headerParams: number } | null;
+  ok: boolean;
+  issue: string | null;
+  fix: string | null;
+}
+
+/** Compare what the code sends against what Meta actually approved.
+ *  Read-only — it lists templates, it never sends. This exists because a
+ *  language mismatch (approved as en_US, mapped as en) is invisible until a
+ *  real send fails with an opaque provider 500. */
+export async function checkOpsTemplates(): Promise<{ configured: boolean; error?: string; rows: TemplateCheck[] }> {
+  const keys = Object.keys(OPS_TEMPLATES) as OpsTemplateKey[];
+  const blank = (key: OpsTemplateKey, issue: string, fix: string | null = null): TemplateCheck => ({
+    key, label: key.replace(/_/g, " "), expects: OPS_TEMPLATES[key].vars.length,
+    mapped: null, account: null, ok: false, issue, fix,
+  });
+
+  if (!superfone.configured()) {
+    return { configured: false, error: "WhatsApp is not configured (SUPERFONE_API_KEY unset, or SUPERFONE_DISABLED=1).", rows: keys.map((k) => blank(k, "WhatsApp is not configured")) };
+  }
+  const list = await superfoneListTemplates();
+  if (!list.ok) return { configured: true, error: list.error ?? "Could not list templates.", rows: keys.map((k) => blank(k, "Could not reach Superfone")) };
+
+  const byName = new Map((list.templates ?? []).map((t) => [t.name, t]));
+  const rows = keys.map<TemplateCheck>((key) => {
+    const expects = OPS_TEMPLATES[key].vars.length;
+    const mapped = superfoneTemplateFor(key);
+    const label = key.replace(/_/g, " ");
+    // Fall back to the event key as the template name so an unmapped-but-approved
+    // template is still reported usefully instead of "not found".
+    const acct = byName.get(mapped?.name ?? key) ?? null;
+    const account = acct
+      ? { status: acct.status, language: acct.language, params: acct.headerParams + acct.bodyParams, headerParams: acct.headerParams }
+      : null;
+    const base = { key, label, expects, mapped, account };
+
+    if (!mapped) {
+      return { ...base, ok: false, issue: "Not mapped in SUPERFONE_WA_TEMPLATES",
+        fix: acct ? `Add "${key}":{"name":"${key}","lang":"${acct.language}","header":0}` : `Create and approve a template named ${key}, then map it.` };
+    }
+    if (!account) return { ...base, ok: false, issue: `No template named "${mapped.name}" in this account`, fix: "Check the name, or submit the template for approval." };
+    if (String(account.status).toUpperCase() !== "APPROVED") {
+      return { ...base, ok: false, issue: `Template is ${account.status}, not APPROVED`, fix: "Wait for Meta to approve it, or fix the rejection reason." };
+    }
+    // The one that bit us: approved in a different language than we ask for.
+    if (account.language !== mapped.lang) {
+      return { ...base, ok: false, issue: `Approved as ${account.language}, mapped as ${mapped.lang}`,
+        fix: `Set "lang":"${account.language}" for ${key} in SUPERFONE_WA_TEMPLATES, then redeploy.` };
+    }
+    if (account.params !== expects) {
+      return { ...base, ok: false, issue: `Approved body takes ${account.params} variable(s), the code sends ${expects}`,
+        fix: `Re-submit the template with ${expects} variables, or tell your engineer the approved wording.` };
+    }
+    // `header` decides how many LEADING variables are sent as a header component.
+    // Both directions are fatal: claiming a header the template doesn't have makes
+    // Meta reject the send, and missing one leaves the header empty.
+    if (mapped.header !== account.headerParams) {
+      return { ...base, ok: false,
+        issue: account.headerParams === 0
+          ? `Mapped with header ${mapped.header}, but the approved template has no header`
+          : `Mapped with header ${mapped.header}, but the approved header takes ${account.headerParams} variable(s)`,
+        fix: `Set "header":${account.headerParams} for ${key} in SUPERFONE_WA_TEMPLATES, then redeploy.` };
+    }
+    return { ...base, ok: true, issue: null, fix: null };
+  });
+  return { configured: true, rows };
 }
 
 /** Fan out one ops template to every configured recipient. */

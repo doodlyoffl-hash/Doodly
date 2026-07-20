@@ -147,11 +147,36 @@ export async function superfoneGetMessage(wamid: string): Promise<{ ok: boolean;
   return { ok: true, status: d?.status, statuses: d?.statuses };
 }
 
-/** List the account's WhatsApp templates (verify names/language/APPROVED status). */
-export async function superfoneListTemplates(): Promise<{ ok: boolean; templates?: { name: string; status: string; language: string; category?: string }[]; error?: string }> {
+export interface SuperfoneTemplate {
+  name: string; status: string; language: string; category?: string;
+  /** Highest {{n}} in the BODY — the count a send must supply for that component. */
+  bodyParams: number;
+  /** Highest {{n}} in the HEADER (0 when there is no header component). */
+  headerParams: number;
+}
+type RawComponent = { type?: string; text?: string };
+const paramsIn = (text?: string) => {
+  const n = [...String(text ?? "").matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]));
+  return n.length ? Math.max(...n) : 0;
+};
+
+/** List the account's WhatsApp templates (verify names/language/APPROVED status,
+    and how many positional parameters each approved body actually declares). */
+export async function superfoneListTemplates(): Promise<{ ok: boolean; templates?: SuperfoneTemplate[]; error?: string }> {
   const r = await call("GET", "/whatsapp/message_templates");
   if (!r.ok) return { ok: false, error: errorOf(r.json, r.status) };
-  const outer = r.json?.data as { data?: { name: string; status: string; language: string; category?: string }[] } | undefined;
+  const outer = r.json?.data as { data?: { name: string; status: string; language: string; category?: string; components?: RawComponent[] }[] } | undefined;
   const list = outer?.data ?? [];
-  return { ok: true, templates: list.map((t) => ({ name: t.name, status: t.status, language: t.language, category: t.category })) };
+  return {
+    ok: true,
+    templates: list.map((t) => {
+      const comp = t.components ?? [];
+      const body = comp.find((c) => String(c.type).toUpperCase() === "BODY");
+      const header = comp.find((c) => String(c.type).toUpperCase() === "HEADER");
+      return {
+        name: t.name, status: t.status, language: t.language, category: t.category,
+        bodyParams: paramsIn(body?.text), headerParams: paramsIn(header?.text),
+      };
+    }),
+  };
 }
