@@ -1848,6 +1848,16 @@
             (risks > 0
               ? '<div class="badge amber" style="margin-bottom:10px">⚠ ' + risks + " order(s) need attention" + ((m.ordersWithoutDelivery || 0) ? " · " + m.ordersWithoutDelivery + " confirmed order(s) with no delivery" : "") + "</div>"
               : '<div class="badge green" style="margin-bottom:10px">No unassigned or at-risk orders</div>') +
+            // WhatsApp delivery confirmation for the last summary — a failed send must be
+            // visible here, never silent.
+            (function () {
+              var dl = r.dispatch || []; if (!dl.length) return "";
+              var col = { SENT: "blue", DELIVERED: "green", READ: "green", FAILED: "red", SKIPPED: "grey" };
+              return '<div style="margin-bottom:10px"><span class="muted-sm">WhatsApp summary: </span>' +
+                dl.map(function (d) {
+                  return '<span class="badge ' + (col[d.status] || "grey") + '" title="' + esc((d.messageId || "no id") + (d.error ? " — " + d.error : "") + " · attempts " + d.attempts) + '">' + esc(d.to) + " · " + esc(d.status) + "</span>";
+                }).join(" ") + "</div>";
+            })() +
             '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
               '<button class="btn btn-primary sm" id="oc-view">View delivery list</button>' +
               '<a class="btn btn-ghost sm" href="/admin/assignment.html">Run auto assignment</a>' +
@@ -1884,13 +1894,16 @@
       '<label class="dac-f" style="margin-top:10px"><span>Extra email recipients (comma-separated)</span><input class="input" id="oc-emails" value="' + esc((cfg.emailRecipients || []).join(", ")) + '" placeholder="ops@doodly.in, dispatch@doodly.in"></label>' +
       '<p class="muted-sm" style="margin:4px 0 0">Every active Admin / Super Admin / Operations user is always emailed.</p>' +
       '<label class="dac-f" style="margin-top:10px"><span>WhatsApp recipients (comma-separated, with country code)</span><input class="input" id="oc-wa" value="' + esc((cfg.whatsappRecipients || []).join(", ")) + '" placeholder="+919876543210"></label>' +
+      '<label class="dac-f" style="margin-top:10px"><span>Retries per recipient on failure (0-5)</span><input class="input" id="oc-retry" type="number" min="0" max="5" value="' + (cfg.whatsappRetries == null ? 2 : cfg.whatsappRetries) + '" style="max-width:120px"></label>' +
       '<div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap">' +
         '<label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="oc-en"' + (cfg.enabled !== false ? " checked" : "") + '> Enabled</label>' +
         '<label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="oc-wae"' + (cfg.whatsappEnabled !== false ? " checked" : "") + '> WhatsApp</label>' +
         '<label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="oc-roles"' + (cfg.notifyRoles !== false ? " checked" : "") + '> In-app alert</label>' +
       "</div>" +
       '<p class="dac-err" id="oc-err"></p>' +
-      '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px"><button class="btn btn-primary sm" id="oc-save">Save settings</button></div>';
+      '<div style="display:flex;justify-content:space-between;gap:10px;margin-top:12px;flex-wrap:wrap">' +
+        '<button class="btn btn-ghost sm" id="oc-test">Test WhatsApp summary</button>' +
+        '<button class="btn btn-primary sm" id="oc-save">Save settings</button></div>';
     var err = m.body.querySelector("#oc-err");
     m.body.querySelector("#oc-save").addEventListener("click", function () {
       var list = function (s) { return String(s || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean); };
@@ -1899,11 +1912,24 @@
         cutoffTime: m.body.querySelector("#oc-time").value.trim(),
         emailRecipients: list(m.body.querySelector("#oc-emails").value),
         whatsappRecipients: list(m.body.querySelector("#oc-wa").value),
+        whatsappRetries: Number(m.body.querySelector("#oc-retry").value) || 0,
         enabled: m.body.querySelector("#oc-en").checked,
         whatsappEnabled: m.body.querySelector("#oc-wae").checked,
         notifyRoles: m.body.querySelector("#oc-roles").checked,
       }).then(function () { dacToast("Cut-off settings saved."); m.close(); wireOpsCutoffAlert(); })
         .catch(function (e) { err.textContent = e.code === "forbidden" ? "Only a Super Admin can change these settings." : (e.message || "Couldn't save."); });
+    });
+    var tb = m.body.querySelector("#oc-test");
+    if (tb) tb.addEventListener("click", function () {
+      tb.disabled = true; err.textContent = ""; dacToast("Sending a test WhatsApp summary…");
+      DOODLY_API.post("/api/admin/ops/cutoff", { action: "test-whatsapp" })
+        .then(function (x) {
+          var r = x.results || [], sent = r.filter(function (y) { return y.status === "SENT"; }).length;
+          dacToast("Test summary: " + sent + "/" + r.length + " sent.");
+          if (sent < r.length) err.textContent = "Not delivered: " + r.filter(function (y) { return y.status !== "SENT"; }).map(function (y) { return y.status + " — " + (y.error || "unknown"); }).join(" · ");
+        })
+        .catch(function (e) { err.textContent = e.message || "Couldn't send the test summary."; })
+        .finally(function () { tb.disabled = false; });
     });
   }
 

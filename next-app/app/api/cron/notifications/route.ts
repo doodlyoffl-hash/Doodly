@@ -72,9 +72,11 @@ async function handle(req: NextRequest) {
   // Daily operations cut-off — safety net: if the evening cut-off never ran (no admin
   // logged in, no dedicated 20:00 cron on this plan), prepare tomorrow's delivery cycle +
   // notify ops now, before the morning run. Idempotent (once per delivery day).
-  const { maybeRunCutoff } = await import("@/lib/ops/cutoff");
+  const { maybeRunCutoff, pollCutoffWhatsAppStatuses } = await import("@/lib/ops/cutoff");
   const cutoff = await maybeRunCutoff({ source: "cron" }).catch(() => ({ ran: false, reason: "error", date: "" }));
-  return NextResponse.json({ ok: true, ...result, whatsapp, autopay, addressChanges, addressChangeReminders, subDeliveries, cutoff });
+  // Refresh WhatsApp delivery/read status for the last summary (Superfone has no webhooks).
+  const cutoffWa = await pollCutoffWhatsAppStatuses().catch(() => ({ polled: 0, updated: 0 }));
+  return NextResponse.json({ ok: true, ...result, whatsapp, autopay, addressChanges, addressChangeReminders, subDeliveries, cutoff, cutoffWa });
 }
 
 export const GET = handle;

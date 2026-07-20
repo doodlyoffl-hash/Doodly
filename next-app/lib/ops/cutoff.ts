@@ -20,6 +20,8 @@ import { istDayWindow } from "@/lib/delivery/stats";
 import { ensureDeliveryForOrder } from "@/lib/orders/delivery-bridge";
 import { audit } from "@/lib/auth/audit";
 import { log } from "@/lib/logger";
+import { manifestLink } from "@/lib/ops/manifest-token";
+import { broadcastOpsWhatsApp, type WaDelivery } from "@/lib/ops/whatsapp";
 
 const CFG_KEY = "ops.cutoff";
 const IST_MS = 5.5 * 60 * 60 * 1000;
@@ -32,13 +34,22 @@ export interface CutoffConfig {
   notifyRoles: boolean;            // also raise an in-app alert for ADMIN/SUPER_ADMIN/OPERATIONS
   whatsappEnabled: boolean;
   whatsappRecipients: string[];    // E.164 numbers
+  whatsappRetries: number;         // extra attempts per recipient on transient failure
+  lastDispatch: WaDelivery[];      // delivery-confirmation log for the last summary
   lastRunDate: string | null;      // IST "YYYY-MM-DD" the cut-off last prepared (idempotency)
   lastRunAt: string | null;        // ISO timestamp of the last run
 }
 const DEFAULTS: CutoffConfig = {
   enabled: true, cutoffTime: "20:00", emailRecipients: [], notifyRoles: true,
-  whatsappEnabled: true, whatsappRecipients: [], lastRunDate: null, lastRunAt: null,
+  whatsappEnabled: true, whatsappRecipients: [], whatsappRetries: 2, lastDispatch: [],
+  lastRunDate: null, lastRunAt: null,
 };
+
+/** Log/display numbers partially masked — an audit trail shouldn't leak full numbers. */
+function maskNumber(n: string): string {
+  const s = String(n || "");
+  return s.length <= 4 ? s : s.slice(0, 3) + "*".repeat(Math.max(0, s.length - 7)) + s.slice(-4);
+}
 
 // ---------- config (AppSetting-backed; editable by Super Admin, no code changes) ----------
 export async function getCutoffConfig(): Promise<CutoffConfig> {
@@ -61,6 +72,7 @@ export async function setCutoffConfig(patch: Partial<CutoffConfig>, actor?: { ac
     clean.cutoffTime = patch.cutoffTime.padStart(5, "0");
   }
   if (patch.emailRecipients !== undefined) clean.emailRecipients = (patch.emailRecipients ?? []).map((s) => String(s).trim().toLowerCase()).filter((s) => /.+@.+\..+/.test(s)).slice(0, 20);
+  if (patch.whatsappRetries !== undefined) clean.whatsappRetries = Math.max(0, Math.min(5, Math.floor(Number(patch.whatsappRetries) || 0)));
   if (patch.whatsappRecipients !== undefined) clean.whatsappRecipients = (patch.whatsappRecipients ?? []).map((s) => String(s).replace(/[^\d+]/g, "")).filter(Boolean).slice(0, 20);
   const next = await patchConfig(clean, actor?.actorId);
   await audit({ userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system", action: "ops.cutoff.config", target: `${CFG_KEY} · ${JSON.stringify(clean).slice(0, 180)}` });
@@ -260,10 +272,12 @@ export async function runDailyCutoff(opts: { force?: boolean; date?: string; act
   const summary = await buildSummary(target);
   const missed = await missedOrderReport(target);
 
-  let notified = { emails: 0, whatsapp: 0, adminsAlerted: false };
+  let notified: { emails: number; whatsapp: number; adminsAlerted: boolean; waLog: WaDelivery[] } = { emails: 0, whatsapp: 0, adminsAlerted: false, waLog: [] };
   try { notified = await dispatchNotifications(cfg, summary, missed); } catch (e) { log.error("ops.cutoff", "notify failed", { err: (e as Error)?.message }); }
 
-  await patchConfig({ lastRunDate: target, lastRunAt: new Date().toISOString() }, opts.actor?.actorId);
+  // Persist the per-recipient delivery-confirmation log alongside the idempotency marker,
+  // so the status poller can upgrade SENT → DELIVERED/READ and admins can see failures.
+  await patchConfig({ lastRunDate: target, lastRunAt: new Date().toISOString(), lastDispatch: notified.waLog }, opts.actor?.actorId);
   await audit({
     userId: opts.actor?.actorId ?? null, actorRole: opts.actor?.actorRole ?? "system",
     action: "ops.cutoff.run",
@@ -289,11 +303,67 @@ export async function maybeRunCutoff(opts: { source?: string } = {}): Promise<{ 
   return { ran: r.ok && !r.skipped, reason: r.skipped ?? "ran", date: target };
 }
 
+/** Send a test summary to the configured WhatsApp recipients (Admin Settings →
+ *  "Test WhatsApp Summary"). Uses the SAME template + real data as the nightly run,
+ *  so what ops see here is exactly what they'll get — but changes nothing. */
+export async function sendTestWhatsAppSummary(actor?: { actorId?: string; actorRole?: string }) {
+  const cfg = await getCutoffConfig();
+  const recipients = cfg.whatsappRecipients ?? [];
+  if (!recipients.length) throw new Error("Add at least one WhatsApp recipient first.");
+  const target = nextDeliveryDayIso();
+  const [s, m] = await Promise.all([buildSummary(target), missedOrderReport(target)]);
+  const dmy = s.date.split("-").reverse().join("/");
+  const link = await manifestLink(s.date);
+  const results = await broadcastOpsWhatsApp("daily_delivery_summary", recipients, [
+    dmy, s.totalOrders, s.totalCustomers, s.milkLitres, s.totalBottles,
+    s.subscriptionOrders, s.oneTimeOrders, s.trialOrders, s.b2bOrders,
+    s.paymentSummary.paid, s.pendingPayments.count, m.confirmedNotAssigned,
+  ], { retries: Math.max(0, cfg.whatsappRetries ?? 2), extra: (link ? `📄 Full manifest:\n${link}\n` : "") + "(This is a TEST from the DOODLY Admin Panel.)" });
+  await audit({
+    userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system",
+    action: "ops.whatsapp.test",
+    target: `${s.date} · ${results.filter((r) => r.status === "SENT").length}/${results.length} sent`,
+  }).catch(() => {});
+  return { date: s.date, results };
+}
+
+/** Refresh the delivery status of the last summary's WhatsApp messages
+ *  (SENT → DELIVERED → READ, or FAILED). Superfone exposes status by message id;
+ *  there are no webhooks, so this polls. Called from the daily cron. */
+export async function pollCutoffWhatsAppStatuses(): Promise<{ polled: number; updated: number }> {
+  const cfg = await getCutoffConfig();
+  const dispatch = cfg.lastDispatch ?? [];
+  const pending = dispatch.filter((d) => d.messageId && (d.status === "SENT" || d.status === "DELIVERED"));
+  if (!pending.length) return { polled: 0, updated: 0 };
+
+  const { superfone, superfoneGetMessage } = await import("@/lib/notifications/superfone");
+  if (!superfone.configured()) return { polled: 0, updated: 0 };
+
+  let updated = 0;
+  const next = [...dispatch];
+  for (const d of pending) {
+    try {
+      const r = await superfoneGetMessage(d.messageId!);
+      if (!r.ok || !r.status) continue;
+      const s = r.status.toLowerCase();
+      const mapped: WaDelivery["status"] | null = s === "read" ? "READ" : s === "delivered" ? "DELIVERED" : s === "failed" ? "FAILED" : null;
+      if (!mapped || mapped === d.status) continue;
+      const i = next.findIndex((x) => x.messageId === d.messageId);
+      if (i >= 0) {
+        next[i] = { ...next[i], status: mapped, error: s === "failed" ? JSON.stringify((r.statuses ?? []).flatMap((x) => x.errors ?? []).slice(0, 2)).slice(0, 300) : next[i].error };
+        updated++;
+      }
+    } catch { /* per-message */ }
+  }
+  if (updated) await patchConfig({ lastDispatch: next });
+  return { polled: pending.length, updated };
+}
+
 /** Dashboard status (Step 5): has tomorrow been prepared? + the summary + risks. */
 export async function getCutoffStatus() {
   const cfg = await getCutoffConfig();
   const target = nextDeliveryDayIso();
-  const [summary, missed] = await Promise.all([buildSummary(target), missedOrderReport(target)]);
+  const [summary, missed, manifestUrl] = await Promise.all([buildSummary(target), missedOrderReport(target), manifestLink(target)]);
   return {
     date: target,
     ready: cfg.lastRunDate === target,
@@ -303,6 +373,10 @@ export async function getCutoffStatus() {
     pastCutoff: istMinutesNow() >= cutoffMinutes(cfg.cutoffTime),
     summary,
     missed,
+    // delivery-confirmation log for the last summary (masked numbers)
+    dispatch: (cfg.lastDispatch ?? []).map((d) => ({ ...d, to: maskNumber(d.to) })),
+    // the same signed link the WhatsApp/email summary carries (share-safe, expires)
+    manifestUrl,
   };
 }
 
@@ -320,13 +394,42 @@ async function dispatchNotifications(cfg: CutoffConfig, s: DeliverySummary, m: M
     for (const addr of to) { try { await sendOpsDailySummary(addr, { dmy, summary: s, missed: m }); emails++; } catch { /* per-recipient */ } }
   } catch (e) { log.error("ops.cutoff", "email send failed", { err: (e as Error)?.message }); }
 
-  // WhatsApp concise summary to configured numbers
+  // ---- WhatsApp summary (Superfone) + signed manifest link ----
+  // Superfone has no document endpoint, so the detailed manifest PDF travels as a
+  // short-lived signed link rather than an attachment. Each recipient's outcome is
+  // recorded (id / status / attempts / error) for the delivery-confirmation log.
+  let waLog: WaDelivery[] = [];
   if (cfg.whatsappEnabled && (cfg.whatsappRecipients?.length ?? 0)) {
-    const body = `📦 DOODLY — Tomorrow's Delivery (${dmy})\n• Orders: ${s.totalOrders}\n• Customers: ${s.totalCustomers}\n• Milk: ${s.milkLitres} L\n• Bottles: ${s.totalBottles}\n• Subscription: ${s.subscriptionOrders} · One-time: ${s.oneTimeOrders} · Trial: ${s.trialOrders}` + (m.confirmedNotAssigned ? `\n⚠ ${m.confirmedNotAssigned} unassigned` : "") + `\nReview in the DOODLY Admin Panel.`;
     try {
-      const { sendWhatsApp } = await import("@/lib/notifications/providers");
-      for (const num of cfg.whatsappRecipients) { try { await sendWhatsApp(num, { text: body }); whatsapp++; } catch { /* per-recipient */ } }
+      const link = await manifestLink(s.date);
+      const vars = [
+        dmy, s.totalOrders, s.totalCustomers, s.milkLitres, s.totalBottles,
+        s.subscriptionOrders, s.oneTimeOrders, s.trialOrders, s.b2bOrders,
+        s.paymentSummary.paid, s.pendingPayments.count, m.confirmedNotAssigned,
+      ];
+      waLog = await broadcastOpsWhatsApp("daily_delivery_summary", cfg.whatsappRecipients, vars, {
+        retries: Math.max(0, cfg.whatsappRetries ?? 2),
+        extra: link ? `📄 Full manifest (customers, addresses, notes):\n${link}\n(link expires in 3 days)` : undefined,
+      });
+      whatsapp = waLog.filter((x) => x.status === "SENT").length;
     } catch (e) { log.error("ops.cutoff", "whatsapp send failed", { err: (e as Error)?.message }); }
+
+    // Never fail silently: if EVERY recipient failed, escalate to the admins in-app.
+    const failed = waLog.filter((x) => x.status === "FAILED" || x.status === "SKIPPED");
+    if (waLog.length && failed.length === waLog.length) {
+      try {
+        const { notifyAdmins } = await import("@/lib/assignment/notify");
+        await notifyAdmins(db, "⚠ WhatsApp summary could not be delivered",
+          `Tomorrow's delivery summary (${dmy}) failed to reach all ${waLog.length} WhatsApp recipient(s): ${failed[0].error ?? "unknown"}. The email summary and the Admin Panel are unaffected.`, "PUSH");
+      } catch { /* non-blocking */ }
+    }
+    for (const d of waLog) {
+      await audit({
+        actorRole: "system",
+        action: d.status === "SENT" ? "ops.whatsapp.sent" : "ops.whatsapp.failed",
+        target: `${s.date} · ${maskNumber(d.to)} · ${d.status}${d.messageId ? " · " + d.messageId : ""} · attempts ${d.attempts}${d.error ? " · " + d.error : ""}`,
+      }).catch(() => { /* audit must never block a send */ });
+    }
   }
 
   // in-app alert for ops/admin
@@ -348,5 +451,5 @@ async function dispatchNotifications(cfg: CutoffConfig, s: DeliverySummary, m: M
     } catch { /* non-blocking */ }
   }
 
-  return { emails, whatsapp, adminsAlerted };
+  return { emails, whatsapp, adminsAlerted, waLog };
 }
