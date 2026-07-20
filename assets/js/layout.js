@@ -1881,7 +1881,12 @@
       });
       var c = host.querySelector("#oc-cfg"); if (c) c.addEventListener("click", function () { openCutoffConfig(cfg); });
     }).catch(function (e) {
-      host.innerHTML = e.code === "forbidden" ? "" : '<div class="panel panel-pad muted-sm" style="margin-bottom:14px">Couldn\'t load the cut-off status — ' + esc(e.message || e.code || "error") + "</div>";
+      // A 403 used to blank the panel entirely, which was indistinguishable from a
+      // broken page — say why instead, so nobody hunts for a button their role hides.
+      host.innerHTML = '<div class="panel panel-pad muted-sm" style="margin-bottom:14px">' +
+        (e.code === "forbidden"
+          ? "Your role can't view the daily cut-off. Ask a Super Admin for the <b>Deliveries → view</b> permission."
+          : "Couldn't load the cut-off status — " + esc(e.message || e.code || "error")) + "</div>";
     });
   }
   window.DOODLY_ADMIN.wireOpsCutoffAlert = wireOpsCutoffAlert;
@@ -5666,6 +5671,7 @@
     if (route === "admin/packing") return wirePackingBackend();
     if (route === "admin/assignment") return wireAssignmentBackend();
     if (route === "admin/delivery-calendar") return wireDeliveryCalendarBackend();
+    if (route === "admin/cutoff") return wireOpsCutoffAlert();
     // ?date=YYYY-MM-DD deep-links a specific day (the Delivery Calendar links here).
     if (route === "admin/deliveries") { var qd = null; try { qd = new URLSearchParams(location.search).get("date"); } catch (e) {} return wireDeliveriesBackend(qd && /^\d{4}-\d{2}-\d{2}$/.test(qd) ? qd : undefined); }
     if (route === "admin/delivery-settings") return wireDeliverySettingsBackend();
