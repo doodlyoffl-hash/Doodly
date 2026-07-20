@@ -72,11 +72,18 @@ async function handle(req: NextRequest) {
   // Daily operations cut-off — safety net: if the evening cut-off never ran (no admin
   // logged in, no dedicated 20:00 cron on this plan), prepare tomorrow's delivery cycle +
   // notify ops now, before the morning run. Idempotent (once per delivery day).
-  const { maybeRunCutoff, pollCutoffWhatsAppStatuses } = await import("@/lib/ops/cutoff");
+  const { maybeRunCutoff, pollCutoffWhatsAppStatuses, auditCutoffHealth } = await import("@/lib/ops/cutoff");
   const cutoff = await maybeRunCutoff({ source: "cron" }).catch(() => ({ ran: false, reason: "error", date: "" }));
   // Refresh WhatsApp delivery/read status for the last summary (Superfone has no webhooks).
   const cutoffWa = await pollCutoffWhatsAppStatuses().catch(() => ({ polled: 0, updated: 0 }));
-  return NextResponse.json({ ok: true, ...result, whatsapp, autopay, addressChanges, addressChangeReminders, subDeliveries, cutoff, cutoffWa });
+  // Did LAST night's cut-off actually go out? A summary that silently never ran is
+  // the exact failure this system exists to prevent, so check and escalate.
+  const cutoffHealth = await auditCutoffHealth().catch(() => ({ healthy: true, checked: false }));
+  // Loyalty maintenance rides this sweep: Hobby allows 2 crons and the second slot
+  // now runs the 20:00 IST cut-off. Idempotent, so a re-run never double-credits.
+  const { runDailyLoyaltyMaintenance } = await import("@/lib/loyalty/daily");
+  const loyalty = await runDailyLoyaltyMaintenance().catch((e) => ({ error: (e as Error)?.message ?? "failed" }));
+  return NextResponse.json({ ok: true, ...result, whatsapp, autopay, addressChanges, addressChangeReminders, subDeliveries, cutoff, cutoffWa, cutoffHealth, loyalty });
 }
 
 export const GET = handle;

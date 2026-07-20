@@ -1845,6 +1845,20 @@
               stat(m.confirmedNotAssigned || 0, "Awaiting assignment") + stat(s.totalBottles || 0, "Total bottles") +
               stat((s.milkLitres || 0) + " L", "Milk required") + stat(s.totalCustomers || 0, "Customers") +
             "</div>" +
+            // Health first: a cut-off that never ran is the failure this whole
+            // system exists to prevent, so it outranks every other number here.
+            (function () {
+              var h = r.health || {};
+              if (h.checked && h.healthy === false) {
+                return '<div class="badge red" style="margin-bottom:10px">🚨 Automation did not run — ' + esc(h.reason || "") +
+                  ' Press "Run cut-off now".</div>';
+              }
+              if (r.scheduleMatchesConfig === false) {
+                return '<div class="badge amber" style="margin-bottom:10px">⚠ The automatic trigger runs at ' + esc(r.scheduledTrigger || "20:00 IST") +
+                  ", but the cut-off time is set to " + esc(cfg.cutoffTime || "") + ". Only the manual and admin-login triggers use your time.</div>";
+              }
+              return "";
+            })() +
             (risks > 0
               ? '<div class="badge amber" style="margin-bottom:10px">⚠ ' + risks + " order(s) need attention" + ((m.ordersWithoutDelivery || 0) ? " · " + m.ordersWithoutDelivery + " confirmed order(s) with no delivery" : "") + "</div>"
               : '<div class="badge green" style="margin-bottom:10px">No unassigned or at-risk orders</div>') +
@@ -1857,6 +1871,24 @@
                 dl.map(function (d) {
                   return '<span class="badge ' + (col[d.status] || "grey") + '" title="' + esc((d.messageId || "no id") + (d.error ? " — " + d.error : "") + " · attempts " + d.attempts) + '">' + esc(d.to) + " · " + esc(d.status) + "</span>";
                 }).join(" ") + "</div>";
+            })() +
+            // Notification history — every scheduled summary, its recipients, message
+            // ids and outcomes. Answers "did last Tuesday's go out?" without logs.
+            (function () {
+              var hs = r.history || []; if (!hs.length) return "";
+              var col = { SENT: "blue", DELIVERED: "green", READ: "green", FAILED: "red", SKIPPED: "grey" };
+              return '<details style="margin-bottom:10px"><summary class="muted-sm" style="cursor:pointer">Notification history (' + hs.length + " run" + (hs.length === 1 ? "" : "s") + ")</summary>" +
+                '<div style="max-height:220px;overflow:auto;margin-top:6px">' + hs.map(function (h) {
+                  return '<div style="padding:4px 0;border-bottom:1px solid var(--line,#eee)">' +
+                    '<span class="muted-sm">' + esc(delDateLabel(h.date)) + " · ran " + esc(fmtTime(h.ranAt)) + " · " + esc(h.source || "system") + "</span>" +
+                    '<div class="muted-sm">' + h.orders + " order(s) · " + h.bottles + " bottle(s) · " + h.litres + " L · " + h.emails + " email(s)</div>" +
+                    (h.recipients && h.recipients.length
+                      ? "<div>" + h.recipients.map(function (d) {
+                          return '<span class="badge ' + (col[d.status] || "grey") + '" title="' + esc((d.messageId || "no id") + (d.error ? " — " + d.error : "") + " · attempts " + d.attempts) + '">' + esc(d.to) + " · " + esc(d.status) + "</span>";
+                        }).join(" ") + "</div>"
+                      : '<div class="muted-sm">no WhatsApp recipients</div>') +
+                    "</div>";
+                }).join("") + "</div></details>";
             })() +
             '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
               '<button class="btn btn-primary sm" id="oc-view">View delivery list</button>' +
@@ -1876,7 +1908,21 @@
       if (run) run.addEventListener("click", function () {
         run.disabled = true; dacToast("Running the cut-off…");
         DOODLY_API.post("/api/admin/ops/cutoff", { action: "run" })
-          .then(function (x) { dacToast("Cut-off done — " + (x.summary ? x.summary.totalOrders + " order(s), " + x.notified.emails + " email(s)" : "prepared") + "."); wireOpsCutoffAlert(); })
+          .then(function (x) {
+            // Report what the PROVIDER said, not just that we tried — a run that
+            // reached nobody must not read as success.
+            var wa = (x.notified && x.notified.waLog) || [], sent = wa.filter(function (y) { return y.status === "SENT"; }).length;
+            var bits = [];
+            if (x.summary) bits.push(x.summary.totalOrders + " order(s)");
+            if (x.notified) bits.push(x.notified.emails + " email(s)");
+            if (wa.length) bits.push("WhatsApp " + sent + "/" + wa.length);
+            dacToast("Cut-off done — " + (bits.join(" · ") || "prepared") + ".");
+            if (wa.length && sent < wa.length) {
+              dacToast("Not delivered: " + wa.filter(function (y) { return y.status !== "SENT"; })
+                .map(function (y) { return y.status + " — " + (y.error || "unknown"); }).join(" · "));
+            }
+            wireOpsCutoffAlert();
+          })
           .catch(function (e) { run.disabled = false; dacToast(e.code === "forbidden" ? "Your role can't run the cut-off (403)." : (e.message || "Cut-off failed.")); });
       });
       var c = host.querySelector("#oc-cfg"); if (c) c.addEventListener("click", function () { openCutoffConfig(cfg); });

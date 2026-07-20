@@ -46,12 +46,34 @@ export interface CutoffConfig {
   events?: Record<string, boolean>;        // per-event on/off (default: all on)
   eventEscalatedAt?: Record<string, string>; // last in-app escalation per event (throttle)
   packingSummaryDate?: string | null;      // IST day whose packing completion was announced
+  history?: CutoffRun[];                   // one record per run (newest first, bounded)
+  healthAlertedFor?: string | null;        // delivery day we already raised a miss alert for
 }
+
+/** One cut-off execution, kept so "did tonight's summary go out?" is answerable
+ *  months later without digging through logs. Stored on the config (bounded ring
+ *  buffer) rather than a new table — no migration, and the volume is one a day. */
+export interface CutoffRun {
+  date: string;              // delivery day prepared (IST YYYY-MM-DD)
+  scheduledFor: string;      // the configured cut-off time it belongs to
+  ranAt: string;             // ISO timestamp of actual execution
+  source: string;            // cron | admin_dashboard | manual | system
+  ok: boolean;
+  skipped?: string;
+  orders: number;
+  bottles: number;
+  litres: number;
+  emails: number;
+  whatsapp: { sent: number; total: number };
+  recipients: WaDelivery[];  // per-recipient outcome incl. message id + error
+}
+const HISTORY_LIMIT = 60;
 const DEFAULTS: CutoffConfig = {
   enabled: true, cutoffTime: "20:00", emailRecipients: [], notifyRoles: true,
   whatsappEnabled: true, whatsappRecipients: [], whatsappRetries: 2, lastDispatch: [],
   lastRunDate: null, lastRunAt: null,
   events: {}, eventEscalatedAt: {}, packingSummaryDate: null,
+  history: [], healthAlertedFor: null,
 };
 
 /** Log/display numbers partially masked — an audit trail shouldn't leak full numbers. */
@@ -278,7 +300,9 @@ export interface CutoffResult {
   prepared?: { bridged: number; subCreated: number };
   summary: DeliverySummary;
   missed: MissedReport;
-  notified?: { emails: number; whatsapp: number; adminsAlerted: boolean };
+  // waLog is part of the contract: a manual run must be able to show the admin what
+  // the provider actually said, per recipient, rather than a bare "done".
+  notified?: { emails: number; whatsapp: number; adminsAlerted: boolean; waLog?: WaDelivery[] };
   dayClose?: { date: string; delivered: number; pending: number; failed: number; alertedMissed: boolean };
 }
 
@@ -313,7 +337,22 @@ export async function runDailyCutoff(opts: { force?: boolean; date?: string; act
 
   // Persist the per-recipient delivery-confirmation log alongside the idempotency marker,
   // so the status poller can upgrade SENT → DELIVERED/READ and admins can see failures.
-  await patchConfig({ lastRunDate: target, lastRunAt: new Date().toISOString(), lastDispatch: notified.waLog }, opts.actor?.actorId);
+  // The same run is appended to a bounded history, so every night is answerable later.
+  const ranAt = new Date().toISOString();
+  const record: CutoffRun = {
+    date: target, scheduledFor: cfg.cutoffTime, ranAt,
+    source: opts.actor?.actorRole ?? "system", ok: true,
+    orders: summary.totalOrders, bottles: summary.totalBottles, litres: summary.milkLitres,
+    emails: notified.emails,
+    whatsapp: { sent: notified.whatsapp, total: notified.waLog.length },
+    recipients: notified.waLog,
+  };
+  const priorHistory = (cfg.history ?? []).filter((h) => !(h.date === target && h.source === record.source));
+  await patchConfig({
+    lastRunDate: target, lastRunAt: ranAt, lastDispatch: notified.waLog,
+    history: [record, ...priorHistory].slice(0, HISTORY_LIMIT),
+    healthAlertedFor: null,          // a successful run clears any outstanding miss alert
+  }, opts.actor?.actorId);
   await audit({
     userId: opts.actor?.actorId ?? null, actorRole: opts.actor?.actorRole ?? "system",
     action: "ops.cutoff.run",
@@ -396,6 +435,55 @@ export async function pollCutoffWhatsAppStatuses(): Promise<{ polled: number; up
   return { polled: pending.length, updated };
 }
 
+/** The run history, newest first — every scheduled summary with its recipients,
+ *  message ids, delivery status and failure reasons. */
+export async function getCutoffHistory(limit = 30): Promise<CutoffRun[]> {
+  const cfg = await getCutoffConfig();
+  return (cfg.history ?? []).slice(0, Math.max(1, Math.min(HISTORY_LIMIT, limit)));
+}
+
+/** How overdue a run is allowed to be before we call it a failure. */
+const HEALTH_GRACE_MIN = 10;
+
+/** Did the cut-off actually run for the day it should have?
+ *
+ *  This is the backstop for the exact incident that created this system: the
+ *  scheduler not firing is INVISIBLE — no error, no failed send, just silence.
+ *  Called from the daily cron and whenever an admin opens the panel. Alerts the
+ *  Super Admins once per delivery day, and records the incident in the audit log.
+ */
+export async function auditCutoffHealth(): Promise<{ healthy: boolean; checked: boolean; date?: string; reason?: string; alerted?: boolean }> {
+  const cfg = await getCutoffConfig();
+  if (!cfg.enabled) return { healthy: true, checked: false };
+
+  const target = nextDeliveryDayIso();
+  if (cfg.lastRunDate === target) return { healthy: true, checked: true, date: target };
+
+  // Not run yet — is it actually late, or simply not due?
+  const dueAt = cutoffMinutes(cfg.cutoffTime);
+  const nowMin = istMinutesNow();
+  const overdue = nowMin >= dueAt + HEALTH_GRACE_MIN || istTodayIso() === target;
+  if (!overdue) return { healthy: true, checked: true, date: target, reason: "not_due_yet" };
+
+  const lateBy = Math.max(0, nowMin - dueAt);
+  const reason = `No cut-off run for ${target}; due at ${cfg.cutoffTime} IST (${lateBy} min ago).`;
+
+  // One alert per delivery day — a health check that spams is a health check people mute.
+  let alerted = false;
+  if (cfg.healthAlertedFor !== target) {
+    try {
+      const { notifyAdmins } = await import("@/lib/assignment/notify");
+      await notifyAdmins(db, "🚨 Daily cut-off did NOT run",
+        `${reason} Tomorrow's deliveries may not be prepared and ops have not been notified. Open Admin → Operations → Daily Cut-Off and press "Run cut-off now".`, "PUSH");
+      alerted = true;
+    } catch { /* non-blocking */ }
+    await patchConfig({ healthAlertedFor: target }).catch(() => {});
+    await audit({ actorRole: "system", action: "ops.cutoff.missed", target: reason }).catch(() => {});
+  }
+  log.error("ops.cutoff", "health check failed", { date: target, lateBy });
+  return { healthy: false, checked: true, date: target, reason, alerted };
+}
+
 /** Dashboard status (Step 5): has tomorrow been prepared? + the summary + risks. */
 export async function getCutoffStatus() {
   const cfg = await getCutoffConfig();
@@ -414,6 +502,17 @@ export async function getCutoffStatus() {
     dispatch: (cfg.lastDispatch ?? []).map((d) => ({ ...d, to: maskNumber(d.to) })),
     // the same signed link the WhatsApp/email summary carries (share-safe, expires)
     manifestUrl,
+    // Is the automation actually firing? Surfaced so a missed run is visible in the
+    // panel, not only in a notification someone may never open.
+    health: await auditCutoffHealth().catch(() => ({ healthy: true, checked: false })),
+    // Recent runs, with numbers masked — the notification history.
+    history: (cfg.history ?? []).slice(0, 14).map((h) => ({
+      ...h, recipients: (h.recipients ?? []).map((r) => ({ ...r, to: maskNumber(r.to) })),
+    })),
+    // The automatic trigger is a fixed daily Vercel cron; a different configured
+    // time only affects the lazy + manual paths, so say so rather than imply it moved.
+    scheduledTrigger: "20:00 IST (14:30 UTC) daily",
+    scheduleMatchesConfig: cfg.cutoffTime === "20:00",
   };
 }
 

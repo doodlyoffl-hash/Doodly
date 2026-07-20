@@ -3,6 +3,6 @@
   "regions": ["syd1"],
   "crons": [
     { "path": "/api/cron/notifications", "schedule": "0 2 * * *" },
-    { "path": "/api/cron/loyalty", "schedule": "30 2 * * *" }
+    { "path": "/api/cron/cutoff", "schedule": "30 14 * * *" }
   ]
 }
