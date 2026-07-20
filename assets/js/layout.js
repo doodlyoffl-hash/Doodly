@@ -1951,9 +1951,15 @@
         .then(function (x) {
           var rows = x.rows || [], bad = rows.filter(function (r) { return !r.ok; });
           if (x.error) { tpl.innerHTML = '<p class="dac-err">' + esc(x.error) + "</p>"; return; }
+          var mp = x.mapping || {};
           tpl.innerHTML =
             '<div class="badge ' + (bad.length ? "amber" : "green") + '" style="margin-bottom:6px">' +
               (bad.length ? "⚠ " + bad.length + " of " + rows.length + " need attention" : "✅ All " + rows.length + " templates are approved and match") + "</div>" +
+            // Why nothing is mapped is a different question from which row is wrong.
+            (mp.note ? '<div class="dac-err" style="margin:0 0 6px">' + esc(mp.note) + "</div>" : "") +
+            '<div class="muted-sm" style="margin-bottom:6px">Mapping env: ' +
+              (mp.set ? (mp.valid ? "set, valid JSON, " + mp.keys + " key(s)" : "set but INVALID JSON") : "not set") +
+              " · free-text fallback: " + (mp.sessionText ? "ON (unmapped events send as plain text and fail outside the 24h window)" : "off") + "</div>" +
             '<div style="max-height:210px;overflow:auto">' + rows.map(function (r) {
               var acc = r.account ? esc(r.account.status + " · " + r.account.language + " · " + r.account.params + " var") : "—";
               return '<div style="display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px solid var(--line,#eee)">' +

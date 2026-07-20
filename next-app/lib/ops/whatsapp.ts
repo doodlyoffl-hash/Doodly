@@ -14,7 +14,7 @@
    ============================================================= */
 import "server-only";
 import { sendWhatsApp } from "@/lib/notifications/providers";
-import { superfone, superfoneTemplateFor, superfoneListTemplates } from "@/lib/notifications/superfone";
+import { superfone, superfoneTemplateFor, superfoneListTemplates, superfoneTemplateMapInfo } from "@/lib/notifications/superfone";
 import { log } from "@/lib/logger";
 
 /** Canonical ops event keys. Map each to an approved template name via
@@ -146,18 +146,44 @@ export interface TemplateCheck {
  *  Read-only — it lists templates, it never sends. This exists because a
  *  language mismatch (approved as en_US, mapped as en) is invisible until a
  *  real send fails with an opaque provider 500. */
-export async function checkOpsTemplates(): Promise<{ configured: boolean; error?: string; rows: TemplateCheck[] }> {
+export interface MappingInfo {
+  set: boolean;               // SUPERFONE_WA_TEMPLATES exists in the runtime env
+  valid: boolean;             // …and is parseable JSON
+  keys: number;               // how many event keys it maps
+  sessionText: boolean;       // SUPERFONE_ALLOW_SESSION_TEXT — the silent fallback
+  note: string | null;        // plain-English reading of the above
+}
+
+export async function checkOpsTemplates(): Promise<{ configured: boolean; error?: string; mapping: MappingInfo; rows: TemplateCheck[] }> {
   const keys = Object.keys(OPS_TEMPLATES) as OpsTemplateKey[];
   const blank = (key: OpsTemplateKey, issue: string, fix: string | null = null): TemplateCheck => ({
     key, label: key.replace(/_/g, " "), expects: OPS_TEMPLATES[key].vars.length,
     mapped: null, account: null, ok: false, issue, fix,
   });
 
+  // Read the mapping env FIRST: "unset", "invalid JSON" and "key missing" all look
+  // identical from a single row ("not mapped"), and they need different fixes.
+  const raw = superfoneTemplateMapInfo();
+  const mapped = keys.filter((k) => raw.keys.includes(k)).length;
+  const mapping: MappingInfo = {
+    set: raw.set, valid: raw.valid, keys: raw.keys.length,
+    sessionText: superfone.sessionTextAllowed(),
+    note: !raw.set
+      ? "SUPERFONE_WA_TEMPLATES is NOT set on this deployment. Add it to the backend project's environment variables and redeploy — an env change does not reach a running deployment."
+      : !raw.valid
+        ? "SUPERFONE_WA_TEMPLATES is set but is not valid JSON, so EVERY mapping is ignored. Re-paste it as a single line with no trailing comma."
+        : mapped === 0
+          ? `SUPERFONE_WA_TEMPLATES is set and valid (${raw.keys.length} key(s)) but contains none of the ops events. Check you edited the BACKEND project, not the storefront.`
+          : mapped < keys.length
+            ? `${mapped} of ${keys.length} ops events are mapped.`
+            : null,
+  };
+
   if (!superfone.configured()) {
-    return { configured: false, error: "WhatsApp is not configured (SUPERFONE_API_KEY unset, or SUPERFONE_DISABLED=1).", rows: keys.map((k) => blank(k, "WhatsApp is not configured")) };
+    return { configured: false, error: "WhatsApp is not configured (SUPERFONE_API_KEY unset, or SUPERFONE_DISABLED=1).", mapping, rows: keys.map((k) => blank(k, "WhatsApp is not configured")) };
   }
   const list = await superfoneListTemplates();
-  if (!list.ok) return { configured: true, error: list.error ?? "Could not list templates.", rows: keys.map((k) => blank(k, "Could not reach Superfone")) };
+  if (!list.ok) return { configured: true, error: list.error ?? "Could not list templates.", mapping, rows: keys.map((k) => blank(k, "Could not reach Superfone")) };
 
   const byName = new Map((list.templates ?? []).map((t) => [t.name, t]));
   const rows = keys.map<TemplateCheck>((key) => {
@@ -201,7 +227,7 @@ export async function checkOpsTemplates(): Promise<{ configured: boolean; error?
     }
     return { ...base, ok: true, issue: null, fix: null };
   });
-  return { configured: true, rows };
+  return { configured: true, mapping, rows };
 }
 
 /** Fan out one ops template to every configured recipient. */

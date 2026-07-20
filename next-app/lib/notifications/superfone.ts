@@ -58,6 +58,20 @@ export function superfoneTemplateFor(key: string): { name: string; lang: string;
   }
 }
 
+/** State of the SUPERFONE_WA_TEMPLATES env var, for diagnostics. Reports whether it
+    is set and parseable and which event keys it maps — never the values, and it
+    distinguishes "unset" from "invalid JSON", which otherwise both read as
+    "nothing is mapped" and send you hunting in the wrong place. */
+export function superfoneTemplateMapInfo(): { set: boolean; valid: boolean; keys: string[] } {
+  const raw = env("SUPERFONE_WA_TEMPLATES");
+  if (!raw) return { set: false, valid: false, keys: [] };
+  try {
+    const map = JSON.parse(raw) as Record<string, unknown>;
+    if (!map || typeof map !== "object" || Array.isArray(map)) return { set: true, valid: false, keys: [] };
+    return { set: true, valid: true, keys: Object.keys(map) };
+  } catch { return { set: true, valid: false, keys: [] }; }
+}
+
 /** One documented call with timeout + a single backoff retry on 429/5xx. Never throws. */
 async function call(method: "GET" | "POST", path: string, body?: unknown, attempt = 0): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
   const ctrl = new AbortController();
