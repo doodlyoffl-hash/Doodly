@@ -16,11 +16,11 @@ function secret(): Uint8Array {
   return new TextEncoder().encode(s);
 }
 
-/** The backend's own absolute base URL (where the PDF endpoint lives). */
-export function backendBase(): string {
-  const b = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-  return b.replace(/\/$/, "");
-}
+/** The backend's own absolute base URL (where the PDF endpoint lives).
+    Shared resolver — customers click these invoice links, so it must never fall
+    back to a per-deployment Vercel host (Deployment Protection → login page). */
+import { backendBase } from "@/lib/public-url";
+export { backendBase };
 
 /** Sign a time-boxed access token for one invoice (default 60 days). */
 export async function signInvoiceToken(invoiceId: string, ttlDays = 60): Promise<string> {

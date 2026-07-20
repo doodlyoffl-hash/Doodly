@@ -19,11 +19,11 @@ function secret(): Uint8Array {
   return new TextEncoder().encode(s);
 }
 
-/** The backend's own absolute base URL (where the PDF endpoint lives). */
-export function backendBase(): string {
-  const b = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-  return b.replace(/\/$/, "");
-}
+/** The backend's own absolute base URL (where the PDF endpoint lives).
+    Shared resolver — it must never fall back to a per-deployment Vercel host,
+    which Deployment Protection would turn into a login page for the recipient. */
+import { backendBase } from "@/lib/public-url";
+export { backendBase };
 
 /** Sign a time-boxed token for ONE delivery day's manifest. */
 export async function signManifestToken(dateIso: string, ttlDays = DEFAULT_TTL_DAYS): Promise<string> {

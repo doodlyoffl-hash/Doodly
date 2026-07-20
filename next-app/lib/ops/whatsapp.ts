@@ -15,6 +15,7 @@
 import "server-only";
 import { sendWhatsApp } from "@/lib/notifications/providers";
 import { superfone, superfoneTemplateFor, superfoneListTemplates, superfoneTemplateMapInfo } from "@/lib/notifications/superfone";
+import { backendBase, backendBaseSource, isProtectedDeploymentHost } from "@/lib/public-url";
 import { log } from "@/lib/logger";
 
 /** Canonical ops event keys. Map each to an approved template name via
@@ -152,6 +153,9 @@ export interface MappingInfo {
   keys: number;               // how many event keys it maps
   sessionText: boolean;       // SUPERFONE_ALLOW_SESSION_TEXT — the silent fallback
   note: string | null;        // plain-English reading of the above
+  linkBase: string;           // where signed manifest links point
+  linkSource: string;         // which env supplied it
+  linkNote: string | null;    // set when recipients would hit a Vercel login page
 }
 
 export async function checkOpsTemplates(): Promise<{ configured: boolean; error?: string; mapping: MappingInfo; rows: TemplateCheck[] }> {
@@ -165,9 +169,22 @@ export async function checkOpsTemplates(): Promise<{ configured: boolean; error?
   // identical from a single row ("not mapped"), and they need different fixes.
   const raw = superfoneTemplateMapInfo();
   const mapped = keys.filter((k) => raw.keys.includes(k)).length;
+  // Where the manifest link points. A per-deployment Vercel host is protected,
+  // so the recipient gets a Vercel login page instead of the PDF — the link is
+  // generated, signed and delivered before anything reveals that.
+  const linkBase = backendBase();
+  const linkSource = backendBaseSource();
   const mapping: MappingInfo = {
     set: raw.set, valid: raw.valid, keys: raw.keys.length,
     sessionText: superfone.sessionTextAllowed(),
+    linkBase, linkSource,
+    // VERCEL_URL is ALWAYS the per-deployment host, so its use is proof on its own;
+    // the host shape is a secondary check for a hand-set NEXT_PUBLIC_SITE_URL.
+    linkNote: linkSource === "VERCEL_URL" || isProtectedDeploymentHost(linkBase)
+      ? `Manifest links point at ${linkBase}, a per-deployment Vercel host behind Deployment Protection — recipients land on a Vercel login page instead of the PDF. Set NEXT_PUBLIC_SITE_URL on the backend project to its public URL and redeploy.`
+      : linkSource === "localhost"
+        ? "Manifest links point at localhost — fine in development, useless in a sent message."
+        : null,
     note: !raw.set
       ? "SUPERFONE_WA_TEMPLATES is NOT set on this deployment. Add it to the backend project's environment variables and redeploy — an env change does not reach a running deployment."
       : !raw.valid

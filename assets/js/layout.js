@@ -1957,6 +1957,10 @@
               (bad.length ? "⚠ " + bad.length + " of " + rows.length + " need attention" : "✅ All " + rows.length + " templates are approved and match") + "</div>" +
             // Why nothing is mapped is a different question from which row is wrong.
             (mp.note ? '<div class="dac-err" style="margin:0 0 6px">' + esc(mp.note) + "</div>" : "") +
+            // A signed link that lands on a Vercel login page is invisible until
+            // someone clicks it — say so here instead.
+            (mp.linkNote ? '<div class="dac-err" style="margin:0 0 6px">' + esc(mp.linkNote) + "</div>" : "") +
+            (mp.linkBase ? '<div class="muted-sm" style="margin-bottom:4px;word-break:break-all">Manifest links: ' + esc(mp.linkBase) + " <span class=\"muted-sm\">(from " + esc(mp.linkSource) + ")</span></div>" : "") +
             '<div class="muted-sm" style="margin-bottom:6px">Mapping env: ' +
               (mp.set ? (mp.valid ? "set, valid JSON, " + mp.keys + " key(s)" : "set but INVALID JSON") : "not set") +
               " · free-text fallback: " + (mp.sessionText ? "ON (unmapped events send as plain text and fail outside the 24h window)" : "off") + "</div>" +
