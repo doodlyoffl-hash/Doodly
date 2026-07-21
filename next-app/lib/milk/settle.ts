@@ -102,6 +102,12 @@ export async function settleDay(dateIso: string, actor?: { actorId?: string; act
     const retail = await consumeLitres(tx, { date: day, channel: "RETAIL", litres: retailLitres, sourceRef: refRetail, note: `Retail sales ${iso}` });
     const b2b = await consumeLitres(tx, { date: day, channel: "B2B", litres: b2bLitres, sourceRef: refB2b, note: `B2B sales ${iso}` });
     return { retail, b2b };
+  }, {
+    // A re-settle does reverse + re-consume across several lots — many sequential
+    // round-trips. Prisma's 5s default is too tight when the DB is a round-trip
+    // away (it was fine in-region, but a latency spike must not abort mid-draw
+    // and leave the day half-settled). Generous ceiling for an admin-cadence op.
+    timeout: 30000, maxWait: 15000,
   });
 
   const settlement: DaySettlement = {

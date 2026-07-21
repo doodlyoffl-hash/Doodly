@@ -76,23 +76,29 @@ export async function consumeLitres(
 }
 
 /** Undo every consumption written under `sourceRef`: restore each lot's litres
- *  (re-opening it if it had closed) and delete the rows. Returns litres restored. */
+ *  (re-opening it if it had closed) and delete the rows. Returns litres restored.
+ *  Groups by tanker so it's one read + one update PER LOT, not per row — fewer
+ *  round-trips keeps the enclosing settle transaction well inside its budget. */
 export async function reverseByRef(tx: Prisma.TransactionClient, sourceRef: string): Promise<number> {
-  const rows = await tx.tankerConsumption.findMany({ where: { sourceRef }, select: { id: true, tankerId: true, litres: true } });
+  const rows = await tx.tankerConsumption.findMany({ where: { sourceRef }, select: { tankerId: true, litres: true } });
+  if (!rows.length) return 0;
+
+  const byLot = new Map<string, number>();
+  for (const r of rows) byLot.set(r.tankerId, (byLot.get(r.tankerId) ?? 0) + r.litres);
+
+  const lots = await tx.milkTanker.findMany({ where: { id: { in: [...byLot.keys()] } }, select: { id: true, remainingLitres: true, consumedLitres: true, litres: true } });
   let restored = 0;
-  for (const r of rows) {
-    const lot = await tx.milkTanker.findUnique({ where: { id: r.tankerId }, select: { remainingLitres: true, consumedLitres: true, litres: true } });
-    if (lot) {
-      const remaining = Math.min(lot.litres, lot.remainingLitres + r.litres);
-      await tx.milkTanker.update({
-        where: { id: r.tankerId },
-        // Restoring litres re-opens a lot that had closed; a re-opened lot's
-        // profit is unlocked again (correct — its consumption is being redone).
-        data: { remainingLitres: remaining, consumedLitres: Math.max(0, lot.consumedLitres - r.litres), status: "OPEN", closedAt: null },
-      });
-      restored += r.litres;
-    }
+  for (const lot of lots) {
+    const back = byLot.get(lot.id) ?? 0;
+    const remaining = Math.min(lot.litres, lot.remainingLitres + back);
+    await tx.milkTanker.update({
+      where: { id: lot.id },
+      // Restoring litres re-opens a lot that had closed; a re-opened lot's profit
+      // is unlocked again (correct — its consumption is being redone).
+      data: { remainingLitres: remaining, consumedLitres: Math.max(0, lot.consumedLitres - back), status: "OPEN", closedAt: null },
+    });
+    restored += back;
   }
-  if (rows.length) await tx.tankerConsumption.deleteMany({ where: { sourceRef } });
+  await tx.tankerConsumption.deleteMany({ where: { sourceRef } });
   return restored;
 }
