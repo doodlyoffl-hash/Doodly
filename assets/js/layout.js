@@ -5723,6 +5723,243 @@
   }
   window.DOODLY_ADMIN.manageRecommendations = openRecoManager;
 
+  // ================= Milk Procurement & Profit Center (tanker FIFO engine) =================
+  function milkRs(paise) { return "₹" + ((paise || 0) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function milkStat(n, l) { return '<div class="dl-an-kpi"><div class="n">' + n + '</div><div class="l">' + l + "</div></div>"; }
+  function milkDate(iso) { try { return new Date(iso + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }); } catch (e) { return iso; } }
+  function istTodayStr() { return new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10); }
+  // Client mirror of computeTankerCost — PREVIEW ONLY; the server recomputes authoritatively.
+  function milkPreview(kg, fat, rates) {
+    kg = Math.max(0, +kg || 0); fat = Math.max(0, +fat || 0);
+    var f = (+rates.conversionFactor > 0) ? +rates.conversionFactor : 1;
+    var litres = kg / f, kgFat = kg * fat / 100;
+    var milkCost = Math.round(litres * rates.milkRatePaise), fatCost = Math.round(kgFat * rates.fatRatePaise);
+    var total = milkCost + fatCost + rates.transportPaise;
+    return { litres: Math.round(litres * 1000) / 1000, kgFat: Math.round(kgFat * 1000) / 1000, milkCost: milkCost, fatCost: fatCost, transport: rates.transportPaise, total: total, perL: litres > 0 ? Math.round(total / litres) : 0, perKg: kg > 0 ? Math.round(total / kg) : 0 };
+  }
+
+  var _milkCfg = { conversionFactor: 1.03, milkRatePaise: 450, fatRatePaise: 82000, transportPaise: 950000, currency: "INR" };
+
+  async function wireMilkTankersBackend() {
+    if (!window.DOODLY_API) return;
+    var host = document.getElementById("milkTankersMount"); if (!host) return;
+    host.innerHTML = '<p class="muted-sm">Loading…</p>';
+    try { var c = await DOODLY_API.get("/api/admin/milk/config"); if (c && c.config) _milkCfg = c.config; } catch (e) {}
+    try {
+      var r = await DOODLY_API.get("/api/admin/milk/tankers");
+      var inv = await DOODLY_API.get("/api/admin/milk/inventory");
+      renderMilkTankers(host, r, inv);
+    } catch (e) {
+      host.innerHTML = e.code === "forbidden" ? '<div class="panel panel-pad muted-sm">Your role can\'t view procurement. Ask a Super Admin for the <b>Procurement → view</b> permission.</div>'
+        : '<div class="panel panel-pad muted-sm">Couldn\'t load tankers — ' + esc(e.message || e.code || "error") + "</div>";
+    }
+  }
+  window.DOODLY_ADMIN.wireMilkTankersBackend = wireMilkTankersBackend;
+
+  function renderMilkTankers(host, r, inv) {
+    var s = r.stats || {}, tankers = r.tankers || [], lots = (inv && inv.openLots) || [];
+    var badge = function (st) { return '<span class="badge ' + (st === "OPEN" ? "green" : "grey") + '">' + esc(st) + "</span>"; };
+    host.innerHTML =
+      '<div class="dl-an-kpis" style="margin-bottom:14px">' +
+        milkStat(s.todayTankers || 0, "Tankers today") +
+        milkStat((s.todayLitres || 0) + " L", "Procured today") +
+        milkStat(milkRs(s.todayCostPaise), "Spent today") +
+        milkStat((s.inventoryLitres || 0) + " L", "Milk in stock") +
+        milkStat(milkRs(s.inventoryValuePaise), "Stock value") +
+        milkStat((s.openTankers || 0) + " / " + (s.closedTankers || 0), "Open / Closed") +
+      "</div>" +
+      // carry-forward / FIFO inventory
+      '<div class="panel" style="margin-bottom:14px"><div class="panel-head"><h3>🥛 Inventory & carry-forward (FIFO — oldest first)</h3>' +
+        '<div style="display:flex;gap:6px;align-items:center"><input class="input" id="mk-settle-date" type="date" value="' + istTodayStr() + '" style="max-width:150px"><button class="btn btn-ghost sm" id="mk-settle">Settle a day\'s sales</button></div></div>' +
+        '<div class="panel-pad">' + (lots.length
+          ? '<table class="tbl"><thead><tr><th>Tanker</th><th>Date</th><th>Supplier</th><th>Remaining</th><th>Cost/L</th><th>Value</th></tr></thead><tbody>' +
+            lots.map(function (l) { return "<tr><td>" + esc(l.code) + " <span class='muted-sm'>" + esc(l.tankerNo) + "</span></td><td>" + esc(milkDate(l.procurementDate.slice(0, 10))) + "</td><td>" + esc(l.supplier) + "</td><td><b>" + (Math.round(l.remainingLitres * 100) / 100) + " L</b> <span class='muted-sm'>of " + (Math.round(l.litres * 100) / 100) + "</span></td><td>" + milkRs(l.costPerLitrePaise) + "</td><td>" + milkRs(l.valuePaise) + "</td></tr>"; }).join("") +
+            "</tbody></table>"
+          : '<p class="muted-sm">No open tankers — all milk is consumed. Add today\'s tanker below.</p>') +
+        "</div></div>" +
+      // tanker list + add
+      '<div class="panel"><div class="panel-head"><h3>Tanker entries</h3><button class="btn btn-primary sm" id="mk-add">+ Add tanker</button></div>' +
+        '<div class="panel-pad">' + (tankers.length
+          ? '<table class="tbl"><thead><tr><th>Code</th><th>Date</th><th>Tanker</th><th>Supplier</th><th>KG</th><th>FAT</th><th>Litres</th><th>Total cost</th><th>Cost/L</th><th>Remaining</th><th>Status</th><th></th></tr></thead><tbody>' +
+            tankers.map(function (t) {
+              return "<tr><td>" + esc(t.code) + "</td><td>" + esc(milkDate(t.procurementDate.slice(0, 10))) + "</td><td>" + esc(t.tankerNo) + "</td><td>" + esc(t.supplier) + "</td><td>" + t.quantityKg + "</td><td>" + t.fatPct + "%</td><td>" + t.litres + "</td><td>" + milkRs(t.totalCostPaise) + "</td><td>" + milkRs(t.costPerLitrePaise) + "</td><td>" + (Math.round(t.remainingLitres * 100) / 100) + " L</td><td>" + badge(t.status) + "</td><td><button class='btn btn-ghost sm js-mk-manage' data-id='" + t.id + "'>Manage</button></td></tr>";
+            }).join("") + "</tbody></table>"
+          : '<p class="muted-sm">No tankers yet. Add your first tanker to start tracking procurement + profit.</p>') +
+        "</div></div>";
+
+    host.querySelector("#mk-add").addEventListener("click", function () { openTankerForm(); });
+    host.querySelectorAll(".js-mk-manage").forEach(function (b) { b.addEventListener("click", function () { openTankerManage(b.dataset.id); }); });
+    var sb = host.querySelector("#mk-settle");
+    if (sb) sb.addEventListener("click", function () {
+      var date = host.querySelector("#mk-settle-date").value || istTodayStr();
+      sb.disabled = true; dacToast("Settling " + date + "…");
+      DOODLY_API.post("/api/admin/milk/settle", { date: date })
+        .then(function (x) {
+          var msg = date + ": " + (Math.round(x.totalLitres * 10) / 10) + " L drawn · COGS " + milkRs(x.cogsPaise);
+          if (x.shortfallLitres > 0.01) msg += " · ⚠ SHORT " + (Math.round(x.shortfallLitres * 10) / 10) + " L (oversold vs stock)";
+          dacToast(msg); wireMilkTankersBackend();
+        })
+        .catch(function (e) { sb.disabled = false; dacToast(e.code === "forbidden" ? "Your role can't settle (needs Procurement → edit)." : (e.message || "Settle failed.")); });
+    });
+  }
+
+  function openTankerForm(existing) {
+    var ed = existing || null;
+    var m = asgnModal(ed ? "Edit tanker " + ed.code : "Add milk tanker", "");
+    m.body.innerHTML =
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+        '<label class="dac-f"><span>Procurement date</span><input class="input" id="tk-date" type="date" value="' + (ed ? ed.procurementDate.slice(0, 10) : istTodayStr()) + '"' + (ed ? " disabled" : "") + "></label>" +
+        '<label class="dac-f"><span>Tanker number</span><input class="input" id="tk-no" placeholder="TN-09-AB-1234" value="' + (ed ? esc(ed.tankerNo) : "") + '"></label>' +
+        '<label class="dac-f"><span>Supplier / farmer group</span><input class="input" id="tk-sup" placeholder="Pamuru buffalo group" value="' + (ed ? esc(ed.supplier) : "") + '"></label>' +
+        '<label class="dac-f"><span>Quantity (KG)</span><input class="input" id="tk-kg" type="number" min="0" step="0.1" placeholder="1500" value="' + (ed ? ed.quantityKg : "") + '"></label>' +
+        '<label class="dac-f"><span>FAT %</span><input class="input" id="tk-fat" type="number" min="0" max="100" step="0.1" placeholder="7.2" value="' + (ed ? ed.fatPct : "") + '"></label>' +
+        '<label class="dac-f"><span>SNF % (optional)</span><input class="input" id="tk-snf" type="number" min="0" max="100" step="0.1" value="' + (ed && ed.snfPct != null ? ed.snfPct : "") + '"></label>' +
+        '<label class="dac-f"><span>Transport (₹, this tanker)</span><input class="input" id="tk-tr" type="number" min="0" step="1" value="' + (ed ? ed.transportPaise / 100 : _milkCfg.transportPaise / 100) + '"></label>' +
+        '<label class="dac-f"><span>Remarks (optional)</span><input class="input" id="tk-rem" value="' + (ed && ed.remarks ? esc(ed.remarks) : "") + '"></label>' +
+      "</div>" +
+      '<div id="tk-prev" class="panel panel-pad" style="margin-top:10px;background:rgba(31,174,102,.06)"></div>' +
+      '<p class="dac-err" id="tk-err"></p>' +
+      '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px"><button class="btn btn-primary sm" id="tk-save">Save tanker</button></div>';
+    var err = m.body.querySelector("#tk-err"), prev = m.body.querySelector("#tk-prev");
+    function refresh() {
+      var kg = m.body.querySelector("#tk-kg").value, fat = m.body.querySelector("#tk-fat").value;
+      var tr = Math.round((+m.body.querySelector("#tk-tr").value || 0) * 100);
+      var p = milkPreview(kg, fat, { conversionFactor: _milkCfg.conversionFactor, milkRatePaise: _milkCfg.milkRatePaise, fatRatePaise: _milkCfg.fatRatePaise, transportPaise: tr });
+      prev.innerHTML = '<div class="muted-sm" style="margin-bottom:6px">Auto-calculated (rates: ÷' + _milkCfg.conversionFactor + ", milk " + milkRs(_milkCfg.milkRatePaise) + "/L, fat " + milkRs(_milkCfg.fatRatePaise) + "/kg)</div>" +
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 14px">' +
+        "<div><span class='muted-sm'>Litres</span><br><b>" + p.litres + " L</b></div>" +
+        "<div><span class='muted-sm'>KG FAT</span><br><b>" + p.kgFat + "</b></div>" +
+        "<div><span class='muted-sm'>Milk cost</span><br>" + milkRs(p.milkCost) + "</div>" +
+        "<div><span class='muted-sm'>Fat cost</span><br>" + milkRs(p.fatCost) + "</div>" +
+        "<div><span class='muted-sm'>Transport</span><br>" + milkRs(p.transport) + "</div>" +
+        "<div><span class='muted-sm'>Cost / litre</span><br>" + milkRs(p.perL) + "</div>" +
+        '</div><div style="border-top:1px solid rgba(0,0,0,.1);margin-top:8px;padding-top:8px"><b style="font-size:18px">Total tanker cost: ' + milkRs(p.total) + "</b> <span class='muted-sm'>· " + milkRs(p.perKg) + "/kg</span></div>";
+    }
+    m.body.querySelectorAll("#tk-kg,#tk-fat,#tk-tr").forEach(function (i) { i.addEventListener("input", refresh); });
+    refresh();
+    m.body.querySelector("#tk-save").addEventListener("click", function () {
+      var body = {
+        procurementDate: m.body.querySelector("#tk-date").value || undefined,
+        tankerNo: m.body.querySelector("#tk-no").value.trim(),
+        supplier: m.body.querySelector("#tk-sup").value.trim(),
+        quantityKg: +m.body.querySelector("#tk-kg").value || 0,
+        fatPct: +m.body.querySelector("#tk-fat").value || 0,
+        snfPct: m.body.querySelector("#tk-snf").value ? +m.body.querySelector("#tk-snf").value : null,
+        transportPaise: Math.round((+m.body.querySelector("#tk-tr").value || 0) * 100),
+        remarks: m.body.querySelector("#tk-rem").value.trim() || null,
+      };
+      if (!body.tankerNo || !body.supplier || !(body.quantityKg > 0)) { err.textContent = "Tanker number, supplier and a positive quantity are required."; return; }
+      var pr = ed ? DOODLY_API.patch("/api/admin/milk/tankers/" + ed.id, body) : DOODLY_API.post("/api/admin/milk/tankers", body);
+      pr.then(function (x) { dacToast("Tanker " + (x.tanker ? x.tanker.code : "") + " saved — " + milkRs(x.tanker.totalCostPaise) + "."); m.close(); wireMilkTankersBackend(); })
+        .catch(function (e) { err.textContent = e.code === "forbidden" ? "Your role can't save tankers (needs Procurement → " + (ed ? "edit" : "create") + ")." : (e.message || "Couldn't save."); });
+    });
+  }
+
+  function openTankerManage(id) {
+    DOODLY_API.get("/api/admin/milk/tankers/" + id).then(function (x) {
+      var t = x.tanker; if (!t) return;
+      var m = asgnModal("Tanker " + t.code, "");
+      var cons = (t.consumptions || []);
+      var locked = t.consumedLitres > 1e-6 || t.status === "CLOSED";
+      m.body.innerHTML =
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-bottom:10px">' +
+          "<div><span class='muted-sm'>Tanker</span><br><b>" + esc(t.tankerNo) + "</b></div>" +
+          "<div><span class='muted-sm'>Supplier</span><br>" + esc(t.supplier) + "</div>" +
+          "<div><span class='muted-sm'>Quantity</span><br>" + t.quantityKg + " kg @ " + t.fatPct + "%</div>" +
+          "<div><span class='muted-sm'>Litres</span><br>" + t.litres + " L</div>" +
+          "<div><span class='muted-sm'>Total cost</span><br>" + milkRs(t.totalCostPaise) + " (" + milkRs(t.costPerLitrePaise) + "/L)</div>" +
+          "<div><span class='muted-sm'>Remaining</span><br><b>" + (Math.round(t.remainingLitres * 100) / 100) + " L</b> · " + esc(t.status) + "</div>" +
+        "</div>" +
+        (cons.length ? '<div class="muted-sm" style="margin:6px 0 4px">Consumption ledger (FIFO draws)</div><div style="max-height:180px;overflow:auto"><table class="tbl"><thead><tr><th>Date</th><th>Channel</th><th>Litres</th><th>Cost</th></tr></thead><tbody>' +
+          cons.map(function (c) { return "<tr><td>" + esc(milkDate(c.date.slice(0, 10))) + "</td><td>" + esc(c.channel) + "</td><td>" + (Math.round(c.litres * 100) / 100) + " L</td><td>" + milkRs(c.costPaise) + "</td></tr>"; }).join("") + "</tbody></table></div>" : '<p class="muted-sm">No milk drawn from this tanker yet.</p>') +
+        '<p class="dac-err" id="tkm-err"></p>' +
+        '<div style="display:flex;justify-content:space-between;gap:10px;margin-top:10px">' +
+          (locked ? '<span class="muted-sm">Locked — milk has been drawn, so cost is fixed.</span>'
+                  : '<button class="btn btn-ghost sm" id="tkm-del">Delete</button><button class="btn btn-primary sm" id="tkm-edit">Edit</button>') +
+        "</div>";
+      var err = m.body.querySelector("#tkm-err");
+      var del = m.body.querySelector("#tkm-del");
+      if (del) del.addEventListener("click", function () {
+        del.disabled = true;
+        DOODLY_API.del("/api/admin/milk/tankers/" + id)
+          .then(function () { dacToast("Tanker " + t.code + " deleted."); m.close(); wireMilkTankersBackend(); })
+          .catch(function (e) { del.disabled = false; err.textContent = e.code === "forbidden" ? "Your role can't delete tankers." : (e.message || "Couldn't delete."); });
+      });
+      var ed = m.body.querySelector("#tkm-edit");
+      if (ed) ed.addEventListener("click", function () { m.close(); openTankerEdit(t); });
+    }).catch(function (e) { dacToast(e.message || "Couldn't load the tanker."); });
+  }
+
+  // ---- Profit Center: daily/monthly P&L + rate settings ----
+  async function wireProfitCenterBackend() {
+    if (!window.DOODLY_API) return;
+    var host = document.getElementById("profitCenterMount"); if (!host) return;
+    host.innerHTML = '<p class="muted-sm">Loading…</p>';
+    try { var c = await DOODLY_API.get("/api/admin/milk/config"); if (c && c.config) _milkCfg = c.config; } catch (e) {}
+    var day = istTodayStr(), month = day.slice(0, 7);
+    try {
+      var p = await DOODLY_API.get("/api/admin/milk/pnl?date=" + day + "&month=" + month);
+      renderProfitCenter(host, p, day, month);
+    } catch (e) {
+      host.innerHTML = e.code === "forbidden" ? '<div class="panel panel-pad muted-sm">Your role can\'t view the P&L.</div>' : '<div class="panel panel-pad muted-sm">Couldn\'t load the P&L — ' + esc(e.message || e.code || "error") + "</div>";
+    }
+  }
+  window.DOODLY_ADMIN.wireProfitCenterBackend = wireProfitCenterBackend;
+
+  function pnlCard(title, p) {
+    var line = function (l, v, strong) { return '<div style="display:flex;justify-content:space-between;padding:3px 0' + (strong ? ";border-top:1px solid rgba(0,0,0,.12);margin-top:4px;font-weight:700" : "") + '"><span' + (strong ? "" : ' class="muted-sm"') + ">" + l + "</span><span>" + v + "</span></div>"; };
+    var profitColour = p.netProfitPaise >= 0 ? "var(--leaf-600,#1FAE66)" : "#c0392b";
+    return '<div class="panel"><div class="panel-head"><h3>' + title + "</h3><span class='badge " + (p.netProfitPaise >= 0 ? "green" : "red") + "'>Net " + p.netMarginPct + "%</span></div><div class='panel-pad'>" +
+      line("Retail revenue", milkRs(p.retailRevenuePaise)) +
+      line("B2B revenue", milkRs(p.b2bRevenuePaise)) +
+      line("Revenue", milkRs(p.revenuePaise), true) +
+      line("− COGS (milk sold, FIFO)", milkRs(p.cogsPaise)) +
+      line("Gross profit", milkRs(p.grossProfitPaise) + " · " + p.grossMarginPct + "%", true) +
+      line("− Expenses", milkRs(p.expensesPaise)) +
+      '<div style="display:flex;justify-content:space-between;padding:6px 0;border-top:2px solid ' + profitColour + ';margin-top:6px;font-weight:800;font-size:16px;color:' + profitColour + '"><span>Net profit</span><span>' + milkRs(p.netProfitPaise) + "</span></div>" +
+      '<div class="muted-sm" style="margin-top:8px">Milk sold ' + p.litresSold + " L · procured " + p.litresProcured + " L (" + milkRs(p.procurementCashPaise) + " cash, " + milkRs(p.avgCostPerLitrePaise) + "/L avg)</div>" +
+      "</div></div>";
+  }
+
+  function renderProfitCenter(host, p, day, month) {
+    var canEdit = true; // config PATCH is super-admin gated server-side; show + handle 403
+    host.innerHTML =
+      '<div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:end">' +
+        '<label class="dac-f"><span>Day</span><input class="input" id="pc-day" type="date" value="' + day + '" style="max-width:150px"></label>' +
+        '<label class="dac-f"><span>Month</span><input class="input" id="pc-month" type="month" value="' + month + '" style="max-width:150px"></label>' +
+      "</div>" +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px" id="pc-cards">' +
+        pnlCard("Daily P&L — " + esc(milkDate(p.daily.from)), p.daily) +
+        pnlCard("Monthly P&L — " + esc(p.monthly.label), p.monthly) +
+      "</div>" +
+      '<div class="panel" style="margin-top:14px"><div class="panel-head"><h3>⚙ Seasonal rates</h3><span class="muted-sm">Super Admin only</span></div><div class="panel-pad">' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+          '<label class="dac-f"><span>Conversion factor (KG → litres divisor)</span><input class="input" id="pc-conv" type="number" step="0.001" value="' + _milkCfg.conversionFactor + '"></label>' +
+          '<label class="dac-f"><span>Milk rate (₹ / litre)</span><input class="input" id="pc-milk" type="number" step="0.01" value="' + (_milkCfg.milkRatePaise / 100) + '"></label>' +
+          '<label class="dac-f"><span>FAT rate (₹ / kg-fat)</span><input class="input" id="pc-fat" type="number" step="0.01" value="' + (_milkCfg.fatRatePaise / 100) + '"></label>' +
+          '<label class="dac-f"><span>Default transport (₹ / tanker)</span><input class="input" id="pc-tr" type="number" step="1" value="' + (_milkCfg.transportPaise / 100) + '"></label>' +
+        "</div><p class='dac-err' id='pc-err'></p><div style='display:flex;justify-content:flex-end;margin-top:8px'><button class='btn btn-primary sm' id='pc-save'>Save rates</button></div>" +
+      "</div></div>";
+    function reload() {
+      var d = host.querySelector("#pc-day").value || day, mo = host.querySelector("#pc-month").value || month;
+      DOODLY_API.get("/api/admin/milk/pnl?date=" + d + "&month=" + mo).then(function (np) {
+        host.querySelector("#pc-cards").innerHTML = pnlCard("Daily P&L — " + esc(milkDate(np.daily.from)), np.daily) + pnlCard("Monthly P&L — " + esc(np.monthly.label), np.monthly);
+      }).catch(function () {});
+    }
+    host.querySelector("#pc-day").addEventListener("change", reload);
+    host.querySelector("#pc-month").addEventListener("change", reload);
+    var err = host.querySelector("#pc-err");
+    host.querySelector("#pc-save").addEventListener("click", function () {
+      DOODLY_API.patch("/api/admin/milk/config", {
+        conversionFactor: +host.querySelector("#pc-conv").value || undefined,
+        milkRatePaise: Math.round((+host.querySelector("#pc-milk").value || 0) * 100),
+        fatRatePaise: Math.round((+host.querySelector("#pc-fat").value || 0) * 100),
+        transportPaise: Math.round((+host.querySelector("#pc-tr").value || 0) * 100),
+      }).then(function (x) { if (x && x.config) _milkCfg = x.config; dacToast("Rates saved. New tankers use these; existing tankers keep their snapshot."); })
+        .catch(function (e) { err.textContent = e.code === "forbidden" ? "Only a Super Admin can change the rates." : (e.message || "Couldn't save."); });
+    });
+  }
+
   // ---- dispatcher: route → module wirer ----
   function bkWire(route) {
     if (route === "admin/offers") return wireOffersBackend();
@@ -5759,6 +5996,8 @@
     if (route === "admin/assignment") return wireAssignmentBackend();
     if (route === "admin/delivery-calendar") return wireDeliveryCalendarBackend();
     if (route === "admin/cutoff") return wireOpsCutoffAlert();
+    if (route === "admin/milk-tankers") return wireMilkTankersBackend();
+    if (route === "admin/profit-center") return wireProfitCenterBackend();
     // ?date=YYYY-MM-DD deep-links a specific day (the Delivery Calendar links here).
     if (route === "admin/deliveries") { var qd = null; try { qd = new URLSearchParams(location.search).get("date"); } catch (e) {} return wireDeliveriesBackend(qd && /^\d{4}-\d{2}-\d{2}$/.test(qd) ? qd : undefined); }
     if (route === "admin/delivery-settings") return wireDeliverySettingsBackend();

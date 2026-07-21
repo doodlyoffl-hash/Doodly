@@ -1420,6 +1420,7 @@ model Farmer {
   createdAt    DateTime      @default(now())       // registration date
   updatedAt    DateTime      @default(now()) @updatedAt
   procurements Procurement[]
+  tankers      MilkTanker[]
 }
 
 model Procurement {
@@ -1478,6 +1479,108 @@ model InventoryItem {
   quantity    Float    @default(0)
   reorderAt   Float    @default(0)                 // stock alert threshold
   updatedAt   DateTime @updatedAt
+}
+
+// ----------------------------------------------------------------
+// MILK PROCUREMENT & PROFIT ENGINE
+// Tanker-based procurement: raw milk arrives in KG, is costed with a
+// configurable seasonal formula, and becomes a FIFO inventory lot that
+// retail (litres) and B2B (litres) sales draw down oldest-first. Cost
+// rates are SNAPSHOTTED onto each tanker at entry so a later rate change
+// never rewrites a closed batch's profit. All money is integer paise.
+// ----------------------------------------------------------------
+
+enum TankerStatus {
+  OPEN     // still has stock to consume
+  CLOSED   // exhausted (or manually closed) — profit locked, no edits
+}
+
+enum ConsumptionChannel {
+  RETAIL       // customer / subscription / trial / one-time (litres)
+  B2B          // business order milk lines (litres)
+  ADJUSTMENT   // manual wastage / correction
+}
+
+// Editable seasonal rates (singleton). One row, id = "singleton".
+model MilkCostConfig {
+  id               String   @id @default("singleton")
+  conversionFactor Float    @default(1.03)     // litres = kg / factor
+  milkRatePaise    Int      @default(450)      // per LITRE (₹4.50)
+  fatRatePaise     Int      @default(82000)    // per KG-FAT (₹820)
+  transportPaise   Int      @default(950000)   // per tanker (₹9,500) — default; editable per entry
+  currency         String   @default("INR")
+  taxBps           Int      @default(0)        // optional procurement tax (basis points), future-ready
+  financialYear    String?                     // e.g. "2026-27"
+  updatedAt        DateTime @default(now()) @updatedAt
+  updatedBy        String?
+}
+
+model MilkTanker {
+  id               String        @id @default(cuid())
+  code             String        @unique               // "TNK-YYYYMMDD-####"
+  procurementDate  DateTime                             // IST-day midnight (the delivery/business day it belongs to)
+  tankerNo         String
+  supplier         String                               // supplier / farmer-group name (free text)
+  farmerId         String?                              // optional link to an existing Farmer
+  farmer           Farmer?       @relation(fields: [farmerId], references: [id])
+
+  // raw entry
+  quantityKg       Float
+  fatPct           Float
+  snfPct           Float?                               // future-ready
+  remarks          String?
+
+  // rate snapshot (locks historical cost against later config edits)
+  conversionFactor Float
+  milkRatePaise    Int
+  fatRatePaise     Int
+
+  // computed cost (all paise; litres derived)
+  litres           Float
+  kgFat            Float
+  milkCostPaise    Int
+  fatCostPaise     Int
+  transportPaise   Int
+  totalCostPaise   Int
+  costPerLitrePaise Int
+  costPerKgPaise   Int
+
+  // FIFO lot state (canonical unit = LITRES)
+  consumedLitres   Float         @default(0)
+  remainingLitres  Float                                // = litres − consumedLitres, denormalised for fast queries
+  status           TankerStatus  @default(OPEN)
+  closedAt         DateTime?
+
+  createdById      String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @default(now()) @updatedAt
+  deletedAt        DateTime?
+
+  consumptions     TankerConsumption[]
+
+  @@index([procurementDate])
+  @@index([status, procurementDate])
+  @@index([deletedAt])
+}
+
+// One row per FIFO draw against a tanker. The sum of a tanker's RETAIL+B2B+ADJUSTMENT
+// litres equals its consumedLitres; costPaise = litres × the tanker's costPerLitrePaise.
+model TankerConsumption {
+  id         String             @id @default(cuid())
+  tankerId   String
+  tanker     MilkTanker         @relation(fields: [tankerId], references: [id], onDelete: Cascade)
+  date       DateTime                                   // IST-day the consumption is attributed to
+  channel    ConsumptionChannel
+  litres     Float
+  costPaise  Int
+  sourceRef  String?                                    // idempotency key, e.g. "settle:2026-07-21:RETAIL"
+  note       String?
+  createdAt  DateTime           @default(now())
+
+  @@index([date])
+  @@index([tankerId])
+  @@index([sourceRef])
+  @@index([channel, date])
 }
 
 // ----------------------------------------------------------------
