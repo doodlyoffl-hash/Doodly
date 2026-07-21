@@ -6,12 +6,16 @@
    Given a KG entry + FAT% + the (snapshotted) seasonal rates:
      litres   = quantityKg / conversionFactor
      kgFat    = quantityKg × fatPct / 100
-     milkCost = litres × milkRatePaise          (rate is per LITRE)
-     fatCost  = kgFat  × fatRatePaise            (rate is per KG-FAT)
+     milkCost = litres × milkRatePaise          (per-LITRE MAINTENANCE charge —
+                                                 the field is UI-labelled "Maintenance";
+                                                 the milk itself is priced by fat below)
+     fatCost  = kgFat  × fatRatePaise            (per KG-FAT — the actual milk cost)
      transport= entered per tanker (default from config)
-     total    = milkCost + fatCost + transport
+     total    = milkCost + fatCost + transport   (maintenance + milk + transport)
      /litre   = total / litres
      /kg      = total / quantityKg
+   NB: the DB/field name `milkRatePaise` is kept for compatibility; it holds the
+   per-litre maintenance charge. Rename to maintenanceRatePaise needs a migration.
    ============================================================= */
 
 export interface CostRates {

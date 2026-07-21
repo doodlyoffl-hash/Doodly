@@ -5825,12 +5825,12 @@
       var kg = m.body.querySelector("#tk-kg").value, fat = m.body.querySelector("#tk-fat").value;
       var tr = Math.round((+m.body.querySelector("#tk-tr").value || 0) * 100);
       var p = milkPreview(kg, fat, { conversionFactor: _milkCfg.conversionFactor, milkRatePaise: _milkCfg.milkRatePaise, fatRatePaise: _milkCfg.fatRatePaise, transportPaise: tr });
-      prev.innerHTML = '<div class="muted-sm" style="margin-bottom:6px">Auto-calculated (rates: ÷' + _milkCfg.conversionFactor + ", milk " + milkRs(_milkCfg.milkRatePaise) + "/L, fat " + milkRs(_milkCfg.fatRatePaise) + "/kg)</div>" +
+      prev.innerHTML = '<div class="muted-sm" style="margin-bottom:6px">Auto-calculated (rates: ÷' + _milkCfg.conversionFactor + ", maintenance " + milkRs(_milkCfg.milkRatePaise) + "/L, fat " + milkRs(_milkCfg.fatRatePaise) + "/kg)</div>" +
         '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 14px">' +
         "<div><span class='muted-sm'>Litres</span><br><b>" + p.litres + " L</b></div>" +
         "<div><span class='muted-sm'>KG FAT</span><br><b>" + p.kgFat + "</b></div>" +
-        "<div><span class='muted-sm'>Milk cost</span><br>" + milkRs(p.milkCost) + "</div>" +
-        "<div><span class='muted-sm'>Fat cost</span><br>" + milkRs(p.fatCost) + "</div>" +
+        "<div><span class='muted-sm'>Maintenance</span><br>" + milkRs(p.milkCost) + "</div>" +
+        "<div><span class='muted-sm'>Milk cost (fat)</span><br>" + milkRs(p.fatCost) + "</div>" +
         "<div><span class='muted-sm'>Transport</span><br>" + milkRs(p.transport) + "</div>" +
         "<div><span class='muted-sm'>Cost / litre</span><br>" + milkRs(p.perL) + "</div>" +
         '</div><div style="border-top:1px solid rgba(0,0,0,.1);margin-top:8px;padding-top:8px"><b style="font-size:18px">Total tanker cost: ' + milkRs(p.total) + "</b> <span class='muted-sm'>· " + milkRs(p.perKg) + "/kg</span></div>";
@@ -5986,7 +5986,7 @@
       '<div class="panel" style="margin-top:14px"><div class="panel-head"><h3>⚙ Seasonal rates</h3><span class="muted-sm">Super Admin only</span></div><div class="panel-pad">' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
           '<label class="dac-f"><span>Conversion factor (KG → litres divisor)</span><input class="input" id="pc-conv" type="number" step="0.001" value="' + _milkCfg.conversionFactor + '"></label>' +
-          '<label class="dac-f"><span>Milk rate (₹ / litre)</span><input class="input" id="pc-milk" type="number" step="0.01" value="' + (_milkCfg.milkRatePaise / 100) + '"></label>' +
+          '<label class="dac-f"><span>Maintenance charge (₹ / litre)</span><input class="input" id="pc-milk" type="number" step="0.01" value="' + (_milkCfg.milkRatePaise / 100) + '"></label>' +
           '<label class="dac-f"><span>FAT rate (₹ / kg-fat)</span><input class="input" id="pc-fat" type="number" step="0.01" value="' + (_milkCfg.fatRatePaise / 100) + '"></label>' +
           '<label class="dac-f"><span>Default transport (₹ / tanker)</span><input class="input" id="pc-tr" type="number" step="1" value="' + (_milkCfg.transportPaise / 100) + '"></label>' +
         "</div><p class='dac-err' id='pc-err'></p><div style='display:flex;justify-content:flex-end;margin-top:8px'><button class='btn btn-primary sm' id='pc-save'>Save rates</button></div>" +

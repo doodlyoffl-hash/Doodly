@@ -16,8 +16,8 @@ export interface MilkConfig extends CostRates {
 
 export const MILK_CONFIG_DEFAULTS: MilkConfig = {
   conversionFactor: 1.03,
-  milkRatePaise: 450,      // ₹4.50 / litre
-  fatRatePaise: 82000,     // ₹820 / kg-fat
+  milkRatePaise: 450,      // ₹4.50 / litre — per-litre MAINTENANCE charge (UI: "Maintenance charge")
+  fatRatePaise: 82000,     // ₹820 / kg-fat — the actual milk cost (fat-based pricing)
   transportPaise: 950000,  // ₹9,500 / tanker
   currency: "INR",
   taxBps: 0,
