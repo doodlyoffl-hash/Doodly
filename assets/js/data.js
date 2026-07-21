@@ -30,9 +30,10 @@ window.DOODLY_DEMO_ALLOWED = function () {
     var host = (typeof location !== "undefined" && location.hostname ? location.hostname : "").toLowerCase();
     var local = host === "" || host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1";
     if (!local) return false;                       // live domain → never demo
+    if (localStorage.getItem("doodly-demo") !== "1") return false;  // OFF by default; opt in for a showcase
     var u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null");
     var realUser = !!(u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token"));
-    return !realUser;                               // local + no real login → demo persona OK
+    return !realUser;                               // local + opted-in + no real login → demo persona OK
   } catch (e) { return false; }                     // fail safe → no demo
 };
 

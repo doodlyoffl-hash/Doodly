@@ -253,7 +253,13 @@ window.DOODLY_DATA = (function () {
       realUser = !!(u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token"));
     } catch (e) { /* no localStorage */ }
 
-    const production = !isLocalDev || realUser; // live domain OR a real login anywhere
+    // Demo personas are OFF by default EVERYWHERE (production and localhost) so
+    // every surface shows an honest empty state or real backend data — never
+    // fabricated rows. A developer can opt back in for a showcase by setting
+    // localStorage['doodly-demo']='1'.
+    let demoOptIn = false;
+    try { demoOptIn = localStorage.getItem("doodly-demo") === "1"; } catch (e) { /* no localStorage */ }
+    const production = !(isLocalDev && !realUser && demoOptIn);
     if (production) {
       // Blank every demo record array at the source (future-proof: covers any key).
       Object.keys(data).forEach((k) => { if (Array.isArray(data[k])) data[k] = []; });
