@@ -69,7 +69,7 @@ export async function reportsOverview(rangeIn: ReportRange = {}) {
   // ---- finance + growth aggregates (batch 2) ----
   const [
     walletUsed, walletByKind, referralAgg, trialAgg, procAll, procRange, expensesAgg,
-    refundsAgg, repeatCustomers,
+    refundsAgg, repeatCustomers, tankerCogsAll,
   ] = await Promise.all([
     db.walletTxn.aggregate({ where: { type: "DEBIT", kind: "usage" }, _sum: { amountPaise: true } }),
     db.walletTxn.groupBy({ by: ["kind", "type"], _sum: { amountPaise: true } }),
@@ -80,6 +80,10 @@ export async function reportsOverview(rangeIn: ReportRange = {}) {
     db.expense.aggregate({ where: { deletedAt: null, status: { notIn: ["REJECTED", "CANCELLED"] } }, _sum: { totalPaise: true } }),
     db.paymentRefund.aggregate({ _count: true, _sum: { amountPaise: true } }),
     db.order.groupBy({ by: ["userId"], where: { status: "PAID" }, _count: { _all: true }, having: { userId: { _count: { gt: 1 } } } }),
+    // Milk-engine COGS: FIFO cost of milk actually SOLD. Once tankers are in use this
+    // is the real cost of goods; before that it's 0 and we fall back to the old
+    // procurement-cash proxy so legacy reports are unchanged.
+    db.tankerConsumption.aggregate({ _sum: { costPaise: true } }),
   ]);
 
   // ---- trend raw rows (batch 3) ----
@@ -123,8 +127,13 @@ export async function reportsOverview(rangeIn: ReportRange = {}) {
   const wKind = (kind: string, type: "CREDIT" | "DEBIT") => (walletByKind as never as { kind: string; type: string; _sum: { amountPaise: number | null } }[]).filter((g) => g.kind === kind && g.type === type).reduce((s, g) => s + (g._sum.amountPaise ?? 0), 0);
   const procurementCost = procAll._sum.amountPaise ?? 0;
   const expensesPaise = expensesAgg._sum.totalPaise ?? 0;
-  const grossProfit = totalRevenue - procurementCost;                 // future-ready COGS proxy
-  const netProfit = totalRevenue - procurementCost - expensesPaise;   // future-ready
+  // COGS = FIFO cost of milk sold (the tanker engine) once it's in use; else the
+  // legacy procurement-cash proxy. This keeps the Reports P&L consistent with the
+  // Milk Profit Center rather than double-counting two procurement models.
+  const tankerCogs = tankerCogsAll._sum.costPaise ?? 0;
+  const cogs = tankerCogs > 0 ? tankerCogs : procurementCost;
+  const grossProfit = totalRevenue - cogs;
+  const netProfit = totalRevenue - cogs - expensesPaise;
 
   const kpis = {
     totalRevenuePaise: totalRevenue,
@@ -153,6 +162,7 @@ export async function reportsOverview(rangeIn: ReportRange = {}) {
     referralGrowthPaise: referralAgg._sum.amountPaise ?? 0,
     trialConversions: trialAgg._count,
     procurementCostPaise: procurementCost,
+    cogsPaise: cogs,                                    // FIFO milk-sold cost (tanker engine) or legacy proxy
     procurementLitres: procAll._sum.litres ?? 0,
     expensesPaise,
     gstCollectedPaise: gstPaid._sum.taxPaise ?? 0,

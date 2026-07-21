@@ -5899,10 +5899,31 @@
     var day = istTodayStr(), month = day.slice(0, 7);
     try {
       var p = await DOODLY_API.get("/api/admin/milk/pnl?date=" + day + "&month=" + month);
-      renderProfitCenter(host, p, day, month);
+      var an = await DOODLY_API.get("/api/admin/milk/analytics").catch(function () { return { cards: null, health: null }; });
+      renderProfitCenter(host, p, an, day, month);
     } catch (e) {
       host.innerHTML = e.code === "forbidden" ? '<div class="panel panel-pad muted-sm">Your role can\'t view the P&L.</div>' : '<div class="panel panel-pad muted-sm">Couldn\'t load the P&L — ' + esc(e.message || e.code || "error") + "</div>";
     }
+  }
+
+  // Authed blob download for a milk report (a plain <a href> would hit the backend
+  // cross-origin unauthenticated → 403); mirrors exportOpsReport.
+  function exportMilkReport(type, from, to, format) {
+    var base = window.DOODLY_API ? DOODLY_API.base() : "";
+    var h = {}; try { var t = localStorage.getItem("doodly-token"); if (t) h["Authorization"] = "Bearer " + t; } catch (e) {}
+    try { if (window.DOODLY_RBAC) { h["X-Doodly-Actor"] = DOODLY_RBAC.activeRole(); var cu = DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser(); if (cu && cu.id) h["X-Doodly-Actor-Id"] = cu.id; } } catch (e) {}
+    var ext = format === "xls" ? "xls" : format === "csv" ? "csv" : "pdf";
+    dacToast("Preparing the " + type + " report (" + ext.toUpperCase() + ")…");
+    fetch(base + "/api/admin/milk/reports/export?type=" + encodeURIComponent(type) + "&from=" + from + "&to=" + to + "&format=" + ext, { headers: h, credentials: "include" })
+      .then(function (r) { if (!r.ok) throw new Error(r.status === 403 ? "Your role can't export this (403)." : "Export failed (" + r.status + ")"); return r.blob(); })
+      .then(function (blob) {
+        var url = URL.createObjectURL(blob), a = document.createElement("a");
+        a.href = url; a.download = "DOODLY_Milk_" + type + "_" + from + "_" + to + "." + ext;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+        dacToast("Report downloaded (" + ext.toUpperCase() + ").");
+      })
+      .catch(function (e) { dacToast(e.message || "Couldn't export the report."); });
   }
   window.DOODLY_ADMIN.wireProfitCenterBackend = wireProfitCenterBackend;
 
@@ -5921,9 +5942,33 @@
       "</div></div>";
   }
 
-  function renderProfitCenter(host, p, day, month) {
-    var canEdit = true; // config PATCH is super-admin gated server-side; show + handle 403
+  function milkCardsHtml(c) {
+    if (!c) return "";
+    var pnPos = c.monthNetProfitPaise >= 0;
+    return '<div class="dl-an-kpis" style="margin-bottom:12px">' +
+      milkStat(milkRs(c.todayRevenuePaise), "Revenue today") +
+      milkStat('<span style="color:' + (c.todayNetProfitPaise >= 0 ? "var(--leaf-600,#1FAE66)" : "#c0392b") + '">' + milkRs(c.todayNetProfitPaise) + "</span>", "Profit today") +
+      milkStat(milkRs(c.monthRevenuePaise), "Revenue (month)") +
+      milkStat('<span style="color:' + (pnPos ? "var(--leaf-600,#1FAE66)" : "#c0392b") + '">' + milkRs(c.monthNetProfitPaise) + "</span>", "Profit (month)") +
+      milkStat(c.monthMilkPurchasedLitres + " L", "Milk purchased") +
+      milkStat(c.monthMilkSoldLitres + " L", "Milk sold") +
+      milkStat(milkRs(c.avgProcurementCostPerLitrePaise), "Avg cost / litre") +
+      milkStat(milkRs(c.inventoryValuePaise), "Inventory value") +
+      milkStat(c.netMarginPct + "%", "Net margin") +
+      milkStat(c.expensePct + "%", "Expense ratio") +
+      "</div>";
+  }
+
+  function renderProfitCenter(host, p, an, day, month) {
+    var cards = an && an.cards, health = an && an.health;
     host.innerHTML =
+      milkCardsHtml(cards) +
+      // settlement health — days with sales whose milk was never drawn (no COGS)
+      (health && health.healthy === false && health.unsettled && health.unsettled.length
+        ? '<div class="panel" style="margin-bottom:12px;border-left:4px solid #E0A800"><div class="panel-pad"><b>⚠ ' + health.unsettled.length + ' delivery day(s) not settled</b> <span class="muted-sm">— their milk hasn\'t been drawn from inventory, so their profit is overstated until you settle them.</span><div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
+          health.unsettled.slice(0, 12).map(function (u) { return '<span class="badge amber">' + esc(milkDate(u.date)) + " · " + u.deliveries + "</span>"; }).join(" ") +
+          '<button class="btn btn-primary sm" id="pc-settle-all" style="margin-left:auto">Settle all</button></div></div></div>'
+        : (health ? '<div class="badge green" style="margin-bottom:12px">✅ All delivery days settled</div>' : "")) +
       '<div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:end">' +
         '<label class="dac-f"><span>Day</span><input class="input" id="pc-day" type="date" value="' + day + '" style="max-width:150px"></label>' +
         '<label class="dac-f"><span>Month</span><input class="input" id="pc-month" type="month" value="' + month + '" style="max-width:150px"></label>' +
@@ -5939,7 +5984,32 @@
           '<label class="dac-f"><span>FAT rate (₹ / kg-fat)</span><input class="input" id="pc-fat" type="number" step="0.01" value="' + (_milkCfg.fatRatePaise / 100) + '"></label>' +
           '<label class="dac-f"><span>Default transport (₹ / tanker)</span><input class="input" id="pc-tr" type="number" step="1" value="' + (_milkCfg.transportPaise / 100) + '"></label>' +
         "</div><p class='dac-err' id='pc-err'></p><div style='display:flex;justify-content:flex-end;margin-top:8px'><button class='btn btn-primary sm' id='pc-save'>Save rates</button></div>" +
+      "</div></div>" +
+      // reports + exports
+      '<div class="panel" style="margin-top:14px"><div class="panel-head"><h3>📄 Reports</h3></div><div class="panel-pad">' +
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">' +
+          '<label class="dac-f"><span>Report</span><select class="input" id="pc-rtype" style="max-width:230px">' +
+            '<option value="pnl">Profit & Loss statement</option><option value="procurement">Procurement (tankers)</option><option value="consumption">Sales & consumption</option><option value="tanker">Tanker cost & consumption</option><option value="inventory">Inventory on hand</option>' +
+          "</select></label>" +
+          '<label class="dac-f"><span>From</span><input class="input" id="pc-rfrom" type="date" value="' + month + '-01" style="max-width:150px"></label>' +
+          '<label class="dac-f"><span>To</span><input class="input" id="pc-rto" type="date" value="' + day + '" style="max-width:150px"></label>' +
+          '<div style="display:flex;gap:6px"><button class="btn btn-primary sm" id="pc-rpdf">PDF</button><button class="btn btn-ghost sm" id="pc-rxls">Excel</button><button class="btn btn-ghost sm" id="pc-rcsv">CSV</button></div>' +
+        "</div><p class='muted-sm' style='margin-top:6px'>Inventory is a live snapshot; the date range applies to the other reports.</p>" +
       "</div></div>";
+    var sa = host.querySelector("#pc-settle-all");
+    if (sa) sa.addEventListener("click", function () {
+      var dates = (health.unsettled || []).map(function (u) { return u.date; });
+      sa.disabled = true; dacToast("Settling " + dates.length + " day(s)…");
+      var i = 0, okc = 0;
+      (function next() {
+        if (i >= dates.length) { dacToast("Settled " + okc + "/" + dates.length + " day(s)."); wireProfitCenterBackend(); return; }
+        DOODLY_API.post("/api/admin/milk/settle", { date: dates[i] }).then(function () { okc++; }).catch(function () {}).finally(function () { i++; next(); });
+      })();
+    });
+    var doReport = function (fmt) { exportMilkReport(host.querySelector("#pc-rtype").value, host.querySelector("#pc-rfrom").value, host.querySelector("#pc-rto").value, fmt); };
+    host.querySelector("#pc-rpdf").addEventListener("click", function () { doReport("pdf"); });
+    host.querySelector("#pc-rxls").addEventListener("click", function () { doReport("xls"); });
+    host.querySelector("#pc-rcsv").addEventListener("click", function () { doReport("csv"); });
     function reload() {
       var d = host.querySelector("#pc-day").value || day, mo = host.querySelector("#pc-month").value || month;
       DOODLY_API.get("/api/admin/milk/pnl?date=" + d + "&month=" + mo).then(function (np) {

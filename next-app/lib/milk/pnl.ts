@@ -47,7 +47,7 @@ export interface Pnl {
   avgCostPerLitrePaise: number; // procurement cash / litres procured
 }
 
-async function pnlForBounds(label: string, start: Date, end: Date): Promise<Pnl> {
+export async function pnlForBounds(label: string, start: Date, end: Date): Promise<Pnl> {
   const [retail, b2b, cogs, expenses, proc] = await Promise.all([
     db.order.aggregate({ where: { status: "PAID", createdAt: { gte: start, lt: end } }, _sum: { totalPaise: true, couponDiscountPaise: true } }),
     db.businessOrder.aggregate({ where: { status: { not: "CANCELLED" }, deliveryDate: { gte: start, lt: end } }, _sum: { totalPaise: true } }),
@@ -87,6 +87,13 @@ const istDate = (d: Date) => new Date(d.getTime() + IST_MS).toISOString().slice(
 export function dailyPnl(dateIso?: string | null): Promise<Pnl> {
   const { start, end, iso } = istDayWindow(dateIso);
   return pnlForBounds(iso, start, end);
+}
+
+/** P&L over an arbitrary IST date range [fromIso, toIso] inclusive. */
+export function rangePnl(fromIso: string, toIso: string): Promise<Pnl> {
+  const start = istDayWindow(fromIso).start;
+  const end = istDayWindow(toIso).end;   // inclusive of the `to` day
+  return pnlForBounds(`${fromIso} → ${toIso}`, start, end);
 }
 
 /** P&L for an IST calendar month. `ym` = "YYYY-MM" (default: current IST month). */
