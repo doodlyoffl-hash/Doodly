@@ -19,15 +19,19 @@ import { backendBase, backendBaseSource, isProtectedDeploymentHost } from "@/lib
 import { log } from "@/lib/logger";
 
 /** Canonical ops event keys. Map each to an approved template name via
- *  SUPERFONE_WA_TEMPLATES, e.g.
- *  {"daily_delivery_summary":{"name":"daily_delivery_summary","lang":"en","header":0}} */
+ *  SUPERFONE_WA_TEMPLATES. `lang` MUST match the language Meta approved the
+ *  template in — daily_delivery_summary is approved as en_US, the rest as en, e.g.
+ *  {"daily_delivery_summary":{"name":"daily_delivery_summary","lang":"en_US","header":0},
+ *   "new_order_alert":{"name":"new_order_alert","lang":"en","header":0}} */
 export const OPS_TEMPLATES = {
   daily_delivery_summary: {
-    // NB: the manifest link is variable 13, NOT trailing free text. Once an event is
-    // mapped to an approved template the provider sends ONLY the variables and drops
-    // msg.text (lib/notifications/providers.ts) — a link appended as text would
-    // silently vanish the day the template goes live.
-    vars: ["date", "totalOrders", "customers", "litres", "bottles", "subscription", "oneTime", "trial", "b2b", "paid", "pending", "awaitingAssignment", "manifestLink"],
+    // EXACTLY 12 variables — the approved Meta/Superfone template ends at {{12}}
+    // ("Ready for Auto Assignment") with no link placeholder and no button. Meta
+    // rejects any send whose parameter count differs from the approved template
+    // (Superfone surfaces that as an opaque 500), so this array must stay at 12.
+    // The manifest PDF link travels on the EMAIL summary instead (rich links, no
+    // template approval needed) — see dispatchNotifications in lib/ops/cutoff.ts.
+    vars: ["date", "totalOrders", "customers", "litres", "bottles", "subscription", "oneTime", "trial", "b2b", "paid", "pending", "awaitingAssignment"],
     text: (v: string[]) =>
       `🥛 DOODLY – Tomorrow's Delivery Summary\n\n` +
       `📅 Delivery Date: ${v[0]}\n\n` +
@@ -36,7 +40,6 @@ export const OPS_TEMPLATES = {
       `🔄 Subscription Orders: ${v[5]}\n🛒 One-Time Orders: ${v[6]}\n🧪 Trial Orders: ${v[7]}\n🏢 B2B Orders: ${v[8]}\n\n` +
       `💰 Paid Orders: ${v[9]}\n⌛ Pending Payments: ${v[10]}\n\n` +
       `🚚 Ready for Auto Assignment: ${v[11]}\n\n` +
-      `📄 Full manifest: ${v[12]}\n\n` +
       `Please review today's operations in the DOODLY Admin Panel.\n\n— DOODLY Operations`,
   },
   new_order_alert: {

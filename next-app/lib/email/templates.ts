@@ -314,6 +314,7 @@ export interface OpsSummaryData {
     areaBreakdown: { area: string; orders: number; bottles: number }[];
   };
   missed: { confirmedNotAssigned: number; assignedNotPacked: number; packedNotDispatched: number; overdue: number; ordersWithoutDelivery: number };
+  manifestUrl?: string;   // signed link to the full delivery-manifest PDF (WhatsApp can't carry it)
 }
 export function opsDailySummary(d: OpsSummaryData): Email {
   const s = d.summary, m = d.missed;
@@ -332,9 +333,9 @@ export function opsDailySummary(d: OpsSummaryData): Email {
     card(`${heading("Payments")}${infoRow("Prepaid", String(s.paymentSummary.paid))}${infoRow("COD", String(s.paymentSummary.cod))}${infoRow("Pending", `${s.pendingPayments.count} · ${rs(s.pendingPayments.amountPaise)}`)}${infoRow("Bottle deposits held", rs(s.bottleDepositsPaise), true)}`),
     warnCard,
     notes,
-    card(`<div style="text-align:center">${button("Open Delivery Management", url("/admin/deliveries.html"))}</div>`),
+    card(`<div style="text-align:center">${button("Open Delivery Management", url("/admin/deliveries.html"))}${d.manifestUrl ? `<div style="margin-top:12px">${button("Download full manifest (PDF)", d.manifestUrl)}</div>` : ""}</div>`),
   ]);
-  const text = `DOODLY — Tomorrow's Delivery Summary (${d.dmy})\nOrders: ${s.totalOrders} | Customers: ${s.totalCustomers} | Milk: ${s.milkLitres} L | Bottles: ${s.totalBottles}\nSubscription ${s.subscriptionOrders} · One-time ${s.oneTimeOrders} · Trial ${s.trialOrders} · B2B ${s.b2bOrders}\nUnassigned: ${m.confirmedNotAssigned} | Not packed: ${m.assignedNotPacked}\nReview: ${url("/admin/deliveries.html")}`;
+  const text = `DOODLY — Tomorrow's Delivery Summary (${d.dmy})\nOrders: ${s.totalOrders} | Customers: ${s.totalCustomers} | Milk: ${s.milkLitres} L | Bottles: ${s.totalBottles}\nSubscription ${s.subscriptionOrders} · One-time ${s.oneTimeOrders} · Trial ${s.trialOrders} · B2B ${s.b2bOrders}\nUnassigned: ${m.confirmedNotAssigned} | Not packed: ${m.assignedNotPacked}\nReview: ${url("/admin/deliveries.html")}${d.manifestUrl ? `\nFull manifest (PDF): ${d.manifestUrl}` : ""}`;
   return { subject: `DOODLY — Tomorrow's Delivery Summary (${d.dmy})`, html, text };
 }
 

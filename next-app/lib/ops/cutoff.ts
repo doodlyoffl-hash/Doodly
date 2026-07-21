@@ -26,9 +26,6 @@ import { broadcastOpsWhatsApp, type WaDelivery } from "@/lib/ops/whatsapp";
 const CFG_KEY = "ops.cutoff";
 const IST_MS = 5.5 * 60 * 60 * 1000;
 const CLOSED: DeliveryStatus[] = ["DELIVERED", "FAILED", "SKIPPED"];
-/** WhatsApp rejects an empty variable, so the manifest slot always carries something.
-    Only reachable when AUTH_SECRET is unset (nothing can be signed). */
-const MANIFEST_FALLBACK = "unavailable — open the DOODLY Admin Panel";
 
 export interface CutoffConfig {
   enabled: boolean;
@@ -388,12 +385,10 @@ export async function sendTestWhatsAppSummary(actor?: { actorId?: string; actorR
   const target = nextDeliveryDayIso();
   const [s, m] = await Promise.all([buildSummary(target), missedOrderReport(target)]);
   const dmy = s.date.split("-").reverse().join("/");
-  const link = await manifestLink(s.date);
   const results = await broadcastOpsWhatsApp("daily_delivery_summary", recipients, [
     dmy, s.totalOrders, s.totalCustomers, s.milkLitres, s.totalBottles,
     s.subscriptionOrders, s.oneTimeOrders, s.trialOrders, s.b2bOrders,
     s.paymentSummary.paid, s.pendingPayments.count, m.confirmedNotAssigned,
-    link ?? MANIFEST_FALLBACK,
   ], { retries: Math.max(0, cfg.whatsappRetries ?? 2), extra: "(This is a TEST from the DOODLY Admin Panel.)" });
   await audit({
     userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system",
@@ -525,25 +520,26 @@ async function dispatchNotifications(cfg: CutoffConfig, s: DeliverySummary, m: M
   const staff = await db.user.findMany({ where: { role: { in: ["ADMIN", "SUPER_ADMIN", "OPERATIONS"] }, status: "ACTIVE", email: { not: null } }, select: { email: true } });
   const to = [...new Set([...(cfg.emailRecipients ?? []), ...staff.map((u) => u.email!).filter(Boolean)])];
 
+  // The signed manifest PDF link rides on the EMAIL (rich links, no template
+  // approval): the approved WhatsApp template has no link slot, so it can't carry it.
+  const link = await manifestLink(s.date);
+
   try {
     const { sendOpsDailySummary } = await import("@/lib/auth/email");
-    for (const addr of to) { try { await sendOpsDailySummary(addr, { dmy, summary: s, missed: m }); emails++; } catch { /* per-recipient */ } }
+    for (const addr of to) { try { await sendOpsDailySummary(addr, { dmy, summary: s, missed: m, manifestUrl: link ?? undefined }); emails++; } catch { /* per-recipient */ } }
   } catch (e) { log.error("ops.cutoff", "email send failed", { err: (e as Error)?.message }); }
 
-  // ---- WhatsApp summary (Superfone) + signed manifest link ----
-  // Superfone has no document endpoint, so the detailed manifest PDF travels as a
-  // short-lived signed link rather than an attachment. Each recipient's outcome is
-  // recorded (id / status / attempts / error) for the delivery-confirmation log.
+  // ---- WhatsApp summary (Superfone) — exactly the 12 template variables ----
+  // The approved template ends at {{12}}; Meta rejects a mismatched parameter count
+  // (Superfone reports it as an opaque 500). Each recipient's outcome is recorded
+  // (id / status / attempts / error) for the delivery-confirmation log.
   let waLog: WaDelivery[] = [];
   if (cfg.whatsappEnabled && (cfg.whatsappRecipients?.length ?? 0)) {
     try {
-      const link = await manifestLink(s.date);
       const vars = [
         dmy, s.totalOrders, s.totalCustomers, s.milkLitres, s.totalBottles,
         s.subscriptionOrders, s.oneTimeOrders, s.trialOrders, s.b2bOrders,
         s.paymentSummary.paid, s.pendingPayments.count, m.confirmedNotAssigned,
-        // Variable, not appended text — see the note on OPS_TEMPLATES.
-        link ?? MANIFEST_FALLBACK,
       ];
       waLog = await broadcastOpsWhatsApp("daily_delivery_summary", cfg.whatsappRecipients, vars, {
         retries: Math.max(0, cfg.whatsappRetries ?? 2),
