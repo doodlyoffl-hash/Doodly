@@ -5969,6 +5969,12 @@
           health.unsettled.slice(0, 12).map(function (u) { return '<span class="badge amber">' + esc(milkDate(u.date)) + " · " + u.deliveries + "</span>"; }).join(" ") +
           '<button class="btn btn-primary sm" id="pc-settle-all" style="margin-left:auto">Settle all</button></div></div></div>'
         : (health ? '<div class="badge green" style="margin-bottom:12px">✅ All delivery days settled</div>' : "")) +
+      // quick actions — book a B2B milk order (adds to B2B revenue) or record an
+      // expense (reduces net profit). Both flow straight into the P&L below.
+      '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">' +
+        '<button class="btn btn-primary sm" id="pc-b2b">+ Book B2B order</button>' +
+        '<button class="btn btn-ghost sm" id="pc-exp">+ Record expense</button>' +
+      "</div>" +
       '<div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:end">' +
         '<label class="dac-f"><span>Day</span><input class="input" id="pc-day" type="date" value="' + day + '" style="max-width:150px"></label>' +
         '<label class="dac-f"><span>Month</span><input class="input" id="pc-month" type="month" value="' + month + '" style="max-width:150px"></label>' +
@@ -6006,6 +6012,8 @@
         DOODLY_API.post("/api/admin/milk/settle", { date: dates[i] }).then(function () { okc++; }).catch(function () {}).finally(function () { i++; next(); });
       })();
     });
+    host.querySelector("#pc-b2b").addEventListener("click", function () { openMilkB2BBooking(function () { wireProfitCenterBackend(); }); });
+    host.querySelector("#pc-exp").addEventListener("click", function () { openMilkExpense(function () { wireProfitCenterBackend(); }); });
     var doReport = function (fmt) { exportMilkReport(host.querySelector("#pc-rtype").value, host.querySelector("#pc-rfrom").value, host.querySelector("#pc-rto").value, fmt); };
     host.querySelector("#pc-rpdf").addEventListener("click", function () { doReport("pdf"); });
     host.querySelector("#pc-rxls").addEventListener("click", function () { doReport("xls"); });
@@ -6028,6 +6036,82 @@
       }).then(function (x) { if (x && x.config) _milkCfg = x.config; dacToast("Rates saved. New tankers use these; existing tankers keep their snapshot."); })
         .catch(function (e) { err.textContent = e.code === "forbidden" ? "Only a Super Admin can change the rates." : (e.message || "Couldn't save."); });
     });
+  }
+
+  // Book a B2B milk order from the Profit Center — reuses the existing B2B order
+  // engine (POST /api/b2b/orders). Server resolves pricing (milk in Litres →
+  // catalogue default); the order lands in the P&L's B2B revenue by delivery date.
+  function openMilkB2BBooking(onSaved) {
+    var m = asgnModal("Book B2B milk order", '<p class="muted-sm">Loading businesses…</p>');
+    DOODLY_API.get("/api/b2b/businesses").then(function (r) {
+      var biz = (r && r.businesses) || [];
+      if (!biz.length) {
+        m.body.innerHTML = '<p class="muted-sm">No B2B businesses yet. Register one first in <a href="/admin/b2b.html" style="text-decoration:underline">Commerce → B2B Orders</a>, then book here.</p>';
+        return;
+      }
+      m.body.innerHTML =
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+          '<label class="dac-f"><span>Business</span><select class="input" id="b2-biz">' + biz.map(function (b) { return '<option value="' + b.id + '">' + esc(b.name) + " (" + esc(b.code) + ")</option>"; }).join("") + "</select></label>" +
+          '<label class="dac-f"><span>Delivery date</span><input class="input" id="b2-date" type="date" value="' + istTodayStr() + '"></label>' +
+          '<label class="dac-f"><span>Quantity (Litres)</span><input class="input" id="b2-qty" type="number" min="0" step="0.5" placeholder="50"></label>' +
+          '<label class="dac-f"><span>Delivery time</span><input class="input" id="b2-time" value="07:00"></label>' +
+          '<label class="dac-f" style="grid-column:1/3"><span>Remarks (optional)</span><input class="input" id="b2-rem"></label>' +
+        "</div>" +
+        '<p class="muted-sm" style="margin-top:6px">Milk is priced per litre from the business\'s negotiated rate (or the catalogue default). The order appears in B2B revenue immediately.</p>' +
+        '<p class="dac-err" id="b2-err"></p>' +
+        '<div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-primary sm" id="b2-save">Book order</button></div>';
+      var err = m.body.querySelector("#b2-err");
+      m.body.querySelector("#b2-save").addEventListener("click", function () {
+        var qty = +m.body.querySelector("#b2-qty").value || 0;
+        if (!(qty > 0)) { err.textContent = "Enter a quantity in litres."; return; }
+        var body = {
+          businessId: m.body.querySelector("#b2-biz").value,
+          deliveryDate: m.body.querySelector("#b2-date").value || istTodayStr(),
+          deliveryTime: m.body.querySelector("#b2-time").value.trim() || "07:00",
+          remarks: m.body.querySelector("#b2-rem").value.trim() || undefined,
+          items: [{ productSlug: "milk", productName: "A2 Buffalo Milk", quantity: qty, unit: "Litres", unitPricePaise: 0 }],
+        };
+        var b = m.body.querySelector("#b2-save"); b.disabled = true;
+        DOODLY_API.post("/api/b2b/orders", body)
+          .then(function (x) { var o = x.order || x; dacToast("B2B order " + (o.code || "") + " booked — " + milkRs(o.totalPaise || 0) + "."); m.close(); if (onSaved) onSaved(); })
+          .catch(function (e) { b.disabled = false; err.textContent = e.code === "forbidden" ? "Your role can't book B2B orders." : e.code === "conflict" ? (e.message || "No B2B price set for milk — set one in B2B Pricing.") : (e.message || "Couldn't book the order."); });
+      });
+    }).catch(function (e) { m.body.innerHTML = '<p class="dac-err">' + esc(e.message || "Couldn't load businesses.") + "</p>"; });
+  }
+
+  // Record an expense from the Profit Center — reuses the real Expense engine
+  // (POST /api/expenses), NOT the localStorage demo. It reduces net profit in the
+  // P&L immediately (counted before approval).
+  function openMilkExpense(onSaved) {
+    var m = asgnModal("Record expense", '<p class="muted-sm">Loading categories…</p>');
+    DOODLY_API.get("/api/expenses/categories").then(function (r) {
+      var cats = (r && r.categories) || [];
+      m.body.innerHTML =
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+          '<label class="dac-f"><span>Date</span><input class="input" id="ex-date" type="date" value="' + istTodayStr() + '"></label>' +
+          '<label class="dac-f"><span>Category</span><select class="input" id="ex-cat">' + cats.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + "</option>"; }).join("") + "</select></label>" +
+          '<label class="dac-f" style="grid-column:1/3"><span>Title</span><input class="input" id="ex-title" placeholder="e.g. Diesel for tanker"></label>' +
+          '<label class="dac-f"><span>Amount (₹)</span><input class="input" id="ex-amt" type="number" min="0" step="0.01" placeholder="0.00"></label>' +
+          '<label class="dac-f"><span>Payment mode</span><select class="input" id="ex-mode"><option>CASH</option><option>UPI</option><option>BANK_TRANSFER</option><option>CREDIT_CARD</option><option>DEBIT_CARD</option><option>CHEQUE</option><option>WALLET</option><option>OTHER</option></select></label>' +
+          '<label class="dac-f" style="grid-column:1/3"><span>Vendor (optional)</span><input class="input" id="ex-vendor"></label>' +
+        "</div>" +
+        '<p class="dac-err" id="ex-err"></p>' +
+        '<div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-primary sm" id="ex-save">Save expense</button></div>';
+      var err = m.body.querySelector("#ex-err");
+      m.body.querySelector("#ex-save").addEventListener("click", function () {
+        var amt = Math.round((+m.body.querySelector("#ex-amt").value || 0) * 100);
+        var title = m.body.querySelector("#ex-title").value.trim();
+        var catId = m.body.querySelector("#ex-cat").value;
+        if (!title || title.length < 2) { err.textContent = "Enter a title (2+ characters)."; return; }
+        if (!catId) { err.textContent = "Pick a category."; return; }
+        if (!(amt > 0)) { err.textContent = "Enter an amount greater than 0."; return; }
+        var body = { date: m.body.querySelector("#ex-date").value || istTodayStr(), title: title, categoryId: catId, amountPaise: amt, gstIncluded: false, gstPaise: 0, paymentMode: m.body.querySelector("#ex-mode").value, vendor: m.body.querySelector("#ex-vendor").value.trim() || undefined };
+        var b = m.body.querySelector("#ex-save"); b.disabled = true;
+        DOODLY_API.post("/api/expenses", body)
+          .then(function (x) { var ex = x.expense || x; dacToast("Expense " + (ex.code || "") + " recorded — " + milkRs(ex.totalPaise || amt) + "."); m.close(); if (onSaved) onSaved(); })
+          .catch(function (e) { b.disabled = false; err.textContent = e.code === "forbidden" ? "Your role can't record expenses." : (e.message || "Couldn't save the expense."); });
+      });
+    }).catch(function (e) { m.body.innerHTML = '<p class="dac-err">' + esc(e.message || "Couldn't load categories.") + "</p>"; });
   }
 
   // Compact "Milk Operations" widget for the main admin dashboard. Silent on

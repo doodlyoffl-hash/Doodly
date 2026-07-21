@@ -993,8 +993,8 @@ window.DOODLY_BLOCKS = (function () {
       </div></section>
 
       <section class="reveal ab-band ab-trust"><div class="wrap">
-        ${sec("about.trust", "", `<p class="kicker" data-cms-field="eyebrow">Customer trust</p><h2 class="ab-h" data-cms-field="heading">Thousands of mornings, earned one bottle at a time.</h2>`)}
-        <div class="ab-kpis">${[["12+", "Partner farms"], ["100%", "Glass bottles"], ["0", "Preservatives"], ["4.8★", "Customer rating"], ["<12h", "Farm to home"], ["4°C", "Cold chain"]].map((k) => `<div class="ab-kpi reveal"><div class="n">${k[0]}</div><div class="l">${k[1]}</div></div>`).join("")}</div>
+        ${sec("about.trust", "", `<p class="kicker" data-cms-field="eyebrow">Our promise</p><h2 class="ab-h" data-cms-field="heading">What goes into every bottle.</h2>`)}
+        <div class="ab-kpis">${[["100%", "Glass bottles"], ["0", "Preservatives"], ["<12h", "Farm to home"], ["4°C", "Cold chain"]].map((k) => `<div class="ab-kpi reveal"><div class="n">${k[0]}</div><div class="l">${k[1]}</div></div>`).join("")}</div>
       </div></section>
 
       <section class="reveal"><div class="wrap ab-narrow">
@@ -1087,8 +1087,8 @@ window.DOODLY_BLOCKS = (function () {
       </div></section>
 
       <section class="reveal ab-trust"><div class="wrap">
-        ${sec("farmers.trust", "", `<p class="kicker" data-cms-field="eyebrow">By the numbers</p><h2 class="ab-h" data-cms-field="heading">A small circle, deeply looked after.</h2>`)}
-        <div class="ab-kpis">${[["12+", "Partner farms"], ["₹64/L", "Fair avg rate"], ["Daily", "Farm-gate pickup"], ["100%", "Batches tested"], ["Weekly", "Bank settlement"], ["4°C", "Chilled on-site"]].map((k) => `<div class="ab-kpi reveal"><div class="n">${k[0]}</div><div class="l">${k[1]}</div></div>`).join("")}</div>
+        ${sec("farmers.trust", "", `<p class="kicker" data-cms-field="eyebrow">How we work with farms</p><h2 class="ab-h" data-cms-field="heading">A small circle, deeply looked after.</h2>`)}
+        <div class="ab-kpis">${[["Daily", "Farm-gate pickup"], ["100%", "Batches tested"], ["Weekly", "Bank settlement"], ["4°C", "Chilled on-site"]].map((k) => `<div class="ab-kpi reveal"><div class="n">${k[0]}</div><div class="l">${k[1]}</div></div>`).join("")}</div>
       </div></section>
 
       <section class="reveal"><div class="wrap ab-narrow">
@@ -1147,7 +1147,7 @@ window.DOODLY_BLOCKS = (function () {
 
       <section class="reveal ab-trust"><div class="wrap">
         ${sec("bottlereturn.trust", "", `<p class="kicker" data-cms-field="eyebrow">The loop, by the numbers</p><h2 class="ab-h" data-cms-field="heading">Built to go round, and round.</h2>`)}
-        <div class="ab-kpis">${[["100%", "Glass packaging"], ["₹120", "Refundable deposit"], ["Next-day", "Empty collection"], ["∞", "Reuse cycle"], ["0", "Single-use plastic"], ["Food-grade", "Sterilised"]].map((k) => `<div class="ab-kpi reveal"><div class="n">${k[0]}</div><div class="l">${k[1]}</div></div>`).join("")}</div>
+        <div class="ab-kpis">${[["100%", "Glass packaging"], ["₹100", "Refundable deposit"], ["Next-day", "Empty collection"], ["∞", "Reuse cycle"], ["0", "Single-use plastic"], ["Food-grade", "Sterilised"]].map((k) => `<div class="ab-kpi reveal"><div class="n">${k[0]}</div><div class="l">${k[1]}</div></div>`).join("")}</div>
       </div></section>
 
       <section class="reveal"><div class="wrap ab-narrow">
