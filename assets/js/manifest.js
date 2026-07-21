@@ -462,6 +462,7 @@ window.DOODLY_MANIFEST = (function () {
     "admin/dashboard": { surface:"admin", title:"Dashboard", blocks:[
       head("Dashboard","Live operations & revenue command center — real-time KPIs, drill-downs, charts and alerts."),
       { type:"opsDashboard" },
+      { type:"milkWidget" },
     ]},
     "admin/customers": { surface:"admin", title:"Customers", blocks:[ head("Customers","All DOODLY customers.",[{label:"Add customer",kind:"btn-primary",icon:"plus"}]), tbl("customers",{filters:["All","Active","Paused","Trial","Churned"]}) ]},
     "admin/subscriptions": { surface:"admin", title:"Subscriptions", blocks:[ head("Subscriptions","Active and lapsed subscriptions."), { type:"kpis", items:[{n:"1,284",l:"Active"},{n:"96",l:"Paused"},{n:"38",l:"New (wk)"},{n:"2.1%",l:"Churn"}] }, tbl("adminOrders",{filters:["All","Active","Paused","On hold"]}) ]},

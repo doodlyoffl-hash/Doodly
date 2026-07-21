@@ -6030,6 +6030,31 @@
     });
   }
 
+  // Compact "Milk Operations" widget for the main admin dashboard. Silent on
+  // 403/offline — not every admin has procurement access, and it must never
+  // break the dashboard it sits under.
+  function wireMilkWidget(host) {
+    if (!window.DOODLY_API || !host) return;
+    DOODLY_API.get("/api/admin/milk/analytics").then(function (a) {
+      var c = a.cards || {}, h = a.health || {}, unsettled = (h.unsettled || []).length;
+      var col = function (v) { return v >= 0 ? "var(--leaf-600,#1FAE66)" : "#c0392b"; };
+      host.innerHTML =
+        '<div class="panel" style="margin-top:14px;border-left:4px solid var(--leaf-600,#1FAE66)">' +
+          '<div class="panel-head"><h3>🥛 Milk Operations</h3><a class="btn btn-ghost sm" href="/admin/profit-center.html">Profit Center →</a></div>' +
+          '<div class="panel-pad"><div class="dl-an-kpis">' +
+            milkStat(milkRs(c.todayRevenuePaise), "Revenue today") +
+            milkStat('<span style="color:' + col(c.todayNetProfitPaise) + '">' + milkRs(c.todayNetProfitPaise) + "</span>", "Profit today") +
+            milkStat('<span style="color:' + col(c.monthNetProfitPaise) + '">' + milkRs(c.monthNetProfitPaise) + "</span>", "Profit (month)") +
+            milkStat((c.monthMilkSoldLitres || 0) + " L", "Milk sold (month)") +
+            milkStat(milkRs(c.inventoryValuePaise), "Inventory value") +
+            milkStat((c.netMarginPct || 0) + "%", "Net margin") +
+          "</div>" +
+          (unsettled ? '<div class="badge amber" style="margin-top:8px">⚠ ' + unsettled + ' delivery day(s) not settled — <a href="/admin/profit-center.html" style="text-decoration:underline">settle now</a></div>' : "") +
+          "</div></div>";
+    }).catch(function () { host.innerHTML = ""; });
+  }
+  window.DOODLY_ADMIN.wireMilkWidget = wireMilkWidget;
+
   // ---- dispatcher: route → module wirer ----
   function bkWire(route) {
     if (route === "admin/offers") return wireOffersBackend();
@@ -6137,6 +6162,8 @@
     if (window.DOODLY_B2B_PRICING) { const bp = $("#b2bPricingMount"); if (bp) window.DOODLY_B2B_PRICING.mount(bp); }
     // Live operations & revenue dashboard (Overview → Dashboard) — role-based widgets
     if (window.DOODLY_DASHBOARD) { const od = $("#opsDashboardMount"); if (od) window.DOODLY_DASHBOARD.mount(od); }
+    // Milk Operations widget beneath the dashboard (self-gates: silent without procurement access)
+    { const mw = $("#milkWidgetMount"); if (mw) wireMilkWidget(mw); }
     // Late delivery monitoring (Operations → Late Deliveries) + customer delivery-quality stats
     if (window.DOODLY_LATE) { const lm = $("#lateMount"); if (lm) window.DOODLY_LATE.mount(lm); const lc = $("#lateCustomerMount"); if (lc) window.DOODLY_LATE.mountCustomer(lc); }
     // live order status banner — customer dashboard/account pages (self-gates by route)

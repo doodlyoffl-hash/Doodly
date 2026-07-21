@@ -759,6 +759,7 @@ window.DOODLY_BLOCKS = (function () {
   R.opsCutoffAlert = () => `<div class="reveal" id="opsCutoffMount"></div>`;
   R.milkTankers = () => `<div class="reveal" id="milkTankersMount"></div>`;
   R.profitCenter = () => `<div class="reveal" id="profitCenterMount"></div>`;
+  R.milkWidget = () => `<div class="reveal" id="milkWidgetMount"></div>`;
   R.deliveryCalendar = () => `<div class="reveal" id="delCalMount"></div>`;
   R.deliveryDateBar = () => `<div class="reveal" id="delDateBar"></div>`;
   R.asgnDateBar = () => `<div class="reveal" id="asgnDateBar"></div>`;
