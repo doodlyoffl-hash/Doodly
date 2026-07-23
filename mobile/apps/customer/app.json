@@ -7,9 +7,15 @@
     "scheme": "doodly",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
     "splash": {
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#0F3D2E"
+    },
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#0F3D2E"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
@@ -28,6 +34,10 @@
     "android": {
       "package": "in.doodly.customer",
       "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0F3D2E"
+      },
       "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "POST_NOTIFICATIONS"],
       "intentFilters": [
         {
