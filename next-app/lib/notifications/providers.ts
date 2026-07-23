@@ -40,7 +40,11 @@ export function channelStatus() {
   const twilio = !!(TWILIO_SID() && TWILIO_TOKEN());
   const sms = msg91.smsConfigured() || (twilio && !!TWILIO_SMS_FROM());
   const whatsapp = superfone.configured() || msg91.whatsappConfigured() || (twilio && !!TWILIO_WA_FROM());
-  return { email, sms, whatsapp, push: false };
+  // Push needs no external credential here (Expo holds the FCM/APNs keys), so
+  // it is live unless switched off. Whether a given USER can be pushed still
+  // depends on them having a registered device — see lib/notifications/push.ts.
+  const push = process.env.PUSH_DISABLED !== "1";
+  return { email, sms, whatsapp, push };
 }
 
 // ------------------------------------------------------------------ helpers
