@@ -21,6 +21,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { log } from "@/lib/logger";
 import { sendEmail, sendSMS, sendWhatsApp, channelStatus, type SendResult } from "./providers";
+import { sendPushToUser } from "./push";
 import * as T from "@/lib/email/templates";
 
 type Chan = "SMS" | "WHATSAPP" | "PUSH" | "EMAIL" | "IN_APP";
@@ -36,6 +37,16 @@ export interface NotifyOpts {
   email?: boolean;                     // also attempt email
   sms?: boolean | ChannelSpec;         // also attempt SMS (object carries the MSG91 template)
   whatsapp?: boolean | ChannelSpec;    // also attempt WhatsApp
+  /** Mobile push. Defaults to ON: every in-app notification should also reach
+   *  the lock screen of a user who installed the app. Pass `false` for the rare
+   *  notification that should stay inside the app. Users with no registered
+   *  device, or with pushOptIn off, are skipped automatically. */
+  push?: boolean;
+  /** Delivered with the push so the app can deep-link, e.g.
+   *  { screen: "order", id: "..." }. Ignored by every other channel. */
+  pushData?: Record<string, unknown>;
+  /** Restrict the push to one app's devices. Omit to reach both. */
+  pushApp?: "customer" | "driver";
   emailHtml?: string;   // optional rich HTML body for email (falls back to text)
   emailSubject?: string;
 }
@@ -46,20 +57,26 @@ function toSpec(v: boolean | ChannelSpec | undefined, on: boolean): ChannelSpec 
   return (v || on) ? {} : null;
 }
 
-interface DeliverPlan { email: boolean; sms: ChannelSpec | null; whatsapp: ChannelSpec | null }
+interface DeliverPlan {
+  email: boolean;
+  sms: ChannelSpec | null;
+  whatsapp: ChannelSpec | null;
+  push?: { data?: Record<string, unknown>; app?: "customer" | "driver" } | null;
+}
 
 /** Premium branded HTML for a plain notification body (DOODLY email design system). */
 function defaultHtml(title: string, body: string) {
   return T.notificationHtml(title, body);
 }
 
-type Prefs = { emailOptIn: boolean; smsOptIn: boolean; whatsappOptIn: boolean } | null;
+type Prefs = { emailOptIn: boolean; smsOptIn: boolean; whatsappOptIn: boolean; pushOptIn?: boolean } | null;
 
 /** Deliver a single notification row across the planned external channels. Records the outcome on the row. */
 async function deliverRow(
   rowId: string,
   plan: DeliverPlan,
-  user: { email: string | null; phone: string | null },
+  /** `id` is required for PUSH — device tokens are looked up per user. */
+  user: { id: string; email: string | null; phone: string | null },
   prefs: Prefs,
   title: string,
   body: string,
@@ -76,23 +93,26 @@ async function deliverRow(
   if (plan.email) wants.push("EMAIL");
   if (plan.sms) wants.push("SMS");
   if (plan.whatsapp) wants.push("WHATSAPP");
+  if (plan.push) wants.push("PUSH");
 
   for (const ch of wants) {
-    // consent gate (defaults: email on, sms/whatsapp off)
+    // consent gate (defaults: email on, sms off, whatsapp/push on)
     const optedIn =
       ch === "EMAIL" ? (prefs ? prefs.emailOptIn : true) :
       ch === "SMS" ? (prefs ? prefs.smsOptIn : false) :
+      ch === "PUSH" ? (prefs ? prefs.pushOptIn !== false : true) :
       (prefs ? prefs.whatsappOptIn : true);   // WhatsApp defaults ON (opt-out respected via the row)
     if (!optedIn) { perChannel[ch] = "skipped:opt-out"; continue; }
 
     // provider gate
-    const live = ch === "EMAIL" ? avail.email : ch === "SMS" ? avail.sms : avail.whatsapp;
+    const live = ch === "EMAIL" ? avail.email : ch === "SMS" ? avail.sms : ch === "PUSH" ? avail.push : avail.whatsapp;
     if (!live) { perChannel[ch] = "skipped:no-provider"; continue; }
 
     attempted++;
     let res: SendResult;
     if (ch === "EMAIL") res = await sendEmail(user.email, emailSubject || title, emailHtml || defaultHtml(title, body), body);
     else if (ch === "SMS") res = await sendSMS(user.phone, { text: `${title}\n${body}`, template: plan.sms!.template, vars: plan.sms!.vars });
+    else if (ch === "PUSH") res = await sendPushToUser(user.id, { title, body, data: plan.push!.data }, { app: plan.push!.app });
     else res = await sendWhatsApp(user.phone, { text: `*${title}*\n${body}`, template: plan.whatsapp!.template, vars: plan.whatsapp!.vars });
 
     if (res.ok) { anyOk = true; firstRef = firstRef || res.ref; perChannel[ch] = res.ref ? `sent:${res.ref}` : "sent"; }
@@ -127,9 +147,13 @@ export async function notify(userId: string, opts: NotifyOpts) {
       email: !!(opts.email || channel === "EMAIL"),
       sms: toSpec(opts.sms, channel === "SMS"),
       whatsapp: toSpec(opts.whatsapp, channel === "WHATSAPP"),
+      // Default ON — see NotifyOpts.push. sendPushToUser() is a no-op (one
+      // indexed lookup) for a user with no registered device, so this costs
+      // nothing for web-only customers and reaches everyone who installed the app.
+      push: opts.push === false ? null : { data: opts.pushData, app: opts.pushApp },
     };
 
-    if (!plan.email && !plan.sms && !plan.whatsapp) {
+    if (!plan.email && !plan.sms && !plan.whatsapp && !plan.push) {
       // in-app only → nothing to dispatch, mark terminal so the drain ignores it
       await db.notification.update({ where: { id: row.id }, data: { providerStatus: "SKIPPED", dispatchedAt: new Date() } });
       return { id: row.id, providerStatus: "SKIPPED" as const };
@@ -137,9 +161,9 @@ export async function notify(userId: string, opts: NotifyOpts) {
 
     const user = await db.user.findUnique({ where: { id: userId }, select: { email: true, phone: true } });
     const prefs = await db.customerPreference.findUnique({
-      where: { userId }, select: { emailOptIn: true, smsOptIn: true, whatsappOptIn: true },
+      where: { userId }, select: { emailOptIn: true, smsOptIn: true, whatsappOptIn: true, pushOptIn: true },
     });
-    const out = await deliverRow(row.id, plan, user ?? { email: null, phone: null }, prefs, opts.title, opts.body, opts.emailHtml, opts.emailSubject);
+    const out = await deliverRow(row.id, plan, { id: userId, ...(user ?? { email: null, phone: null }) }, prefs, opts.title, opts.body, opts.emailHtml, opts.emailSubject);
     return { id: row.id, ...out };
   } catch (e) {
     log.error("notify", "notify() failed (swallowed)", { userId, msg: (e as Error)?.message });
@@ -181,7 +205,7 @@ async function processPending(rows: PendingRow[], budgetMs?: number) {
   if (!rows.length) return { processed: 0, sent: 0, skipped: 0, failed: 0 };
   const userIds = Array.from(new Set(rows.map((r) => r.userId)));
   const prefRows = await db.customerPreference.findMany({
-    where: { userId: { in: userIds } }, select: { userId: true, emailOptIn: true, smsOptIn: true, whatsappOptIn: true },
+    where: { userId: { in: userIds } }, select: { userId: true, emailOptIn: true, smsOptIn: true, whatsappOptIn: true, pushOptIn: true },
   });
   const prefMap = new Map(prefRows.map((p) => [p.userId, p]));
   const start = Date.now();
@@ -191,8 +215,12 @@ async function processPending(rows: PendingRow[], budgetMs?: number) {
     // the daily drain / a manual drain / retry, so a large audience never times out.
     if (budgetMs && processed > 0 && Date.now() - start > budgetMs) break;
     // rows carry no template info → email/Twilio free-text; MSG91 skips (no template).
-    const plan: DeliverPlan = { email: r.channel === "EMAIL", sms: r.channel === "SMS" ? {} : null, whatsapp: r.channel === "WHATSAPP" ? {} : null };
-    const out = await deliverRow(r.id, plan, r.user ?? { email: null, phone: null }, prefMap.get(r.userId) ?? null, r.title, r.body);
+    const plan: DeliverPlan = {
+      email: r.channel === "EMAIL", sms: r.channel === "SMS" ? {} : null,
+      whatsapp: r.channel === "WHATSAPP" ? {} : null,
+      push: r.channel === "PUSH" ? {} : null,
+    };
+    const out = await deliverRow(r.id, plan, { id: r.userId, ...(r.user ?? { email: null, phone: null }) }, prefMap.get(r.userId) ?? null, r.title, r.body);
     if (out.providerStatus === "SENT") sent++;
     else if (out.providerStatus === "FAILED") failed++;
     else skipped++;

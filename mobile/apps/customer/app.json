@@ -1,0 +1,68 @@
+{
+  "expo": {
+    "name": "DOODLY",
+    "slug": "doodly-customer",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "doodly",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F3D2E"
+    },
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#0F3D2E"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "in.doodly.customer",
+      "buildNumber": "1",
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "DOODLY uses your location to find your delivery address and confirm we deliver to your area.",
+        "NSCameraUsageDescription": "DOODLY uses the camera so you can add a photo to a support request.",
+        "NSPhotoLibraryUsageDescription": "DOODLY needs photo access so you can attach an image to a support request.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "associatedDomains": ["applinks:doodly.in", "applinks:www.doodly.in"]
+    },
+    "android": {
+      "package": "in.doodly.customer",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0F3D2E"
+      },
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "POST_NOTIFICATIONS"],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "doodly.in" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-apple-authentication",
+      "expo-asset",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "DOODLY uses your location to find your delivery address."
+        }
+      ]
+    ],
+    "experiments": { "typedRoutes": true },
+    "extra": {
+      "eas": { "projectId": "" }
+    }
+  }
+}

@@ -175,12 +175,18 @@ model User {
   loyaltyLedger LoyaltyLedger[]                    // DOODLY Pure Rewards: per-lot points ledger
   reviews       Review[]
   notifications Notification[]
+  deviceTokens  DeviceToken[]
   driver        Driver?
   // ---- RBAC / account security ----
   status          UserStatus   @default(ACTIVE)        // active / disabled / locked
   deletedAt       DateTime?                            // soft delete
   forcePwReset    Boolean      @default(false)
   tokenVersion    Int          @default(0)             // bump to instantly revoke all bearer tokens (logout / password change)
+  // Sign in with Apple's stable user id. Matched on FIRST because Apple lets a
+  // user hide their real address behind a per-app privaterelay.appleid.com
+  // alias — matching on email alone would create a duplicate account whenever
+  // that alias differs from the one they signed up with.
+  appleSub        String?      @unique
   twoFactorOn     Boolean      @default(false)         // enforce for ADMIN / SUPER_ADMIN
   roleAssignments UserRoleAssignment[]                 // secondary roles (multi-role)
   auditLogs       AuditLog[]
@@ -3217,4 +3223,55 @@ model Payslip {
   recoveries          AdvanceRecovery[]
   @@unique([employeeId, month])
   @@index([month, status])
+}
+
+// ---------------------------------------------------------------------------
+// PUSH NOTIFICATIONS — one row per installed app per device.
+// A user legitimately has several (phone + tablet, customer + driver app), so
+// pushes fan out to every live row. `token` is unique because the provider
+// re-issues the SAME token to whoever reinstalls on that device: on conflict we
+// MOVE the row to the new user rather than creating a duplicate, otherwise the
+// previous owner keeps receiving the new owner's notifications.
+// ---------------------------------------------------------------------------
+model DeviceToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String    @unique               // Expo push token (ExponentPushToken[...])
+  platform   String                          // "ios" | "android"
+  app        String                          // "customer" | "driver" — lets us target one app
+  deviceName String?
+  appVersion String?
+  lastSeenAt DateTime  @default(now())
+  // Set when the provider reports the token is dead (app uninstalled, token
+  // rotated). Kept rather than deleted so we can see churn; excluded from sends.
+  disabledAt DateTime?
+  failCount  Int       @default(0)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([userId, disabledAt])
+  @@index([app, disabledAt])
+}
+
+// ---------------------------------------------------------------------------
+// ONE-TIME PASSCODES — mobile-number sign-in for the apps.
+// The code is stored ONLY as a SHA-256 hash: a leaked database must not hand
+// an attacker a working login code. Rows are single-use (consumedAt) and
+// attempt-capped so a 6-digit code can't be brute-forced.
+// ---------------------------------------------------------------------------
+model OtpCode {
+  id         String    @id @default(cuid())
+  phone      String                                 // E.164 digits, no leading +
+  codeHash   String                                 // sha256(code + phone)
+  purpose    String    @default("login")
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+  // Audit trail for abuse investigation — never used for authorisation.
+  ip         String?
+
+  @@index([phone, consumedAt])
+  @@index([expiresAt])
 }
