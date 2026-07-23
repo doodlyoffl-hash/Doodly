@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowJs": false,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@doodly/core": ["packages/core/src/index.ts"],
+      "@doodly/core/*": ["packages/core/src/*"],
+      "@doodly/ui": ["packages/ui/src/index.ts"],
+      "@doodly/ui/*": ["packages/ui/src/*"]
+    }
+  },
+  "exclude": ["node_modules", "**/node_modules", "**/.expo", "**/dist"]
+}

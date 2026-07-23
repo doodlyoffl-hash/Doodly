@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "DOODLY Delivery",
+    "slug": "doodly-delivery",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "doodlydelivery",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0F3D2E"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "in.doodly.delivery",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "DOODLY Delivery uses your location to show your position on the delivery route and to record where each delivery was completed.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "DOODLY Delivery shares your location with the operations team while you are on an active delivery run, so customers can see their delivery approaching.",
+        "UIBackgroundModes": [
+          "location",
+          "remote-notification"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "in.doodly.delivery",
+      "versionCode": 1,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "POST_NOTIFICATIONS",
+        "CALL_PHONE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "DOODLY Delivery shares your location with the operations team while you are on an active delivery run."
+        }
+      ],
+      "expo-asset"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    }
+  }
+}

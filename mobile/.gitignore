@@ -1,0 +1,30 @@
+# Dependencies (also covered by the repo-root .gitignore; restated here so the
+# mobile workspace is self-contained if ever split out).
+node_modules/
+
+# Expo / Metro
+.expo/
+.expo-shared/
+dist/
+web-build/
+*.tsbuildinfo
+
+# Native projects — generated per-app by `expo prebuild`, never hand-edited.
+# Unanchored so apps/*/ios and apps/*/android are both caught. (No source dir
+# is named ios/android, so this can't swallow the expo-router app/ folders.)
+ios/
+android/
+
+# EAS
+.easignore
+
+# Secrets & local env — credentials never belong in the repo.
+.env
+.env.*
+!.env.example
+google-services.json
+GoogleService-Info.plist
+
+# Logs & OS cruft
+*.log
+.DS_Store

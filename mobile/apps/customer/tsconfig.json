@@ -1,0 +1,17 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"],
+      "@doodly/core": ["../../packages/core/src/index.ts"],
+      "@doodly/core/*": ["../../packages/core/src/*"],
+      "@doodly/ui": ["../../packages/ui/src/index.ts"],
+      "@doodly/ui/*": ["../../packages/ui/src/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
+  "exclude": ["node_modules"]
+}

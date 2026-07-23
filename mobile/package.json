@@ -1,0 +1,20 @@
+{
+  "name": "doodly-mobile",
+  "private": true,
+  "version": "1.0.0",
+  "description": "DOODLY native apps (Customer + Delivery Executive) — Expo/React Native, sharing the existing Next.js backend.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "customer": "npm run start --workspace @doodly/customer",
+    "driver": "npm run start --workspace @doodly/driver",
+    "typecheck": "tsc --noEmit -p tsconfig.base.json && npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
