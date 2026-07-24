@@ -60,19 +60,52 @@ window.DOODLY_B2B_PRICING = (function () {
   var DEFAULT_COST = { milk: 52, curd: 92, paneer: 330, kova: 300, ghee: 900 };
   function costFor(slug) { var s = settings(); var c = (s.costs || {})[slug]; return c != null ? Number(c) : (DEFAULT_COST[slug] != null ? DEFAULT_COST[slug] : Math.round(retailFor(slug) * 0.8)); }
 
-  /* ---------- storage ---------- */
+  /* ---------- storage (localStorage cache + shared DB via AppSetting) ----------
+     Each blob is mirrored to the DB (/api/b2b/pricing/store) so per-business
+     negotiated prices, quantity slabs, order overrides, scheduled changes and
+     history persist across devices/deploys. localStorage is the offline
+     cache/fallback. Pushes are debounced so a bulk update = one save. */
   function get(k, d) { try { var v = JSON.parse(localStorage.getItem(k) || "null"); return v == null ? d : v; } catch (e) { return d; } }
   function set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
-  function store() { return get("doodly-b2b-pricing", {}); }
-  function saveStore(s) { set("doodly-b2b-pricing", s); }
-  function settings() { return get("doodly-b2b-price-settings", { slabsEnabled: true, approvalRequired: false, costs: {}, retail: {} }); }
-  function saveSettings(s) { set("doodly-b2b-price-settings", s); }
-  function historyAll() { return get("doodly-b2b-price-history", []); }
-  function saveHistory(a) { set("doodly-b2b-price-history", a); }
-  function overridesAll() { return get("doodly-b2b-overrides", []); }
-  function saveOverrides(a) { set("doodly-b2b-overrides", a); }
-  function scheduledAll() { return get("doodly-b2b-price-scheduled", []); }
-  function saveScheduled(a) { set("doodly-b2b-price-scheduled", a); }
+  var _pushTimers = {};
+  function pushBlob(part, value) {
+    try {
+      if (!(window.DOODLY_API && window.DOODLY_API.put)) return;
+      clearTimeout(_pushTimers[part]);
+      _pushTimers[part] = setTimeout(function () { var body = {}; body[part] = value; window.DOODLY_API.put("/api/b2b/pricing/store", body).catch(function () {}); }, 300);
+    } catch (e) {}
+  }
+  function nonEmpty(v) { if (v == null) return false; if (Array.isArray(v)) return v.length > 0; if (typeof v === "object") return Object.keys(v).length > 0; return true; }
+  var STORE_KEY = "doodly-b2b-pricing", OV_KEY = "doodly-b2b-overrides", SC_KEY = "doodly-b2b-price-scheduled", HI_KEY = "doodly-b2b-price-history", SET_KEY = "doodly-b2b-price-settings";
+  function store() { return get(STORE_KEY, {}); }
+  function saveStore(s) { set(STORE_KEY, s); pushBlob("store", s); }
+  function settings() { return get(SET_KEY, { slabsEnabled: true, approvalRequired: false, costs: {}, retail: {} }); }
+  function saveSettings(s) { set(SET_KEY, s); pushBlob("settings", s); }
+  function historyAll() { return get(HI_KEY, []); }
+  function saveHistory(a) { set(HI_KEY, a); pushBlob("history", a); }
+  function overridesAll() { return get(OV_KEY, []); }
+  function saveOverrides(a) { set(OV_KEY, a); pushBlob("overrides", a); }
+  function scheduledAll() { return get(SC_KEY, []); }
+  function saveScheduled(a) { set(SC_KEY, a); pushBlob("scheduled", a); }
+
+  /* Load the shared pricing blobs from the DB. If the DB has data it wins
+     (mirrored into localStorage). If the DB is empty but THIS device has local
+     pricing, a Super Admin seeds the DB from it once — so existing per-browser
+     negotiated prices are migrated, never lost. */
+  function loadServerPricing(done) {
+    try {
+      if (!(window.DOODLY_API && window.DOODLY_API.get)) { if (done) done(); return; }
+      window.DOODLY_API.get("/api/b2b/pricing/store").then(function (r) {
+        r = r || {};
+        [["store", STORE_KEY], ["overrides", OV_KEY], ["scheduled", SC_KEY], ["history", HI_KEY], ["settings", SET_KEY]].forEach(function (p) {
+          var part = p[0], lsKey = p[1], dbVal = r[part];
+          if (nonEmpty(dbVal)) { set(lsKey, dbVal); }                                          // DB is the source of truth
+          else if (isSuper()) { var lv = get(lsKey, null); if (nonEmpty(lv)) pushBlob(part, lv); } // one-time seed DB from this device
+        });
+        if (done) done();
+      }).catch(function () { if (done) done(); });
+    } catch (e) { if (done) done(); }
+  }
 
   function bizCfg(bizId) { var s = store(); return s[bizId] || null; }
   function ensureBiz(s, bizId) { if (!s[bizId]) s[bizId] = { active: true, products: {} }; if (!s[bizId].products) s[bizId].products = {}; return s[bizId]; }
@@ -687,9 +720,11 @@ window.DOODLY_B2B_PRICING = (function () {
     }
 
     render();
-    // Pull the shared retail prices from the DB, then re-render so the Retail
-    // column and Settings editor show the same values on every device.
-    loadServerRetail(function () { render(); });
+    // Pull the shared retail + negotiated pricing from the DB, then re-render so
+    // every device shows the same prices, slabs, overrides and schedules.
+    loadServerRetail(function () {
+      loadServerPricing(function () { applyScheduled(); render(); });
+    });
   }
 
   /* ---------- embeddable customer catalogue (used by b2b.js profile) ---------- */

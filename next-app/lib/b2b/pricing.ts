@@ -236,6 +236,50 @@ export async function setRetailPrices(overrides: Record<string, number>, actor: 
   return getRetailPrices();
 }
 
+/* ---- Negotiated per-business pricing store (DB-backed via AppSetting) --------
+   The static admin (assets/js/b2b-pricing.js) is the pricing-resolution
+   authority (slabs, order overrides, scheduled + effective-dated changes). Its
+   state used to live only in per-browser localStorage, so negotiated prices
+   "reverted" across devices/deploys. We now persist each blob as an AppSetting
+   key so every device/staff member shares the same B2B pricing. The values are
+   opaque JSON owned by the client — we store them verbatim. */
+const PRICING_KEYS = {
+  store: "b2b.pricing.store",         // { [bizId]: { active, products: { [slug]: {price,slabs,notes,enabled,effectiveFrom,effectiveUntil} } } }
+  overrides: "b2b.pricing.overrides", // order-time price overrides (append-only log)
+  scheduled: "b2b.pricing.scheduled", // future/effective-dated price changes
+  history: "b2b.pricing.history",     // price-change history (audit view)
+  settings: "b2b.pricing.settings",   // { slabsEnabled, approvalRequired, costs, retail }
+} as const;
+export type PricingPart = keyof typeof PRICING_KEYS;
+export const PRICING_PARTS = Object.keys(PRICING_KEYS) as PricingPart[];
+/** Config parts only a Super-Admin may change; `overrides` any B2B user may record. */
+export const PRICING_SUPER_PARTS: PricingPart[] = ["store", "scheduled", "history", "settings"];
+
+/** Read all B2B negotiated-pricing blobs. Missing keys default to {} / []. */
+export async function getPricingBlobs(): Promise<Record<PricingPart, unknown>> {
+  const rows = await db.appSetting.findMany({ where: { key: { in: Object.values(PRICING_KEYS) } } });
+  const byKey = new Map(rows.map((r) => [r.key, r.value]));
+  const out = {} as Record<PricingPart, unknown>;
+  for (const part of PRICING_PARTS) {
+    const v = byKey.get(PRICING_KEYS[part]);
+    out[part] = v ?? (part === "store" || part === "settings" ? {} : []);
+  }
+  return out;
+}
+
+/** Persist one B2B pricing blob (verbatim JSON) to its AppSetting key. */
+export async function setPricingBlob(part: PricingPart, value: unknown, actor: Actor): Promise<void> {
+  const key = PRICING_KEYS[part];
+  const isObjectPart = part === "store" || part === "settings";
+  const json = (value == null ? (isObjectPart ? {} : []) : value) as Prisma.InputJsonValue;
+  await db.appSetting.upsert({
+    where: { key },
+    create: { key, value: json, updatedBy: actor.actorId ?? null },
+    update: { value: json, updatedBy: actor.actorId ?? null },
+  });
+  await audit({ userId: actor.actorId ?? null, actorRole: actor.actorRole ?? "system", action: `b2b.pricing.${part}.save`, target: key }).catch(() => {});
+}
+
 /** Product list for the pricing form, with the LIVE (override-aware) base price. */
 export async function productLookup() {
   const retail = await getRetailPrices();
