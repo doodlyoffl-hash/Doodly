@@ -161,7 +161,7 @@ export async function getProductDetail(id: string): Promise<ProductDetail | null
     status: p.status, visible: p.visible, featured: p.featured, category: p.categoryRef?.name ?? p.category, categoryId: p.categoryId, imageUrl: p.imageUrl, sortOrder: p.sortOrder, tags: p.tags,
     lowStockThreshold: p.lowStockThreshold, restockDate: p.restockDate?.toISOString() ?? null, launchDate: p.launchDate?.toISOString() ?? null, ratingValue: p.ratingValue, ratingCount: p.ratingCount,
     createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString(), updatedBy: p.updatedById ? names.get(p.updatedById) ?? null : null, deletedAt: p.deletedAt?.toISOString() ?? null,
-    pricing: p.pricing ? { mrpPaise: p.pricing.mrpPaise, sellingPaise: p.pricing.sellingPaise, costPaise: p.pricing.costPaise, offerPaise: p.pricing.offerPaise, discountBps: p.pricing.discountBps, taxBps: p.pricing.taxBps, depositPaise: p.pricing.depositPaise, deliveryPaise: p.pricing.deliveryPaise } : null,
+    pricing: p.pricing ? { mrpPaise: p.pricing.mrpPaise, sellingPaise: p.pricing.sellingPaise, costPaise: p.pricing.costPaise, offerPaise: p.pricing.offerPaise, discountBps: p.pricing.discountBps, taxBps: p.pricing.taxBps, depositPaise: p.pricing.depositPaise, deliveryPaise: p.pricing.deliveryPaise, freeDeliveryOverPaise: p.pricing.freeDeliveryOverPaise } : null,
     variants,
     images: p.images.map((i) => ({ id: i.id, url: i.url, alt: i.alt, sortOrder: i.sortOrder, isFeatured: i.isFeatured })),
     seo: p.seo ? { metaTitle: p.seo.metaTitle, metaDescription: p.seo.metaDescription, ogImageUrl: p.seo.ogImageUrl, canonicalUrl: p.seo.canonicalUrl, keywords: p.seo.keywords } : null,
@@ -255,9 +255,9 @@ export async function restoreProduct(id: string, actor: Actor) {
 
 // ---------------------------------------------------------------- pricing / seo / nutrition / quality
 
-export async function updatePricing(id: string, p: { mrpPaise?: number; sellingPaise?: number; costPaise?: number; offerPaise?: number; discountBps?: number; taxBps?: number; depositPaise?: number; deliveryPaise?: number }, actor: Actor) {
+export async function updatePricing(id: string, p: { mrpPaise?: number; sellingPaise?: number; costPaise?: number; offerPaise?: number; discountBps?: number; taxBps?: number; depositPaise?: number; deliveryPaise?: number; freeDeliveryOverPaise?: number }, actor: Actor) {
   if (!(await db.product.findUnique({ where: { id }, select: { id: true } }))) throw Errors.notFound("Product not found.");
-  const create = { mrpPaise: p.mrpPaise ?? 0, sellingPaise: p.sellingPaise ?? 0, costPaise: p.costPaise, offerPaise: p.offerPaise, discountBps: p.discountBps ?? 0, taxBps: p.taxBps ?? 0, depositPaise: p.depositPaise ?? 0, deliveryPaise: p.deliveryPaise ?? 0 };
+  const create = { mrpPaise: p.mrpPaise ?? 0, sellingPaise: p.sellingPaise ?? 0, costPaise: p.costPaise, offerPaise: p.offerPaise, discountBps: p.discountBps ?? 0, taxBps: p.taxBps ?? 0, depositPaise: p.depositPaise ?? 0, deliveryPaise: p.deliveryPaise ?? 0, freeDeliveryOverPaise: p.freeDeliveryOverPaise ?? 0 };
   await db.pricing.upsert({ where: { productId: id }, create: { productId: id, ...create }, update: p });
   await db.product.update({ where: { id }, data: { updatedById: actor.actorId } });
   await logProductEvent(db, id, "PRICE", "Pricing updated", p, actor);

@@ -130,9 +130,137 @@ window.DOODLY_ADMIN = (function () {
     ["analytics", "Analytics", (p) => analyticsTab(p)],
   ];
 
-  let modal = null;
-  function edit(id) {
-    const p = find(id); if (!p) return;
+  /* ---- DB persistence (production) --------------------------------------
+     The commercial fields (prices, variant/subscription prices, plan discounts,
+     deposit, delivery charge, tax, availability) are written to the PRODUCTION
+     DATABASE through the admin API, so an edit survives deploys, restarts and
+     device changes. We only fall back to the localStorage overlay when the
+     backend is unreachable. Presentational fields (badges, gallery) stay on the
+     overlay. This is the fix for "prices revert after a deploy". */
+  const API = () => (window.DOODLY_API && window.DOODLY_API.get ? window.DOODLY_API : null);
+  const r2p = (r) => (r == null || r === "" ? null : Math.round(Number(r) * 100)); // rupees → paise
+  const p2r = (p) => (p == null ? null : Math.round(Number(p) / 100));             // paise → rupees
+  function deepSetLocal(obj, path, value) {
+    const parts = path.split("."); let o = obj;
+    for (let i = 0; i < parts.length - 1; i++) { if (typeof o[parts[i]] !== "object" || o[parts[i]] == null) o[parts[i]] = {}; o = o[parts[i]]; }
+    o[parts[parts.length - 1]] = value;
+  }
+
+  /* Load the live DB values for this product (pricing + real variants + plans)
+     into the in-memory catalogue, so the form shows exactly what's stored and
+     edits diff against the truth. No-op (returns false) when there's no backend
+     or the product has no DB id — the editor then behaves as before. */
+  async function hydrateFromDb(p) {
+    const api = API(); if (!api || !p || !p._id) return false;
+    try {
+      const [detail, cat] = await Promise.all([
+        api.get("/api/admin/products/" + p._id),
+        api.get("/api/catalogue").catch(() => null),
+      ]);
+      const d = detail && detail.product;
+      if (d) {
+        const pr = d.pricing || {};
+        p.pricing = {
+          mrp: p2r(pr.mrpPaise), selling: p2r(pr.sellingPaise), cost: p2r(pr.costPaise), offer: p2r(pr.offerPaise),
+          discountPct: Math.round((pr.discountBps || 0) / 100), taxPct: Math.round((pr.taxBps || 0) / 100),
+          deposit: p2r(pr.depositPaise), deliveryCharge: p2r(pr.deliveryPaise), freeDeliveryThreshold: p2r(pr.freeDeliveryOverPaise),
+        };
+        if (d.name != null) p.name = d.name;
+        p.status = String(d.status || p.status || "").toLowerCase();
+        p.visible = d.visible;
+        if (d.sortOrder != null) p.order = d.sortOrder;
+        if (d.lowStockThreshold != null) p.lowStockThreshold = d.lowStockThreshold;
+        if (d.description != null || d.longDesc != null) p.description = Object.assign({}, p.description, { short: d.description, long: d.longDesc, story: d.story, usage: d.usage, storage: d.storage, ingredients: d.ingredients, allergens: d.allergens });
+        if (d.nutrition) p.nutrition = Object.assign({}, p.nutrition, d.nutrition);
+        if (d.quality) p.quality = Object.assign({}, p.quality, { fat: d.quality.fatPct, snf: d.quality.snf, lactometer: d.quality.lactometer, storageTemp: d.quality.storageTemp, milkType: d.quality.milkType, animalType: d.quality.animalType, expiry: d.quality.expiry });
+        if (d.seo) p.seo = Object.assign({}, p.seo, { metaTitle: d.seo.metaTitle, metaDescription: d.seo.metaDescription, ogImage: d.seo.ogImageUrl, canonical: d.seo.canonicalUrl, keywords: d.seo.keywords });
+        const others = (D().variants || []).filter((v) => (v.productId || "milk") !== p.id);
+        const mine = (d.variants || []).map((v) => ({
+          id: v.id, _id: v.id, productId: p.id, label: v.label, displayName: v.displayName || v.label, sku: v.sku || "",
+          type: v.type === "TRIAL" ? "trial" : "subscription",
+          dailyPrice: v.dailyPaise == null ? null : p2r(v.dailyPaise),
+          fixedPrice: v.fixedPaise == null ? null : p2r(v.fixedPaise),
+          stock: v.stock, active: v.active !== false, weight: v.weightG ? v.weightG + " g" : "",
+        }));
+        if (window.DOODLY) window.DOODLY.variants = others.concat(mine);
+        p._dbLoaded = true;
+      }
+      if (cat && cat.plans && window.DOODLY) {
+        const byId = {}; cat.plans.forEach((pl) => { byId[pl.id] = pl; });
+        window.DOODLY.plans = (D().plans || []).map((pl) => { const dp = byId[pl.id]; return dp ? Object.assign({}, pl, { name: dp.name, days: dp.days, discount: dp.discount, tag: dp.tag, active: dp.active }) : pl; });
+      }
+      return true;
+    } catch (e) { return false; }
+  }
+
+  /* Persist all editable commercial + descriptive fields to the DB. Each group
+     is best-effort and independent, so a bad SKU or an over-long description can
+     never block the price from saving. Returns {ok:[],fail:[]}. */
+  async function pushProductToDb(p, prod, variantMap, planMap) {
+    const api = API(), id = p._id, ok = [], fail = [];
+    const run = async (label, body, path) => {
+      try { await api.patch(path || ("/api/admin/products/" + id), body); ok.push(label); }
+      catch (e) { fail.push(label + (e && e.code === "forbidden" ? " (not allowed)" : "")); }
+    };
+    // PRICING — product-level (retail price, deposit, delivery charge, tax…)
+    if (prod.pricing) {
+      const pr = prod.pricing, body = { action: "pricing" };
+      const money = { mrpPaise: pr.mrp, sellingPaise: pr.selling, costPaise: pr.cost, offerPaise: pr.offer, depositPaise: pr.deposit, deliveryPaise: pr.deliveryCharge, freeDeliveryOverPaise: pr.freeDeliveryThreshold };
+      Object.keys(money).forEach((k) => { const v = r2p(money[k]); if (v != null) body[k] = v; });
+      if (pr.discountPct != null && pr.discountPct !== "") body.discountBps = Math.round(Number(pr.discountPct) * 100);
+      if (pr.taxPct != null && pr.taxPct !== "") body.taxBps = Math.round(Number(pr.taxPct) * 100);
+      await run("prices", body);
+    }
+    // VARIANTS — subscription/trial prices, stock, availability (real DB ids only)
+    for (const vid in variantMap) {
+      const vf = variantMap[vid], vb = { action: "update-variant", variantId: vid };
+      if (vf.displayName != null && vf.displayName !== "") vb.displayName = vf.displayName;
+      if (vf.sku != null && vf.sku !== "") vb.sku = vf.sku;
+      if (vf.dailyPrice != null && vf.dailyPrice !== "") vb.dailyPaise = r2p(vf.dailyPrice);
+      if (vf.fixedPrice != null && vf.fixedPrice !== "") vb.fixedPaise = r2p(vf.fixedPrice);
+      if (vf.stock != null && vf.stock !== "") vb.stock = Number(vf.stock);
+      if (vf.active != null) vb.active = !!vf.active;
+      const wg = vf.weight ? parseInt(String(vf.weight).replace(/[^0-9]/g, ""), 10) : 0; if (wg) vb.weightG = wg;
+      await run("variant " + (vf.displayName || vid.slice(-4)), vb);
+    }
+    // PLANS — subscription plan discounts (persisted by slug)
+    for (const slug in planMap) {
+      const pf = planMap[slug], pb = {};
+      if (pf.name != null && pf.name !== "") pb.name = pf.name;
+      if (pf.days != null && pf.days !== "") pb.days = Number(pf.days);
+      if (pf.discount != null && pf.discount !== "") pb.discountBps = Math.round(Number(pf.discount) * 10000);
+      if (pf.tag !== undefined) pb.badge = pf.tag || null;
+      if (pf.autoRenew != null) pb.autoRenew = !!pf.autoRenew;
+      if (pf.active != null) pb.active = !!pf.active;
+      if (Object.keys(pb).length) await run("plan " + slug, pb, "/api/admin/plans/" + slug);
+    }
+    // BASIC + DESCRIPTION (best-effort)
+    const ub = { action: "update" };
+    if (prod.name != null && prod.name !== "") ub.name = prod.name;
+    if (prod.visible != null) ub.visible = !!prod.visible;
+    if (prod.order != null && prod.order !== "") ub.sortOrder = Number(prod.order);
+    if (prod.lowStockThreshold != null && prod.lowStockThreshold !== "") ub.lowStockThreshold = Number(prod.lowStockThreshold);
+    const dd = prod.description || {};
+    [["short", "description", 300], ["long", "longDesc", 4000], ["story", "story", 4000], ["usage", "usage", 2000], ["storage", "storage", 2000], ["ingredients", "ingredients", 2000], ["allergens", "allergens", 500]].forEach((m) => { if (dd[m[0]] != null && dd[m[0]] !== "") ub[m[1]] = String(dd[m[0]]).slice(0, m[2]); });
+    if (Object.keys(ub).length > 1) await run("details", ub);
+    // STATUS (best-effort)
+    if (prod.status != null && prod.status !== "") await run("status", { action: "status", status: String(prod.status).toUpperCase() });
+    // NUTRITION / QUALITY / SEO (best-effort, whitelisted to real columns)
+    if (prod.nutrition) { const nb = { action: "nutrition" }, ns = prod.nutrition; ["fat", "snf", "protein", "calcium", "energy", "carbs", "sugar"].forEach((k) => { if (ns[k] != null && ns[k] !== "") nb[k] = String(ns[k]); }); if (Object.keys(nb).length > 1) await run("nutrition", nb); }
+    if (prod.quality) { const qs = prod.quality, qb = { action: "quality" }, qmap = { fat: "fatPct", snf: "snf", lactometer: "lactometer", storageTemp: "storageTemp", milkType: "milkType", animalType: "animalType", expiry: "expiry" }; Object.keys(qmap).forEach((k) => { if (qs[k] != null && qs[k] !== "") qb[qmap[k]] = String(qs[k]); }); if (Object.keys(qb).length > 1) await run("quality", qb); }
+    if (prod.seo) { const s = prod.seo, sb = { action: "seo" }; if (s.metaTitle != null) sb.metaTitle = s.metaTitle; if (s.metaDescription != null) sb.metaDescription = s.metaDescription; if (s.keywords != null) sb.keywords = Array.isArray(s.keywords) ? s.keywords : String(s.keywords).split(",").map((x) => x.trim()).filter(Boolean); if (s.ogImage) sb.ogImageUrl = s.ogImage; if (s.canonical) sb.canonicalUrl = s.canonical; if (Object.keys(sb).length > 1) await run("seo", sb); }
+    return { ok, fail };
+  }
+
+  let modal = null, opening = false;
+  async function edit(id) {
+    if (opening) return;
+    opening = true;
+    let p = find(id);
+    if (!p) { opening = false; return; }
+    try { await hydrateFromDb(p); } catch (e) {}
+    opening = false;
+    p = find(id) || p;
     if (modal) modal.remove();
     modal = document.createElement("div");
     modal.className = "cms-modal";
@@ -174,16 +302,24 @@ window.DOODLY_ADMIN = (function () {
       if (up && row.previousElementSibling) list.insertBefore(row, row.previousElementSibling);
       if (down && row.nextElementSibling) list.insertBefore(row.nextElementSibling, row);
     });
-    modal.querySelector(".cms-save").addEventListener("click", () => { saveAll(id); close(); });
+    const saveBtn = modal.querySelector(".cms-save");
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled = true; const _t = saveBtn.textContent; saveBtn.textContent = "Saving…";
+      try { await saveAll(id); close(); } catch (e) { saveBtn.disabled = false; saveBtn.textContent = _t; }
+    });
     modal.querySelector(".cms-reset").addEventListener("click", () => {
       if (CMS()) { CMS().reset(); }
       location.reload();
     });
   }
 
-  function saveAll(id) {
+  async function saveAll(id) {
     if (!modal || !CMS()) return;
-    // scalar fields (product / variant / plan)
+    const p = find(id);
+    const useDb = !!(API() && p && p._id);
+
+    // ---- collect scalar fields (product / variant / plan) ----
+    const prod = {}, variantMap = {}, planMap = {};
     modal.querySelectorAll("[data-path]").forEach((inp) => {
       const scope = inp.dataset.scope, eid = inp.dataset.id, path = inp.dataset.path, cast = inp.dataset.cast;
       let val;
@@ -192,6 +328,10 @@ window.DOODLY_ADMIN = (function () {
       else if (cast === "pct") val = (Number(inp.value) || 0) / 100;
       else if (cast === "list") val = inp.value.split(",").map((s) => s.trim()).filter(Boolean);
       else val = inp.value;
+      if (scope === "variant") { (variantMap[eid] = variantMap[eid] || {})[path] = val; }
+      else if (scope === "plan") { (planMap[eid] = planMap[eid] || {})[path] = val; }
+      else deepSetLocal(prod, path, val);
+      // keep the in-memory catalogue in sync so the admin table updates instantly
       CMS().setField(scope, eid, path, val);
     });
     // badges -> rebuild array
@@ -207,9 +347,22 @@ window.DOODLY_ADMIN = (function () {
       const feat = modal.querySelector("[data-feat]:checked");
       if (feat) CMS().setField("product", id, "image", feat.value);
     }
+
+    if (useDb) {
+      // Production path — write commercial fields to the DATABASE. Nothing is
+      // persisted to localStorage, so the DB stays the single source of truth.
+      const res = await pushProductToDb(p, prod, variantMap, planMap);
+      if (res.fail.length && !res.ok.length) { toast("Couldn't save to the database (" + res.fail.join(", ") + ")"); throw new Error("db-save-failed"); }
+      toast(res.fail.length ? ("Saved " + res.ok.join(", ") + " — couldn't save: " + res.fail.join(", ")) : "Saved to the database — live on every device");
+      if (window.DOODLY_ADMIN && DOODLY_ADMIN.wireProductsBackend) { try { await DOODLY_ADMIN.wireProductsBackend(); } catch (e) { rerenderAdminTable(); } }
+      else rerenderAdminTable();
+      return;
+    }
+
+    // ---- offline / no backend: localStorage overlay (unchanged behaviour) ----
     CMS().save();
     rerenderAdminTable();
-    toast("Saved — live across the storefront");
+    toast("Saved — will sync to the database when the backend is reachable");
   }
 
   function rerenderAdminTable() {

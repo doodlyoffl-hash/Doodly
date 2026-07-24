@@ -87,7 +87,7 @@ export interface ProductDetail {
   updatedAt: string;
   updatedBy: string | null;
   deletedAt: string | null;
-  pricing: { mrpPaise: number; sellingPaise: number; costPaise: number | null; offerPaise: number | null; discountBps: number; taxBps: number; depositPaise: number; deliveryPaise: number } | null;
+  pricing: { mrpPaise: number; sellingPaise: number; costPaise: number | null; offerPaise: number | null; discountBps: number; taxBps: number; depositPaise: number; deliveryPaise: number; freeDeliveryOverPaise: number } | null;
   variants: VariantRow[];
   images: ImageRow[];
   seo: { metaTitle: string | null; metaDescription: string | null; ogImageUrl: string | null; canonicalUrl: string | null; keywords: string[] } | null;
