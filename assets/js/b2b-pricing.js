@@ -37,7 +37,25 @@ window.DOODLY_B2B_PRICING = (function () {
   ];
   function products() { try { return (B2B() && B2B().products && B2B().products()) || FALLBACK_PRODUCTS; } catch (e) { return FALLBACK_PRODUCTS; } }
   function product(slug) { return products().find(function (p) { return p.slug === slug; }) || null; }
-  function retailFor(slug) { var r = (settings().retail || {})[slug]; if (r != null && r !== "") return Number(r) || 0; var p = product(slug); return p ? Number(p.price) || 0 : 0; }
+  // Retail prices, DB-backed (shared across devices). serverRetail is filled
+  // from /api/b2b/pricing/retail on mount; until then (or offline) we fall
+  // back to the per-browser localStorage override, then the built-in default.
+  var serverRetail = null;   // { slug: rupees } once loaded from the DB
+  function loadServerRetail(done) {
+    try {
+      if (!window.DOODLY_API) return;
+      window.DOODLY_API.get("/api/b2b/pricing/retail").then(function (r) {
+        var map = {}; ((r && r.products) || []).forEach(function (p) { map[p.slug] = Number(p.retail) || 0; });
+        serverRetail = map;
+        if (typeof done === "function") done();
+      }).catch(function () { /* offline / no backend → keep the local fallback */ });
+    } catch (e) {}
+  }
+  function retailFor(slug) {
+    if (serverRetail && serverRetail[slug] != null) return Number(serverRetail[slug]) || 0;   // shared DB value
+    var r = (settings().retail || {})[slug]; if (r != null && r !== "") return Number(r) || 0; // per-browser fallback
+    var p = product(slug); return p ? Number(p.price) || 0 : 0;                                 // built-in default
+  }
   function gstPercentFor(slug) { try { return GST() ? (Number(GST().resolve(slug).percent) || 0) : 0; } catch (e) { return 0; } }
   var DEFAULT_COST = { milk: 52, curd: 92, paneer: 330, kova: 300, ghee: 900 };
   function costFor(slug) { var s = settings(); var c = (s.costs || {})[slug]; return c != null ? Number(c) : (DEFAULT_COST[slug] != null ? DEFAULT_COST[slug] : Math.round(retailFor(slug) * 0.8)); }
@@ -623,7 +641,17 @@ window.DOODLY_B2B_PRICING = (function () {
         var s = settings(); s.slabsEnabled = host.querySelector("#bp-set-slabs").checked; s.approvalRequired = host.querySelector("#bp-set-approval").checked;
         s.costs = s.costs || {}; host.querySelectorAll(".bp-cost").forEach(function (i) { s.costs[i.dataset.slug] = Number(i.value) || 0; });
         s.retail = s.retail || {}; host.querySelectorAll(".bp-retail").forEach(function (i) { s.retail[i.dataset.slug] = (i.value === "" ? null : (Number(i.value) || 0)); });
-        saveSettings(s); audit("b2bPricing.settings", "updated"); toast("Settings saved"); render();
+        saveSettings(s); audit("b2bPricing.settings", "updated");
+        // Persist retail to the shared DB so every device sees it. localStorage
+        // (saved above) is the offline cache / fallback if the API is unreachable.
+        if (window.DOODLY_API) {
+          window.DOODLY_API.put("/api/b2b/pricing/retail", { retail: s.retail || {} }).then(function (r) {
+            var map = {}; ((r && r.products) || []).forEach(function (p) { map[p.slug] = Number(p.retail) || 0; }); serverRetail = map;
+            toast("Saved — retail prices updated on all devices ✓"); render();
+          }).catch(function (e) {
+            toast(e && e.code === "forbidden" ? "Saved on this device (only a Super Admin can sync to all)" : "Saved on this device — will not sync until you're back online"); render();
+          });
+        } else { toast("Settings saved"); render(); }
       });
       var rst = host.querySelector("#bp-setreset"); if (rst) rst.addEventListener("click", function () { if (confirm("Delete ALL B2B pricing, history, overrides and scheduled changes? This cannot be undone.")) { ["doodly-b2b-pricing", "doodly-b2b-price-history", "doodly-b2b-overrides", "doodly-b2b-price-scheduled", "doodly-b2b-price-settings"].forEach(function (k) { localStorage.removeItem(k); }); audit("b2bPricing.reset", "all pricing data cleared"); toast("Pricing data reset"); seedIfEmpty(); render(); } });
     }
@@ -659,6 +687,9 @@ window.DOODLY_B2B_PRICING = (function () {
     }
 
     render();
+    // Pull the shared retail prices from the DB, then re-render so the Retail
+    // column and Settings editor show the same values on every device.
+    loadServerRetail(function () { render(); });
   }
 
   /* ---------- embeddable customer catalogue (used by b2b.js profile) ---------- */

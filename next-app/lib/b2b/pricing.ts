@@ -8,6 +8,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { audit } from "@/lib/auth/audit";
 import { B2B_PRODUCTS } from "./catalog";
 
 interface Actor { actorId?: string; actorRole?: string }
@@ -195,8 +196,50 @@ export async function restorePricing(id: string, actor: Actor) {
 
 // ---------- lookups + reports ----------
 
-export function productLookup() {
-  return B2B_PRODUCTS.map((p) => ({ slug: p.slug, name: p.name, units: p.units, primaryUnit: p.primaryUnit, basePricePaise: p.defaultPricePaise }));
+/* ---------- retail (base) prices — DB-backed via AppSetting ----------
+   The catalog defaults (lib/b2b/catalog.ts) are the fallback; a Super-Admin
+   can override them, and the override is stored ONCE in AppSetting so every
+   device/staff member sees the same retail prices. Key: "b2b.retail",
+   value: { slug: paise }. */
+const RETAIL_KEY = "b2b.retail";
+
+/** Effective retail price per slug (paise) — AppSetting override layered over
+ *  the catalog defaults. The single source of truth for B2B retail. */
+export async function getRetailPrices(): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  for (const p of B2B_PRODUCTS) out[p.slug] = p.defaultPricePaise;
+  try {
+    const row = await db.appSetting.findUnique({ where: { key: RETAIL_KEY } });
+    const ov = (row?.value ?? {}) as Record<string, unknown>;
+    for (const [slug, v] of Object.entries(ov)) {
+      const n = Math.round(Number(v) || 0);
+      if (out[slug] !== undefined && n > 0) out[slug] = n;   // only known slugs, positive
+    }
+  } catch { /* fall back to defaults */ }
+  return out;
+}
+
+/** Save retail overrides (paise). Only known slugs with a positive price are
+ *  persisted; anything else is dropped so a stray key can't poison the store. */
+export async function setRetailPrices(overrides: Record<string, number>, actor: Actor): Promise<Record<string, number>> {
+  const clean: Record<string, number> = {};
+  for (const p of B2B_PRODUCTS) {
+    const v = overrides?.[p.slug];
+    if (v != null) { const n = Math.round(Number(v) || 0); if (n > 0) clean[p.slug] = n; }
+  }
+  await db.appSetting.upsert({
+    where: { key: RETAIL_KEY },
+    create: { key: RETAIL_KEY, value: clean, updatedBy: actor.actorId ?? null },
+    update: { value: clean, updatedBy: actor.actorId ?? null },
+  });
+  await audit({ userId: actor.actorId ?? null, actorRole: actor.actorRole ?? "system", action: "b2b.retail.update", target: JSON.stringify(clean).slice(0, 180) }).catch(() => {});
+  return getRetailPrices();
+}
+
+/** Product list for the pricing form, with the LIVE (override-aware) base price. */
+export async function productLookup() {
+  const retail = await getRetailPrices();
+  return B2B_PRODUCTS.map((p) => ({ slug: p.slug, name: p.name, units: p.units, primaryUnit: p.primaryUnit, basePricePaise: retail[p.slug] ?? p.defaultPricePaise }));
 }
 
 export async function pricingReports() {

@@ -9,5 +9,5 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   if (!canUseB2B(actorRole(req))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  return NextResponse.json({ products: productLookup() }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ products: await productLookup() }, { headers: { "Cache-Control": "no-store" } });
 }
