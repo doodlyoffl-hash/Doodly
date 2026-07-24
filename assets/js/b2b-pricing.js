@@ -37,7 +37,7 @@ window.DOODLY_B2B_PRICING = (function () {
   ];
   function products() { try { return (B2B() && B2B().products && B2B().products()) || FALLBACK_PRODUCTS; } catch (e) { return FALLBACK_PRODUCTS; } }
   function product(slug) { return products().find(function (p) { return p.slug === slug; }) || null; }
-  function retailFor(slug) { var p = product(slug); return p ? Number(p.price) || 0 : 0; }
+  function retailFor(slug) { var r = (settings().retail || {})[slug]; if (r != null && r !== "") return Number(r) || 0; var p = product(slug); return p ? Number(p.price) || 0 : 0; }
   function gstPercentFor(slug) { try { return GST() ? (Number(GST().resolve(slug).percent) || 0) : 0; } catch (e) { return 0; } }
   var DEFAULT_COST = { milk: 52, curd: 92, paneer: 330, kova: 300, ghee: 900 };
   function costFor(slug) { var s = settings(); var c = (s.costs || {})[slug]; return c != null ? Number(c) : (DEFAULT_COST[slug] != null ? DEFAULT_COST[slug] : Math.round(retailFor(slug) * 0.8)); }
@@ -47,7 +47,7 @@ window.DOODLY_B2B_PRICING = (function () {
   function set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
   function store() { return get("doodly-b2b-pricing", {}); }
   function saveStore(s) { set("doodly-b2b-pricing", s); }
-  function settings() { return get("doodly-b2b-price-settings", { slabsEnabled: true, approvalRequired: false, costs: {} }); }
+  function settings() { return get("doodly-b2b-price-settings", { slabsEnabled: true, approvalRequired: false, costs: {}, retail: {} }); }
   function saveSettings(s) { set("doodly-b2b-price-settings", s); }
   function historyAll() { return get("doodly-b2b-price-history", []); }
   function saveHistory(a) { set("doodly-b2b-price-history", a); }
@@ -543,6 +543,9 @@ window.DOODLY_B2B_PRICING = (function () {
       return '<div class="panel"><div class="panel-head"><h3>Pricing settings</h3></div><div class="panel-pad">' +
         '<label class="bp-toggle-l"><input type="checkbox" id="bp-set-slabs" ' + (s.slabsEnabled !== false ? "checked" : "") + '> Enable quantity-slab pricing platform-wide</label>' +
         '<label class="bp-toggle-l"><input type="checkbox" id="bp-set-approval" ' + (s.approvalRequired ? "checked" : "") + '> Require approval for order-time price overrides</label>' +
+        '<h4 style="margin:16px 0 8px">Product retail prices</h4>' +
+        '<p class="muted-sm" style="margin:0 0 8px">The base price shown in the Retail column. Businesses without a negotiated price pay this.</p>' +
+        '<div class="exp-fgrid">' + products().map(function (p) { return '<label class="bp-f"><span>' + esc(p.name) + ' retail ₹</span><input class="input bp-retail" data-slug="' + p.slug + '" type="number" min="0" value="' + retailFor(p.slug) + '"></label>'; }).join("") + '</div>' +
         '<h4 style="margin:16px 0 8px">Product cost prices (for margin analysis)</h4>' +
         '<div class="exp-fgrid">' + products().map(function (p) { return '<label class="bp-f"><span>' + esc(p.name) + ' cost ₹</span><input class="input bp-cost" data-slug="' + p.slug + '" type="number" value="' + (costs[p.slug] != null ? costs[p.slug] : costFor(p.slug)) + '"></label>'; }).join("") + '</div>' +
         '<div style="margin-top:14px"><button class="btn btn-primary sm" id="bp-setsave">Save settings</button> <button class="link" id="bp-setreset" style="color:var(--danger,#c0392b)">Reset all pricing data</button></div>' +
@@ -619,6 +622,7 @@ window.DOODLY_B2B_PRICING = (function () {
       var save = host.querySelector("#bp-setsave"); if (save) save.addEventListener("click", function () {
         var s = settings(); s.slabsEnabled = host.querySelector("#bp-set-slabs").checked; s.approvalRequired = host.querySelector("#bp-set-approval").checked;
         s.costs = s.costs || {}; host.querySelectorAll(".bp-cost").forEach(function (i) { s.costs[i.dataset.slug] = Number(i.value) || 0; });
+        s.retail = s.retail || {}; host.querySelectorAll(".bp-retail").forEach(function (i) { s.retail[i.dataset.slug] = (i.value === "" ? null : (Number(i.value) || 0)); });
         saveSettings(s); audit("b2bPricing.settings", "updated"); toast("Settings saved"); render();
       });
       var rst = host.querySelector("#bp-setreset"); if (rst) rst.addEventListener("click", function () { if (confirm("Delete ALL B2B pricing, history, overrides and scheduled changes? This cannot be undone.")) { ["doodly-b2b-pricing", "doodly-b2b-price-history", "doodly-b2b-overrides", "doodly-b2b-price-scheduled", "doodly-b2b-price-settings"].forEach(function (k) { localStorage.removeItem(k); }); audit("b2bPricing.reset", "all pricing data cleared"); toast("Pricing data reset"); seedIfEmpty(); render(); } });
