@@ -150,14 +150,25 @@ window.DOODLY_INVOICE = (function () {
   /* ============================================================
      B2B — Business partner statement
      ============================================================ */
-  function b2bStatement(code) {
+  function b2bStatement(code, range) {
     var b = B2B();
     var biz = null, prof = null, ords = [];
+    var ordDate = function (o) { return o.deliveryDate || (o.createdAt ? String(o.createdAt).slice(0, 10) : ""); };
     if (b) {
       var all = b.businesses();
       biz = code ? all.find(function (x) { return x.code === code; }) : all[0];
       biz = biz || all[0];
-      if (biz) { prof = b.profile(biz); ords = b.orders().filter(function (o) { return o.businessId === biz.id; }); }
+      if (biz) {
+        prof = b.profile(biz);
+        ords = b.orders().filter(function (o) { return o.businessId === biz.id; });
+        // Date-range filter — the statement then covers only this billing period.
+        if (range && (range.from || range.to)) ords = ords.filter(function (o) {
+          var d = ordDate(o); if (!d) return false;
+          if (range.from && d < range.from) return false;
+          if (range.to && d > range.to) return false;
+          return true;
+        });
+      }
     }
     // On production the numbers must be REAL (derived from recorded B2B orders)
     // or zero — never fabricated. The pretty illustrative figures below are for
@@ -182,10 +193,14 @@ window.DOODLY_INVOICE = (function () {
     var dueDate = demo ? "2026-07-10" : "—", daysOverdue = 0;
     var amountDue = totalOut, balanceAfter = 0, netPayable = totalOut;
 
-    // Milk is delivered in 20 L / 40 L CANS — never bottles. Litres is the exact
-    // measure; "cans" is a 20 L-equivalent figure for the partner's convenience.
-    var litres = demo ? (prof.avgDaily || 45) * 30 : Math.round((prof.avgDaily || 0) * 30);
+    // Milk is delivered in 20 L / 40 L CANS — never bottles. Litres is summed from
+    // the milk lines of the orders in range; "cans" is the 20 L-equivalent count.
+    var litres = 0, prodSet = {};
+    ords.forEach(function (o) { (o.items || []).forEach(function (it) { prodSet[it.slug] = 1; if (it.slug === "milk" || String(it.unit || "").toLowerCase().indexOf("litre") >= 0) litres += Number(it.qty) || 0; }); });
+    if (demo) litres = (prof.avgDaily || 45) * 30;
     var cans = Math.round(litres / 20);
+    var fmtD = function (s) { try { return new Date(s).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }); } catch (e) { return s; } };
+    var periodLabel = (range && (range.from || range.to)) ? ((range.from ? fmtD(range.from) : "Start") + " – " + (range.to ? fmtD(range.to) : "Today")) : (ords.length ? "All recorded orders" : "");
 
     var history = (ords.length ? ords.slice(0, 6) : []).map(function (o) {
       var amt = Number(o.total) || 0;
@@ -196,10 +211,10 @@ window.DOODLY_INVOICE = (function () {
 
     var todayStr = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
     return {
-      no: demo ? "DOODLY/B2B/2026/00042" : (biz.code || "—"), date: demo ? "30 Jun 2026" : todayStr, period: demo ? "1–30 Jun 2026" : "", creditPeriod: (biz.paymentTerm && /\d+\s*day/i.test(biz.paymentTerm)) ? biz.paymentTerm : (demo ? "30 days" : "—"), dueDate: dueDate, rep: biz.salesRep || (demo ? "Vikram Rao" : "—"),
+      no: demo ? "DOODLY/B2B/2026/00042" : (biz.code || "—"), date: demo ? "30 Jun 2026" : todayStr, period: demo ? "1–30 Jun 2026" : periodLabel, creditPeriod: (biz.paymentTerm && /\d+\s*day/i.test(biz.paymentTerm)) ? biz.paymentTerm : (demo ? "30 days" : "—"), dueDate: dueDate, rep: biz.salesRep || (demo ? "Vikram Rao" : "—"),
       biz: { code: biz.code, name: biz.name, type: biz.type, gst: biz.gst, contactPerson: biz.contactPerson, mobile: biz.mobile, email: biz.email, address: addr, paymentTerm: biz.paymentTerm, creditLimit: creditLimit },
       status: totalOut > 0 ? (daysOverdue > 0 ? "overdue" : "pending") : "paid",
-      supply: { litres: litres, cans: cans, products: (prof.preferred || []).length || (demo ? 3 : 0), deliveryDays: demo ? 26 : ords.length, avgDaily: prof.avgDaily || 0 },
+      supply: { litres: litres, cans: cans, products: demo ? 3 : Object.keys(prodSet).length, deliveryDays: demo ? 26 : ords.length, avgDaily: prof.avgDaily || 0 },
       fin: { prevOut: prevOut, current: current, received: received, creditNotes: creditNotes, adjustments: adjustments, discounts: discounts, gst: gst, totalOut: totalOut, netPayable: netPayable, amountDue: amountDue, balanceAfter: balanceAfter },
       track: { outstanding: totalOut, dueDate: dueDate, daysOverdue: daysOverdue, creditLimit: creditLimit, available: Math.max(0, creditLimit - totalOut), progress: (prevOut + current) ? Math.min(100, Math.round((received / (prevOut + current)) * 100)) : 0 },
       history: history,
@@ -216,7 +231,8 @@ window.DOODLY_INVOICE = (function () {
     // (and always on production without real data) show a clean empty state.
     var hasBiz = false; try { hasBiz = !!(B2B() && B2B().businesses && B2B().businesses().length); } catch (e) {}
     if (!demoOK() && !hasBiz) return invEmpty(host, "No business statement yet", "Register a business and record B2B orders to generate a partner statement here.");
-    var v = b2bStatement(code || qp("id"));
+    var range = { from: qp("from") || "", to: qp("to") || "" };
+    var v = b2bStatement(code || qp("id"), range);
     var c = cfg(), b = B2B();
     var bizOpts = b ? b.businesses().map(function (x) { return '<option value="' + x.code + '"' + (x.code === v.biz.code ? " selected" : "") + '>' + esc(x.name) + ' (' + x.code + ')</option>'; }).join("") : "";
     var stat = function (l, val, sub, tone, count) { return '<div class="inv-stat ' + (tone || "") + '"><div class="inv-stat-v">' + (count !== false ? num(val, "₹") : esc(val)) + '</div><div class="inv-stat-l">' + l + '</div>' + (sub ? '<div class="inv-stat-s">' + sub + '</div>' : "") + '</div>'; };
@@ -228,7 +244,11 @@ window.DOODLY_INVOICE = (function () {
 
     host.innerHTML =
       '<div class="inv inv-b2b reveal-inv">' + watermark() + actionBar("b2b", { title: "DOODLY B2B statement", no: v.no, amount: v.fin.amountDue }) +
-      (b && bizOpts ? '<div class="inv-bizpick"><label>Business</label><select class="input" id="invBizSel">' + bizOpts + '</select></div>' : "") +
+      (b && bizOpts ? '<div class="inv-bizpick"><label>Business</label><select class="input" id="invBizSel">' + bizOpts + '</select>' +
+        '<label>From</label><input type="date" class="input" id="invFrom" value="' + esc(range.from) + '">' +
+        '<label>To</label><input type="date" class="input" id="invTo" value="' + esc(range.to) + '">' +
+        ((range.from || range.to) ? '<button class="link" id="invRangeClear">Clear</button>' : "") +
+        '</div>' : "") +
       '<div class="inv-doc" id="invDoc">' +
         '<header class="inv-head"><div class="inv-brand">' + logo() + '<div><div class="inv-bname">' + esc(c.brandName) + '</div><div class="inv-tag">Business Partner Statement</div></div></div>' +
           '<div class="inv-meta"><div class="inv-title">STATEMENT OF ACCOUNT</div><div class="inv-mrow"><span>Statement</span><b>' + esc(v.no) + '</b></div><div class="inv-mrow"><span>Date</span><b>' + esc(v.date) + '</b></div><div class="inv-mrow"><span>Billing period</span><b>' + esc(v.period) + '</b></div><div class="inv-mrow"><span>Due date</span><b>' + esc(v.dueDate) + '</b></div><div class="inv-mrow"><span>Status</span>' + badge(v.status) + '</div></div></header>' +
@@ -259,6 +279,18 @@ window.DOODLY_INVOICE = (function () {
       '</div></div>';
     afterMount(host, { kind: "b2b", v: v });
     var sel = host.querySelector("#invBizSel"); if (sel) sel.addEventListener("change", function () { var u = new URL(location.href); u.searchParams.set("id", sel.value); history.replaceState({}, "", u); mountB2B(host, sel.value); });
+    // Date-range → re-render the statement for the chosen billing period (keeps ?id=).
+    var curCode = function () { var s = host.querySelector("#invBizSel"); return s ? s.value : (code || qp("id")); };
+    var applyRange = function () {
+      var u = new URL(location.href);
+      var fromI = host.querySelector("#invFrom"), toI = host.querySelector("#invTo");
+      if (fromI && fromI.value) u.searchParams.set("from", fromI.value); else u.searchParams.delete("from");
+      if (toI && toI.value) u.searchParams.set("to", toI.value); else u.searchParams.delete("to");
+      history.replaceState({}, "", u); mountB2B(host, curCode());
+    };
+    var fI = host.querySelector("#invFrom"); if (fI) fI.addEventListener("change", applyRange);
+    var tI = host.querySelector("#invTo"); if (tI) tI.addEventListener("change", applyRange);
+    var clr = host.querySelector("#invRangeClear"); if (clr) clr.addEventListener("click", function () { var u = new URL(location.href); u.searchParams.delete("from"); u.searchParams.delete("to"); history.replaceState({}, "", u); mountB2B(host, curCode()); });
   }
   function an(l, v) { return '<div class="inv-an"><div class="inv-an-l">' + l + '</div><div class="inv-an-v">' + esc(v) + '</div></div>'; }
 
