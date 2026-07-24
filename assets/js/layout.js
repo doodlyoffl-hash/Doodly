@@ -7,6 +7,9 @@
 (function () {
   // Load the DOODLY sound system once, on every page (subtle UI sound effects).
   try { if (!window.DOODLY_SOUND && !document.getElementById("doodly-sound-js")) { var _snd = document.createElement("script"); _snd.id = "doodly-sound-js"; _snd.src = "/assets/js/sound.js"; _snd.async = true; document.head.appendChild(_snd); } } catch (e) {}
+  // Load the DOODLY date picker (brand-styled calendar for every date field, site-wide).
+  try { if (!document.getElementById("doodly-datepicker-css")) { var _dpc = document.createElement("link"); _dpc.id = "doodly-datepicker-css"; _dpc.rel = "stylesheet"; _dpc.href = "/assets/css/datepicker.css"; document.head.appendChild(_dpc); } } catch (e) {}
+  try { if (!window.DOODLY_DATEPICKER && !document.getElementById("doodly-datepicker-js")) { var _dpj = document.createElement("script"); _dpj.id = "doodly-datepicker-js"; _dpj.src = "/assets/js/datepicker.js"; _dpj.async = true; document.head.appendChild(_dpj); } } catch (e) {}
   const M = window.DOODLY_MANIFEST;
   const B = window.DOODLY_BLOCKS;
   const D = window.DOODLY;
