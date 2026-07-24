@@ -159,28 +159,53 @@ window.DOODLY_INVOICE = (function () {
       biz = biz || all[0];
       if (biz) { prof = b.profile(biz); ords = b.orders().filter(function (o) { return o.businessId === biz.id; }); }
     }
-    if (!biz) biz = { code: "DOO-B2B-000001", name: "Grand Park Hotel", type: "Hotel", gst: "37ABCDE1234F1Z5", contactPerson: "Mr. Suresh", mobile: "+91 98480 22113", email: "purchase@grandpark.in", address: "MG Road, Vijayawada 520010", paymentTerm: "Monthly Billing", creditLimit: 50000 };
-    if (!prof) prof = { totalOrders: 24, totalRevenue: 86400, avgDaily: 45, outstanding: 18650, lastDelivery: "2026-06-28", preferred: [{ name: "A2 Buffalo Milk" }, { name: "Malai Paneer" }] };
-    // financial summary
-    var current = 24200, prevOut = 12450, received = 18000, creditNotes = 600, adjustments = 0, discounts = 1200, gst = 0;
-    var totalOut = prevOut + current - received - creditNotes - adjustments;
-    var creditLimit = biz.creditLimit || 50000;
-    var dueDate = "2026-07-10", daysOverdue = 0;
+    // On production the numbers must be REAL (derived from recorded B2B orders)
+    // or zero — never fabricated. The pretty illustrative figures below are for
+    // local demo mode only (demoOK), matching how demo data is gated elsewhere.
+    var demo = demoOK();
+    if (!biz) biz = demo
+      ? { code: "DOO-B2B-000001", name: "Grand Park Hotel", type: "Hotel", gst: "37ABCDE1234F1Z5", contactPerson: "Mr. Suresh", mobile: "+91 98480 22113", email: "purchase@grandpark.in", address: "MG Road, Vijayawada 520010", paymentTerm: "Monthly Billing", creditLimit: 50000 }
+      : { code: code || "—", name: "—", type: "", gst: "", contactPerson: "", mobile: "", email: "", address: "", paymentTerm: "", creditLimit: 0 };
+    if (!prof) prof = { totalOrders: 0, totalRevenue: 0, avgDaily: 0, outstanding: 0, lastDelivery: "", preferred: [] };
+    var addr = biz.address || [biz.line1, biz.area, biz.city, biz.pincode].filter(Boolean).join(", ");
+
+    // Financial summary — derived from the business's real orders.
+    var sum = function (fn) { return ords.reduce(function (s, o) { return s + (Number(fn(o)) || 0); }, 0); };
+    var current = demo ? 24200 : sum(function (o) { return o.total; });
+    var received = demo ? 18000 : sum(function (o) { return o.paid; });
+    var discounts = demo ? 1200 : sum(function (o) { return o.discount; });
+    var gst = demo ? 0 : sum(function (o) { return o.gst != null ? o.gst : o.tax; });
+    var prevOut = demo ? 12450 : 0;          // prior-period balance isn't tracked locally
+    var creditNotes = demo ? 600 : 0, adjustments = 0;
+    var totalOut = Math.max(0, prevOut + current - received - creditNotes - adjustments);
+    var creditLimit = Number(biz.creditLimit) || (demo ? 50000 : 0);
+    var dueDate = demo ? "2026-07-10" : "—", daysOverdue = 0;
     var amountDue = totalOut, balanceAfter = 0, netPayable = totalOut;
-    var litres = (prof.avgDaily || 45) * 30, bottles = Math.round(litres);
-    var history = (ords.length ? ords.slice(0, 6) : seedHistory()).map(function (o, i) {
-      var amt = o.total != null ? o.total : [3588, 4655, 2400, 5200, 3100, 4200][i % 6];
-      var paid = o.paymentStatus === "Paid" ? amt : (o.paid != null ? o.paid : [amt, 0, amt, 2000, amt, 0][i % 6]);
-      return { date: o.deliveryDate || o.createdAt || "2026-06-2" + (i + 1), no: o.code || ("DOODLY/B2B/2026/0000" + (i + 1)), amount: amt, paid: paid, pending: Math.max(0, amt - paid), status: paid >= amt ? "paid" : paid > 0 ? "partial" : "pending" };
+
+    // Milk is delivered in 20 L / 40 L CANS — never bottles. Litres is the exact
+    // measure; "cans" is a 20 L-equivalent figure for the partner's convenience.
+    var litres = demo ? (prof.avgDaily || 45) * 30 : Math.round((prof.avgDaily || 0) * 30);
+    var cans = Math.round(litres / 20);
+
+    var history = (ords.length ? ords.slice(0, 6) : []).map(function (o) {
+      var amt = Number(o.total) || 0;
+      var paid = o.paymentStatus === "Paid" ? amt : (Number(o.paid) || 0);
+      return { date: o.deliveryDate || (o.createdAt ? String(o.createdAt).slice(0, 10) : "—"), no: o.code || "—", amount: amt, paid: paid, pending: Math.max(0, amt - paid), status: paid >= amt && amt > 0 ? "paid" : paid > 0 ? "partial" : "pending" };
     });
+    if (!history.length && demo) history = [0, 1, 2, 3, 4, 5].map(function (i) { var amt = [3588, 4655, 2400, 5200, 3100, 4200][i]; var paid = [amt, 0, amt, 2000, amt, 0][i]; return { date: "2026-06-2" + (i + 1), no: "DOODLY/B2B/2026/0000" + (i + 1), amount: amt, paid: paid, pending: Math.max(0, amt - paid), status: paid >= amt ? "paid" : paid > 0 ? "partial" : "pending" }; });
+
+    var todayStr = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
     return {
-      no: "DOODLY/B2B/2026/00042", date: "30 Jun 2026", period: "1–30 Jun 2026", creditPeriod: "30 days", dueDate: dueDate, rep: "Vikram Rao",
-      biz: biz, status: totalOut > 0 ? (daysOverdue > 0 ? "overdue" : "pending") : "paid",
-      supply: { litres: litres, bottles: bottles, products: (prof.preferred || []).length || 3, deliveryDays: 26, avgDaily: prof.avgDaily || 45 },
+      no: demo ? "DOODLY/B2B/2026/00042" : (biz.code || "—"), date: demo ? "30 Jun 2026" : todayStr, period: demo ? "1–30 Jun 2026" : "", creditPeriod: (biz.paymentTerm && /\d+\s*day/i.test(biz.paymentTerm)) ? biz.paymentTerm : (demo ? "30 days" : "—"), dueDate: dueDate, rep: biz.salesRep || (demo ? "Vikram Rao" : "—"),
+      biz: { code: biz.code, name: biz.name, type: biz.type, gst: biz.gst, contactPerson: biz.contactPerson, mobile: biz.mobile, email: biz.email, address: addr, paymentTerm: biz.paymentTerm, creditLimit: creditLimit },
+      status: totalOut > 0 ? (daysOverdue > 0 ? "overdue" : "pending") : "paid",
+      supply: { litres: litres, cans: cans, products: (prof.preferred || []).length || (demo ? 3 : 0), deliveryDays: demo ? 26 : ords.length, avgDaily: prof.avgDaily || 0 },
       fin: { prevOut: prevOut, current: current, received: received, creditNotes: creditNotes, adjustments: adjustments, discounts: discounts, gst: gst, totalOut: totalOut, netPayable: netPayable, amountDue: amountDue, balanceAfter: balanceAfter },
-      track: { outstanding: totalOut, dueDate: dueDate, daysOverdue: daysOverdue, creditLimit: creditLimit, available: Math.max(0, creditLimit - totalOut), progress: Math.min(100, Math.round((received / (prevOut + current || 1)) * 100)) },
+      track: { outstanding: totalOut, dueDate: dueDate, daysOverdue: daysOverdue, creditLimit: creditLimit, available: Math.max(0, creditLimit - totalOut), progress: (prevOut + current) ? Math.min(100, Math.round((received / (prevOut + current)) * 100)) : 0 },
       history: history,
-      analytics: { avgDaily: inr(2880), monthly: inr(86400), quarterly: inr(248000), highMonth: "May 2026", lowMonth: "Feb 2026", avgPayTime: "8 days", mostOrdered: (prof.preferred && prof.preferred[0] ? prof.preferred[0].name : "A2 Buffalo Milk"), lifetime: inr(prof.totalRevenue * 6 || 518000) },
+      analytics: demo
+        ? { avgDaily: inr(2880), monthly: inr(86400), quarterly: inr(248000), highMonth: "May 2026", lowMonth: "Feb 2026", avgPayTime: "8 days", mostOrdered: "A2 Buffalo Milk", lifetime: inr(518000) }
+        : { avgDaily: inr(litres ? Math.round(current / 30) : 0), monthly: inr(current), quarterly: inr(0), highMonth: "—", lowMonth: "—", avgPayTime: "—", mostOrdered: (prof.preferred && prof.preferred[0] ? prof.preferred[0].name : "—"), lifetime: inr(prof.totalRevenue || 0) },
     };
   }
   function seedHistory() { return [{}, {}, {}, {}, {}, {}]; }
@@ -198,7 +223,7 @@ window.DOODLY_INVOICE = (function () {
     var alerts = [];
     if (v.track.daysOverdue > 0) alerts.push(["red", "⚠️ Overdue payment — " + v.track.daysOverdue + " days past due (" + inr(v.track.outstanding) + ")."]);
     else if (v.track.outstanding > 0) alerts.push(["amber", "🕒 Payment due soon — " + inr(v.fin.amountDue) + " by " + v.dueDate + "."]);
-    if (v.track.available <= v.track.creditLimit * 0.15) alerts.push(["red", "🚫 Credit limit nearly reached — only " + inr(v.track.available) + " available."]);
+    if (v.track.creditLimit > 0 && v.track.available <= v.track.creditLimit * 0.15) alerts.push(["red", "🚫 Credit limit nearly reached — only " + inr(v.track.available) + " available."]);
     if (v.history.some(function (h) { return h.status === "pending"; })) alerts.push(["amber", "📄 You have pending invoices awaiting payment."]);
 
     host.innerHTML =
@@ -212,7 +237,7 @@ window.DOODLY_INVOICE = (function () {
         '<section class="inv-sec inv-parties" style="--i:1"><div class="inv-party"><div class="inv-ph">Business</div><b>' + esc(v.biz.name) + '</b><div class="inv-pl">' + esc(v.biz.type || "") + ' · ' + esc(v.biz.code) + '</div><div class="inv-pl">GSTIN ' + esc(v.biz.gst || "—") + '</div><div class="inv-pl">' + esc(v.biz.contactPerson || "") + ' · ' + esc(v.biz.mobile || "") + '</div><div class="inv-pl">' + esc(v.biz.email || "") + '</div><div class="inv-pl">' + esc(v.biz.address || "") + '</div></div>' +
           '<div class="inv-party"><div class="inv-ph">Billing</div><div class="inv-kv"><span>Credit period</span><b>' + esc(v.creditPeriod) + '</b></div><div class="inv-kv"><span>Payment due</span><b>' + esc(v.dueDate) + '</b></div><div class="inv-kv"><span>Terms</span><b>' + esc(v.biz.paymentTerm || "Monthly Billing") + '</b></div><div class="inv-kv"><span>Sales rep</span><b>' + esc(v.rep) + '</b></div></div></section>' +
         '<section class="inv-sec" style="--i:2"><div class="inv-ph">Supply summary</div><div class="inv-supgrid">' +
-          dchip("🥛", "Total litres", v.supply.litres) + dchip("🍶", "Total bottles", v.supply.bottles) + dchip("📦", "Products", v.supply.products) + dchip("🚚", "Delivery days", v.supply.deliveryDays) + dchip("📊", "Avg daily (L)", v.supply.avgDaily) +
+          dchip("🥛", "Total litres", v.supply.litres) + dchip("🥫", "Cans (20 L)", v.supply.cans) + dchip("📦", "Products", v.supply.products) + dchip("🚚", "Delivery days", v.supply.deliveryDays) + dchip("📊", "Avg daily (L)", v.supply.avgDaily) +
         '</div></section>' +
         '<section class="inv-sec" style="--i:3"><div class="inv-ph">Financial summary</div><div class="inv-stats">' +
           stat("Previous outstanding", v.fin.prevOut) + stat("Current invoice", v.fin.current) + stat("Payments received", v.fin.received, "", "green") + stat("Credit notes", v.fin.creditNotes) +
