@@ -2099,6 +2099,10 @@
     var curDrv = d.driver ? d.driver.id : "";
     var drvOpts = '<option value="">— Unassigned —</option>' + _delDrivers.map(function (dv) { var nm = (dv.user && dv.user.name) || dv.name || dv.employeeId || "Driver"; return '<option value="' + dv.id + '"' + (dv.id === curDrv ? " selected" : "") + ">" + esc(nm) + "</option>"; }).join("");
     var issueOpts = DEL_ISSUES.map(function (i) { return '<option value="' + i[0] + '">' + i[1] + "</option>"; }).join("");
+    var ADJ_REASONS = [["OPS_MISSED", "Operations missed"], ["EXECUTIVE_ISSUE", "Delivery executive issue"], ["VEHICLE_BREAKDOWN", "Vehicle breakdown"], ["WEATHER", "Weather"], ["STOCK_UNAVAILABLE", "Stock unavailable"], ["QUALITY_ISSUE", "Quality issue"], ["ADMIN_ADJUSTMENT", "Admin adjustment"], ["OTHER", "Other"]];
+    var adjOpts = ADJ_REASONS.map(function (r) { return '<option value="' + r[0] + '">' + r[1] + "</option>"; }).join("");
+    var isSubDel = !!d.plan && d.status !== "DELIVERED";                  // only subscription stops can be made up
+    var canReinstate = d.status === "SKIPPED" || d.status === "FAILED";
     var ov = document.createElement("div"); ov.className = "dac-ov";
     ov.innerHTML =
       '<div class="dac-card" role="dialog" aria-modal="true" aria-label="Manage delivery">' +
@@ -2113,6 +2117,14 @@
               '<label class="dac-f"><span>Priority</span><select class="input" id="dm-ipri"><option value="LOW">Low</option><option value="MEDIUM" selected>Medium</option><option value="HIGH">High</option></select></label></div>' +
             '<label class="dac-f"><span>Comments</span><input class="input" id="dm-icomment" placeholder="what happened…"></label>' +
             '<div style="margin-top:8px"><button class="btn btn-ghost" type="button" id="dm-logissue">Log issue</button></div></div>' +
+          ((isSubDel || canReinstate) ?
+            '<div style="border-top:1px solid var(--line,#eee);padding-top:12px;margin-top:12px"><div class="strong" style="margin-bottom:8px">Missed delivery — reschedule &amp; extend</div>' +
+              '<p class="muted-sm" style="margin:-4px 0 8px">Marks this stop as missed and adds a make-up day at the end, so the customer never loses a paid day.</p>' +
+              (isSubDel ? '<div class="dac-row"><label class="dac-f"><span>Reason</span><select class="input" id="dm-areason">' + adjOpts + '</select></label>' +
+                '<label class="dac-f"><span>Note</span><input class="input" id="dm-anote" placeholder="optional"></label></div>' +
+                '<div style="margin-top:8px"><button class="btn btn-ghost" type="button" id="dm-adjust">Mark missed → make up (extends plan)</button></div>' : "") +
+              (canReinstate ? '<div style="margin-top:8px"><button class="btn btn-ghost" type="button" id="dm-reinstate">Reinstate this delivery</button></div>' : "") +
+            "</div>" : "") +
           '<p class="dac-err" id="dm-err"></p>' +
         "</form>" +
         '<div class="dac-ft"><button class="btn btn-ghost" type="button" id="dm-close">Close</button></div>' +
@@ -2140,10 +2152,32 @@
         qs("#dm-icomment").value = ""; btn.disabled = false;
       } catch (e) { err.textContent = e.code === "forbidden" ? "Your role can't log issues (403)." : (e.message || "Couldn't log issue."); btn.disabled = false; }
     }
+    async function doAdjust() {
+      var err = qs("#dm-err"), btn = qs("#dm-adjust");
+      btn.disabled = true; err.textContent = "";
+      try {
+        await DOODLY_API.post("/api/admin/deliveries/" + d.id, { action: "adjust", reason: qs("#dm-areason").value, note: (qs("#dm-anote").value || "").trim() || undefined });
+        await wireDeliveriesBackend();
+        dacToast("Marked missed — a make-up was added and the plan extended.");
+        close();
+      } catch (e) { err.textContent = e.code === "forbidden" ? "Your role can't adjust deliveries (403)." : (e.message || "Couldn't adjust."); btn.disabled = false; }
+    }
+    async function doReinstate() {
+      var err = qs("#dm-err"), btn = qs("#dm-reinstate");
+      btn.disabled = true; err.textContent = "";
+      try {
+        await DOODLY_API.post("/api/admin/deliveries/" + d.id, { action: "reinstate" });
+        await wireDeliveriesBackend();
+        dacToast("Delivery reinstated.");
+        close();
+      } catch (e) { err.textContent = e.code === "forbidden" ? "Not allowed (403)." : (e.message || "Couldn't reinstate."); btn.disabled = false; }
+    }
     function onKey(e) { if (e.key === "Escape") close(); }
     ov.addEventListener("click", function (e) { if (e.target === ov) close(); });
     qs(".dac-x").addEventListener("click", close); qs("#dm-close").addEventListener("click", close);
     qs("#dm-save").addEventListener("click", saveAssign); qs("#dm-logissue").addEventListener("click", logIssue);
+    var _adj = qs("#dm-adjust"); if (_adj) _adj.addEventListener("click", doAdjust);
+    var _rei = qs("#dm-reinstate"); if (_rei) _rei.addEventListener("click", doReinstate);
     document.addEventListener("keydown", onKey);
   }
   window.DOODLY_ADMIN.manageDelivery = openDeliveryManage;
