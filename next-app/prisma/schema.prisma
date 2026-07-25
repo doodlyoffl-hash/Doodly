@@ -530,6 +530,7 @@ model Subscription {
   endDate         DateTime?
   deliverySlot    String     @default("06:00-08:00")
   nextDeliveryAt  DateTime?
+  targetDeliveries Int?                             // paid delivery count; make-ups (skip/miss) extend endDate, manual Extend raises this. null ⇒ fall back to plan.days
   autoRenew       Boolean    @default(true)
   pausedFrom      DateTime?
   pausedUntil     DateTime?                        // Vacation Mode window
@@ -870,6 +871,8 @@ model Delivery {
   otp            String?                           // delivery OTP
   podPhotoUrl    String?                           // proof-of-delivery (Cloudinary)
   customerRemark String?
+  adjustReason   String?                           // why this stop was SKIPPED/FAILED/adjusted (OPS_MISSED, CUSTOMER_REQUESTED, …)
+  adjustNote     String?                           // free-text remark for the adjustment
   cashCollected  Int            @default(0)        // paise, COD
   bottlesOut     Int            @default(0)        // bottles handed over
   bottlesIn      Int            @default(0)        // empties collected

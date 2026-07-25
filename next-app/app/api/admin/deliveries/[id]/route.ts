@@ -6,8 +6,10 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { ok, parseBody, route, Errors } from "@/lib/http";
 import { requirePermission } from "@/lib/auth/authorize";
+import { readUserId } from "@/lib/auth/identity";
 import { reqContext } from "@/lib/auth/request";
 import { audit } from "@/lib/auth/audit";
+import { ADJUST_REASONS } from "@/lib/subscriptions/reasons";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,4 +45,33 @@ export const PATCH = route("admin.deliveries.update", async (req: NextRequest, {
 
   await audit({ actorRole: actor, action: body.driverId !== undefined ? "delivery.assign" : "delivery.update", target: delivery.id, ctx: reqContext(req) });
   return ok({ delivery });
+});
+
+/* POST — Adjust a MISSED subscription delivery (mark FAILED + reason → made up at the
+   end, subscription extends) or Reinstate a cancelled/missed one. Subscription
+   deliveries only. */
+const adjustSchema = z.object({
+  action: z.enum(["adjust", "reinstate"]),
+  reason: z.enum(ADJUST_REASONS).optional(),
+  note: z.string().max(300).optional(),
+});
+
+export const POST = route("admin.deliveries.adjust", async (req: NextRequest, { params }: Ctx) => {
+  const role = requirePermission(req, "deliveries", "edit");
+  const body = await parseBody(req, adjustSchema);
+  const actor = { actorId: readUserId(req) ?? undefined, actorRole: role };
+
+  let result: unknown;
+  if (body.action === "adjust") {
+    const { adjustMissedDelivery } = await import("@/lib/subscriptions/deliveries");
+    result = await adjustMissedDelivery(params.id, body.reason ?? "OPS_MISSED", body.note, actor);
+    if (!result) throw Errors.badRequest("This delivery isn't part of a subscription.");
+  } else {
+    const { reinstateDelivery } = await import("@/lib/subscriptions/deliveries");
+    result = await reinstateDelivery(params.id, actor);
+    if (!result) throw Errors.badRequest("Nothing to reinstate for this delivery.");
+  }
+
+  await audit({ actorRole: role, action: `delivery.${body.action}`, target: params.id, ctx: reqContext(req) });
+  return ok({ result });
 });

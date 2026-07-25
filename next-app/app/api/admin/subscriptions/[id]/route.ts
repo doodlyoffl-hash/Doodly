@@ -11,8 +11,10 @@ import { audit } from "@/lib/auth/audit";
 import { reqContext } from "@/lib/auth/request";
 import {
   getSubscriptionDetail, updateSubscription, pauseSubscription, resumeSubscription,
-  skipDelivery, cancelSubscription, setAutopay, addNote, type Actor,
+  skipDelivery, cancelSubscription, setAutopay, addNote,
+  cancelDates, adjustDelivery, reinstate, extend, computeRemainingValue, refundSubscription, type Actor,
 } from "@/lib/subscriptions/admin";
+import { ADJUST_REASONS } from "@/lib/subscriptions/reasons";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,10 +25,13 @@ export const GET = route("admin.subscriptions.detail", async (req: NextRequest, 
   requireSubsAdmin(req);
   const detail = await getSubscriptionDetail(params.id);
   if (!detail) throw Errors.notFound("Subscription not found.");
-  return ok({ subscription: detail });
+  // Suggested prorated refund for the cancel dialog (admin edits the amount/method).
+  const refundQuote = await computeRemainingValue(params.id).catch(() => null);
+  return ok({ subscription: detail, refundQuote });
 });
 
 const itemSchema = z.object({ variantId: z.string().min(1), qty: z.number().int().min(1).max(20) });
+const refundSchema = z.object({ method: z.enum(["wallet", "gateway", "none", "manual"]), amountPaise: z.number().int().min(0).max(50_000_00).optional(), note: z.string().max(300).optional() });
 
 const patchSchema = z.discriminatedUnion("action", [
   z.object({
@@ -42,7 +47,12 @@ const patchSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("pause"), until: z.string().datetime().optional(), reason: z.string().max(300).optional() }),
   z.object({ action: z.literal("resume") }),
   z.object({ action: z.literal("skip"), date: z.string().datetime().optional() }),
-  z.object({ action: z.literal("cancel"), reason: z.string().max(300).optional(), refundPaise: z.number().int().min(0).max(10_000_00).optional() }),
+  z.object({ action: z.literal("cancel-dates"), dates: z.array(z.string().datetime()).min(1).max(60) }),
+  z.object({ action: z.literal("adjust"), deliveryId: z.string().min(1), reason: z.enum(ADJUST_REASONS), note: z.string().max(300).optional() }),
+  z.object({ action: z.literal("reinstate"), deliveryId: z.string().min(1) }),
+  z.object({ action: z.literal("extend"), days: z.number().int().min(1).max(120), reason: z.string().max(300).optional() }),
+  z.object({ action: z.literal("cancel"), reason: z.string().max(300).optional(), scope: z.enum(["all", "remaining"]).optional(), refund: refundSchema.optional() }),
+  z.object({ action: z.literal("refund"), refund: refundSchema }),
   z.object({ action: z.literal("autopay"), on: z.boolean() }),
   z.object({ action: z.literal("note"), text: z.string().min(1).max(500) }),
 ]);
@@ -59,7 +69,12 @@ export const PATCH = route("admin.subscriptions.action", async (req: NextRequest
     case "pause": result = await pauseSubscription(id, { until: body.until, reason: body.reason }, actor); break;
     case "resume": result = await resumeSubscription(id, actor); break;
     case "skip": result = await skipDelivery(id, body.date, actor); break;
-    case "cancel": result = await cancelSubscription(id, { reason: body.reason, refundPaise: body.refundPaise }, actor); break;
+    case "cancel-dates": result = await cancelDates(id, body.dates, actor); break;
+    case "adjust": result = await adjustDelivery(body.deliveryId, body.reason, body.note, actor); break;
+    case "reinstate": result = await reinstate(body.deliveryId, actor); break;
+    case "extend": result = await extend(id, body.days, body.reason, actor); break;
+    case "cancel": result = await cancelSubscription(id, { reason: body.reason, scope: body.scope, refund: body.refund }, actor); break;
+    case "refund": result = await refundSubscription(id, body.refund, actor); break;
     case "autopay": result = await setAutopay(id, body.on, actor); break;
     case "note": result = await addNote(id, body.text, actor); break;
   }

@@ -230,6 +230,7 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
           data: {
             userId, planId: subPlanId, addressId, orderId: order.id, status: "ACTIVE",
             startDate, endDate: end, deliverySlot: slot, nextDeliveryAt: startDate,
+            targetDeliveries: subDays,               // the paid delivery count; make-ups extend endDate, not this
             autoRenew: false,
             items: { create: [{ variantId: dbVariantId, qty: bottles }] },
           },

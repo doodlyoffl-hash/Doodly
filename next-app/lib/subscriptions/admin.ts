@@ -410,12 +410,13 @@ export async function updateSubscription(id: string, args: UpdateArgs, actor: Ac
     if (args.deliverySlot) await db.delivery.updateMany({ where: futureWhere, data: { slot: args.deliverySlot } });
     if (args.addressId) await db.delivery.updateMany({ where: { ...futureWhere, driverId: null, routeId: null }, data: { addressId: args.addressId } });
     if (args.planId) {
-      const sub2 = await db.subscription.findUnique({ where: { id }, select: { startDate: true, endDate: true } });
-      if (sub2?.endDate) {
-        // trim deliveries beyond the new plan end, then top the schedule back up
-        await db.delivery.deleteMany({ where: { subscriptionId: id, status: "SCHEDULED", driverId: null, routeId: null, date: { gt: sub2.endDate } } });
-        const { generateAllForSubscription } = await import("./deliveries");
-        await generateAllForSubscription(id, Math.max(1, Math.round((sub2.endDate.getTime() - sub2.startDate.getTime()) / 86_400_000)));
+      // plan changed → reset the paid target to the new plan length and rebuild the
+      // schedule (reconcile grows or shrinks it to match).
+      const np = await db.plan.findUnique({ where: { id: args.planId }, select: { days: true } });
+      if (np) {
+        await db.subscription.update({ where: { id }, data: { targetDeliveries: np.days } });
+        const { reconcileSchedule } = await import("./deliveries");
+        await reconcileSchedule(id);
       }
     }
   } catch { /* non-blocking */ }
@@ -453,39 +454,112 @@ export async function resumeSubscription(id: string, actor: Actor) {
 }
 
 export async function skipDelivery(id: string, dateISO: string | undefined, actor: Actor) {
-  const cur = await db.subscription.findUnique({ where: { id }, select: { status: true, startDate: true, skipDates: true, pausedFrom: true, pausedUntil: true, nextDeliveryAt: true } });
+  const cur = await db.subscription.findUnique({ where: { id }, select: { status: true, nextDeliveryAt: true } });
   if (!cur) throw Errors.notFound("Subscription not found.");
   if (cur.status === "CANCELLED" || cur.status === "COMPLETED") throw Errors.conflict("Cannot skip a closed subscription.");
-  const when = dateISO ? startOfDay(new Date(dateISO)) : (cur.nextDeliveryAt ? startOfDay(cur.nextDeliveryAt) : null);
+  const when = dateISO ? new Date(dateISO) : cur.nextDeliveryAt;
   if (!when) throw Errors.badRequest("No upcoming delivery to skip.");
-  const nextSkips = [...cur.skipDates.map((d) => startOfDay(d)), when];
-  const next = nextDeliverableFrom({ status: cur.status as SubRule["status"], startDate: cur.startDate, pausedFrom: cur.pausedFrom, pausedUntil: cur.pausedUntil, skipDates: nextSkips }, addDays(when, 1));
-  await db.$transaction(async (tx) => {
-    await tx.subscription.update({ where: { id }, data: { skipDates: { push: when }, nextDeliveryAt: next } });
-    await logSubEvent(tx, id, "SKIPPED", `Delivery on ${when.toDateString()} skipped`, { date: when.toISOString(), nextDeliveryAt: next?.toISOString() ?? null }, actor);
-  });
-  // Drop that day's pre-materialised delivery (if still unassigned).
-  try { const { removeScheduledDeliveries } = await import("./deliveries"); await removeScheduledDeliveries(id, { from: when, to: when }); } catch { /* non-blocking */ }
-  return { id, skipped: when.toISOString() };
+  // Skipping a day now EXTENDS the plan — the customer keeps their full paid count.
+  const { skipOrCancelDates } = await import("./deliveries");
+  const res = await skipOrCancelDates(id, [when], actor);
+  return { id, skipped: startOfDay(new Date(when)).toISOString(), endDate: res.endDate };
 }
 
-export async function cancelSubscription(id: string, opts: { reason?: string; refundPaise?: number }, actor: Actor) {
+/** Cancel/skip specific future date(s) — each is made up at the end (extends). */
+export async function cancelDates(id: string, dates: string[], actor: Actor) {
+  const cur = await db.subscription.findUnique({ where: { id }, select: { status: true } });
+  if (!cur) throw Errors.notFound("Subscription not found.");
+  if (cur.status === "CANCELLED" || cur.status === "COMPLETED") throw Errors.conflict("Cannot change a closed subscription.");
+  const { skipOrCancelDates } = await import("./deliveries");
+  return skipOrCancelDates(id, dates, actor);
+}
+
+/** Adjust a missed (our-fault) delivery → FAILED + reason, made up at the end (extends). */
+export async function adjustDelivery(deliveryId: string, reason: string, note: string | undefined, actor: Actor) {
+  const { adjustMissedDelivery } = await import("./deliveries");
+  const res = await adjustMissedDelivery(deliveryId, reason, note, actor);
+  if (!res) throw Errors.badRequest("Not a subscription delivery.");
+  return res;
+}
+
+/** Reinstate a cancelled/missed delivery → back to SCHEDULED (drops a surplus make-up). */
+export async function reinstate(deliveryId: string, actor: Actor) {
+  const { reinstateDelivery } = await import("./deliveries");
+  const res = await reinstateDelivery(deliveryId, actor);
+  if (!res) throw Errors.badRequest("Not a subscription delivery.");
+  return res;
+}
+
+/** Manually extend an active subscription by N delivery days. */
+export async function extend(id: string, days: number, reason: string | undefined, actor: Actor) {
+  const cur = await db.subscription.findUnique({ where: { id }, select: { status: true } });
+  if (!cur) throw Errors.notFound("Subscription not found.");
+  if (cur.status !== "ACTIVE") throw Errors.conflict("Only an active subscription can be extended.");
+  const { extendSubscription } = await import("./deliveries");
+  const res = await extendSubscription(id, days, reason, actor);
+  if (!res) throw Errors.badRequest("Enter a valid number of days.");
+  return res;
+}
+
+/** Suggested refund = value of the not-yet-delivered days at the per-delivery price. */
+export async function computeRemainingValue(id: string): Promise<{ remaining: number; perDeliveryPaise: number; amountPaise: number }> {
+  const sub = await db.subscription.findUnique({
+    where: { id },
+    select: { targetDeliveries: true, plan: { select: { days: true } }, items: { select: { qty: true, variant: { select: { dailyPaise: true } } } } },
+  });
+  if (!sub) return { remaining: 0, perDeliveryPaise: 0, amountPaise: 0 };
+  const perDeliveryPaise = sub.items.reduce((s, i) => s + i.qty * (i.variant.dailyPaise ?? 0), 0);
+  const target = sub.targetDeliveries ?? sub.plan.days ?? 0;
+  const delivered = await db.delivery.count({ where: { subscriptionId: id, status: "DELIVERED" } });
+  const remaining = Math.max(0, target - delivered);
+  return { remaining, perDeliveryPaise, amountPaise: remaining * perDeliveryPaise };
+}
+
+export interface RefundChoice { method: "wallet" | "gateway" | "none" | "manual"; amountPaise?: number; note?: string }
+
+export async function cancelSubscription(id: string, opts: { reason?: string; scope?: "all" | "remaining"; refund?: RefundChoice }, actor: Actor) {
   const cur = await db.subscription.findUnique({ where: { id }, select: { status: true, userId: true } });
   if (!cur) throw Errors.notFound("Subscription not found.");
   if (cur.status === "CANCELLED") throw Errors.conflict("Subscription is already cancelled.");
 
   await db.subscription.update({ where: { id }, data: { status: "CANCELLED", endDate: new Date(), autoRenew: false, cancelReason: opts.reason ?? null } });
-  await logSubEvent(db, id, "CANCELLED", opts.reason ? `Cancelled — ${opts.reason}` : "Subscription cancelled", { reason: opts.reason ?? null }, actor);
-  // Clear every upcoming delivery so a cancelled subscription leaves no ghost stops.
-  try { const { removeScheduledDeliveries } = await import("./deliveries"); await removeScheduledDeliveries(id); } catch { /* non-blocking */ }
+  await logSubEvent(db, id, "CANCELLED", opts.reason ? `Cancelled — ${opts.reason}` : "Subscription cancelled", { reason: opts.reason ?? null, scope: opts.scope ?? "remaining" }, actor);
+  // Detach + delete every upcoming delivery (including assigned ones) — no ghost stops.
+  try { const { cancelAllFutureDeliveries } = await import("./deliveries"); await cancelAllFutureDeliveries(id, actor.actorRole); } catch { /* non-blocking */ }
 
-  let refund: { reference: string; balancePaise: number } | null = null;
-  if (opts.refundPaise && opts.refundPaise > 0) {
-    const res = await adminCredit({ userId: cur.userId, amountPaise: opts.refundPaise, reason: "Subscription cancellation refund", actorId: actor.actorId, actorRole: actor.actorRole });
-    refund = { reference: res.txn.reference, balancePaise: res.balancePaise };
-    await logSubEvent(db, id, "REFUND", `Refunded ₹${Math.round(opts.refundPaise / 100)} to wallet`, { amountPaise: opts.refundPaise, reference: res.txn.reference }, actor);
+  // Refund — the admin picks the method (wallet auto-credits; gateway/manual are recorded).
+  const r = opts.refund;
+  let refund: { method: string; amountPaise: number; reference?: string; balancePaise?: number } | null = null;
+  if (r && r.method !== "none") {
+    const amountPaise = Math.max(0, Math.floor(r.amountPaise ?? 0));
+    if (r.method === "wallet" && amountPaise > 0) {
+      const res = await adminCredit({ userId: cur.userId, amountPaise, reason: "Subscription cancellation refund", kind: "refund", actorId: actor.actorId, actorRole: actor.actorRole });
+      refund = { method: "wallet", amountPaise, reference: res.txn.reference, balancePaise: res.balancePaise };
+      await logSubEvent(db, id, "REFUND", `Refunded ₹${Math.round(amountPaise / 100)} to wallet`, { method: "wallet", amountPaise, reference: res.txn.reference }, actor);
+    } else if (r.method === "gateway" || r.method === "manual") {
+      refund = { method: r.method, amountPaise };
+      await logSubEvent(db, id, "REFUND", `Refund recorded — ${r.method} ₹${Math.round(amountPaise / 100)}${r.note ? ` (${r.note})` : ""}`, { method: r.method, amountPaise, note: r.note ?? null }, actor);
+    }
   }
+  try { const { notifySubscriptionCancelled } = await import("@/lib/notifications/dispatch"); await notifySubscriptionCancelled(cur.userId, { refundPaise: refund?.method === "wallet" ? refund.amountPaise : 0 }); } catch { /* non-blocking */ }
   return { id, status: "CANCELLED", refund };
+}
+
+/** Issue a refund against a subscription independently of cancellation (e.g. after a
+    customer self-cancelled) — admin picks the method: wallet auto-credits, gateway/manual
+    are recorded for external processing. */
+export async function refundSubscription(id: string, r: RefundChoice, actor: Actor) {
+  const cur = await db.subscription.findUnique({ where: { id }, select: { userId: true } });
+  if (!cur) throw Errors.notFound("Subscription not found.");
+  const amountPaise = Math.max(0, Math.floor(r.amountPaise ?? 0));
+  if (r.method === "none" || amountPaise <= 0) return { id, refund: null };
+  if (r.method === "wallet") {
+    const res = await adminCredit({ userId: cur.userId, amountPaise, reason: "Subscription refund", kind: "refund", actorId: actor.actorId, actorRole: actor.actorRole });
+    await logSubEvent(db, id, "REFUND", `Refunded ₹${Math.round(amountPaise / 100)} to wallet`, { method: "wallet", amountPaise, reference: res.txn.reference }, actor);
+    return { id, refund: { method: "wallet", amountPaise, reference: res.txn.reference, balancePaise: res.balancePaise } };
+  }
+  await logSubEvent(db, id, "REFUND", `Refund recorded — ${r.method} ₹${Math.round(amountPaise / 100)}${r.note ? ` (${r.note})` : ""}`, { method: r.method, amountPaise, note: r.note ?? null }, actor);
+  return { id, refund: { method: r.method, amountPaise } };
 }
 
 export async function setAutopay(id: string, on: boolean, actor: Actor) {

@@ -319,4 +319,39 @@ export async function notifyDelivered(userId: string, d: { bottles?: number } = 
   });
 }
 
+const fmtDate = (d?: Date | string | null) => { try { return d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""; } catch { return ""; } };
+
+/** We missed a delivery → apology + it's been added back, subscription extended. */
+export async function notifyMissedDeliveryAdjusted(userId: string, d: { date?: Date | string | null; newEndDate?: Date | string | null } = {}) {
+  const title = "We missed a delivery — and added it back 🙏";
+  const end = fmtDate(d.newEndDate);
+  const body = `Sorry we couldn't deliver on ${fmtDate(d.date) || "your last slot"}. We've scheduled a make-up delivery, so you don't lose a single day${end ? ` — your plan now runs to ${end}` : ""}. Check your delivery calendar for the updated schedule.`;
+  return notify(userId, { title, body, email: true, emailSubject: "We missed a delivery — added back, no day lost 🙏", emailHtml: T.notificationHtml(title, body, { label: "View schedule", href: "/account/subscription.html" }, "🙏") });
+}
+
+/** A specific delivery date was cancelled/skipped → it's been made up at the end. */
+export async function notifyDeliveryCancelled(userId: string, d: { count?: number; newEndDate?: Date | string | null } = {}) {
+  const n = d.count && d.count > 1 ? `${d.count} delivery dates were` : "A delivery date was";
+  const end = fmtDate(d.newEndDate);
+  const title = "Delivery date cancelled 🗓️";
+  const body = `${n} cancelled as requested. Don't worry — you keep every paid delivery${end ? `; your plan now runs to ${end}` : ""}.`;
+  return notify(userId, { title, body, email: true, emailSubject: "Delivery date cancelled — no day lost", emailHtml: T.notificationHtml(title, body, { label: "View schedule", href: "/account/subscription.html" }, "🗓️") });
+}
+
+/** Subscription end date extended (manual extend / make-ups). */
+export async function notifySubscriptionExtended(userId: string, d: { newEndDate?: Date | string | null; reason?: string | null } = {}) {
+  const end = fmtDate(d.newEndDate);
+  const title = "Your subscription was extended 🎁";
+  const body = `Good news — your DOODLY subscription now runs${end ? ` to ${end}` : " a little longer"}.${d.reason ? ` (${d.reason})` : ""}`;
+  return notify(userId, { title, body, email: true, emailSubject: "Your subscription was extended 🎁", emailHtml: T.notificationHtml(title, body, { label: "View subscription", href: "/account/subscription.html" }, "🎁") });
+}
+
+/** Subscription cancelled (+ optional refund line). */
+export async function notifySubscriptionCancelled(userId: string, d: { refundPaise?: number | null } = {}) {
+  const title = "Subscription cancelled";
+  const refund = d.refundPaise && d.refundPaise > 0 ? ` A refund of ₹${rs(d.refundPaise)} has been credited to your DOODLY wallet.` : "";
+  const body = `Your DOODLY subscription has been cancelled and future deliveries stopped.${refund} We'd love to have you back anytime.`;
+  return notify(userId, { title, body, email: true, emailSubject: "Your DOODLY subscription was cancelled", emailHtml: T.notificationHtml(title, body, { label: "Reorder", href: "/subscriptions.html" }, "🥛") });
+}
+
 export { channelStatus };
