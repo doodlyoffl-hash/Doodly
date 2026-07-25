@@ -86,6 +86,24 @@ export const POST = route("account.subscription.action", async (req: NextRequest
   }
 
   await db.subscription.update({ where: { id: sub.id }, data });
+
+  // Reconcile the pre-materialised future deliveries with this lifecycle change so
+  // the board never shows ghost deliveries (cancel/pause) or misses them (resume).
+  try {
+    const { removeScheduledDeliveries, generateAllForSubscription } = await import("@/lib/subscriptions/deliveries");
+    if (body.action === "cancel") {
+      await removeScheduledDeliveries(sub.id);                                            // clear every upcoming delivery
+    } else if (body.action === "pause") {
+      await removeScheduledDeliveries(sub.id, { from: new Date(), to: body.until ? new Date(body.until) : undefined });
+    } else if (body.action === "resume") {
+      const planDays = sub.endDate ? Math.max(1, Math.round((sub.endDate.getTime() - sub.startDate.getTime()) / 86_400_000)) : 1;
+      await generateAllForSubscription(sub.id, planDays);                                  // refill the upcoming schedule
+    } else if (body.action === "skip") {
+      const when = body.date ? new Date(body.date) : sub.nextDeliveryAt;
+      if (when) await removeScheduledDeliveries(sub.id, { from: when, to: when });         // drop just that day's delivery
+    }
+  } catch { /* non-blocking */ }
+
   // Cancelling the subscription voids any not-yet-applied address change on it.
   if (body.action === "cancel") {
     try { await cancelScheduledForSubscription(sub.id, { actorId: userId, actorRole: "customer", ip: reqContext(req).ip ?? undefined }); } catch { /* non-blocking */ }

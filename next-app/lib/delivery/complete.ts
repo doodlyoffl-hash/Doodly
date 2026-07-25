@@ -91,5 +91,12 @@ export async function completeDelivery(deliveryId: string, opts: CompleteDeliver
     } catch { /* non-blocking */ }
   }
 
+  // Auto-complete a fixed-term (trial / non-renewing) subscription once its last
+  // delivery is done — so a 3-day trial flips to COMPLETED after day 3. No-op for
+  // auto-renewing plans.
+  if (del.subscriptionId) {
+    try { const { maybeCompleteSubscription } = await import("@/lib/subscriptions/deliveries"); await maybeCompleteSubscription(del.subscriptionId); } catch { /* non-blocking */ }
+  }
+
   return { idempotent: false as const, delivery };
 }

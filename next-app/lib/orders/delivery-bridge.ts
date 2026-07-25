@@ -50,7 +50,7 @@ export async function ensureDeliveryForOrder(orderId: string): Promise<{ deliver
       stockUnits: true,
       payment: { select: { method: true } },
       delivery: { select: { id: true } },
-      subscription: { select: { id: true, addressId: true, items: { select: { qty: true } } } },
+      subscription: { select: { id: true, addressId: true, startDate: true, endDate: true, items: { select: { qty: true } } } },
     },
   });
   if (!order) return null;
@@ -72,16 +72,25 @@ export async function ensureDeliveryForOrder(orderId: string): Promise<{ deliver
   // customer's saved default). Only skip when there is genuinely no address on file.
   const date = order.deliveryDate ?? nextDeliveryDateIST();
 
-  // Subscription order → the subscription's first delivery (recurring ones generated elsewhere).
+  // Subscription (incl. trial) order → materialise the WHOLE delivery schedule now,
+  // so every day of the plan is on the board immediately instead of being drip-fed
+  // by the nightly cron. deliveryDays = span of the plan (trial: fixedDays; p7/p30/p90).
   if (order.subscription) {
-    const existing = await db.delivery.findFirst({ where: { subscriptionId: order.subscription.id }, select: { id: true } });
-    if (existing) return { deliveryId: existing.id, created: false };
-    const addressId = await resolveAddressId(order.addressId ?? order.subscription.addressId, order.userId);
-    if (!addressId) return null;
-    const d = await db.delivery.create({
-      data: { subscriptionId: order.subscription.id, addressId, date, slot: order.deliverySlot ?? DEFAULT_SLOT, status: "SCHEDULED", bottleCount },
-    });
-    return { deliveryId: d.id, created: true };
+    const sub = order.subscription;
+    const deliveryDays = sub.endDate ? Math.max(1, Math.round((sub.endDate.getTime() - sub.startDate.getTime()) / 86_400_000)) : 1;
+    const existing = await db.delivery.findFirst({ where: { subscriptionId: sub.id }, select: { id: true } });
+    let firstId = existing?.id ?? null;
+    if (!firstId) {
+      const addressId = await resolveAddressId(order.addressId ?? sub.addressId, order.userId);
+      if (!addressId) return null;
+      const d = await db.delivery.create({
+        data: { subscriptionId: sub.id, addressId, date, slot: order.deliverySlot ?? DEFAULT_SLOT, status: "SCHEDULED", bottleCount },
+      });
+      firstId = d.id;
+    }
+    // Fill the remaining days (idempotent — dedupes the first delivery above).
+    try { const { generateAllForSubscription } = await import("@/lib/subscriptions/deliveries"); await generateAllForSubscription(sub.id, deliveryDays); } catch (e) { console.error("delivery.generateAll", (e as Error)?.message); }
+    return { deliveryId: firstId!, created: !existing };
   }
 
   // One-time / sample / extra order → a single delivery linked to the order.

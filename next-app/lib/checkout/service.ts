@@ -193,28 +193,49 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     });
     await tx.orderEvent.create({ data: { orderId: order.id, type: "CREATED", title: "Order placed", note: `${days}× ${variant.label} ${variant.productName}`.trim() } });
 
-    // plans become a live Subscription record (address + slot + first delivery)
+    // Real plans AND the trial pack become a live Subscription record (a short
+    // "Trial Subscription" for the trial), so the FULL delivery schedule is
+    // generated up front and it flows into deliveries / assignment / the
+    // customer dashboard. The order type stays SAMPLE for a trial (preserves
+    // trial reporting + the ₹200 cashback, which keys off the paid SAMPLE order).
     let subscriptionId: string | null = null;
-    if (orderType === "SUBSCRIPTION" && plan) {
-      // the DB plan/variant ids were already resolved by resolveCheckoutPricing
-      const dbPlanId = plan.dbPlanId ?? (await tx.plan.findUnique({ where: { slug: plan.slug }, select: { id: true } }))?.id ?? null;
+    const isTrial = variant.type === "TRIAL";
+    if (orderType === "SUBSCRIPTION" || isTrial) {
+      // resolve the plan: the chosen plan, or a dedicated (non-customer-facing)
+      // trial plan whose length = the trial's fixedDays.
+      let subPlanId: string | null;
+      let subDays: number;
+      let subPlanName: string;
+      if (isTrial) {
+        subDays = Math.max(1, variant.fixedDays ?? days);
+        const trialPlan = await tx.plan.upsert({
+          where: { slug: "trial" },
+          update: { days: subDays },
+          create: { slug: "trial", name: "Trial Pack", days: subDays, discountBps: 0, badge: "Trial", autoRenew: false, active: false },
+          select: { id: true, name: true },
+        });
+        subPlanId = trialPlan.id; subPlanName = trialPlan.name;
+      } else {
+        subPlanId = plan!.dbPlanId ?? (await tx.plan.findUnique({ where: { slug: plan!.slug }, select: { id: true } }))?.id ?? null;
+        subDays = plan!.days; subPlanName = plan!.name;
+      }
       let dbVariantId = variant.dbVariantId;
       if (!dbVariantId) {
         const dbProduct = await tx.product.findUnique({ where: { slug: variant.productSlug }, include: { variants: true } });
         dbVariantId = (dbProduct?.variants.find((v) => v.ml === variant.ml) ?? dbProduct?.variants[0])?.id ?? null;
       }
-      if (dbPlanId && dbVariantId) {
-        const end = new Date(startDate); end.setDate(end.getDate() + plan.days);
+      if (subPlanId && dbVariantId) {
+        const end = new Date(startDate); end.setDate(end.getDate() + subDays);
         const sub = await tx.subscription.create({
           data: {
-            userId, planId: dbPlanId, addressId, orderId: order.id, status: "ACTIVE",
+            userId, planId: subPlanId, addressId, orderId: order.id, status: "ACTIVE",
             startDate, endDate: end, deliverySlot: slot, nextDeliveryAt: startDate,
             autoRenew: false,
             items: { create: [{ variantId: dbVariantId, qty: bottles }] },
           },
         });
         await tx.subscriptionEvent.create({
-          data: { subscriptionId: sub.id, type: "CREATED", summary: `Subscribed via checkout — ${plan.name}, ${variant.label}`, byId: userId, byRole: "customer", ip: ctx.ip },
+          data: { subscriptionId: sub.id, type: "CREATED", summary: `${isTrial ? "Trial started" : "Subscribed"} via checkout — ${subPlanName}, ${variant.label}`, byId: userId, byRole: "customer", ip: ctx.ip },
         });
         subscriptionId = sub.id;
       }

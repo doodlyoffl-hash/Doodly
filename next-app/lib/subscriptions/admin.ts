@@ -397,6 +397,29 @@ export async function updateSubscription(id: string, args: UpdateArgs, actor: Ac
     if (Object.keys(data).length) await tx.subscription.update({ where: { id }, data });
     await logSubEvent(tx, id, "UPDATED", `Subscription edited (${Object.keys(diff).join(", ")})`, diff, actor);
   });
+
+  // Reconcile pre-materialised FUTURE scheduled deliveries with the edit so a
+  // quantity / slot / address / plan change reaches the already-created stops.
+  try {
+    const today = startOfDay(new Date());
+    const futureWhere = { subscriptionId: id, status: "SCHEDULED" as const, date: { gte: today } };
+    if (args.items && args.items.length) {
+      const bottleCount = Math.max(1, args.items.reduce((s, i) => s + (i.qty || 0), 0));
+      await db.delivery.updateMany({ where: futureWhere, data: { bottleCount } });
+    }
+    if (args.deliverySlot) await db.delivery.updateMany({ where: futureWhere, data: { slot: args.deliverySlot } });
+    if (args.addressId) await db.delivery.updateMany({ where: { ...futureWhere, driverId: null, routeId: null }, data: { addressId: args.addressId } });
+    if (args.planId) {
+      const sub2 = await db.subscription.findUnique({ where: { id }, select: { startDate: true, endDate: true } });
+      if (sub2?.endDate) {
+        // trim deliveries beyond the new plan end, then top the schedule back up
+        await db.delivery.deleteMany({ where: { subscriptionId: id, status: "SCHEDULED", driverId: null, routeId: null, date: { gt: sub2.endDate } } });
+        const { generateAllForSubscription } = await import("./deliveries");
+        await generateAllForSubscription(id, Math.max(1, Math.round((sub2.endDate.getTime() - sub2.startDate.getTime()) / 86_400_000)));
+      }
+    }
+  } catch { /* non-blocking */ }
+
   return { id, changed: true };
 }
 
@@ -411,17 +434,21 @@ export async function pauseSubscription(id: string, opts: { until?: string; reas
     await tx.subscription.update({ where: { id }, data: { status: "PAUSED", pausedFrom: new Date(), pausedUntil } });
     await logSubEvent(tx, id, "PAUSED", opts.reason ? `Paused — ${opts.reason}` : "Subscription paused", { until: pausedUntil?.toISOString() ?? null, reason: opts.reason ?? null }, actor);
   });
+  // Clear upcoming deliveries in the vacation window (or all if open-ended).
+  try { const { removeScheduledDeliveries } = await import("./deliveries"); await removeScheduledDeliveries(id, { from: new Date(), to: pausedUntil ?? undefined }); } catch { /* non-blocking */ }
   return { id, status: "PAUSED" };
 }
 
 export async function resumeSubscription(id: string, actor: Actor) {
-  const cur = await db.subscription.findUnique({ where: { id }, select: { status: true, startDate: true, skipDates: true } });
+  const cur = await db.subscription.findUnique({ where: { id }, select: { status: true, startDate: true, endDate: true, skipDates: true } });
   if (!cur) throw Errors.notFound("Subscription not found.");
   const next = nextDeliverableFrom({ status: "ACTIVE", startDate: cur.startDate, pausedFrom: null, pausedUntil: null, skipDates: cur.skipDates }, earliestByCutoff(new Date()));
   await db.$transaction(async (tx) => {
     await tx.subscription.update({ where: { id }, data: { status: "ACTIVE", pausedFrom: null, pausedUntil: null, nextDeliveryAt: next } });
     await logSubEvent(tx, id, "RESUMED", "Subscription resumed", { nextDeliveryAt: next?.toISOString() ?? null }, actor);
   });
+  // Refill the upcoming schedule that was cleared on pause.
+  try { const { generateAllForSubscription } = await import("./deliveries"); const planDays = cur.endDate ? Math.max(1, Math.round((cur.endDate.getTime() - cur.startDate.getTime()) / 86_400_000)) : 1; await generateAllForSubscription(id, planDays); } catch { /* non-blocking */ }
   return { id, status: "ACTIVE" };
 }
 
@@ -437,6 +464,8 @@ export async function skipDelivery(id: string, dateISO: string | undefined, acto
     await tx.subscription.update({ where: { id }, data: { skipDates: { push: when }, nextDeliveryAt: next } });
     await logSubEvent(tx, id, "SKIPPED", `Delivery on ${when.toDateString()} skipped`, { date: when.toISOString(), nextDeliveryAt: next?.toISOString() ?? null }, actor);
   });
+  // Drop that day's pre-materialised delivery (if still unassigned).
+  try { const { removeScheduledDeliveries } = await import("./deliveries"); await removeScheduledDeliveries(id, { from: when, to: when }); } catch { /* non-blocking */ }
   return { id, skipped: when.toISOString() };
 }
 
@@ -447,6 +476,8 @@ export async function cancelSubscription(id: string, opts: { reason?: string; re
 
   await db.subscription.update({ where: { id }, data: { status: "CANCELLED", endDate: new Date(), autoRenew: false, cancelReason: opts.reason ?? null } });
   await logSubEvent(db, id, "CANCELLED", opts.reason ? `Cancelled — ${opts.reason}` : "Subscription cancelled", { reason: opts.reason ?? null }, actor);
+  // Clear every upcoming delivery so a cancelled subscription leaves no ghost stops.
+  try { const { removeScheduledDeliveries } = await import("./deliveries"); await removeScheduledDeliveries(id); } catch { /* non-blocking */ }
 
   let refund: { reference: string; balancePaise: number } | null = null;
   if (opts.refundPaise && opts.refundPaise > 0) {
