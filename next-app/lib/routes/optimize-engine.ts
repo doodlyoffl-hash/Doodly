@@ -113,6 +113,21 @@ export async function optimizeStops(origin: Pt, stops: RouteStopIn[]): Promise<O
     source = "HAVERSINE";
   }
 
+  // Deliver the NEAREST stop first. A round trip has the same total distance in either
+  // direction (it's one loop), so Google's optimal set can be traversed either way for free —
+  // orient it so the stop closest to the origin (warehouse, or the driver's current position)
+  // is stop #1, instead of Google's arbitrary tie-break. Reassigns the same edge distances to
+  // the reversed sequence (total is unchanged); the polyline is an undirected line, so it stays.
+  if (groupOrder.length >= 2) {
+    const first = uniqPts[groupOrder[0]], last = uniqPts[groupOrder[groupOrder.length - 1]];
+    if (haversineKm(origin, last) < haversineKm(origin, first)) {
+      const oldFirstLeg = groupLegs[0];
+      groupOrder = groupOrder.slice().reverse();
+      groupLegs = [returnLeg, ...groupLegs.slice(1).reverse()];
+      returnLeg = oldFirstLeg;
+    }
+  }
+
   // expand groups → individual stops (first stop of a group carries the leg, the rest are 0-km)
   const order: string[] = [], legs: RouteLeg[] = [];
   groupOrder.forEach((gi, i) => {
