@@ -588,9 +588,7 @@ window.DOODLY_MANIFEST = (function () {
     "driver/cash": { surface:"driver", title:"Cash Collection", blocks:[ head("Cash Collection","COD reconciliation for today."), { type:"kpis", items:[{n:"₹2,140",l:"Expected"},{n:"₹1,540",l:"Collected"},{n:"₹600",l:"Remaining"},{n:"8",l:"COD stops"}] }, { type:"notice", text:"Hand over collected cash at the hub at end of route. Reconciliation is automatic against delivered COD stops." } ]},
     "driver/completed": { surface:"driver", title:"Completed", blocks:[ head("Completed Deliveries","Stops you've finished today."), { type:"kpis", dataset:"driverKpis" }, tbl("driverCompleted",{toolbar:false,pager:false}) ]},
     "driver/history": { surface:"driver", title:"History", blocks:[ head("Delivery History","Your past delivery days."), tbl("driverCompleted",{filters:["All","This week","This month"]}) ]},
-    "driver/profile": { surface:"driver", title:"Profile", blocks:[ head("Profile","Your driver details."), { type:"columns", cols:2, items:[
-      { type:"deflist", title:"Ramesh Kumar · DRV-07", rows:[["Zone","Jubilee Hills"],["Vehicle","TS09 EZ 4421"],["Rating","4.9★"],["Joined","Feb 2026"],["Deliveries","2,840"]] },
-      { type:"form", title:"Update details", fields:[{ label:"Phone", type:"tel", placeholder:"+91 …" },{ label:"Emergency contact", type:"tel", placeholder:"+91 …" }], submit:"Save" } ]} ]},
+    "driver/profile": { surface:"driver", title:"Profile", blocks:[ head("Profile","Your driver details."), { type:"deliveryProfile" } ]},
 
     /* ===== DELIVERY EXECUTIVE PORTAL (separate app + auth) ===== */
     "delivery/login": { surface:"auth", title:"Executive Login", auth:{
@@ -598,9 +596,7 @@ window.DOODLY_MANIFEST = (function () {
       fields:[{ label:"Employee ID or mobile", placeholder:"DRV-07 / +91 …" },{ label:"Password", type:"password", placeholder:"••••••••" }],
       submit:"Sign in", otpLink:true, forgot:true, dest:"/delivery/dashboard.html", alt:["Trouble signing in?","Contact your supervisor","/contact.html"] }},
     "delivery/dashboard": { surface:"delivery", title:"My Route", blocks:[ { type:"deliveryPortal" } ]},
-    "delivery/profile": { surface:"delivery", title:"Profile", blocks:[ head("Profile","Your executive details."), { type:"columns", cols:2, items:[
-      { type:"deflist", title:"Ramesh Kumar · DRV-07", rows:[["Zone","Central Vijayawada"],["Vehicle","AP16 EZ 4421"],["Rating","4.9★"],["Joined","Feb 2026"],["Deliveries","2,840"]] },
-      { type:"form", title:"Update details", fields:[{ label:"Phone", type:"tel", placeholder:"+91 …" },{ label:"Emergency contact", type:"tel", placeholder:"+91 …" }], submit:"Save" } ]} ]},
+    "delivery/profile": { surface:"delivery", title:"Profile", blocks:[ head("Profile","Your executive details."), { type:"deliveryProfile" } ]},
   };
 
   /* tiny icon helper available at manifest-build time */

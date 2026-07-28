@@ -1192,6 +1192,7 @@ window.DOODLY_BLOCKS = (function () {
   /* ---------- maps + delivery (built by maps.js / delivery.js) ---------- */
   R.addressManager = () => `<div class="reveal" id="addressManagerMount"></div>`;
   R.deliveryPortal = () => `<div class="reveal" id="deliveryPortalMount"></div>`;
+  R.deliveryProfile = () => `<div class="reveal" id="deliveryProfileMount"></div>`;
   R.hrDashboard = () => `<div class="reveal" id="hrDashboardMount"></div>`;
   R.hrEmployees = () => `<div class="reveal" id="hrEmployeesMount"></div>`;
   R.hrAttendance = () => `<div class="reveal" id="hrAttendanceMount"></div>`;

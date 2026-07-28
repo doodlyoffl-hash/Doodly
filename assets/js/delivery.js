@@ -348,5 +348,83 @@ window.DOODLY_DELIVERY = (function () {
     setTimeout(() => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); }, 2400);
   }
 
-  return { mountPortal, stops };
+  /* ============================================================
+     mountProfile(host) — the executive's REAL profile (was a demo sheet).
+     Reads /api/driver/profile; lets the executive edit their emergency
+     contact. Identity + stats are read-only (admin/identity managed).
+     ============================================================ */
+  function loadProfile() {
+    if (!signedIn() || !API()) return Promise.resolve(null);
+    return API().get("/api/driver/profile").then((r) => (r && r.profile) ? r.profile : (r || null)).catch(() => null);
+  }
+
+  function renderProfile(host, p) {
+    const initials = String(p.name || "E").trim().split(/\s+/).map((w) => w[0] || "").slice(0, 2).join("").toUpperCase() || "EX";
+    const statusBadge = p.onTrip
+      ? '<span class="badge amber">On a trip</span>'
+      : (p.available ? '<span class="badge green">On shift</span>' : '<span class="badge">Off shift</span>');
+    const row = (k, v) => `<div class="row"><span class="k">${esc(k)}</span><span class="v">${esc(v == null || v === "" ? "—" : v)}</span></div>`;
+    host.innerHTML = `
+      <div class="dl-card" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <span style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#1FAE66,#0F3D2E);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.25rem;flex-shrink:0">${esc(initials)}</span>
+          <div style="flex:1;min-width:180px">
+            <div style="font-size:1.25rem;font-weight:800;color:#0F3D2E">${esc(p.name)}</div>
+            <div class="muted-sm">${esc(p.employeeId ? "Executive · " + p.employeeId : "Delivery Executive")}</div>
+          </div>
+          ${statusBadge}
+        </div>
+      </div>
+
+      <div class="dl-kpis" style="margin-bottom:16px">
+        <div class="dl-kpi"><div class="n">${p.totalDeliveries}</div><div class="l">Total delivered</div></div>
+        <div class="dl-kpi"><div class="n">${p.deliveredToday}</div><div class="l">Delivered today</div></div>
+        <div class="dl-kpi"><div class="n">${p.stopsToday}</div><div class="l">Stops today</div></div>
+        <div class="dl-kpi"><div class="n">${(Number(p.rating) || 0).toFixed(1)}<small>★</small></div><div class="l">Rating</div></div>
+        <div class="dl-kpi"><div class="n">${p.capacityBottles}</div><div class="l">Bottle capacity</div></div>
+      </div>
+
+      <div class="dl-card" style="margin-bottom:16px">
+        <div class="dl-card-h"><h3>Your details</h3></div>
+        <div class="deflist">
+          ${row("Employee ID", p.employeeId)}
+          ${row("Zone", p.zone)}
+          ${row("Vehicle", p.vehicleNo)}
+          ${row("Phone", p.phone)}
+          ${row("Email", p.email)}
+          ${row("Joined", p.joinedLabel)}
+          ${row("Status", p.active ? "Active" : "Inactive")}
+        </div>
+        <div class="muted-sm" style="margin-top:10px">Name, zone, vehicle and employee ID are managed by your supervisor — contact them to update these.</div>
+      </div>
+
+      <div class="dl-card">
+        <div class="dl-card-h"><h3>Emergency contact</h3></div>
+        <div class="muted-sm" style="margin-bottom:10px">A number your supervisor can reach if there's an emergency on your route.</div>
+        <div class="field" style="max-width:340px;margin:0"><input type="tel" id="dlEmerg" value="${esc(p.emergencyContact || "")}" placeholder="+91 …" autocomplete="tel"></div>
+        <div style="margin-top:12px"><button type="button" class="btn btn-primary" id="dlEmergSave">${svg("check", 16)} Save</button></div>
+      </div>`;
+
+    const inp = host.querySelector("#dlEmerg"), btn = host.querySelector("#dlEmergSave");
+    if (btn && inp) btn.addEventListener("click", () => {
+      const val = inp.value.trim();
+      btn.disabled = true;
+      API().patch("/api/driver/profile", { emergencyContact: val })
+        .then((r) => { btn.disabled = false; p.emergencyContact = (r && r.emergencyContact) || val; toast("Emergency contact saved"); })
+        .catch((e) => { btn.disabled = false; toast((e && e.message) || "Couldn't save — please try again"); });
+    });
+  }
+
+  function mountProfile(host) {
+    if (!host) return;
+    // Live site: executives only (mirror the portal guard).
+    if (!/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) && !execUser()) { location.replace("/delivery/login.html"); return; }
+    host.innerHTML = '<div class="dl-card" style="text-align:center;padding:34px 18px;color:#6b7280">Loading your profile…</div>';
+    loadProfile().then((p) => {
+      if (!p) { host.innerHTML = '<div class="dl-card" style="text-align:center;padding:34px 18px;color:#6b7280">Couldn\'t load your profile right now — check your connection and refresh.</div>'; return; }
+      try { renderProfile(host, p); } catch (e) { host.innerHTML = '<div class="dl-card" style="text-align:center;padding:34px 18px;color:#6b7280">Couldn\'t display your profile.</div>'; }
+    });
+  }
+
+  return { mountPortal, mountProfile, stops };
 })();
