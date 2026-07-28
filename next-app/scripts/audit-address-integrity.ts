@@ -10,7 +10,7 @@
    ============================================================= */
 import { PrismaClient } from "@prisma/client";
 import { getWarehouse } from "../lib/warehouse/config";
-import { haversineKm } from "../lib/warehouse/distance";
+import { haversineKm, recomputeDeliveriesForAddress } from "../lib/warehouse/distance";
 import { geocodeAddress } from "../lib/geo/geocode";
 
 const db = new PrismaClient();
@@ -65,18 +65,36 @@ async function main() {
   console.log(`  4. PAID orders without an address → investigate individually (legacy); attach a valid address before dispatch. NONE are auto-deleted.`);
 
   if (BACKFILL) {
-    console.log(`\n--backfill: re-geocoding ${nullCoords.length} null-coord address(es)…`);
-    let fixed = 0, stillNeedPin = 0;
-    for (const a of nullCoords) {
+    // Both missing-coordinate AND implausible (mis-geocoded) addresses need a coordinate fix.
+    const targets = [...nullCoords, ...implausible.filter((a) => !nullCoords.some((n) => n.id === a.id))];
+    console.log(`\n--backfill: re-geocoding ${targets.length} address(es) (${nullCoords.length} missing-coords + ${implausible.length} implausible)…`);
+    let fixed = 0, cleared = 0, stillNull = 0;
+    const touched: string[] = [];
+    for (const a of targets) {
       const pin = String(a.pincode ?? "").replace(/\D/g, "").slice(0, 6);
       const geo = await geocodeAddress({ buildingName: a.buildingName, street: a.street, area: a.area, landmark: a.landmark, city: a.city, pincode: pin }).catch(() => null);
-      if (geo && !farFromWh(geo.lat, geo.lng)) { await db.address.update({ where: { id: a.id }, data: { lat: geo.lat, lng: geo.lng } }).catch(() => {}); fixed++; }
-      else stillNeedPin++;
+      const hadCoord = a.lat != null && a.lng != null;
+      if (geo && !farFromWh(geo.lat, geo.lng)) {
+        await db.address.update({ where: { id: a.id }, data: { lat: geo.lat, lng: geo.lng } }).catch(() => {});
+        console.log(`  ✓ FIXED   ${a.id} → ${geo.lat.toFixed(6)}, ${geo.lng.toFixed(6)}`);
+        fixed++; touched.push(a.id);
+      } else if (hadCoord) {
+        // couldn't resolve to a plausible point → remove the wrong coordinate (customer must re-pin;
+        // they're blocked at checkout until they do — far better than a 100+ km-off marker).
+        await db.address.update({ where: { id: a.id }, data: { lat: null, lng: null } }).catch(() => {});
+        console.log(`  ⌫ CLEARED ${a.id} (implausible coordinate removed — needs a customer pin)`);
+        cleared++; touched.push(a.id);
+      } else {
+        console.log(`  … STILL MISSING ${a.id} (geocode unresolved — needs a customer pin)`);
+        stillNull++;
+      }
     }
-    console.log(`  ✓ backfilled ${fixed} · still need a manual pin: ${stillNeedPin}`);
-    console.log(`  (Now run the cron backfill or wait for the nightly sweep to recompute delivery distances.)`);
+    // refresh distance/time on the future deliveries pointing at any changed address
+    let recomputed = 0;
+    for (const id of touched) recomputed += await recomputeDeliveriesForAddress(id).catch(() => 0);
+    console.log(`\n  fixed ${fixed} · cleared-for-repin ${cleared} · still-missing ${stillNull} · recomputed ${recomputed} future delivery distance(s)`);
   } else {
-    console.log(`\n(Run again with --backfill to auto-fix the resolvable missing-coordinate addresses. Read-only otherwise.)`);
+    console.log(`\n(Run again with --backfill to re-geocode the missing-coordinate + implausible addresses. Read-only otherwise.)`);
   }
 }
 
