@@ -786,6 +786,7 @@ window.DOODLY_BLOCKS = (function () {
   R.puzzlePage = () => `<div id="puzzleGameMount"></div>`;
   R.puzzleCard = () => `<div id="puzzleCardMount"></div>`;
   R.puzzleAdmin = () => `<div id="puzzleAdminMount"></div>`;
+  R.rewardsAdmin = () => `<div id="rewardsAdminMount"></div>`;
   R.puzzleTerms = () => `
     <section class="pzt reveal" aria-label="Puzzle Challenge terms and conditions">
       <div class="pzt-hero">

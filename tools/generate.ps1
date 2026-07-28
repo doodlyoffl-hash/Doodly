@@ -120,6 +120,7 @@ $template = @'
   <script src="/assets/js/loyalty.js"></script>
   <script src="/assets/js/reviews.js"></script>
   <script src="/assets/js/rewards.js"></script>
+  <script src="/assets/js/rewards-admin.js"></script>
   <script src="/assets/js/account.js"></script>
   <script src="/assets/js/layout.js"></script>
 </body>

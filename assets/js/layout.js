@@ -6399,6 +6399,7 @@
     if (window.DOODLY_PUZZLE) { try { DOODLY_PUZZLE.mountAll(); } catch (e) {} }   // Monthly Puzzle Challenge (dashboard/rewards card + admin module)
     if (window.DOODLY_LOYALTY) { try { DOODLY_LOYALTY.mountAll(); } catch (e) {} } // DOODLY Pure Rewards (rewards page + dashboard card + admin module)
     if (window.DOODLY_REVIEWS) { try { DOODLY_REVIEWS.mountAll(); } catch (e) {} } // Customer reviews (admin moderation module, self-gates by mount)
+    if (window.DOODLY_REWARDS_ADMIN) { try { DOODLY_REWARDS_ADMIN.mountAll(); } catch (e) {} } // Reward Management (admin /admin/rewards, self-gates by mount)
     if (window.DOODLY_ACCOUNT) { try { DOODLY_ACCOUNT.mountAll(); } catch (e) {} } // customer account ACTIONS (orders/subscription/notifications/profile/addresses)
     if (window.DOODLY_TOUR) window.DOODLY_TOUR.init();
     // Global Smart Search — topbar box + shortcuts on every dashboard surface + admin insights
