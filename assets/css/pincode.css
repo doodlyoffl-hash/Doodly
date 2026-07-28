@@ -69,3 +69,67 @@
 @keyframes pcPop { 0%{ opacity:.5; transform:scale(.97); } 100%{ opacity:1; transform:none; } }
 @keyframes pcShake { 10%,90%{ transform:translateX(-1px); } 30%,50%,70%{ transform:translateX(-4px); } 40%,60%{ transform:translateX(4px); } }
 @media (prefers-reduced-motion: reduce) { .pc-pop, .pc-wl-shake, .pc-toast { animation:none !important; } }
+
+/* =============================================================
+   Floating "Check Delivery Availability" FAB + modal / bottom-sheet
+   Bottom-LEFT (bottom-right is taken by the assistant + help launchers).
+   ============================================================= */
+.pc-fab {
+  position:fixed; left:20px; bottom:20px; z-index:1240;
+  display:inline-flex; align-items:center; gap:9px;
+  padding:12px 18px 12px 15px; border:0; cursor:pointer; border-radius:999px;
+  font:inherit; font-weight:800; font-size:.9rem; color:#fff; line-height:1;
+  background:linear-gradient(120deg,#169A57,#1FAE66 60%,#2bc77a);
+  box-shadow:0 10px 26px rgba(15,61,46,.32), 0 2px 6px rgba(15,61,46,.2);
+  transition:transform .2s cubic-bezier(.2,.8,.2,1), box-shadow .2s;
+  animation:pcFabIn .5s cubic-bezier(.2,.8,.2,1) both;
+}
+.pc-fab:hover { transform:translateY(-3px); box-shadow:0 16px 34px rgba(15,61,46,.4); }
+.pc-fab:active { transform:translateY(-1px); }
+.pc-fab:focus-visible { outline:3px solid rgba(31,174,102,.55); outline-offset:2px; }
+.pc-fab .pc-fab-ic { display:grid; place-items:center; }
+.pc-fab .pc-fab-ic svg { width:18px; height:18px; }
+@keyframes pcFabIn { from { opacity:0; transform:translateY(16px) scale(.9); } to { opacity:1; transform:none; } }
+@media (max-width:560px) {
+  .pc-fab { left:14px; bottom:14px; padding:13px; }
+  .pc-fab .pc-fab-txt { display:none; }        /* circular icon button on small screens */
+  .pc-fab .pc-fab-ic svg { width:20px; height:20px; }
+}
+@media (prefers-reduced-motion: reduce) { .pc-fab { animation:none; } .pc-fab:hover { transform:none; } }
+
+.pc-modal-lock { overflow:hidden; }
+.pc-modal-ov {
+  position:fixed; inset:0; z-index:1600; display:flex; align-items:center; justify-content:center; padding:18px;
+  background:rgba(15,61,46,.5); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+  opacity:0; transition:opacity .22s ease;
+}
+.pc-modal-ov.show { opacity:1; }
+.pc-modal {
+  width:min(480px,100%); max-height:calc(100vh - 36px); max-height:calc(100dvh - 36px);
+  display:flex; flex-direction:column; overflow:hidden;
+  background:var(--surface,#fff); color:var(--ink,#16241c); border:1px solid var(--line,#e3ece3);
+  border-radius:22px; box-shadow:0 30px 70px rgba(15,61,46,.35);
+  transform:translateY(14px) scale(.97); opacity:.55; transition:transform .24s cubic-bezier(.2,.8,.2,1), opacity .24s;
+}
+.pc-modal-ov.show .pc-modal { transform:none; opacity:1; }
+.pc-modal-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:18px 20px; border-bottom:1px solid var(--line,#eef2ef); flex:0 0 auto; }
+.pc-modal-title { margin:0; display:flex; align-items:center; gap:9px; font-family:"Fraunces",serif; font-weight:600; font-size:1.15rem; color:var(--forest); }
+.pc-modal-pin { display:inline-grid; place-items:center; }
+.pc-modal-pin svg { color:var(--leaf-600); width:20px; height:20px; }
+.pc-modal-x { background:none; border:0; cursor:pointer; color:var(--ink-3,#6b7c72); display:grid; place-items:center; width:34px; height:34px; border-radius:10px; transition:background .18s; flex:0 0 auto; }
+.pc-modal-x:hover { background:var(--mint-soft,#eef6ef); }
+.pc-modal-x svg { width:18px; height:18px; }
+.pc-modal-body { padding:18px 20px; overflow-y:auto; -webkit-overflow-scrolling:touch; flex:1 1 auto; min-height:0; }
+.pc-modal-sub { color:var(--ink-3); font-size:.9rem; margin:0 0 14px; }
+.pc-modal-foot { padding:14px 20px; border-top:1px solid var(--line,#eef2ef); background:var(--mint-soft,#f6faf6); flex:0 0 auto; text-align:right; }
+.pc-modal-continue { border:1px solid var(--line); background:var(--surface); color:var(--forest); font:inherit; font-weight:700; padding:.6rem 1rem; border-radius:11px; cursor:pointer; transition:border-color .18s, color .18s; }
+.pc-modal-continue:hover { border-color:var(--leaf); color:var(--leaf-600); }
+@media (max-width:560px) {
+  .pc-modal-ov { align-items:flex-end; padding:0; }
+  .pc-modal { width:100%; max-height:90dvh; border-radius:22px 22px 0 0; transform:translateY(100%); opacity:1; }
+  .pc-modal-ov.show .pc-modal { transform:none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pc-modal-ov, .pc-modal { transition:none; }
+  .pc-modal { transform:none; opacity:1; }
+}

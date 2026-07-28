@@ -219,5 +219,82 @@ window.DOODLY_PINCODE = (function () {
     render();
   }
 
-  return { list, setList, resetList, zones, zoneName, validate, validateLive, lookup, getPin, setPin, isServiceable, waitlist, addWaitlist, mountChecker, mountAdmin, toast };
+  /* ============================================================
+     Floating "Check Delivery Availability" — an unobtrusive, one-click
+     entry point (homepage FAB) that opens the EXISTING checker inside a
+     modal (desktop) / bottom-sheet (mobile). Reuses mountChecker — no
+     pincode logic is duplicated or changed. Keyboard + focus accessible.
+     ============================================================ */
+  let _modalOpen = false, _lastFocus = null;
+  function focusables(el) {
+    return Array.prototype.filter.call(
+      el.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])'),
+      (n) => n.offsetParent !== null || n === document.activeElement
+    );
+  }
+  function openCheckerModal() {
+    if (_modalOpen) return null;
+    _modalOpen = true;
+    _lastFocus = document.activeElement;
+    const ov = document.createElement("div");
+    ov.className = "pc-modal-ov";
+    ov.setAttribute("role", "dialog");
+    ov.setAttribute("aria-modal", "true");
+    ov.setAttribute("aria-label", "Check delivery availability");
+    ov.innerHTML =
+      '<div class="pc-modal" role="document">' +
+        '<div class="pc-modal-head"><h3 class="pc-modal-title"><span class="pc-modal-pin" aria-hidden="true">' + I.pin + '</span> Check Delivery Availability</h3>' +
+          '<button type="button" class="pc-modal-x" aria-label="Close">' + I.x + '</button></div>' +
+        '<div class="pc-modal-body"><p class="pc-modal-sub">Enter your pincode to see if DOODLY delivers fresh milk to your area.</p>' +
+          '<div class="pc-modal-mount"></div></div>' +
+        '<div class="pc-modal-foot"><button type="button" class="pc-modal-continue">Continue shopping</button></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    document.body.classList.add("pc-modal-lock");
+    // Reuse the existing checker verbatim — same validation, results + waitlist.
+    mountChecker(ov.querySelector(".pc-modal-mount"), {});
+    requestAnimationFrame(() => ov.classList.add("show"));
+    const input = ov.querySelector(".pc-input");
+    setTimeout(() => { try { if (input) input.focus({ preventScroll: true }); } catch (e) {} }, reduced() ? 0 : 130);
+
+    function close() {
+      if (!_modalOpen) return;
+      _modalOpen = false;
+      ov.classList.remove("show");
+      document.body.classList.remove("pc-modal-lock");
+      document.removeEventListener("keydown", onKey);
+      const done = () => { if (ov.parentNode) ov.remove(); try { if (_lastFocus && _lastFocus.focus) _lastFocus.focus(); } catch (e) {} };
+      if (reduced()) done(); else setTimeout(done, 230);
+    }
+    function onKey(e) {
+      if (e.key === "Escape") { e.preventDefault(); close(); return; }
+      if (e.key === "Tab") {
+        const f = focusables(ov); if (!f.length) return;
+        const first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    }
+    ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+    ov.querySelector(".pc-modal-x").addEventListener("click", close);
+    ov.querySelector(".pc-modal-continue").addEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+    return { close };
+  }
+  function mountHomeFab() {
+    if (document.querySelector(".pc-fab")) return;
+    const fab = document.createElement("button");
+    fab.type = "button";
+    fab.className = "pc-fab";
+    fab.setAttribute("aria-haspopup", "dialog");
+    fab.setAttribute("aria-label", "Check delivery availability");
+    fab.innerHTML = '<span class="pc-fab-ic" aria-hidden="true">' + I.pin + '</span><span class="pc-fab-txt">Check Delivery Availability</span>';
+    fab.addEventListener("click", openCheckerModal);
+    document.body.appendChild(fab);
+    return fab;
+  }
+  function initHomeFab() { try { if (document.body && document.body.dataset && document.body.dataset.route === "home") mountHomeFab(); } catch (e) {} }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initHomeFab); else initHomeFab();
+
+  return { list, setList, resetList, zones, zoneName, validate, validateLive, lookup, getPin, setPin, isServiceable, waitlist, addWaitlist, mountChecker, mountAdmin, toast, openCheckerModal, mountHomeFab };
 })();
