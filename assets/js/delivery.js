@@ -19,12 +19,18 @@ window.DOODLY_DELIVERY = (function () {
 
   /* ---------- LIVE route (signed-in executive) ---------- */
   const API = () => window.DOODLY_API;
-  function execUser() {
+  // Any real signed-in user (token present), regardless of role string.
+  function signedIn() {
     try {
       const u = JSON.parse(localStorage.getItem("doodly-currentuser") || "null");
-      return (u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token") &&
-        (u.role === "delivery_executive" || u.role === "super_admin")) ? u : null;
+      return (u && u.id && !/^static-/.test(String(u.id)) && localStorage.getItem("doodly-token")) ? u : null;
     } catch (e) { return null; }
+  }
+  function execUser() {
+    const u = signedIn();
+    // case-insensitive so a role stored as "DELIVERY_EXECUTIVE" (DB enum casing) still counts.
+    const role = String((u && u.role) || "").toLowerCase();
+    return (u && (role === "delivery_executive" || role === "super_admin")) ? u : null;
   }
   let _live = null;   // { driver, route, date, stops } from /api/delivery/my-route
   function loadLive() {
@@ -51,7 +57,10 @@ window.DOODLY_DELIVERY = (function () {
   /* ---------- shift availability (signed-in executive only) ---------- */
   let _avail = null;   // { availability, available, onTrip } from /api/driver/availability — stays null (no pill) unless the GET succeeds
   function loadAvailability() {
-    if (!execUser() || !API()) { _avail = null; return Promise.resolve(false); }
+    // Gate on "signed in" (not the client role string) — the backend returns availability
+    // only for a user who actually has a delivery profile, so the shift pill reliably
+    // appears for every executive even if their cached role casing differs.
+    if (!signedIn() || !API()) { _avail = null; return Promise.resolve(false); }
     return API().get("/api/driver/availability").then((r) => { _avail = r || null; return true; }).catch(() => { _avail = null; return false; });
   }
 
@@ -158,7 +167,7 @@ window.DOODLY_DELIVERY = (function () {
             ? `${_live.route ? esc(_live.route.name || _live.route.code || "Your route") + " · " : ""}${esc(_live.date || "")}${_live.isFallbackDate ? " (latest assigned day)" : ""} · ${s.total} stops`
             : (s.total ? `${s.total} stops today` : "No route assigned yet")}</div></div>
           <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">${_avail
-            ? `<button type="button" class="badge ${_avail.available ? "green" : "grey"}" id="dlAvail" style="border:none;cursor:pointer;font-family:inherit" title="${_avail.available ? "Tap to end your shift" : "Tap to start your shift"}">${_avail.available ? "🟢 Available for assignment" : "⚪ Not available — start shift"}</button>`
+            ? `<button type="button" class="badge ${_avail.available ? "green" : "amber"}" id="dlAvail" style="border:none;cursor:pointer;font-family:inherit;font-weight:700" title="${_avail.available ? "You're on shift — tap to end" : "Tap to start your shift and begin receiving deliveries"}">${_avail.available ? "🟢 On shift · tap to end" : "▶ Start shift"}</button>`
             : ""}<span class="badge green">${_live ? "Live" : "On shift"}</span></span>
         </div>
         <div class="dl-kpis">
