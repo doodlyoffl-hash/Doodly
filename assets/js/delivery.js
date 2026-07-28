@@ -189,11 +189,19 @@ window.DOODLY_DELIVERY = (function () {
         </div>
         <div class="dl-list">${all.length ? all.map((s2) => stopCard(s2)).join("") : '<div class="dl-card" style="text-align:center;padding:34px 18px;color:#6b7280">No deliveries assigned for today. New stops will appear here once your route is assigned.</div>'}</div>`;
 
-      if (M()) {
-        M().routeMap(host.querySelector("#dlRouteMap"), { stops: all, onStop: (i) => { const c = host.querySelector(`#card-${all[i].id}`); if (c) c.scrollIntoView({ behavior: "smooth", block: "center" }); } });
-        const next = all.find((x) => stStatus(st, x.id) !== "delivered") || all[0];
-        const navBtn = host.querySelector("#dlNav"); if (navBtn) navBtn.href = M().navUrl(next.lat, next.lng, "driving");
-      }
+      // The map/nav block must NEVER abort render() before wire() runs — otherwise
+      // the shift pill (and every action button) is drawn but left unclickable.
+      // Root cause of "Start shift not working": an executive who hasn't started
+      // their shift yet has no assigned route, so `all` is empty → `next` was
+      // undefined → `next.lat` threw here, skipping wire(). Guard `next` and wrap
+      // the whole block so a map failure can't ever kill the portal's interactivity.
+      try {
+        if (M()) {
+          M().routeMap(host.querySelector("#dlRouteMap"), { stops: all, onStop: (i) => { const c = host.querySelector(`#card-${all[i].id}`); if (c) c.scrollIntoView({ behavior: "smooth", block: "center" }); } });
+          const next = all.find((x) => stStatus(st, x.id) !== "delivered") || all[0];
+          const navBtn = host.querySelector("#dlNav"); if (navBtn && next) navBtn.href = M().navUrl(next.lat, next.lng, "driving");
+        }
+      } catch (e) { /* map is non-critical — keep the portal interactive */ }
       wire();
     }
 
