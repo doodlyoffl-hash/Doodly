@@ -158,6 +158,21 @@ export async function getClaimView(sel: { code?: string | null; token?: string |
   };
 }
 
+/** The signed-in customer's rewards, for the account dashboard card:
+    claimable (ISSUED + unexpired, soonest-expiry first) + already-claimed active ones. */
+export async function getUserRewards(userId: string) {
+  const rows = await db.rewardRedemption.findMany({ where: { issuedToUserId: userId }, orderBy: { createdAt: "desc" } });
+  const claimableRows = rows.filter((r) => r.status === "ISSUED" && !(r.expiresAt && r.expiresAt.getTime() < Date.now()));
+  const slugs = [...new Set(claimableRows.map((r) => r.planSlug))];
+  const plans = slugs.length ? await db.plan.findMany({ where: { slug: { in: slugs } }, select: { slug: true, days: true } }) : [];
+  const dayMap = new Map(plans.map((p) => [p.slug, p.days]));
+  const claimable = claimableRows
+    .map((r) => ({ code: r.code, campaignName: r.campaignName, productLabel: `${ML_LABEL(r.variantMl)} A2 Buffalo Milk × ${r.qty}`, planDays: dayMap.get(r.planSlug) ?? 7, expiresAt: r.expiresAt }))
+    .sort((a, b) => (a.expiresAt ? a.expiresAt.getTime() : Infinity) - (b.expiresAt ? b.expiresAt.getTime() : Infinity));
+  const active = rows.filter((r) => r.status === "REDEEMED" && r.subscriptionId).map((r) => ({ campaignName: r.campaignName, subscriptionId: r.subscriptionId }));
+  return { claimable, active };
+}
+
 // ---------- redeem (the engine) ----------
 export interface RedeemInput {
   code?: string | null;

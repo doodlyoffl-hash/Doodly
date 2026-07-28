@@ -371,6 +371,7 @@ window.DOODLY_MANIFEST = (function () {
         { ic:"plus", t:"Extra milk", s:"Guests over?", href:"/account/extra-milk.html" },
         { ic:"bottle", t:"Return bottles", s:"Manage empties", href:"/account/bottles.html" },
         { ic:"pin", t:"Track delivery", s:"Live now", href:"/account/tracking.html" } ]},
+      { type:"rewardCard" },
       { type:"loyaltyCard" },
       { type:"puzzleCard" },
       { type:"customerSub" },

@@ -41,6 +41,16 @@ window.DOODLY_REWARDS = (function () {
       ".rc-bad{color:#c0392b;font-weight:600;text-align:center;margin:14px 0;line-height:1.5}" +
       ".rc-success{text-align:center}.rc-success-cta{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:16px}.rc-success-cta .btn{flex:1 1 auto}" +
       ".rc-loading{text-align:center;color:var(--ink-3,#6b7c72);padding:24px 0}" +
+      /* dashboard card */
+      ".rc-dash{display:flex;align-items:center;gap:14px;text-decoration:none;border-radius:18px;padding:16px 18px;margin:0 0 4px;background:linear-gradient(120deg,var(--forest,#0F3D2E),var(--leaf-600,#169A57));color:#fff;box-shadow:0 12px 30px rgba(15,61,46,.18);position:relative;overflow:hidden;transition:transform .16s,box-shadow .16s}" +
+      ".rc-dash:hover{transform:translateY(-2px);box-shadow:0 16px 38px rgba(15,61,46,.24)}" +
+      ".rc-dash-emoji{font-size:2rem;flex:0 0 auto;filter:drop-shadow(0 2px 4px rgba(0,0,0,.2))}" +
+      ".rc-dash-body{flex:1 1 auto;min-width:0}" +
+      ".rc-dash-title{display:block;font-family:'Fraunces',serif;font-weight:700;font-size:1.12rem;line-height:1.15}" +
+      ".rc-dash-sub{display:block;font-size:.86rem;opacity:.92;margin-top:3px}" +
+      ".rc-dash-more{display:inline-block;background:rgba(255,255,255,.22);border-radius:999px;padding:.05rem .5rem;font-size:.7rem;font-weight:700;vertical-align:middle;margin-left:6px}" +
+      ".rc-dash-cta{flex:0 0 auto;background:#fff;color:var(--forest,#0F3D2E);font-weight:700;font-size:.86rem;border-radius:999px;padding:.5rem .95rem;white-space:nowrap}" +
+      "@media(max-width:520px){.rc-dash{flex-wrap:wrap}.rc-dash-cta{width:100%;text-align:center}}" +
       "@media(max-width:480px){.rc-card{padding:20px}.rc-f2{grid-template-columns:1fr}}";
     document.head.appendChild(s);
   }
@@ -143,6 +153,32 @@ window.DOODLY_REWARDS = (function () {
     });
   }
 
-  function mountAll() { const m = document.getElementById("rewardClaimMount"); if (m) mountClaim(m); }
-  return { mountClaim, mountAll };
+  /* ---------- account dashboard card (#rewardCardMount) ----------
+     Shows a signed-in customer their unclaimed reward with a claim CTA.
+     Renders nothing for guests or when there's nothing to claim. */
+  function mountCard() {
+    const host = document.getElementById("rewardCardMount");
+    if (!host || !API() || !signedIn()) return;
+    injectStyles();
+    API().get("/api/account/reward-claims").then((d) => {
+      const list = (d && d.claimable) || [];
+      if (!list.length) { host.innerHTML = ""; return; }
+      const r = list[0];
+      const more = list.length > 1 ? ' <span class="rc-dash-more">+' + (list.length - 1) + " more</span>" : "";
+      const expiry = r.expiresAt ? " · claim before " + fmtDate(r.expiresAt) : "";
+      host.innerHTML =
+        '<a class="rc-dash" href="/rewards/claim.html?code=' + encodeURIComponent(r.code) + '">' +
+          '<span class="rc-dash-emoji" aria-hidden="true">🎁</span>' +
+          '<span class="rc-dash-body"><span class="rc-dash-title">You\'ve won a reward!' + more + "</span>" +
+          '<span class="rc-dash-sub">' + r.planDays + " Days FREE " + esc(r.productLabel) + expiry + "</span></span>" +
+          '<span class="rc-dash-cta">Claim now →</span>' +
+        "</a>";
+    }).catch(() => { host.innerHTML = ""; });
+  }
+
+  function mountAll() {
+    const m = document.getElementById("rewardClaimMount"); if (m) mountClaim(m);
+    if (document.getElementById("rewardCardMount")) mountCard();
+  }
+  return { mountClaim, mountCard, mountAll };
 })();

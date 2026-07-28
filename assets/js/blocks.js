@@ -776,6 +776,7 @@ window.DOODLY_BLOCKS = (function () {
   /* ---------- DOODLY Pure Rewards loyalty (built by loyalty.js) ---------- */
   R.loyaltyProgram = () => `<div id="loyaltyMount"></div>`;
   R.loyaltyCard = () => `<div id="loyaltyCardMount"></div>`;
+  R.rewardCard = () => `<div id="rewardCardMount"></div>`;
   R.loyaltyAdmin = () => `<div id="loyaltyAdminMount"></div>`;
   R.reviewsAdmin = () => `<div id="reviewsAdminMount"></div>`;
   R.reviewsPanel = () => `<div id="reviewsPanelMount"></div>`;
