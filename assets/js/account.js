@@ -284,10 +284,17 @@ window.DOODLY_ACCOUNT = (function () {
     var contact = [a.contactName, a.contactPhone].filter(Boolean).join(" · ");
     var lm = a.landmark ? '<div class="muted-sm">' + icon("pin", 12) + " Landmark: " + esc(a.landmark) + "</div>" : "";
     var note = a.deliveryNote ? '<div class="muted-sm" style="font-style:italic;margin-top:2px">“' + esc(a.deliveryNote) + "”</div>" : "";
+    var hasPin = a.lat != null && a.lng != null;
+    // Address Verification Status — a verified pin + PIN code that agree, or a prompt to fix it.
+    var vBadge = a.verified ? ' <span class="tp-yn yes">✓ Verified location</span>'
+      : (hasPin ? ' <span class="tp-yn" style="background:#fff3e0;color:#a15b12">Unverified</span>' : ' <span class="tp-yn no">📍 No pin</span>');
+    var miniMap = hasPin ? '<div id="mini-' + a.id + '" style="height:120px;border-radius:10px;overflow:hidden;margin-top:8px;border:1px solid var(--line,#e3ece3)"></div>' : "";
+    var coords = hasPin ? '<div class="muted-sm" style="margin-top:6px">' + icon("pin", 12) + " PIN " + esc(a.pincode) + " · " + Number(a.lat).toFixed(5) + ", " + Number(a.lng).toFixed(5) + (a.distanceFromWarehouseKm != null ? " · " + Number(a.distanceFromWarehouseKm).toFixed(1) + " km from warehouse" : "") + "</div>"
+      : '<div class="muted-sm" style="margin-top:6px;color:#a15b12">' + icon("pin", 12) + " No map pin — edit to drop one for accurate delivery.</div>";
     return '<div class="acc-addr2">' +
-      '<div class="acc-addr2-h"><b>' + esc(a.label) + "</b>" + (a.isDefault ? ' <span class="tp-yn yes">Default</span>' : "") + "</div>" +
+      '<div class="acc-addr2-h"><b>' + esc(a.label) + "</b>" + (a.isDefault ? ' <span class="tp-yn yes">Default</span>' : "") + vBadge + "</div>" +
       (contact ? '<div class="muted-sm" style="font-weight:600;color:#2c3a33">' + esc(contact) + "</div>" : "") +
-      '<div class="acc-addr2-body">' + esc(addrSummary(a)) + "</div>" + lm + note +
+      '<div class="acc-addr2-body">' + esc(addrSummary(a)) + "</div>" + lm + note + coords + miniMap +
       '<div class="acc-addr2-acts">' +
         '<a class="btn btn-ghost sm" target="_blank" rel="noopener" href="' + addrMapUrl(a) + '">' + icon("pin", 13) + " Map</a>" +
         '<button class="btn btn-ghost sm ad-edit" data-id="' + a.id + '">Edit</button>' +
@@ -305,6 +312,11 @@ window.DOODLY_ACCOUNT = (function () {
         (list.length ? '<div class="acc-addr-grid">' + list.map(addrCard).join("") + "</div>"
           : '<div class="state"><div class="ic">' + icon("pin", 22) + '</div><h3>No addresses yet</h3><p>Add your delivery address so we know exactly where to bring your fresh milk.</p></div>') +
         "</div></div>";
+      // Mini-map preview per verified/pinned address (reuses DOODLY_MAPS.miniMap).
+      if (window.DOODLY_MAPS && DOODLY_MAPS.miniMap) list.forEach(function (a) {
+        if (a.lat == null || a.lng == null) return;
+        var el = host.querySelector("#mini-" + a.id); if (el) try { DOODLY_MAPS.miniMap(el, { lat: a.lat, lng: a.lng, label: a.label }); } catch (e) {}
+      });
       host.querySelector("#ad-add").addEventListener("click", function () { openAddAddress(host, null, list); });
       host.querySelector("#ad-change").addEventListener("click", function () { startAddressChange({ onDone: function () { loadAddresses(host); reloadAddressChanges(); } }); });
       host.querySelectorAll(".ad-edit").forEach(function (b) { b.addEventListener("click", function () { openAddAddress(host, list.filter(function (x) { return x.id === b.dataset.id; })[0], list); }); });
@@ -401,7 +413,8 @@ window.DOODLY_ACCOUNT = (function () {
       // Reflect the svOK serviceability gate on the Save/Continue button — disabled
       // (greyed) whenever the pinned location isn't serviceable. Same gate the hard
       // save-guard below uses. Loading counts as "not yet serviceable" → disabled.
-      var syncSaveBtn = function () { var b = q("#na-save"); if (b) { b.disabled = !svOK; b.style.opacity = svOK ? "" : ".55"; b.style.cursor = svOK ? "" : "not-allowed"; } };
+      var pinMatch = true;   // pin ↔ entered-pincode agree (set by verifyPin)
+      var syncSaveBtn = function () { var b = q("#na-save"); if (b) { var okAll = svOK && pinMatch; b.disabled = !okAll; b.style.opacity = okAll ? "" : ".55"; b.style.cursor = okAll ? "" : "not-allowed"; } };
       var counter = q("#na-counter"), noteEl = q("#na-note");
       var updCount = function () { counter.textContent = (noteEl.value || "").length + " / 250"; };
       updCount();
@@ -447,6 +460,29 @@ window.DOODLY_ACCOUNT = (function () {
         else apply(window.DOODLY_PINCODE ? DOODLY_PINCODE.validate(pin) : { serviceable: true });
       }
 
+      // PIN ↔ pin verification — blocks Save when the dropped pin's location disagrees with the
+      // entered PIN code (a real cross-zone mismatch). Tolerant of geocoder blips (never hard-blocks on error).
+      var pmEl = document.createElement("div"); pmEl.id = "na-pinmatch";
+      pmEl.style.cssText = "display:none;margin:8px 0 0;padding:8px 11px;border-radius:9px;background:#fdecec;color:#b42318;font-size:.82rem;font-weight:600;line-height:1.35";
+      (function () { var m = q("#na-map"); if (m && m.parentNode) m.parentNode.insertBefore(pmEl, m.nextSibling); })();
+      function hideMismatch() { pmEl.style.display = "none"; }
+      function showMismatch(msg) { pmEl.style.display = "block"; pmEl.innerHTML = "⚠ " + esc(msg || "The selected map location does not match the entered PIN code. Please correct the PIN code or move the map pin to the correct location."); }
+      var _vt;
+      function verifyPin() {
+        var pin = g("#na-pin");
+        if (geo.lat == null || geo.lng == null || pin.length !== 6) { pinMatch = true; hideMismatch(); syncSaveBtn(); return; }
+        clearTimeout(_vt);
+        _vt = setTimeout(function () {
+          var lat = geo.lat, lng = geo.lng;
+          API().get("/api/geo/verify?lat=" + lat + "&lng=" + lng + "&pincode=" + pin).then(function (r) {
+            if (g("#na-pin") !== pin || geo.lat !== lat || geo.lng !== lng) return;   // changed mid-flight
+            pinMatch = !(r && r.match === false);
+            if (!pinMatch) showMismatch(r && r.message); else hideMismatch();
+            syncSaveBtn();
+          }).catch(function () { pinMatch = true; hideMismatch(); syncSaveBtn(); });   // geocoder blip → don't block
+        }, 350);
+      }
+
       try {
         if (window.DOODLY_MAPS && DOODLY_MAPS.mountPicker) {
           DOODLY_MAPS.mountPicker(q("#na-map"), { value: geo.lat != null ? { lat: geo.lat, lng: geo.lng } : undefined, height: "200px", onChange: function (r) {
@@ -468,11 +504,12 @@ window.DOODLY_ACCOUNT = (function () {
             if (r.serviceable) svOk(r.area, r.city);
             else if (r.pincode) svNo();                          // a real pincode that isn't covered → out of area
             else svLoading("Drag the pin onto your building to detect the pincode.");
+            verifyPin();                                          // re-check pin ↔ pincode agreement
           } });
         }
       } catch (er) {}
 
-      q("#na-pin").addEventListener("input", function () { pinTouched = true; this.value = this.value.replace(/\D/g, "").slice(0, 6); checkPin(); });
+      q("#na-pin").addEventListener("input", function () { pinTouched = true; this.value = this.value.replace(/\D/g, "").slice(0, 6); checkPin(); verifyPin(); });
       checkPin();
       noteEl.addEventListener("input", updCount);
       // label chips
@@ -496,7 +533,9 @@ window.DOODLY_ACCOUNT = (function () {
         var phone = g("#na-cphone"); if (!PHONE_RE.test(phone)) { q("#na-cphone").classList.add("na-bad"); showErr("Enter a valid mobile number."); return; }
         var alt = g("#na-altphone"); if (alt && !PHONE_RE.test(alt)) { q("#na-altphone").classList.add("na-bad"); showErr("Enter a valid alternate contact number."); return; }
         var pin = g("#na-pin"); if (!/^[1-9][0-9]{5}$/.test(pin)) { q("#na-pin").classList.add("na-bad"); showErr("Enter a valid 6-digit pincode."); return; }
+        if (geo.lat == null || geo.lng == null) { showErr("Please drop a pin on the map to set your exact delivery location."); return; }
         if (!svOK) { showErr("Sorry! DOODLY does not currently deliver to this location."); return; }
+        if (!pinMatch) { showErr("The selected map location does not match the entered PIN code. Correct the PIN code or move the pin to the right spot."); return; }
         var label = chosenLabel === "Other" ? (g("#na-label-custom") || "Other") : chosenLabel;
         // duplicate guard (add only)
         if (!editing && (existing || []).some(function (x) { return (x.houseNo || "").toLowerCase() === g("#na-house").toLowerCase() && x.pincode === pin; })) {

@@ -2203,7 +2203,9 @@
       '<div class="dac-detail" style="background:rgba(0,0,0,.035);border-radius:10px;padding:12px 14px;margin:-2px 0 14px;font-size:.88rem;line-height:1.75">' +
         '<div><b>Customer</b> — ' + esc(d.customer) + (d.mobile && d.mobile !== "—" ? ' · <a href="tel:' + esc(d.mobile) + '">' + esc(d.mobile) + "</a>" : "") + "</div>" +
         '<div><b>Address</b> — ' + esc(d.address || "—") + (mapUrl ? ' · <a href="' + mapUrl + '" target="_blank" rel="noopener">Open in Maps &#8599;</a>' : "") + "</div>" +
+        ((d.lat && d.lng) ? '<div><b>Location</b> — ' + Number(d.lat).toFixed(5) + ", " + Number(d.lng).toFixed(5) + (d.routeStatus === "OK" || !d.routeStatus ? ' · <span class="badge green">Verified pin</span>' : ' · <span class="badge amber">' + esc(rsMap[d.routeStatus] || d.routeStatus) + "</span>") + "</div>" : '<div><b>Location</b> — <span class="badge red">No pin dropped</span></div>') +
         distLine +
+        ((d.lat && d.lng) ? '<div id="dm-mini" style="height:150px;border-radius:10px;overflow:hidden;margin:8px 0;border:1px solid var(--line,#e3ece3)"></div>' : "") +
         (d.deliveryNote ? '<div><b>Note</b> — ' + esc(d.deliveryNote) + "</div>" : "") +
         '<div><b>Order</b> — ' + esc(d.orderRef || "—") + " · " + esc(d.type || "") + (d.plan ? " (" + esc(d.plan) + ")" : "") + "</div>" +
         '<div><b>Products</b> — ' + esc(d.products || "—") + "</div>" +
@@ -2246,6 +2248,8 @@
       "</div>";
     document.body.appendChild(ov);
     var qs = function (s) { return ov.querySelector(s); };
+    // Address verification mini-map preview for ops (reuses DOODLY_MAPS.miniMap).
+    if (d.lat && d.lng && window.DOODLY_MAPS && DOODLY_MAPS.miniMap) { var _mm = qs("#dm-mini"); if (_mm) try { DOODLY_MAPS.miniMap(_mm, { lat: d.lat, lng: d.lng, label: "Delivery" }); } catch (e) {} }
     var close = function () { ov.remove(); document.removeEventListener("keydown", onKey); };
     async function saveAssign() {
       var err = qs("#dm-err"), btn = qs("#dm-save");

@@ -311,6 +311,13 @@ model Address {
   wing         String?                           // optional — Wing
   gateNumber   String?                           // optional — Society gate number
   doorColor    String?                           // optional — door colour (visual cue for the executive)
+  // --- geolocation verification (pin ↔ pincode integrity) ---
+  verified                Boolean   @default(false)  // pin present + agrees with the entered pincode + serviceable + within radius
+  verifiedAt              DateTime?                  // when verification last passed
+  serviceable             Boolean?                   // cached serviceability of the pincode at verify time
+  distanceFromWarehouseKm Float?                     // cached warehouse → address distance (verified coords)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt @default(now())
   zoneId       String?
   zone         DeliveryZone? @relation(fields: [zoneId], references: [id])
   subscriptions Subscription[]

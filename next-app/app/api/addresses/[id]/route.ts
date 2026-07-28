@@ -12,7 +12,9 @@ import { reqContext } from "@/lib/auth/request";
 import { audit } from "@/lib/auth/audit";
 import { addressFields, assertServiceable, buildAddressData, cleanStr, LOCATION_KEYS } from "@/lib/addresses/helpers";
 import { geocodeAddress } from "@/lib/geo/geocode";
-import { isWithinServiceRadius } from "@/lib/warehouse/distance";
+import { verifyAddressLocation, PIN_MISMATCH_MESSAGE } from "@/lib/addresses/verify";
+import { NEEDS_PIN } from "@/lib/addresses/deliverable";
+import { recomputeDeliveriesForAddress } from "@/lib/warehouse/distance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,22 +45,27 @@ export const PATCH = route("addresses.update", async (req: NextRequest, { params
   let needsPin = false;
 
   if (editingLocation) {
-    // any location change re-validates serviceability + recomposes the address
+    // any location change re-validates serviceability + recomposes the address + re-verifies the pin
     const pincode = (typeof body.pincode === "string" && body.pincode) || current.pincode;
     const sp = await assertServiceable(pincode);
     data = buildAddressData(body, sp);
     data.pincode = pincode;
-    // No pin dropped → best-effort keyless geocode so tracking has a destination.
+    // A map pin is REQUIRED for a location edit → best-effort geocode, else demand a pin.
     if (data.lat == null || data.lng == null) {
       const geo = await geocodeAddress({ ...data, pincode });
       if (geo) { data.lat = geo.lat; data.lng = geo.lng; }
     }
-    // Plausibility: never persist an implausibly-far coordinate for a serviceable pincode.
-    if (data.lat != null && data.lng != null) {
-      if (!(await isWithinServiceRadius({ lat: data.lat as number, lng: data.lng as number }))) { data.lat = null; data.lng = null; needsPin = true; }
-    } else { needsPin = true; }
+    if (data.lat == null || data.lng == null) throw Errors.badRequest(NEEDS_PIN, { needsPin: true });
+    // Re-verify the pin ↔ pincode + radius, and re-cache verification state.
+    const v = await verifyAddressLocation({ pincode, lat: data.lat as number, lng: data.lng as number });
+    if (!v.withinRadius) throw Errors.badRequest(NEEDS_PIN, { needsPin: true, farKm: v.distanceKm ?? undefined });
+    if (!v.match) throw Errors.conflict(PIN_MISMATCH_MESSAGE);
+    data.verified = v.verified;
+    data.verifiedAt = v.verified ? new Date() : null;
+    data.serviceable = v.serviceable;
+    data.distanceFromWarehouseKm = v.distanceKm;
   } else {
-    // simple partial (set default / edit note / label / contact) — no location touch
+    // simple partial (set default / edit note / label / contact) — no location touch, verification unchanged
     data = {};
     for (const k of SIMPLE_KEYS) if (body[k] !== undefined) data[k] = cleanStr(body[k] as string);
   }
@@ -68,8 +75,11 @@ export const PATCH = route("addresses.update", async (req: NextRequest, { params
     return tx.address.update({ where: { id: params.id }, data: { ...data, ...(parsed.isDefault !== undefined ? { isDefault: parsed.isDefault } : {}) } as Prisma.AddressUncheckedUpdateInput });
   });
 
+  // A moved pin makes every FUTURE delivery's warehouse distance stale → recompute (non-blocking).
+  if (editingLocation) recomputeDeliveriesForAddress(address.id).catch(() => {});
+
   await audit({ userId, actorRole: "customer", action: "address.update", target: address.id, ctx: reqContext(req) });
-  return ok({ address, needsPin });
+  return ok({ address, needsPin, verified: address.verified });
 });
 
 export const DELETE = route("addresses.delete", async (req: NextRequest, { params }: Ctx) => {

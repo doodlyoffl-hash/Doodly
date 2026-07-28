@@ -19,6 +19,7 @@ import { NOT_SERVICEABLE } from "@/lib/addresses/helpers";
 import { geocodeAddress } from "@/lib/geo/geocode";
 import { getWarehouse } from "@/lib/warehouse/config";
 import { haversineKm } from "@/lib/warehouse/distance";
+import { verifyAddressLocation, PIN_MISMATCH_MESSAGE } from "@/lib/addresses/verify";
 import { audit } from "@/lib/auth/audit";
 import type { ReqContext } from "@/lib/auth/request";
 
@@ -42,7 +43,7 @@ const isSuper = (role?: string | null) => role === "super_admin";
 export async function assertDeliverableAddress(input: AssertDeliverableInput): Promise<DeliverableAddress> {
   const addr = await db.address.findFirst({
     where: { id: input.addressId, userId: input.userId },
-    select: { id: true, line1: true, city: true, pincode: true, lat: true, lng: true, buildingName: true, street: true, area: true, landmark: true },
+    select: { id: true, line1: true, city: true, pincode: true, lat: true, lng: true, buildingName: true, street: true, area: true, landmark: true, verified: true },
   });
   if (!addr) throw Errors.forbidden("That delivery address isn't on this account — please choose a saved address.");
 
@@ -84,8 +85,21 @@ export async function assertDeliverableAddress(input: AssertDeliverableInput): P
     throw Errors.badRequest(NEEDS_PIN, { needsPin: true, farKm: Math.round(km) });
   }
 
-  // plausible → cache a freshly geocoded coordinate so we don't geocode again
-  if (geocoded) await db.address.update({ where: { id: addr.id }, data: { lat, lng } }).catch(() => {});
+  // 5. pin ↔ pincode verification. Already-verified addresses fast-path (no reverse-geocode
+  //    call at checkout). Grandfathered/legacy addresses (verified=false but plausible) get
+  //    verified now: pin-match (pragmatic) → persist `verified` + cache serviceable/distance;
+  //    a real cross-zone mismatch is rejected.
+  if (!addr.verified) {
+    const v = await verifyAddressLocation({ pincode, lat, lng });
+    if (!v.match) throw Errors.conflict(PIN_MISMATCH_MESSAGE);
+    await db.address.update({
+      where: { id: addr.id },
+      data: { lat, lng, verified: v.verified, verifiedAt: v.verified ? new Date() : null, serviceable: v.serviceable, distanceFromWarehouseKm: v.distanceKm },
+    }).catch(() => {});
+  } else if (geocoded) {
+    // plausible → cache a freshly geocoded coordinate so we don't geocode again
+    await db.address.update({ where: { id: addr.id }, data: { lat, lng } }).catch(() => {});
+  }
 
   return { addressId: addr.id, lat, lng, pincode };
 }
