@@ -907,14 +907,14 @@
     if (document.getElementById("dac-style")) return;
     var s = document.createElement("style"); s.id = "dac-style";
     s.textContent = ".dac-ov{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;background:rgba(15,61,46,.45);backdrop-filter:blur(3px);padding:18px;animation:dacFade .18s ease}" +
-      ".dac-card{background:var(--surface,#fff);color:var(--ink,#16241c);width:min(440px,100%);border-radius:18px;border:1px solid var(--line,#e3ece3);box-shadow:0 24px 60px rgba(15,61,46,.28);overflow:hidden;animation:dacPop .2s ease}" +
-      ".dac-hd{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line,#e3ece3)}" +
+      ".dac-card{background:var(--surface,#fff);color:var(--ink,#16241c);width:min(440px,100%);max-height:calc(100vh - 36px);max-height:calc(100dvh - 36px);display:flex;flex-direction:column;border-radius:18px;border:1px solid var(--line,#e3ece3);box-shadow:0 24px 60px rgba(15,61,46,.28);overflow:hidden;animation:dacPop .2s ease}" +
+      ".dac-hd{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line,#e3ece3);flex:0 0 auto}" +
       ".dac-hd h3{margin:0;font-family:var(--font-display,inherit);font-size:1.05rem;color:var(--ink,#16241c)}" +
       ".dac-x{background:none;border:none;cursor:pointer;color:var(--ink-3,#6b7c72);font-size:1.5rem;line-height:1;padding:0 6px;border-radius:8px}.dac-x:hover{background:var(--mint-soft,#eef6ef)}" +
-      ".dac-bd{padding:16px 18px;display:grid;gap:12px}" +
+      ".dac-bd{padding:16px 18px;display:grid;gap:12px;overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1 1 auto;min-height:0}" +
       ".dac-f{display:grid;gap:5px}.dac-f>span{font-size:.78rem;font-weight:600;color:var(--ink-2,#37463d)}.dac-f .req{color:var(--leaf-600,#1FAE66);font-style:normal}" +
       ".dac-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}" +
-      ".dac-ft{display:flex;justify-content:flex-end;gap:10px;padding:14px 18px;border-top:1px solid var(--line,#e3ece3);background:var(--mint-soft,#f6faf6)}" +
+      ".dac-ft{display:flex;justify-content:flex-end;gap:10px;padding:14px 18px;border-top:1px solid var(--line,#e3ece3);background:var(--mint-soft,#f6faf6);flex:0 0 auto}" +
       ".dac-err{color:#d83a3a;font-size:.78rem;font-weight:600;margin:0;min-height:1em}" +
       // modal() helper card (account/puzzle) — constrain height + scroll the body so tall forms stay usable
       ".dac-ov{overflow-y:auto}" +
