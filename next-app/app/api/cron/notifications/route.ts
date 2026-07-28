@@ -83,7 +83,11 @@ async function handle(req: NextRequest) {
   // now runs the 20:00 IST cut-off. Idempotent, so a re-run never double-credits.
   const { runDailyLoyaltyMaintenance } = await import("@/lib/loyalty/daily");
   const loyalty = await runDailyLoyaltyMaintenance().catch((e) => ({ error: (e as Error)?.message ?? "failed" }));
-  return NextResponse.json({ ok: true, ...result, whatsapp, autopay, addressChanges, addressChangeReminders, subDeliveries, cutoff, cutoffWa, cutoffHealth, loyalty });
+  // Reward-redemption expiry: mark past-due rewards EXPIRED + nudge customers whose
+  // unclaimed prize expires in 7/3/1 days. Idempotent (exact day-windows).
+  const { runRewardExpiryReminders } = await import("@/lib/rewards/expiry");
+  const rewardExpiry = await runRewardExpiryReminders().catch((e) => ({ error: (e as Error)?.message ?? "failed" }));
+  return NextResponse.json({ ok: true, ...result, whatsapp, autopay, addressChanges, addressChangeReminders, subDeliveries, cutoff, cutoffWa, cutoffHealth, loyalty, rewardExpiry });
 }
 
 export const GET = handle;
