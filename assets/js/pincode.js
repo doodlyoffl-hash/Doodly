@@ -180,20 +180,41 @@ window.DOODLY_PINCODE = (function () {
       wlData = wlData.filter(function (w) { return w.id !== id; }); render();   // optimistic
       if (API && API.del) API.del("/api/admin/waitlist?id=" + encodeURIComponent(id)).then(loadWl).catch(loadWl);
     }
+    // Serviceable pincodes — DB-backed (ServiceablePincode). Editing here now reflects
+    // live for customers (storefront reads the same table); localStorage is only an
+    // offline cache + the sync-check fallback. Falls back to the client list offline.
+    let pcRows = list();       // fallback: client defaults + localStorage overlay
+    let zoneList = zones();    // fallback: client zones; replaced by DB zones on load
+    let pcLive = false;        // true once the DB list is loaded
+    function loadPc() {
+      const API = window.DOODLY_API;
+      if (!API || !API.get) return Promise.resolve();
+      return API.get("/api/admin/pincodes").then(function (r) {
+        if (r && Array.isArray(r.pincodes)) { pcRows = r.pincodes; pcLive = true; }
+        if (r && Array.isArray(r.zones) && r.zones.length) zoneList = r.zones;
+        try { setList(pcRows); } catch (e) {}   // keep the sync checker's cache fresh
+        render();
+      }).catch(function () {});
+    }
+    function delPc(pincode, idx) {
+      const API = window.DOODLY_API;
+      pcRows.splice(idx, 1); render();          // optimistic
+      try { setList(pcRows); } catch (e) {}
+      if (pcLive && API && API.del && /^\d{6}$/.test(String(pincode || ""))) API.del("/api/admin/pincodes?pincode=" + encodeURIComponent(pincode)).then(loadPc).catch(function () {});
+    }
     function render() {
-      const rows = list();
-      const zopts = zones().map((z) => `<option value="${z.id}">${esc(z.name)}</option>`).join("");
+      const rows = pcRows;
       const tr = (p, i) => `<tr data-i="${i}">
         <td><input class="input ds-i" data-k="pincode" value="${esc(p.pincode)}" style="width:78px"></td>
         <td><input class="input ds-i" data-k="area" value="${esc(p.area)}" style="width:160px"></td>
         <td><input class="input ds-i" data-k="city" value="${esc(p.city)}" style="width:100px"></td>
         <td><input class="input ds-i" data-k="state" value="${esc(p.state)}" style="width:120px"></td>
-        <td><select class="input ds-i" data-k="zone" style="width:120px">${zones().map((z) => `<option value="${z.id}" ${p.zone === z.id ? "selected" : ""}>${esc(z.name)}</option>`).join("")}</select></td>
+        <td><select class="input ds-i" data-k="zone" style="width:140px"><option value="">— none —</option>${zoneList.map((z) => `<option value="${esc(z.id)}" ${p.zone === z.id ? "selected" : ""}>${esc(z.name)}</option>`).join("")}</select></td>
         <td><input class="input ds-i" data-k="charge" type="number" value="${esc(p.charge || 0)}" style="width:64px"></td>
         <td><input class="input ds-i" data-k="slot" value="${esc(p.slot)}" style="width:120px"></td>
         <td><input class="input ds-i" data-k="eta" value="${esc(p.eta)}" style="width:96px"></td>
         <td><label class="check"><input type="checkbox" class="ds-i" data-k="enabled" ${p.enabled !== false ? "checked" : ""}></label></td>
-        <td><button class="link pc-del" data-i="${i}" aria-label="Delete">${I.x}</button></td></tr>`;
+        <td><button class="link pc-del" data-i="${i}" data-pin="${esc(p.pincode)}" aria-label="Delete">${I.x}</button></td></tr>`;
       const wl = wlData;
       const byPin = {}; wl.forEach((w) => { (byPin[w.pincode] = byPin[w.pincode] || []).push(w); });
       const wlGroups = Object.keys(byPin).sort().map((pin) => {
@@ -212,19 +233,26 @@ window.DOODLY_PINCODE = (function () {
         <div class="panel mt-3"><div class="panel-head"><h3>Waitlist <span class="badge">${wl.length}</span></h3><button class="btn btn-ghost" id="pc-csv" style="padding:.42rem .8rem;font-size:.82rem">Export CSV</button></div>
           <div class="panel-pad"><div class="pc-wl-list">${wlGroups}</div></div></div>`;
 
-      host.querySelector("#pc-add").addEventListener("click", () => { const a = list(); a.push({ pincode: "", area: "", city: "Vijayawada", state: "Andhra Pradesh", zone: (zones()[0] || {}).id || "Z1", charge: 0, slot: "Before 7 AM", eta: "", enabled: true }); setList(a); render(); });
+      host.querySelector("#pc-add").addEventListener("click", () => { pcRows = readTable(); pcRows.push({ pincode: "", area: "", city: "Vijayawada", state: "Andhra Pradesh", zone: (zoneList[0] || {}).id || "", charge: 0, slot: "Before 7 AM", eta: "", enabled: true }); render(); });
       host.querySelector("#pc-save").addEventListener("click", save);
-      host.querySelector("#pc-reset").addEventListener("click", () => { resetList(); render(); });
+      host.querySelector("#pc-reset").addEventListener("click", () => { resetList(); pcRows = list(); render(); loadPc(); });
       host.querySelector("#pc-csv").addEventListener("click", exportCsv);
-      host.querySelectorAll(".pc-del").forEach((b) => b.addEventListener("click", () => { const a = list(); a.splice(Number(b.dataset.i), 1); setList(a); render(); }));
+      host.querySelectorAll(".pc-del").forEach((b) => b.addEventListener("click", () => delPc(b.dataset.pin, Number(b.dataset.i))));
       host.querySelectorAll(".pc-wl-del").forEach((b) => b.addEventListener("click", () => delWl(b.dataset.id)));
     }
-    function save() {
-      const rows = [].slice.call(host.querySelectorAll("tbody tr")).map((tr) => {
+    function readTable() {
+      return [].slice.call(host.querySelectorAll("tbody tr")).map((tr) => {
         const o = {}; tr.querySelectorAll(".ds-i").forEach((inp) => { o[inp.dataset.k] = inp.type === "checkbox" ? inp.checked : (inp.dataset.k === "charge" ? Number(inp.value) || 0 : inp.value.trim()); }); return o;
-      }).filter((o) => o.pincode);
-      setList(rows);
-      const ok = host.querySelector("#pc-saved"); if (ok) { ok.hidden = false; setTimeout(() => { ok.hidden = true; }, 2600); }
+      });
+    }
+    function save() {
+      const rows = readTable().filter((o) => o.pincode);
+      pcRows = rows; setList(rows);   // cache locally (offline + the sync checker)
+      const okEl = host.querySelector("#pc-saved");
+      const done = () => { if (okEl) { okEl.hidden = false; setTimeout(() => { okEl.hidden = true; }, 2600); } };
+      const API = window.DOODLY_API;
+      if (API && API.put) API.put("/api/admin/pincodes", { pincodes: rows }).then(function () { done(); loadPc(); }).catch(function (e) { toast((e && e.message) || "Couldn't save to the server — kept locally."); done(); });
+      else done();
     }
     function exportCsv() {
       const wl = wlData;
@@ -234,7 +262,8 @@ window.DOODLY_PINCODE = (function () {
       const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "doodly-waitlist.csv"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     }
     render();
-    loadWl();   // pull the live list from the DB (visible to any admin, any device)
+    loadPc();   // live serviceable pincodes + zones from the DB (edits reflect on the storefront)
+    loadWl();   // live waitlist from the DB (visible to any admin, any device)
   }
 
   /* ============================================================
