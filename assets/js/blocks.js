@@ -1214,11 +1214,14 @@ window.DOODLY_BLOCKS = (function () {
       ? [["Ramesh K.","Z1",42,40,"10 min","4.9★"],["Suresh B.","Z2",46,38,"12 min","4.8★"],["Anil P.","Z3",28,24,"13 min","4.7★"]]
       : [];
     const execRows = execData
-      .map(r=>`<tr><td><span class="strong">${r[0]}</span></td><td>${(zones.find(z=>z.id===r[1])||{}).name||r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td></tr>`).join("")
-      || `<tr><td colspan="6" class="muted-sm">No executive activity yet.</td></tr>`;
-    return `<div class="reveal"><div class="dl-an-kpis">${k}</div>
+      .map(r=>`<tr><td><span class="strong">${r[0]}</span></td><td><span class="badge green">Available</span></td><td>${r[2]}</td><td>0</td><td>${r[3]}</td><td>0</td><td>—</td></tr>`).join("")
+      || `<tr><td colspan="7" class="muted-sm">No executives on shift yet.</td></tr>`;
+    return `<div class="reveal" id="delAnalytics">
+      <div class="panel"><div class="panel-head"><h3>Executive availability</h3></div>
+        <div class="panel-pad"><div class="dl-an-kpis dl-an-avail"></div></div></div>
+      <div class="dl-an-kpis mt-3">${k}</div>
       <div class="panel mt-3"><div class="panel-head"><h3>Deliveries per executive</h3></div>
-        <div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Executive</th><th>Zone</th><th>Assigned</th><th>Completed</th><th>Avg time</th><th>Rating</th></tr></thead><tbody>${execRows}</tbody></table></div></div></div></div>`;
+        <div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Executive</th><th>Shift</th><th>Assigned</th><th>Pending</th><th>Delivered</th><th>Failed</th><th>Remaining</th></tr></thead><tbody>${execRows}</tbody></table></div></div></div></div>`;
   };
 
   /* ---------- blog list ---------- */

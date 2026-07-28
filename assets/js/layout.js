@@ -1716,18 +1716,32 @@
   var _delItems = [], _delDrivers = [];
   function delStatusMeta(s) { return DEL_STATUS[s] || ["grey", s]; }
   function updateDeliveryAnalytics(k, execs) {
-    var kwrap = document.querySelector(".dl-an-kpis");
+    // Scope to #delAnalytics — the packing card also uses .dl-an-kpis, so an
+    // unscoped selector matches the wrong strip once packing has rendered.
+    var root = document.getElementById("delAnalytics") || document;
+    var kwrap = root.querySelector(".dl-an-kpis:not(.dl-an-avail)");
     if (kwrap) {
       var cards = [["Total deliveries", k.total || 0], ["Pending", k.pending || 0], ["Assigned", k.assigned || 0], ["Out for delivery", k.outForDelivery || 0],
         ["Delivered", k.delivered || 0], ["Failed", k.failed || 0], ["Unassigned", k.unassigned || 0], ["Total bottles", k.totalBottles || 0]];
       kwrap.innerHTML = cards.map(function (x) { return '<div class="dl-an-kpi"><div class="n">' + x[1] + '</div><div class="l">' + x[0] + "</div></div>"; }).join("");
     }
-    var tb = null;
-    if (kwrap && kwrap.parentElement) tb = kwrap.parentElement.querySelector(".panel .tbl tbody");
+    // Executive Availability widget — live shift-status counts.
+    var awrap = root.querySelector(".dl-an-avail");
+    if (awrap) {
+      var a = k.executiveAvailability || {};
+      var acards = [["Total executives", a.total || 0], ["Available", a.available || 0], ["On delivery", a.onDelivery || 0], ["Offline", a.offline || 0], ["Shift not started", a.notStarted || 0]];
+      awrap.innerHTML = acards.map(function (x) { return '<div class="dl-an-kpi"><div class="n">' + x[1] + '</div><div class="l">' + x[0] + "</div></div>"; }).join("");
+    }
+    // Deliveries per executive — every on-shift exec + their live counts/capacity.
+    var tb = root.querySelector(".panel .tbl tbody");
     if (tb) {
+      var toneOf = function (s) { return s === "Available" ? "green" : s === "On delivery" ? "blue" : s === "Not started" ? "amber" : "grey"; };
       tb.innerHTML = (execs || []).map(function (e) {
-        return '<tr><td><span class="strong">' + esc(e.name) + "</span></td><td>" + esc(e.zone) + "</td><td>" + e.assigned + "</td><td>" + e.completed + "</td><td>" + (e.avgTimeMin != null ? e.avgTimeMin + " min" : "—") + "</td><td>" + (e.rating || 0) + "★</td></tr>";
-      }).join("") || '<tr><td colspan="6" class="muted-sm">No executive activity yet.</td></tr>';
+        return '<tr><td><span class="strong">' + esc(e.name) + "</span>" + (e.employeeId ? ' <span class="muted-sm">' + esc(e.employeeId) + "</span>" : "") + "</td>" +
+          '<td><span class="badge ' + toneOf(e.shiftStatus) + '">' + esc(e.shiftStatus || "—") + "</span></td>" +
+          "<td>" + (e.assigned || 0) + "</td><td>" + (e.pending || 0) + "</td><td>" + (e.delivered || 0) + "</td><td>" + (e.failed || 0) + "</td>" +
+          "<td>" + (e.remainingCapacity != null ? e.remainingCapacity + " / " + (e.capacity || 0) : "—") + "</td></tr>";
+      }).join("") || '<tr><td colspan="7" class="muted-sm">No executives on shift yet.</td></tr>';
     }
   }
   /* Packing Summary card — bottles to pack BY SIZE for the selected delivery date.
@@ -2095,6 +2109,34 @@
     });
   }
 
+  // ---- live auto-refresh ----
+  // Shift Start/End (and Accept/Complete) happen on the executive's device, so the
+  // admin board must poll to reflect them without a manual reload. Lightweight: only
+  // re-fetches stats (availability + per-exec) + the delivery table; never rebuilds
+  // the date bar (won't steal focus from the date picker). Pauses when the tab is
+  // hidden and refreshes instantly when it regains focus.
+  var _delPollTimer = null, _delPollWired = false;
+  async function pollDeliveriesLive() {
+    if (!window.DOODLY_API || document.hidden) return;
+    if (!document.querySelector('.dt-host[data-dataset="adminDeliveries"]')) { if (_delPollTimer) { clearInterval(_delPollTimer); _delPollTimer = null; } return; }
+    var iso = _delDate || istTodayISO();
+    try {
+      var stats = await DOODLY_API.get("/api/admin/deliveries/stats?date=" + iso);
+      var k = stats.kpis || {};
+      bkKpis({ "scheduled": String(k.scheduled || 0), "zones": String(k.zones || 0), "milk required": (k.milkLitres || 0) + " L", "drivers": String(k.activeExecutives || 0) });
+      updateDeliveryAnalytics(k, stats.executives);
+      renderPackingSummary(stats.packing, iso);
+      var data = await DOODLY_API.get("/api/admin/deliveries?date=" + iso);
+      _delItems = data.deliveries || [];
+      if (window.DOODLY_DATA) DOODLY_DATA.adminDeliveries = _delItems.map(function (d) { return { id: "#" + d.id.slice(-6), order: d.orderRef || "—", customer: d.customer, area: d.area, driver: d.driver ? d.driver.name : "—", slot: d.slot || "—", bottles: (d.bottlesIn || 0) + "/" + (d.bottleCount || 0), pay: payBadge(d.paymentStatus), status: delStatusMeta(d.status), _id: d.id, _driverId: d.driver ? d.driver.id : "", _status: d.status }; });
+      bkRemount("adminDeliveries");
+    } catch (e) { /* keep the last good render on a transient error */ }
+  }
+  function ensureDeliveryPolling() {
+    if (!_delPollTimer) _delPollTimer = setInterval(pollDeliveriesLive, 20000);
+    if (!_delPollWired) { _delPollWired = true; document.addEventListener("visibilitychange", function () { if (!document.hidden) pollDeliveriesLive(); }); }
+  }
+
   async function wireDeliveriesBackend(date) {
     if (!window.DOODLY_API) return;
     var iso = date || _delDate || istTodayISO(); _delDate = iso;
@@ -2128,6 +2170,7 @@
     } catch (e) {
       bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live deliveries." : e.code === "forbidden" ? "⚠ Your role can't view deliveries (403)." : "⚠ " + (e.message || "Couldn't load deliveries."), "err");
     }
+    ensureDeliveryPolling();
   }
   window.DOODLY_ADMIN.wireDeliveriesBackend = wireDeliveriesBackend;
 

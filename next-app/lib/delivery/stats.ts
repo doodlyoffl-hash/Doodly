@@ -78,7 +78,7 @@ export async function deliveryStats(dateStr?: string | null) {
       },
       orderBy: { date: "desc" }, take: 2000,
     }),
-    db.driver.findMany({ where: { deletedAt: null }, select: { id: true, active: true, rating: true, user: { select: { name: true } } } }),
+    db.driver.findMany({ where: { deletedAt: null }, select: { id: true, active: true, rating: true, employeeId: true, user: { select: { name: true } }, execStatus: { select: { availability: true, lastChangedAt: true, assignedBottles: true } }, capacity: { select: { maxBottles: true } } } }),
     db.deliveryZone.count(),
     db.variant.findMany({ select: { label: true, ml: true, product: { select: { slug: true } } } }),
   ]);
@@ -131,28 +131,66 @@ export async function deliveryStats(dateStr?: string | null) {
   const times = deliveredRows.map(mins).filter((m) => m > 0 && m < 600);
   const avgTimeMin = times.length ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : null;
 
-  // per-executive performance
-  const byDriver = new Map<string, { id: string; name: string; rating: number; zone: string; assigned: number; completed: number; times: number[] }>();
-  for (const d of drivers) byDriver.set(d.id, { id: d.id, name: d.user.name ?? "—", rating: d.rating, zone: "—", assigned: 0, completed: 0, times: [] });
+  // per-executive performance + live shift/availability state.
+  // Shift status comes from ExecutiveStatus (the exec's Start/End-shift toggle),
+  // so an executive who started a shift shows up even before any delivery is
+  // assigned — the previous "assigned > 0" filter hid them.
+  const AVAIL_ONSHIFT = ["AVAILABLE", "RETURNED_TO_DAIRY", "COMPLETED"];
+  const AVAIL_ONDELIVERY = ["ASSIGNED", "ACCEPTED", "OUT_FOR_DELIVERY"];
+  const shiftLabel = (av?: string | null) =>
+    !av ? "Not started"
+      : AVAIL_ONSHIFT.includes(av) ? "Available"
+      : AVAIL_ONDELIVERY.includes(av) ? "On delivery"
+      : av === "BREAK" ? "On break"
+      : av === "OFFLINE" ? "Offline" : av;
+
+  const byDriver = new Map<string, { id: string; name: string; employeeId: string | null; rating: number; zone: string; availability: string | null; capacity: number; assigned: number; pending: number; delivered: number; failed: number; activeBottles: number; times: number[] }>();
+  for (const d of drivers) byDriver.set(d.id, {
+    id: d.id, name: d.user.name ?? d.employeeId ?? "—", employeeId: d.employeeId ?? null, rating: d.rating, zone: "—",
+    availability: d.execStatus?.availability ?? null, capacity: d.capacity?.maxBottles ?? 45,
+    assigned: 0, pending: 0, delivered: 0, failed: 0, activeBottles: 0, times: [],
+  });
   for (const r of rows) {
     if (!r.driverId) continue;
     const e = byDriver.get(r.driverId); if (!e) continue;
     e.assigned++;
-    if (r.status === "DELIVERED") { e.completed++; const m = mins(r); if (m > 0 && m < 600) e.times.push(m); }
+    if (r.status === "DELIVERED") { e.delivered++; const m = mins(r); if (m > 0 && m < 600) e.times.push(m); }
+    else if (r.status === "FAILED" || r.status === "SKIPPED") e.failed++;
+    else { e.pending++; e.activeBottles += r.bottleCount || 0; }   // still to deliver → still loaded
     const zn = r.route?.zone?.name;
     if (zn && e.zone === "—") e.zone = zn;
   }
-  const executives = [...byDriver.values()].filter((e) => e.assigned > 0).map((e) => ({
-    id: e.id, name: e.name, zone: e.zone, assigned: e.assigned, completed: e.completed,
-    avgTimeMin: e.times.length ? Math.round(e.times.reduce((a, b) => a + b, 0) / e.times.length) : null, rating: e.rating,
-  }));
+  // Show every executive who is ON SHIFT (has a status) or has deliveries today.
+  const executives = [...byDriver.values()]
+    .filter((e) => e.availability != null || e.assigned > 0)
+    .map((e) => ({
+      id: e.id, name: e.name, employeeId: e.employeeId, zone: e.zone,
+      availability: e.availability, shiftStatus: shiftLabel(e.availability),
+      onShift: e.availability != null && e.availability !== "OFFLINE",
+      assigned: e.assigned, pending: e.pending, delivered: e.delivered, failed: e.failed,
+      completed: e.delivered,                                        // kept for existing consumers
+      capacity: e.capacity, remainingCapacity: Math.max(0, e.capacity - e.activeBottles),
+      avgTimeMin: e.times.length ? Math.round(e.times.reduce((a, b) => a + b, 0) / e.times.length) : null, rating: e.rating,
+    }))
+    .sort((a, b) => (b.onShift ? 1 : 0) - (a.onShift ? 1 : 0) || b.assigned - a.assigned || a.name.localeCompare(b.name));
+
+  // Executive availability breakdown for the "Executive Availability" widget.
+  const activeDrivers = drivers.filter((d) => d.active);
+  const executiveAvailability = { total: activeDrivers.length, available: 0, onDelivery: 0, offline: 0, notStarted: 0 };
+  for (const d of activeDrivers) {
+    const av = d.execStatus?.availability;
+    if (!av) executiveAvailability.notStarted++;
+    else if (AVAIL_ONSHIFT.includes(av)) executiveAvailability.available++;
+    else if (AVAIL_ONDELIVERY.includes(av)) executiveAvailability.onDelivery++;
+    else executiveAvailability.offline++;                            // OFFLINE / BREAK
+  }
 
   return {
     date: iso,
     kpis: {
       total, scheduled, assigned, outForDelivery, delivered, failed, pending, unassigned, delayed,
       bottlesCollected, bottlesPending, bottleCollectionPct, activeExecutives, zones,
-      totalBottles, milkLitres, avgRating, completionPct, avgTimeMin,
+      totalBottles, milkLitres, avgRating, completionPct, avgTimeMin, executiveAvailability,
     },
     executives,
   };
