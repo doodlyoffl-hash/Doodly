@@ -184,10 +184,14 @@ window.DOODLY_DELIVERY = (function () {
       if (!cur) return `<div class="dl-card dl-navcard done"><div class="dl-navcard-h"><span class="dl-navcard-tag ok">${svg("check", 15)} Route complete</span></div><div class="dl-navcard-name">All ${all.length} stops delivered</div><div class="dl-navcard-addr">Head back to the warehouse${_live && _live.route && _live.route.warehouse ? " · " + esc(_live.route.warehouse.name) : ""}.</div></div>`;
       const nxt = upcomingAfter(cur);
       const curNav = M() ? M().navUrl(cur.lat, cur.lng, "driving") : "#";
+      // Distances are only meaningful for a pinned stop — an unpinned address has no
+      // measurable leg (the optimiser appends it with a 0-km leg), so show the pin prompt instead of "0.0 km".
       const bits = [];
-      if (cur.legKm != null) bits.push(`${svg("nav", 12)} ${Number(cur.legKm).toFixed(1)} km from previous`);
-      if (cur.legMin != null) bits.push(`~${cur.legMin} min`);
-      if (cur.distanceFromWarehouseKm != null) bits.push(`${Number(cur.distanceFromWarehouseKm).toFixed(1)} km from warehouse`);
+      if (!cur.noCoords) {
+        if (cur.legKm != null) bits.push(`${svg("nav", 12)} ${Number(cur.legKm).toFixed(1)} km from previous`);
+        if (cur.legMin != null) bits.push(`~${cur.legMin} min`);
+        if (cur.distanceFromWarehouseKm != null) bits.push(`${Number(cur.distanceFromWarehouseKm).toFixed(1)} km from warehouse`);
+      }
       return `<div class="dl-card dl-navcard">
         <div class="dl-navcard-h"><span class="dl-navcard-tag">Current stop · #${cur.seq}</span>${cur.noCoords ? '<span class="badge amber">Location not pinned</span>' : ""}<span class="dl-navcard-prog">${s.done}/${s.total} done</span></div>
         <div class="dl-navcard-name">${esc(cur.name)}</div>
@@ -197,7 +201,7 @@ window.DOODLY_DELIVERY = (function () {
           <a class="btn btn-primary"${cur.noCoords ? ' aria-disabled="true" style="opacity:.5;pointer-events:none"' : ` href="${curNav}" target="_blank" rel="noopener"`}>${svg("nav", 16)} Navigate to stop</a>
           <button class="btn btn-ghost" id="dlGoCur">View stop details</button>
         </div>
-        <div class="dl-navcard-next">${nxt ? `${svg("nav", 12)} Next: <b>#${nxt.seq} ${esc(nxt.name)}</b>${nxt.legKm != null ? ` · ${Number(nxt.legKm).toFixed(1)} km further` : ""}` : "This is your final stop before returning to the warehouse."}</div>
+        <div class="dl-navcard-next">${nxt ? `${svg("nav", 12)} Next: <b>#${nxt.seq} ${esc(nxt.name)}</b>${nxt.noCoords ? " · 📍 location not pinned" : (nxt.legKm != null ? ` · ${Number(nxt.legKm).toFixed(1)} km further` : "")}` : "This is your final stop before returning to the warehouse."}</div>
       </div>`;
     }
 
@@ -266,7 +270,7 @@ window.DOODLY_DELIVERY = (function () {
       const stepIdx = WORKFLOW.findIndex((w) => w[0] === status);
       const done = status === "delivered";
       const isCur = !done && (currentStop() || {}).id === s2.id;
-      const legTxt = s2.legKm != null ? `${Number(s2.legKm).toFixed(1)} km from previous${s2.legMin != null ? ` · ~${s2.legMin} min` : ""}` : "";
+      const legTxt = (!s2.noCoords && s2.legKm != null) ? `${Number(s2.legKm).toFixed(1)} km from previous${s2.legMin != null ? ` · ~${s2.legMin} min` : ""}` : "";
       return `<div class="dl-stop ${done ? "done" : ""} ${isCur ? "cur" : ""}" id="card-${s2.id}" data-id="${s2.id}">
         ${isCur ? `<div class="dl-stop-cur">${svg("nav", 12)} Current stop</div>` : ""}
         <div class="dl-stop-top">
@@ -283,7 +287,9 @@ window.DOODLY_DELIVERY = (function () {
             (xtra ? `<div class="muted-sm" style="margin-top:2px">${esc(xtra)}</div>` : "") +
             (s2.customerName && s2.customerName !== s2.name ? `<div class="muted-sm" style="margin-top:2px">Account: ${esc(s2.customerName)}</div>` : "");
         })()}
-        ${legTxt ? `<div class="dl-stop-leg">${svg("nav", 12)} ${legTxt}${s2.cumulativeKm != null ? ` · ${Number(s2.cumulativeKm).toFixed(1)} km cumulative` : ""}</div>` : ""}
+        ${s2.noCoords
+          ? `<div class="dl-stop-leg" style="color:#a15b12">${svg("pin", 12)} Location not pinned — distance unavailable. Ask the customer to set their map pin.</div>`
+          : (legTxt ? `<div class="dl-stop-leg">${svg("nav", 12)} ${legTxt}${s2.cumulativeKm != null ? ` · ${Number(s2.cumulativeKm).toFixed(1)} km cumulative` : ""}</div>` : "")}
         ${s2.instructions ? `<div class="dl-instr">${svg("alert", 13)} ${esc(s2.instructions)}</div>` : ""}
         <div class="dl-steps">${WORKFLOW.map((w, i) => `<span class="dl-step ${i <= stepIdx ? "on" : ""}">${esc(w[1])}</span>`).join('<span class="dl-step-sep"></span>')}</div>
         <div class="dl-bottles">

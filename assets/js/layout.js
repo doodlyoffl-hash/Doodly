@@ -2812,9 +2812,12 @@
         var STA = { DELIVERED: ["green", "Delivered"], FAILED: ["red", "Failed"], SKIPPED: ["red", "Skipped"], OUT_FOR_DELIVERY: ["amber", "Out"], ON_THE_WAY: ["amber", "On the way"], REACHED: ["amber", "Near"] };
         var rows = stops.map(function (s) {
           var m = STA[s.status] || ["blue", "Assigned"];
+          var unpinned = s.lat == null || s.lng == null;
+          var fromPrev = unpinned ? '<span class="muted-sm" style="color:#a15b12">📍 not pinned</span>'
+            : (n1(s.legKm) + ' km' + (s.legMin != null ? '<br><span class="muted-sm">~' + s.legMin + ' min</span>' : ''));
           return '<tr><td><b>' + s.seq + '</b></td><td><span class="strong">' + esc(s.customer) + '</span><br><span class="muted-sm">' + esc(s.address) + '</span></td>' +
-            '<td>' + n1(s.legKm) + ' km' + (s.legMin != null ? '<br><span class="muted-sm">~' + s.legMin + ' min</span>' : '') + '</td>' +
-            '<td>' + n1(s.cumulativeKm) + ' km</td>' +
+            '<td>' + fromPrev + '</td>' +
+            '<td>' + (unpinned ? '—' : n1(s.cumulativeKm) + ' km') + '</td>' +
             '<td><span class="badge ' + m[0] + '">' + m[1] + '</span></td></tr>';
         }).join("") || '<tr><td colspan="5" class="muted-sm">No stops for this day.</td></tr>';
         body.innerHTML =
