@@ -76,6 +76,10 @@ window.DOODLY_MANIFEST = (function () {
       { type:"testimonialGrid" }, { type:"faqSection" }, { type:"downloadApp" }, { type:"ctaBand" },
     ]},
 
+    "check-delivery": { surface:"public", title:"Check Delivery Availability", full:true,
+      hero:{ eyebrow:"Delivery coverage", title:"Do we deliver to your door?", text:"Enter your pincode and find out in seconds — fresh A2 buffalo milk, in glass bottles, at your step before 7 AM." },
+      blocks:[ { type:"html", html:`<div id="checkDeliveryMount"></div>` } ] },
+
     "about": { surface:"public", title:"About Us", hero:{ eyebrow:"Our story", title:"Fresh milk, the way it used to be.", text:"DOODLY is built on a simple idea: milk you can trace. A small circle of family-run farms, every batch tested, kept cold through the chain, bottled in glass — at your door before 7." }, blocks:[
       { type:"aboutPage" },
       { type:"cardGrid", cols:3, cards:[

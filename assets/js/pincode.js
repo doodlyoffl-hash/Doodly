@@ -283,18 +283,114 @@ window.DOODLY_PINCODE = (function () {
   }
   function mountHomeFab() {
     if (document.querySelector(".pc-fab")) return;
-    const fab = document.createElement("button");
-    fab.type = "button";
+    // A real link to the dedicated, shareable page (single reusable experience).
+    // An <a> lets middle-click / open-in-new-tab work and is crawlable.
+    const fab = document.createElement("a");
     fab.className = "pc-fab";
-    fab.setAttribute("aria-haspopup", "dialog");
+    fab.href = "/check-delivery.html";
     fab.setAttribute("aria-label", "Check delivery availability");
     fab.innerHTML = '<span class="pc-fab-ic" aria-hidden="true">' + I.pin + '</span><span class="pc-fab-txt">Check Delivery Availability</span>';
-    fab.addEventListener("click", openCheckerModal);
+    fab.addEventListener("click", function () { trackDeliveryEvent("fab_click"); });   // navigation via href
     document.body.appendChild(fab);
     return fab;
   }
+
+  /* ============================================================
+     Dedicated shareable page  (/check-delivery)
+     Reuses mountChecker (no logic duplicated) + conversion CTAs, a native
+     share button with copy-link fallback, and analytics on every key event.
+     ============================================================ */
+  const SHARE_TITLE = "DOODLY — Check Delivery Availability";
+  const SHARE_TEXT = "Fresh A2 buffalo milk delivered to your doorstep. Check if DOODLY delivers to your area in seconds.";
+  function pageShareUrl() {
+    const c = document.querySelector('link[rel="canonical"]');
+    return (c && c.href) || (location.origin + "/check-delivery");
+  }
+  // Analytics — mirrors search.js: local counters + standard hooks (dataLayer +
+  // a DOM CustomEvent) so any analytics wired later captures it. No new backend.
+  function trackDeliveryEvent(event, data) {
+    try {
+      const K = "doodly-delivery-analytics";
+      let c = {}; try { c = JSON.parse(localStorage.getItem(K) || "{}"); } catch (e) {}
+      c[event] = (c[event] || 0) + 1;
+      try { localStorage.setItem(K, JSON.stringify(c)); } catch (e) {}
+      window.dataLayer = window.dataLayer || [];
+      window.dataLayer.push(Object.assign({ event: "doodly_delivery_" + event }, data || {}));
+      document.dispatchEvent(new CustomEvent("doodly:analytics", { detail: Object.assign({ category: "check_delivery", event: event }, data || {}) }));
+    } catch (e) {}
+  }
+  function fallbackCopy(text) {
+    try { const t = document.createElement("textarea"); t.value = text; t.style.position = "fixed"; t.style.opacity = "0"; document.body.appendChild(t); t.focus(); t.select(); document.execCommand("copy"); t.remove(); return true; } catch (e) { return false; }
+  }
+  function copyLink(url) {
+    trackDeliveryEvent("copy_link");
+    const done = () => toast("Link copied — paste it anywhere to share.");
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done).catch(() => { fallbackCopy(url); done(); });
+    else { fallbackCopy(url); done(); }
+  }
+  function openShareFallback(url) {
+    const old = document.querySelector(".pc-share-ov"); if (old) old.remove();
+    const msg = SHARE_TEXT + " " + url, e = encodeURIComponent;
+    const ov = document.createElement("div"); ov.className = "pc-share-ov";
+    ov.innerHTML =
+      '<div class="pc-share-sheet" role="dialog" aria-modal="true" aria-label="Share this page">' +
+        '<div class="pc-share-head"><b>Share this page</b><button type="button" class="pc-share-x" aria-label="Close">' + I.x + '</button></div>' +
+        '<div class="pc-share-grid">' +
+          '<a class="pc-share-opt" data-s="whatsapp" href="https://wa.me/?text=' + e(msg) + '" target="_blank" rel="noopener"><span aria-hidden="true">💬</span> WhatsApp</a>' +
+          '<a class="pc-share-opt" data-s="sms" href="sms:?&body=' + e(msg) + '"><span aria-hidden="true">📱</span> SMS</a>' +
+          '<a class="pc-share-opt" data-s="email" href="mailto:?subject=' + e(SHARE_TITLE) + '&body=' + e(msg) + '"><span aria-hidden="true">✉️</span> Email</a>' +
+          '<button type="button" class="pc-share-opt" data-s="copy"><span aria-hidden="true">🔗</span> Copy link</button>' +
+        '</div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(() => ov.classList.add("show"));
+    function close() { ov.classList.remove("show"); setTimeout(() => { if (ov.parentNode) ov.remove(); }, 200); }
+    ov.addEventListener("click", (ev) => { if (ev.target === ov) close(); });
+    ov.querySelector(".pc-share-x").addEventListener("click", close);
+    document.addEventListener("keydown", function onEsc(ev) { if (ev.key === "Escape") { close(); document.removeEventListener("keydown", onEsc); } });
+    ov.querySelectorAll(".pc-share-opt").forEach((b) => b.addEventListener("click", (ev) => {
+      const s = b.dataset.s;
+      if (s === "copy") { ev.preventDefault(); copyLink(url); close(); }
+      else { trackDeliveryEvent("share_" + s); setTimeout(close, 60); }
+    }));
+  }
+  function shareCheckDelivery() {
+    trackDeliveryEvent("share_click");
+    const url = pageShareUrl();
+    if (navigator.share) { navigator.share({ title: SHARE_TITLE, text: SHARE_TEXT, url: url }).then(() => trackDeliveryEvent("share_native")).catch(() => {}); return; }
+    openShareFallback(url);
+  }
+  function mountCheckDeliveryPage(host) {
+    if (!host) return;
+    trackDeliveryEvent("page_visit");
+    host.classList.add("cd-wrap");
+    host.innerHTML =
+      '<div class="cd-card">' +
+        '<div class="cd-check"></div>' +
+        '<div class="cd-cta" hidden>' +
+          '<a class="btn btn-primary cd-sub" href="/subscriptions.html">Start a subscription</a>' +
+          '<a class="btn btn-ghost cd-shop" href="/products.html">Shop now</a>' +
+        '</div>' +
+        '<div class="cd-support" hidden>' +
+          '<p class="cd-support-t">We\'re not in your area just yet — join the waitlist above and we\'ll notify you the moment we launch.</p>' +
+          '<div class="cd-support-btns"><a class="btn btn-ghost cd-contact" href="/contact.html">Contact support</a><a class="btn btn-ghost cd-browse" href="/">Continue browsing</a></div>' +
+        '</div>' +
+        '<div class="cd-share-row"><button type="button" class="btn btn-ghost cd-share">' + I.pin + ' Share this page</button></div>' +
+      '</div>';
+    const cta = host.querySelector(".cd-cta"), support = host.querySelector(".cd-support");
+    mountChecker(host.querySelector(".cd-check"), { onResult: function (res) {
+      if (!res || !res.valid) { cta.hidden = true; support.hidden = true; return; }
+      trackDeliveryEvent("pin_check", { serviceable: !!res.serviceable });
+      if (res.serviceable) { trackDeliveryEvent("serviceable_check"); cta.hidden = false; support.hidden = true; }
+      else { trackDeliveryEvent("non_serviceable_check"); cta.hidden = true; support.hidden = false; }
+    } });
+    host.querySelector(".cd-share").addEventListener("click", shareCheckDelivery);
+    host.querySelector(".cd-sub").addEventListener("click", () => trackDeliveryEvent("subscription_click"));
+    host.querySelector(".cd-shop").addEventListener("click", () => trackDeliveryEvent("shop_click"));
+    host.querySelector(".cd-contact").addEventListener("click", () => trackDeliveryEvent("contact_support_click"));
+  }
+
   function initHomeFab() { try { if (document.body && document.body.dataset && document.body.dataset.route === "home") mountHomeFab(); } catch (e) {} }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initHomeFab); else initHomeFab();
 
-  return { list, setList, resetList, zones, zoneName, validate, validateLive, lookup, getPin, setPin, isServiceable, waitlist, addWaitlist, mountChecker, mountAdmin, toast, openCheckerModal, mountHomeFab };
+  return { list, setList, resetList, zones, zoneName, validate, validateLive, lookup, getPin, setPin, isServiceable, waitlist, addWaitlist, mountChecker, mountAdmin, toast, openCheckerModal, mountHomeFab, mountCheckDeliveryPage, shareCheckDelivery, trackDeliveryEvent };
 })();

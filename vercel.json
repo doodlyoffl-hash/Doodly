@@ -5,6 +5,8 @@
   ],
   "rewrites": [
     { "source": "/signup", "destination": "/signup.html" },
-    { "source": "/register", "destination": "/register.html" }
+    { "source": "/register", "destination": "/register.html" },
+    { "source": "/check-delivery", "destination": "/check-delivery.html" },
+    { "source": "/delivery-availability", "destination": "/check-delivery.html" }
   ]
 }
