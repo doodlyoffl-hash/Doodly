@@ -246,7 +246,8 @@ window.DOODLY_DELIVERY = (function () {
           const cur = currentStop();
           const R = (_live && _live.route) || null;
           M().routeMap(host.querySelector("#dlRouteMap"), {
-            stops: all,
+            // rich per-stop data so the numbered markers can pop a full customer card
+            stops: all.map(function (s2) { return { lat: s2.lat, lng: s2.lng, name: s2.name, mobile: s2.mobile, address: s2.address, seq: s2.seq, status: stStatus(st, s2.id), bottles: s2.bottlesExpected, bottlesPending: Math.max(0, (s2.bottlesExpected || 0) - stBottles(st, s2.id)), legKm: s2.legKm, cumulativeKm: s2.cumulativeKm, distanceFromWarehouseKm: s2.distanceFromWarehouseKm, etaMinutes: s2.etaMinutes }; }),
             origin: (R && R.warehouse) || null,   // warehouse-anchored polyline (start AND end)
             roundTrip: true,
             currentIndex: cur ? all.indexOf(cur) : -1,

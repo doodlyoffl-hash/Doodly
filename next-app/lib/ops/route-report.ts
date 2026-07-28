@@ -25,6 +25,7 @@ export interface RouteReportRow {
   plannedKm: number | null;
   plannedMin: number | null;
   distanceSoFarKm: number; // sum of the delivered stops' optimised legs (actual, future-ready)
+  efficiencyPct: number;   // completed / total stops (route completion %)
   source: string;          // ROAD | HAVERSINE | —
 }
 
@@ -85,6 +86,7 @@ export async function routeReport(dateIso?: string | null): Promise<RouteReport>
       totalStops: a.total, completed: a.completed, missed: a.missed, skipped: a.skipped,
       plannedKm: t?.plannedKm ?? null, plannedMin: t?.plannedMin ?? null,
       distanceSoFarKm: Math.round(a.distanceSoFarKm * 100) / 100,
+      efficiencyPct: a.total ? Math.round((a.completed / a.total) * 100) : 0,
       source: t?.source ?? "—",
     };
   }).sort((x, y) => x.executive.localeCompare(y.executive));
@@ -98,19 +100,20 @@ export async function routeReport(dateIso?: string | null): Promise<RouteReport>
     distanceSoFarKm: Math.round(data.reduce((s, r) => s + r.distanceSoFarKm, 0) * 10) / 10,
   };
 
+  const overallEff = totals.stops ? Math.round((totals.completed / totals.stops) * 100) : 0;
   const columns = [
     { label: "Executive" }, { label: "Emp ID" }, { label: "Shift / route" },
     { label: "Stops", right: true }, { label: "Completed", right: true }, { label: "Missed", right: true },
     { label: "Planned km (round trip)", right: true }, { label: "Est. travel (min)", right: true },
-    { label: "Distance so far (km)", right: true }, { label: "Optimiser" },
+    { label: "Distance so far (km)", right: true }, { label: "Efficiency", right: true }, { label: "Optimiser" },
   ];
   const rows = data.map((r) => [
     r.executive, r.employeeId, r.route,
     String(r.totalStops), String(r.completed), String(r.missed),
     r.plannedKm != null ? n1(r.plannedKm) : "—", r.plannedMin != null ? String(r.plannedMin) : "—",
-    n1(r.distanceSoFarKm), r.source === "ROAD" ? "Road" : r.source === "HAVERSINE" ? "Distance" : "—",
+    n1(r.distanceSoFarKm), r.efficiencyPct + "%", r.source === "ROAD" ? "Road" : r.source === "HAVERSINE" ? "Distance" : "—",
   ]);
-  const totalRow = ["TOTAL", "", `${totals.executives} exec(s)`, String(totals.stops), String(totals.completed), String(totals.missed), n1(totals.plannedKm), "", n1(totals.distanceSoFarKm), ""];
+  const totalRow = ["TOTAL", "", `${totals.executives} exec(s)`, String(totals.stops), String(totals.completed), String(totals.missed), n1(totals.plannedKm), "", n1(totals.distanceSoFarKm), overallEff + "%", ""];
 
   return {
     type: "route", date: iso,

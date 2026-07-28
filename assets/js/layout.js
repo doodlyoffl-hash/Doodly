@@ -2802,8 +2802,12 @@
         var body = ov.querySelector("#er-body"); if (!body) return;
         var stops = r.stops || [], R = r.route || {}, wh = r.warehouse || null;
         var n1 = function (v) { return (v == null) ? "—" : (Math.round(v * 10) / 10).toFixed(1); };
-        var kpis = [["Total stops", R.totalStops || stops.length], ["Completed", R.completedStops || 0], ["Remaining", R.remainingStops || 0],
-          ["Planned distance", n1(R.plannedKm) + " km"], ["Est. travel", (R.plannedMin != null ? R.plannedMin + " min" : "—")], ["Optimiser", R.source === "ROAD" ? "Road" : R.source === "HAVERSINE" ? "Distance" : "—"]];
+        var etaClock = (R.remainingStops > 0 && R.remainingMin != null) ? new Date(Date.now() + R.remainingMin * 60000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
+        var kpis = [
+          ["Total stops", R.totalStops || stops.length], ["Completed", R.completedStops || 0], ["Remaining", R.remainingStops || 0],
+          ["Planned distance", n1(R.plannedKm) + " km"], ["Travelled", n1(R.travelledKm) + " km"], ["Distance left", (R.remainingKm != null ? n1(R.remainingKm) + " km" : "—")],
+          ["Est. completion", etaClock], ["Total bottles", (R.totalBottles != null ? R.totalBottles : "—")], ["Total milk", (R.totalMilkLitres != null ? R.totalMilkLitres + " L" : "—")],
+        ];
         var kpiHtml = kpis.map(function (x) { return '<div class="dl-an-kpi"><div class="n">' + x[1] + '</div><div class="l">' + x[0] + "</div></div>"; }).join("");
         var STA = { DELIVERED: ["green", "Delivered"], FAILED: ["red", "Failed"], SKIPPED: ["red", "Skipped"], OUT_FOR_DELIVERY: ["amber", "Out"], ON_THE_WAY: ["amber", "On the way"], REACHED: ["amber", "Near"] };
         var rows = stops.map(function (s) {
@@ -2817,12 +2821,13 @@
           '<div class="dl-an-kpis" style="grid-template-columns:repeat(3,1fr)">' + kpiHtml + "</div>" +
           '<div id="er-map" style="margin-top:14px;border-radius:14px;overflow:hidden"></div>' +
           '<div class="table-wrap" style="margin-top:14px"><table class="tbl"><thead><tr><th>#</th><th>Stop</th><th>From prev</th><th>Cumulative</th><th>Status</th></tr></thead><tbody>' + rows + "</tbody></table></div>" +
-          (wh ? '<div class="muted-sm" style="margin-top:10px">Round trip from ' + esc(wh.name) + ' and back — planned distance includes the return leg.</div>' : "");
+          '<div class="muted-sm" style="margin-top:10px">' + (R.source === "ROAD" ? "Road-optimised" : R.source === "HAVERSINE" ? "Distance-optimised" : "Optimised") + (wh ? ' · round trip from ' + esc(wh.name) + ' and back — planned distance includes the return leg.' : ".") + '</div>';
         try {
           if (window.DOODLY_MAPS) {
             var cur = -1; for (var i = 0; i < stops.length; i++) { if (stops[i].status !== "DELIVERED" && stops[i].status !== "SKIPPED" && stops[i].status !== "FAILED") { cur = i; break; } }
             DOODLY_MAPS.routeMap(ov.querySelector("#er-map"), {
-              stops: stops.map(function (s) { return { lat: s.lat, lng: s.lng, name: s.customer, status: s.status === "DELIVERED" ? "delivered" : "" }; }),
+              // full per-stop fields → status-coloured markers + clickable customer popups
+              stops: stops.map(function (s) { return { lat: s.lat, lng: s.lng, name: s.customer, mobile: s.mobile, address: s.address, seq: s.seq, status: s.status, bottles: s.bottles, legKm: s.legKm, cumulativeKm: s.cumulativeKm, distanceFromWarehouseKm: s.distanceFromWarehouseKm, etaMinutes: s.etaMinutes }; }),
               origin: wh, roundTrip: true, currentIndex: cur, plannedKm: R.plannedKm, plannedMin: R.plannedMin, polyline: R.polyline,
             });
           }

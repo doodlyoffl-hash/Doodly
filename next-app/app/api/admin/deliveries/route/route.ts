@@ -49,7 +49,7 @@ export const GET = route("admin.deliveries.route", async (req: NextRequest) => {
         id: true, status: true, slot: true, sequence: true, bottleCount: true,
         legDistanceKm: true, legTravelMin: true, cumulativeKm: true, etaMinutes: true, distanceKm: true, routeSource: true,
         address: ADDR,
-        subscription: { select: { user: { select: { name: true, phone: true } }, address: ADDR, plan: { select: { name: true } } } },
+        subscription: { select: { user: { select: { name: true, phone: true } }, address: ADDR, plan: { select: { name: true } }, items: { select: { qty: true, variant: { select: { ml: true } } } } } },
         order: { select: { user: { select: { name: true, phone: true } }, address: ADDR } },
       },
     }),
@@ -59,29 +59,42 @@ export const GET = route("admin.deliveries.route", async (req: NextRequest) => {
   const stops = rows.map((d, i) => {
     const user = d.subscription?.user ?? d.order?.user ?? null;
     const addr = d.address ?? d.subscription?.address ?? d.order?.address ?? null;
+    // milk on this stop: subscription items (qty × variant.ml), else bottleCount × 1L default
+    const subMl = (d.subscription?.items ?? []).reduce((s, it) => s + (it.variant?.ml ?? 1000) * it.qty, 0);
+    const litres = Math.round(((subMl || (d.bottleCount ?? 1) * 1000) / 1000) * 100) / 100;
     return {
       id: d.id, seq: d.sequence ?? i + 1, status: d.status, slot: d.slot ?? null,
       customer: user?.name ?? "—", mobile: user?.phone ?? "—",
       address: fmtAddr(addr), area: addr?.area ?? addr?.city ?? "—", pincode: addr?.pincode ?? null,
       lat: addr?.lat ?? null, lng: addr?.lng ?? null,
       plan: d.subscription?.plan?.name ?? "One-time",
-      bottles: d.bottleCount ?? 1,
+      bottles: d.bottleCount ?? 1, litres,
       legKm: r2(d.legDistanceKm), legMin: d.legTravelMin ?? null,
       cumulativeKm: r2(d.cumulativeKm), etaMinutes: d.etaMinutes ?? null,
       distanceFromWarehouseKm: r2(d.distanceKm), routeSource: d.routeSource ?? null,
     };
   });
 
-  const completed = stops.filter((s) => s.status === "DELIVERED").length;
+  const done = stops.filter((s) => s.status === "DELIVERED");
+  const completed = done.length;
+  // Live progress: distance/time already travelled = the completed stops' optimised legs.
+  const travelledKm = Math.round(done.reduce((a, s) => a + (s.legKm ?? 0), 0) * 100) / 100;
+  const travelledMin = done.reduce((a, s) => a + (s.legMin ?? 0), 0);
+  const plannedKm = trip?.plannedDistanceKm ?? null, plannedMin = trip?.plannedDurationMin ?? null;
+  const totalBottles = stops.reduce((a, s) => a + (s.bottles ?? 0), 0);
+  const totalMilkLitres = Math.round(stops.reduce((a, s) => a + (s.litres ?? 0), 0) * 100) / 100;
   return ok({
     driver: { id: driver.id, name: driver.user?.name ?? "Executive", employeeId: driver.employeeId, vehicleNo: driver.vehicleNo },
     date: iso,
     warehouse: { name: wh.name, lat: wh.lat, lng: wh.lng },
     route: {
-      plannedKm: r2(trip?.plannedDistanceKm), plannedMin: trip?.plannedDurationMin ?? null,
+      plannedKm: r2(plannedKm), plannedMin: plannedMin,
       source: trip?.routeSource ?? stops.find((s) => s.routeSource)?.routeSource ?? null,
       polyline: trip?.routePolyline ?? null,   // road geometry for the map (ROAD only)
       totalStops: stops.length, completedStops: completed, remainingStops: stops.length - completed,
+      travelledKm, remainingKm: plannedKm != null ? r2(Math.max(0, plannedKm - travelledKm)) : null,
+      travelledMin, remainingMin: plannedMin != null ? Math.max(0, plannedMin - travelledMin) : null,
+      totalBottles, totalMilkLitres,
     },
     stops,
   });

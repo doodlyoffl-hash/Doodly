@@ -428,6 +428,38 @@ window.DOODLY_MAPS = (function () {
     const hasRoad = !!(road && road.length >= 2);
     const meta = `<div class="mp-route-meta"><span>${svgPin(13)} ${allStops.length} stops</span><span>${dispDist.toFixed(1)} km</span><span>~${dispEta} min</span></div>`;
 
+    // Status-coloured numbered markers: warehouse blue · current green · completed grey
+    // · upcoming red · cancelled amber (Live Route Map spec).
+    const MARK = { wh: "#2563EB", cur: "#1FAE66", done: "#9AA5A0", up: "#E5484D", cancel: "#E0A800" };
+    const CLS_LABEL = { cur: "Current stop", done: "Delivered", up: "Upcoming", cancel: "Cancelled" };
+    const clsOf = (s, i) => {
+      const st = String(s.status || "").toLowerCase();
+      if (st === "cancelled" || st === "failed" || st === "skipped") return "cancel";
+      if (st === "delivered" || st === "completed") return "done";
+      return i === curI ? "cur" : "up";
+    };
+    // Info popup shown when a numbered marker is clicked (Google InfoWindow content).
+    function popupHtml(s, n, cls) {
+      const line = (t) => `<div style="font-size:12.5px;margin:2px 0">${t}</div>`;
+      const rows = [];
+      if (s.mobile) rows.push(line("📞 " + esc(s.mobile)));
+      if (s.address) rows.push(line(esc(s.address)));
+      const b = [];
+      if (s.bottles != null) b.push(s.bottles + " bottle" + (s.bottles === 1 ? "" : "s"));
+      if (s.bottlesPending) b.push(s.bottlesPending + " to collect");
+      if (b.length) rows.push(line("🍼 " + b.join(" · ")));
+      const d = [];
+      if (s.legKm != null) d.push(Number(s.legKm).toFixed(1) + " km from previous");
+      if (s.distanceFromWarehouseKm != null) d.push(Number(s.distanceFromWarehouseKm).toFixed(1) + " km from warehouse");
+      if (d.length) rows.push(line(d.join(" · ")));
+      if (s.etaMinutes != null) rows.push(line("ETA ~" + s.etaMinutes + " min"));
+      const nav = (fin(s.lat) && fin(s.lng)) ? `<a href="${navUrl(s.lat, s.lng, "driving")}" target="_blank" rel="noopener" style="display:inline-block;margin-top:7px;padding:5px 11px;background:#1FAE66;color:#fff;border-radius:7px;font-weight:700;font-size:12px;text-decoration:none">Navigate</a>` : "";
+      return `<div style="min-width:190px;max-width:260px;font-family:system-ui,-apple-system,sans-serif;color:#173a2c;line-height:1.35">
+        <div style="font-weight:800">Stop ${n} · ${esc(s.name || "Customer")}</div>
+        <div style="font-size:11.5px;color:#5a6b62;margin:1px 0 4px">${CLS_LABEL[cls] || "Stop"}</div>
+        ${rows.join("")}${nav}</div>`;
+    }
+
     function svgVariant() {
       const pts = mapped.map((x) => toXY(x.s.lat, x.s.lng)), cp = toXY(cur.lat, cur.lng);
       let line;
@@ -441,8 +473,8 @@ window.DOODLY_MAPS = (function () {
       host.innerHTML = `
         <svg viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid slice" aria-label="Delivery route">${mapBg()}
           <path d="${line}" class="mp-route-line"/>
-          <g class="mp-cur" transform="translate(${cp.x},${cp.y})"><circle r="11" class="mp-cur-halo"/><circle r="6" class="mp-cur-dot"/></g>
-          ${mapped.map((x, k) => { const p = pts[k]; const done = x.s.status === "delivered" || x.s.status === "completed"; const isCur = x.i === curI; return `<g class="mp-stop ${done ? "done" : ""} ${isCur ? "cur" : ""}" data-i="${x.i}" transform="translate(${p.x},${p.y})">${isCur ? '<circle r="21" fill="none" stroke="#1FAE66" stroke-width="3" opacity="0.95"/>' : ""}<circle r="15" class="mp-stop-c"${isCur ? ' fill="#1FAE66"' : ""}/><text y="5" text-anchor="middle" class="mp-stop-n"${isCur ? ' fill="#fff"' : ""}>${x.i + 1}</text></g>`; }).join("")}
+          <g transform="translate(${cp.x},${cp.y})"><circle r="12" fill="${MARK.wh}" opacity="0.22"/><circle r="8" fill="${MARK.wh}" stroke="#fff" stroke-width="2"/><text y="4" text-anchor="middle" fill="#fff" font-weight="800" font-size="10">W</text></g>
+          ${mapped.map((x, k) => { const p = pts[k]; const cls = clsOf(x.s, x.i); const isCur = cls === "cur"; const col = MARK[cls] || MARK.up; return `<g class="mp-stop ${cls}" data-i="${x.i}" transform="translate(${p.x},${p.y})">${isCur ? '<circle r="21" fill="none" stroke="#1FAE66" stroke-width="3" opacity="0.95"/>' : ""}<circle r="15" fill="${col}" stroke="#fff" stroke-width="2"/><text y="5" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">${x.i + 1}</text></g>`; }).join("")}
         </svg>${meta}`;
       if (o.onStop) host.querySelectorAll(".mp-stop").forEach((g) => g.addEventListener("click", () => o.onStop(Number(g.dataset.i))));
     }
@@ -451,14 +483,16 @@ window.DOODLY_MAPS = (function () {
       host.innerHTML = `<div class="mp-gmap" style="width:100%;height:280px"></div>${meta}`;
       const map = new gm.Map(host.querySelector(".mp-gmap"), { disableDefaultUI: true, zoomControl: true, clickableIcons: false, gestureHandling: "greedy" });
       const bounds = new gm.LatLngBounds();
+      const info = new gm.InfoWindow();
+      const dot = (color, r) => ({ path: gm.SymbolPath.CIRCLE, scale: r, fillColor: color, fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2 });
       const path = [{ lat: cur.lat, lng: cur.lng }];
-      new gm.Marker({ position: { lat: cur.lat, lng: cur.lng }, map, label: anchored ? { text: "W", fontWeight: "800" } : "•", title: originLabel });
+      // Warehouse = blue, the route's start & end.
+      new gm.Marker({ position: { lat: cur.lat, lng: cur.lng }, map, icon: dot(MARK.wh, 14), label: anchored ? { text: "W", color: "#fff", fontWeight: "800", fontSize: "12px" } : { text: "•", color: "#fff" }, title: originLabel, zIndex: 1000 });
       mapped.forEach((x) => {
         const s = x.s, ll = { lat: s.lat, lng: s.lng };
-        const done = s.status === "delivered" || s.status === "completed";
-        const isCur = x.i === curI;
-        const m = new gm.Marker({ position: ll, map, label: isCur ? { text: String(x.i + 1), fontWeight: "800", color: "#0F3D2E" } : String(x.i + 1), title: s.name || ("Stop " + (x.i + 1)), opacity: done ? 0.45 : 1, zIndex: isCur ? 999 : undefined });
-        if (o.onStop) m.addListener("click", () => o.onStop(x.i));
+        const cls = clsOf(s, x.i), color = MARK[cls] || MARK.up, isCur = cls === "cur";
+        const m = new gm.Marker({ position: ll, map, icon: dot(color, isCur ? 15 : 13), label: { text: String(x.i + 1), color: "#fff", fontWeight: "800", fontSize: "12px" }, title: (s.name || ("Stop " + (x.i + 1))), zIndex: isCur ? 999 : cls === "done" ? 1 : 5 });
+        m.addListener("click", () => { info.setContent(popupHtml(s, x.i + 1, cls)); info.open(map, m); if (o.onStop) o.onStop(x.i); });
         path.push(ll); bounds.extend(ll);
       });
       if (roundTrip && mapped.length) path.push({ lat: cur.lat, lng: cur.lng });
