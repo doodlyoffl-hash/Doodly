@@ -828,6 +828,7 @@
     if (window.DOODLY_CHECKOUT) window.DOODLY_CHECKOUT.init(document);
     if (window.DOODLY_PINCODE) { const pc = $("#pincodeCheckerMount"); if (pc) window.DOODLY_PINCODE.mountChecker(pc); }
     if (window.DOODLY_PINCODE && DOODLY_PINCODE.mountCheckDeliveryPage) { const cd = $("#checkDeliveryMount"); if (cd) DOODLY_PINCODE.mountCheckDeliveryPage(cd); }
+    if (window.DOODLY_REWARDS && DOODLY_REWARDS.mountAll) { try { DOODLY_REWARDS.mountAll(); } catch (e) {} }
     if (window.DOODLY_UNFOLD) { const um = $("#unfoldMount"); if (um) window.DOODLY_UNFOLD.mount(um); }
     { const caf = $("#careersApplyForm"); if (caf) wireCareersForm(caf); }
     wireFarmerCards();  // Our Farmers → expandable farm profile cards

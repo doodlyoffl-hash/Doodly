@@ -26,6 +26,7 @@ import { rateLimit } from "@/lib/auth/ratelimit";
 import type { ReqContext } from "@/lib/auth/request";
 import { log } from "@/lib/logger";
 import { earn } from "@/lib/loyalty/service";
+import { issueReward, rewardClaimUrl } from "@/lib/rewards/service";
 
 /* ---------------- campaign schedule (defaults; admin-editable) ---------------- */
 
@@ -371,62 +372,28 @@ export async function ensureWinner(puzzleId: string) {
   return winner;
 }
 
-/** Award the FREE 7-Day Fresh Start subscription (reuses Plan p7 + Subscription). */
+/** Issue the FREE 7-Day (1 L A2 Buffalo Milk) reward to the winner as a claimable
+    RewardRedemption (code + claim link). The winner activates it on /rewards/claim
+    by choosing a serviceable address → redeemReward creates the ₹0 p7 subscription.
+    Idempotent per winner; prizeStatus PENDING_ADDRESS = issued, awaiting claim. */
 export async function awardPrize(winnerId: string, opts?: { actorId?: string | null; actorRole?: string | null; manual?: boolean }) {
-  const winner = await db.puzzleWinner.findUnique({ where: { id: winnerId }, include: { puzzle: true, user: { include: { addresses: true } } } });
+  const winner = await db.puzzleWinner.findUnique({ where: { id: winnerId }, include: { puzzle: true } });
   if (!winner) throw Errors.notFound("Winner record not found.");
-  if (winner.prizeStatus === "AWARDED" && winner.subscriptionId) return winner; // idempotent
+  if (winner.prizeStatus === "AWARDED" && winner.subscriptionId) return winner;        // already redeemed
+  const existing = await db.rewardRedemption.findFirst({ where: { winnerId: winner.id } });
+  if (existing) return winner;                                                          // reward already issued
 
-  const plan = await db.plan.findUnique({ where: { slug: "p7" } });
-  if (!plan) {
-    await db.puzzleWinner.update({ where: { id: winner.id }, data: { prizeStatus: "FAILED", notes: "Plan p7 missing" } });
-    throw Errors.notFound("Prize plan (7-Day Fresh Start) not found.");
-  }
-
-  const address = winner.user.addresses.find((a) => a.isDefault) ?? winner.user.addresses[0];
-  if (!address) {
-    await db.puzzleWinner.update({ where: { id: winner.id }, data: { prizeStatus: "PENDING_ADDRESS", notes: "Winner has no delivery address yet" } });
-    await notifyUser(winner.userId, "🏆 You won the DOODLY Puzzle Challenge!",
-      `You won month ${winner.puzzle.monthIndex} (${winner.puzzle.title})! Add a delivery address to receive your FREE 7-Day Fresh Start subscription.`);
-    return db.puzzleWinner.findUnique({ where: { id: winner.id } });
-  }
-
-  // default prize item: 1 × A2 Buffalo Milk 500 ml (falls back to any milk variant)
-  const milk = await db.product.findUnique({ where: { slug: "milk" }, include: { variants: true } });
-  const variant = milk?.variants.find((v) => v.ml === 500) ?? milk?.variants[0];
-  if (!variant) {
-    await db.puzzleWinner.update({ where: { id: winner.id }, data: { prizeStatus: "FAILED", notes: "No milk variant available" } });
-    throw Errors.notFound("Prize product variant not found.");
-  }
-
-  const start = new Date(); start.setDate(start.getDate() + 1); start.setHours(0, 0, 0, 0);
-  const end = new Date(start); end.setDate(end.getDate() + plan.days);
-
-  const sub = await db.$transaction(async (tx) => {
-    const s = await tx.subscription.create({
-      data: {
-        userId: winner.userId, planId: plan.id, addressId: address.id,
-        status: "ACTIVE", startDate: start, endDate: end, nextDeliveryAt: start,
-        autoRenew: false,
-        notes: `DOODLY Monthly Puzzle Challenge prize — Month ${winner.puzzle.monthIndex} (${winner.puzzle.title}). Free of charge.`,
-        items: { create: [{ variantId: variant.id, qty: 1 }] },
-      },
-    });
-    await tx.subscriptionEvent.create({
-      data: {
-        subscriptionId: s.id, type: "CREATED",
-        summary: `FREE 7-Day Fresh Start — Puzzle Challenge prize (Month ${winner.puzzle.monthIndex})`,
-        detail: { source: "puzzle_challenge", puzzleId: winner.puzzleId, winnerId: winner.id, manual: !!opts?.manual },
-        byId: opts?.actorId ?? null, byRole: opts?.actorRole ?? "system",
-      },
-    });
-    await tx.puzzleWinner.update({ where: { id: winner.id }, data: { prizeStatus: "AWARDED", subscriptionId: s.id, notes: opts?.manual ? "Awarded manually" : null } });
-    return s;
+  const expiresAt = new Date(); expiresAt.setDate(expiresAt.getDate() + 60);            // 60-day claim window
+  const reward = await issueReward({
+    winnerId: winner.id, issuedToUserId: winner.userId,
+    campaignName: `Puzzle Challenge — Month ${winner.puzzle.monthIndex} (${winner.puzzle.title})`,
+    source: "puzzle_challenge", productSlug: "milk", variantMl: 1000, qty: 1, planSlug: "p7",
+    expiresAt, createdById: opts?.actorId ?? null, notes: opts?.manual ? "Reward issued manually" : null,
   });
-
+  await db.puzzleWinner.update({ where: { id: winner.id }, data: { prizeStatus: "PENDING_ADDRESS", notes: opts?.manual ? "Reward issued manually" : null } });
   await notifyUser(winner.userId, "🏆 You won the DOODLY Puzzle Challenge!",
-    `Congratulations! You solved "${winner.puzzle.title}" best this month. Your FREE 7-Day Fresh Start subscription starts tomorrow — fresh A2 milk, on us.`);
-  await audit({ userId: opts?.actorId ?? winner.userId, actorRole: opts?.actorRole ?? "system", action: "puzzle.prize_awarded", target: `month ${winner.puzzle.monthIndex} → user ${winner.userId} (subscription ${sub.id})` });
+    `Congratulations — you solved "${winner.puzzle.title}" best this month! Claim your FREE 7 days of 1 L A2 Buffalo Milk: ${rewardClaimUrl(reward.token)} — or enter code ${reward.code} at doodly.in/rewards/claim. Valid until ${expiresAt.toDateString()}.`);
+  await audit({ userId: opts?.actorId ?? winner.userId, actorRole: opts?.actorRole ?? "system", action: "puzzle.prize_reward_issued", target: `month ${winner.puzzle.monthIndex} → user ${winner.userId} (reward ${reward.code})` });
   return db.puzzleWinner.findUnique({ where: { id: winner.id } });
 }
 

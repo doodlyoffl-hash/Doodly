@@ -119,6 +119,7 @@ $template = @'
   <script src="/assets/js/puzzle.js"></script>
   <script src="/assets/js/loyalty.js"></script>
   <script src="/assets/js/reviews.js"></script>
+  <script src="/assets/js/rewards.js"></script>
   <script src="/assets/js/account.js"></script>
   <script src="/assets/js/layout.js"></script>
 </body>
@@ -138,6 +139,8 @@ $seo = @{
     canonical = 'https://doodly.in/check-delivery'
   }
 }
+# Routes that must never be indexed (private, token-gated pages).
+$noindexRoutes = @('rewards/claim')
 function Build-HeadExtra($s) {
   $ld = '{"@context":"https://schema.org","@type":"WebPage","name":"' + $s.ogTitle + '","description":"' + $s.desc + '","url":"' + $s.canonical + '","publisher":{"@type":"Organization","name":"DOODLY","logo":"https://doodly.in/assets/img/logo.png"}}'
   $lines = @(
@@ -174,7 +177,8 @@ foreach ($m in $rx.Matches($manifest)) {
 
   $desc = $defaultDesc
   $headExtra = ''
-  if ($seo.ContainsKey($route)) { $desc = $seo[$route].desc; $headExtra = Build-HeadExtra $seo[$route] }
+  if ($noindexRoutes -contains $route) { $headExtra = "`n  <meta name=""robots"" content=""noindex, nofollow"">" }
+  elseif ($seo.ContainsKey($route)) { $desc = $seo[$route].desc; $headExtra = Build-HeadExtra $seo[$route] }
 
   $html = $template.Replace('{{ROUTE}}', $route).Replace('{{TITLE}}', $title).Replace('{{DESC}}', $desc).Replace('{{HEAD_EXTRA}}', $headExtra)
   [System.IO.File]::WriteAllText($path, $html, $utf8)

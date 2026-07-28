@@ -1194,6 +1194,7 @@ window.DOODLY_BLOCKS = (function () {
   R.deliveryPortal = () => `<div class="reveal" id="deliveryPortalMount"></div>`;
   R.deliveryProfile = () => `<div class="reveal" id="deliveryProfileMount"></div>`;
   R.packingSummary = () => `<div class="reveal" id="packingSummaryMount"></div>`;
+  R.rewardClaim = () => `<div id="rewardClaimMount"></div>`;
   R.hrDashboard = () => `<div class="reveal" id="hrDashboardMount"></div>`;
   R.hrEmployees = () => `<div class="reveal" id="hrEmployeesMount"></div>`;
   R.hrAttendance = () => `<div class="reveal" id="hrAttendanceMount"></div>`;

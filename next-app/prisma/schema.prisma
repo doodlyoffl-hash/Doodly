@@ -3278,3 +3278,45 @@ model OtpCode {
   @@index([phone, consumedAt])
   @@index([expiresAt])
 }
+
+// ============================================================
+// REWARD REDEMPTION — single-use claimable rewards (e.g. puzzle winners)
+// Each record carries BOTH a coupon `code` and a claim-link `token`; redeeming
+// it creates a normal ₹0 subscription (see lib/rewards/service.ts) so every
+// operational module treats it like any paid subscription. Nothing is deleted —
+// CANCELLED/EXPIRED are terminal states.
+// ============================================================
+enum RewardStatus {
+  ISSUED
+  REDEEMED
+  EXPIRED
+  CANCELLED
+}
+
+model RewardRedemption {
+  id               String       @id @default(cuid())
+  code             String       @unique                 // "DOODLYPUZZLE-8X4K2M" (single-use)
+  token            String       @unique                 // long crypto-random claim-link secret
+  campaignName     String                               // "Puzzle Challenge — Month 1 (…)"
+  source           String       @default("manual")      // "puzzle_challenge" | "manual"
+  productSlug      String       @default("milk")
+  variantMl        Int          @default(1000)
+  qty              Int          @default(1)
+  planSlug         String       @default("p7")
+  winnerId         String?                              // PuzzleWinner.id when puzzle-sourced
+  issuedToUserId   String?                              // pre-bound winner (User)
+  status           RewardStatus @default(ISSUED)
+  issuedAt         DateTime     @default(now())
+  expiresAt        DateTime?                            // configurable validity
+  redeemedAt       DateTime?
+  redeemedByUserId String?
+  subscriptionId   String?      @unique                 // the created reward subscription
+  createdById      String?
+  notes            String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @default(now()) @updatedAt
+
+  @@index([status])
+  @@index([issuedToUserId])
+  @@index([winnerId])
+}
