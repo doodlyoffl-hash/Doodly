@@ -66,9 +66,13 @@ window.DOODLY_PINCODE = (function () {
   /* ---------- waitlist ---------- */
   function waitlist() { try { return JSON.parse(localStorage.getItem("doodly-waitlist") || "[]"); } catch (e) { return []; } }
   function addWaitlist(rec) {
+    // Cache locally (offline / instant), then persist to the DB so any admin on any
+    // device sees it — the localStorage copy alone was invisible to the admin panel.
     const w = waitlist(); w.push(Object.assign({ date: new Date().toISOString() }, rec));
     try { localStorage.setItem("doodly-waitlist", JSON.stringify(w)); } catch (e) {}
-    return w;
+    const API = window.DOODLY_API;
+    if (API && API.post) return API.post("/api/geo/waitlist", rec).catch(function () { return null; });
+    return Promise.resolve(null);
   }
 
   /* ---------- icons ---------- */
@@ -164,6 +168,18 @@ window.DOODLY_PINCODE = (function () {
      ============================================================ */
   function mountAdmin(host) {
     if (!host) return;
+    let wlData = waitlist();   // instant local cache; replaced by the DB list on load
+    function loadWl() {
+      const API = window.DOODLY_API;
+      if (!API || !API.get) return Promise.resolve();
+      return API.get("/api/admin/waitlist").then(function (r) { wlData = (r && r.waitlist) || []; render(); }).catch(function () {});
+    }
+    function delWl(id) {
+      const API = window.DOODLY_API;
+      if (!id) return;
+      wlData = wlData.filter(function (w) { return w.id !== id; }); render();   // optimistic
+      if (API && API.del) API.del("/api/admin/waitlist?id=" + encodeURIComponent(id)).then(loadWl).catch(loadWl);
+    }
     function render() {
       const rows = list();
       const zopts = zones().map((z) => `<option value="${z.id}">${esc(z.name)}</option>`).join("");
@@ -178,12 +194,12 @@ window.DOODLY_PINCODE = (function () {
         <td><input class="input ds-i" data-k="eta" value="${esc(p.eta)}" style="width:96px"></td>
         <td><label class="check"><input type="checkbox" class="ds-i" data-k="enabled" ${p.enabled !== false ? "checked" : ""}></label></td>
         <td><button class="link pc-del" data-i="${i}" aria-label="Delete">${I.x}</button></td></tr>`;
-      const wl = waitlist();
+      const wl = wlData;
       const byPin = {}; wl.forEach((w) => { (byPin[w.pincode] = byPin[w.pincode] || []).push(w); });
       const wlGroups = Object.keys(byPin).sort().map((pin) => {
         const g = byPin[pin], e = lookup(pin);
         return `<div class="pc-wlg"><div class="pc-wlg-h"><b>${esc(pin)}</b> ${e ? esc(e.area) + ", " + esc(e.city) : "Unknown area"} <span class="badge amber">${g.length} waiting</span></div>
-          ${g.map((w) => `<div class="pc-wlg-row"><span>${esc(w.name)}</span><span>${esc(w.mobile)}</span><span>${esc(w.email || "—")}</span><span class="muted-sm">${new Date(w.date).toLocaleDateString("en-IN")}</span></div>`).join("")}</div>`;
+          ${g.map((w) => `<div class="pc-wlg-row"><span>${esc(w.name)}</span><span>${esc(w.mobile)}</span><span>${esc(w.email || "—")}</span><span class="muted-sm">${new Date(w.createdAt || w.date).toLocaleDateString("en-IN")}${w.id ? ` <button type="button" class="link pc-wl-del" data-id="${esc(w.id)}" title="Remove from waitlist" aria-label="Remove">${I.x}</button>` : ""}</span></div>`).join("")}</div>`;
       }).join("") || `<p class="muted-sm">No waitlist requests yet.</p>`;
 
       host.innerHTML = `
@@ -201,6 +217,7 @@ window.DOODLY_PINCODE = (function () {
       host.querySelector("#pc-reset").addEventListener("click", () => { resetList(); render(); });
       host.querySelector("#pc-csv").addEventListener("click", exportCsv);
       host.querySelectorAll(".pc-del").forEach((b) => b.addEventListener("click", () => { const a = list(); a.splice(Number(b.dataset.i), 1); setList(a); render(); }));
+      host.querySelectorAll(".pc-wl-del").forEach((b) => b.addEventListener("click", () => delWl(b.dataset.id)));
     }
     function save() {
       const rows = [].slice.call(host.querySelectorAll("tbody tr")).map((tr) => {
@@ -210,13 +227,14 @@ window.DOODLY_PINCODE = (function () {
       const ok = host.querySelector("#pc-saved"); if (ok) { ok.hidden = false; setTimeout(() => { ok.hidden = true; }, 2600); }
     }
     function exportCsv() {
-      const wl = waitlist();
+      const wl = wlData;
       const head = ["Name", "Mobile", "Email", "Address", "Pincode", "Date"];
-      const lines = [head.join(",")].concat(wl.map((w) => [w.name, w.mobile, w.email, w.address, w.pincode, new Date(w.date).toLocaleString("en-IN")].map((v) => `"${String(v || "").replace(/"/g, '""')}"`).join(",")));
+      const lines = [head.join(",")].concat(wl.map((w) => [w.name, w.mobile, w.email, w.address, w.pincode, new Date(w.createdAt || w.date).toLocaleString("en-IN")].map((v) => `"${String(v || "").replace(/"/g, '""')}"`).join(",")));
       const blob = new Blob([lines.join("\n")], { type: "text/csv" });
       const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "doodly-waitlist.csv"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     }
     render();
+    loadWl();   // pull the live list from the DB (visible to any admin, any device)
   }
 
   /* ============================================================
