@@ -2823,7 +2823,7 @@
             var cur = -1; for (var i = 0; i < stops.length; i++) { if (stops[i].status !== "DELIVERED" && stops[i].status !== "SKIPPED" && stops[i].status !== "FAILED") { cur = i; break; } }
             DOODLY_MAPS.routeMap(ov.querySelector("#er-map"), {
               stops: stops.map(function (s) { return { lat: s.lat, lng: s.lng, name: s.customer, status: s.status === "DELIVERED" ? "delivered" : "" }; }),
-              origin: wh, roundTrip: true, currentIndex: cur, plannedKm: R.plannedKm, plannedMin: R.plannedMin,
+              origin: wh, roundTrip: true, currentIndex: cur, plannedKm: R.plannedKm, plannedMin: R.plannedMin, polyline: R.polyline,
             });
           }
         } catch (e) {}

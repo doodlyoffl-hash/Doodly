@@ -250,7 +250,7 @@ window.DOODLY_DELIVERY = (function () {
             origin: (R && R.warehouse) || null,   // warehouse-anchored polyline (start AND end)
             roundTrip: true,
             currentIndex: cur ? all.indexOf(cur) : -1,
-            plannedKm: R ? R.plannedKm : null, plannedMin: R ? R.plannedMin : null,
+            plannedKm: R ? R.plannedKm : null, plannedMin: R ? R.plannedMin : null, polyline: R ? R.polyline : null,
             onStop: (i) => { const c = host.querySelector(`#card-${all[i].id}`); if (c) c.scrollIntoView({ behavior: "smooth", block: "center" }); },
           });
           // header "Navigate" always points at the CURRENT stop

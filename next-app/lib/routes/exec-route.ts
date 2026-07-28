@@ -79,7 +79,7 @@ export async function optimizeExecutiveRoute(driverId: string, dateIso?: string 
     // planned round-trip total = final stop cumulative + the return-to-warehouse leg
     const plannedKm = round2(cum + res.returnLeg.km);
     const plannedMin = eta + res.returnLeg.min;
-    await db.tripHistory.updateMany({ where: { driverId, date: { gte: start, lt: end } }, data: { plannedDistanceKm: plannedKm, plannedDurationMin: plannedMin, routeSource: res.source, routePlanHash: planHash } }).catch(() => {});
+    await db.tripHistory.updateMany({ where: { driverId, date: { gte: start, lt: end } }, data: { plannedDistanceKm: plannedKm, plannedDurationMin: plannedMin, routeSource: res.source, routePlanHash: planHash, routePolyline: res.polyline ?? null } }).catch(() => {});
 
     log.info("route.optimise", `driver ${driverId} ${iso}: ${rows.length} stops · ${plannedKm} km · ${res.source}`);
     return { stops: rows.length, plannedKm, source: res.source };

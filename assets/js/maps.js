@@ -381,6 +381,25 @@ window.DOODLY_MAPS = (function () {
      Route map  routeMap(host, { stops, currentIndex })
      stops: [{ lat, lng, name, status }]
      ============================================================ */
+  // Decode a Google-encoded polyline (the optimiser's road geometry) → [{lat,lng}].
+  // Standard algorithm; empty array on any bad input so callers can fall back safely.
+  function decodePolyline(str) {
+    if (!str || typeof str !== "string") return [];
+    let index = 0, lat = 0, lng = 0; const coords = [];
+    try {
+      while (index < str.length) {
+        let b, shift = 0, result = 0;
+        do { b = str.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+        lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+        shift = 0; result = 0;
+        do { b = str.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+        lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+        coords.push({ lat: lat / 1e5, lng: lng / 1e5 });
+      }
+    } catch (e) { return []; }
+    return coords;
+  }
+
   function routeMap(host, o) {
     if (!host) return;
     o = o || {}; const allStops = o.stops || [];
@@ -403,12 +422,21 @@ window.DOODLY_MAPS = (function () {
     const dispDist = (o.plannedKm != null) ? Number(o.plannedKm) : dist;
     const dispEta = (o.plannedMin != null) ? Number(o.plannedMin) : eta;
     const originLabel = anchored ? (o.origin.name || "Warehouse") : "Current location";
+    // Road geometry from the optimiser (Directions overview polyline) → draw the real streets.
+    // Absent (HAVERSINE / no key) → fall back to straight warehouse→stop segments.
+    const road = o.polyline ? decodePolyline(o.polyline) : null;
+    const hasRoad = !!(road && road.length >= 2);
     const meta = `<div class="mp-route-meta"><span>${svgPin(13)} ${allStops.length} stops</span><span>${dispDist.toFixed(1)} km</span><span>~${dispEta} min</span></div>`;
 
     function svgVariant() {
       const pts = mapped.map((x) => toXY(x.s.lat, x.s.lng)), cp = toXY(cur.lat, cur.lng);
-      let line = `M${cp.x},${cp.y} ` + pts.map((p) => `L${p.x},${p.y}`).join(" ");
-      if (roundTrip && pts.length) line += ` L${cp.x},${cp.y}`;   // close the loop back to the warehouse
+      let line;
+      if (hasRoad) {
+        line = "M" + road.map((p) => { const q = toXY(p.lat, p.lng); return `${q.x},${q.y}`; }).join(" L");
+      } else {
+        line = `M${cp.x},${cp.y} ` + pts.map((p) => `L${p.x},${p.y}`).join(" ");
+        if (roundTrip && pts.length) line += ` L${cp.x},${cp.y}`;   // close the loop back to the warehouse
+      }
       host.classList.add("mp-route");
       host.innerHTML = `
         <svg viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid slice" aria-label="Delivery route">${mapBg()}
@@ -435,8 +463,11 @@ window.DOODLY_MAPS = (function () {
       });
       if (roundTrip && mapped.length) path.push({ lat: cur.lat, lng: cur.lng });
       bounds.extend({ lat: cur.lat, lng: cur.lng });
-      new gm.Polyline({ path, map, strokeColor: "#1FAE66", strokeOpacity: 0.9, strokeWeight: 3 });
-      if (mapped.length) map.fitBounds(bounds, 40); else { map.setCenter({ lat: cur.lat, lng: cur.lng }); map.setZoom(13); }
+      // Draw the actual road path when the optimiser supplied one; else straight segments.
+      const drawPath = hasRoad ? road : path;
+      if (hasRoad) road.forEach((p) => bounds.extend(p));
+      new gm.Polyline({ path: drawPath, map, strokeColor: "#1FAE66", strokeOpacity: 0.9, strokeWeight: hasRoad ? 5 : 3 });
+      if (mapped.length || hasRoad) map.fitBounds(bounds, 40); else { map.setCenter({ lat: cur.lat, lng: cur.lng }); map.setZoom(13); }
     }
     if (window.google && window.google.maps) realVariant(window.google.maps);
     else { svgVariant(); ensureGoogle().then((gm) => { if (gm && document.body.contains(host)) realVariant(gm); }); }

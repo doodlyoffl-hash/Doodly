@@ -114,7 +114,7 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
 
   // ---- Live route summary (Step 4): warehouse origin + planned/travelled/remaining ----
   const wh = await getWarehouse();
-  const trip = await db.tripHistory.findFirst({ where: { driverId: driver.id, date: { gte: dayStart, lt: dayEnd } }, select: { plannedDistanceKm: true, plannedDurationMin: true, routeSource: true } });
+  const trip = await db.tripHistory.findFirst({ where: { driverId: driver.id, date: { gte: dayStart, lt: dayEnd } }, select: { plannedDistanceKm: true, plannedDurationMin: true, routeSource: true, routePolyline: true } });
   const done = stops.filter((s) => s.status === "delivered");
   const travelledKm = round2(done.reduce((a, s) => a + (s.legKm ?? 0), 0));
   const travelledMin = done.reduce((a, s) => a + (s.legMin ?? 0), 0);
@@ -124,6 +124,7 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
     code: rows[0]?.route?.code ?? null,
     warehouse: { name: wh.name, lat: wh.lat, lng: wh.lng },
     source,
+    polyline: trip?.routePolyline ?? null,   // road geometry for the map (ROAD only)
     plannedKm: trip?.plannedDistanceKm != null ? round2(trip.plannedDistanceKm) : null,
     plannedMin: trip?.plannedDurationMin ?? null,
     totalStops: stops.length,

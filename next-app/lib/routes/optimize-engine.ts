@@ -25,6 +25,7 @@ export interface OptimizeResult {
   totalKm: number;        // round-trip total (all arrival legs + return)
   totalMin: number;
   source: RouteSource;
+  polyline?: string;      // Google-encoded road geometry of the whole round trip (ROAD only)
 }
 
 const SPEED_KMH = 22;                 // nominal city speed for the haversine fallback ETA
@@ -35,7 +36,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 const havLeg = (a: Pt, b: Pt): RouteLeg => { const km = round2(haversineKm(a, b)); return { km, min: Math.max(1, Math.round((km / SPEED_KMH) * 60)) }; };
 
 // ---------- Google Directions (road, optimised order) ----------
-async function directionsOptimize(origin: Pt, pts: Pt[]): Promise<{ orderIdx: number[]; legs: RouteLeg[]; returnLeg: RouteLeg } | null> {
+async function directionsOptimize(origin: Pt, pts: Pt[]): Promise<{ orderIdx: number[]; legs: RouteLeg[]; returnLeg: RouteLeg; polyline?: string } | null> {
   const key = gkey();
   if (!key || pts.length === 0 || pts.length > MAX_DIRECTIONS_STOPS) return null;
   const wp = "optimize:true|" + pts.map((p) => `${p.lat},${p.lng}`).join("|");
@@ -44,12 +45,12 @@ async function directionsOptimize(origin: Pt, pts: Pt[]): Promise<{ orderIdx: nu
   try {
     const res = await fetch(url, { signal: ctrl.signal, cache: "no-store" });
     if (!res.ok) return null;
-    const j = (await res.json().catch(() => null)) as { status?: string; routes?: { waypoint_order?: number[]; legs?: { distance?: { value: number }; duration?: { value: number } }[] }[] } | null;
+    const j = (await res.json().catch(() => null)) as { status?: string; routes?: { waypoint_order?: number[]; legs?: { distance?: { value: number }; duration?: { value: number } }[]; overview_polyline?: { points?: string } }[] } | null;
     const route = j?.status === "OK" ? j.routes?.[0] : null;
     if (!route || !Array.isArray(route.waypoint_order) || !Array.isArray(route.legs)) return null;
     if (route.legs.length !== pts.length + 1) return null;   // origin→wp…→origin
     const toLeg = (l: { distance?: { value: number }; duration?: { value: number } }): RouteLeg => ({ km: round2((l.distance?.value ?? 0) / 1000), min: Math.max(1, Math.round((l.duration?.value ?? 0) / 60)) });
-    return { orderIdx: route.waypoint_order, legs: route.legs.slice(0, pts.length).map(toLeg), returnLeg: toLeg(route.legs[pts.length]) };
+    return { orderIdx: route.waypoint_order, legs: route.legs.slice(0, pts.length).map(toLeg), returnLeg: toLeg(route.legs[pts.length]), polyline: route.overview_polyline?.points };
   } catch { return null; } finally { clearTimeout(timer); }
 }
 
@@ -100,10 +101,10 @@ export async function optimizeStops(origin: Pt, stops: RouteStopIn[]): Promise<O
   const uniqKeys = [...groups.keys()];
   const uniqPts: Pt[] = uniqKeys.map((k) => { const g = groups.get(k)!; return { lat: g[0].lat as number, lng: g[0].lng as number }; });
 
-  let groupOrder: number[], groupLegs: RouteLeg[], returnLeg: RouteLeg, source: RouteSource;
+  let groupOrder: number[], groupLegs: RouteLeg[], returnLeg: RouteLeg, source: RouteSource, polyline: string | undefined;
   const dir = await directionsOptimize(origin, uniqPts);
   if (dir) {
-    groupOrder = dir.orderIdx; groupLegs = dir.legs; returnLeg = dir.returnLeg; source = "ROAD";
+    groupOrder = dir.orderIdx; groupLegs = dir.legs; returnLeg = dir.returnLeg; source = "ROAD"; polyline = dir.polyline;
   } else {
     const opt = twoOpt(origin, uniqPts, nearestNeighbour(origin, uniqPts));
     groupOrder = opt;
@@ -121,5 +122,5 @@ export async function optimizeStops(origin: Pt, stops: RouteStopIn[]): Promise<O
 
   const totalKm = round2(legs.reduce((s, l) => s + l.km, 0) + returnLeg.km);
   const totalMin = legs.reduce((s, l) => s + l.min, 0) + returnLeg.min;
-  return { order, legs, returnLeg, totalKm, totalMin, source };
+  return { order, legs, returnLeg, totalKm, totalMin, source, polyline };
 }

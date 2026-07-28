@@ -2057,6 +2057,7 @@ model TripHistory {
   plannedDurationMin Int?                           // estimated route duration (min)
   routeSource       String?                         // "ROAD" | "HAVERSINE"
   routePlanHash     String?                         // hash of ordered stop ids + coords + warehouse → skip no-op recompute
+  routePolyline     String?                         // Google-encoded road geometry of the round trip (ROAD only) — for the map
   createdAt    DateTime             @default(now())
   assignments  DeliveryAssignment[]
   @@index([driverId, date, slot])

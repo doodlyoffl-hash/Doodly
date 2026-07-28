@@ -53,7 +53,7 @@ export const GET = route("admin.deliveries.route", async (req: NextRequest) => {
         order: { select: { user: { select: { name: true, phone: true } }, address: ADDR } },
       },
     }),
-    db.tripHistory.findFirst({ where: { driverId, date: { gte: start, lt: end } }, orderBy: { createdAt: "desc" }, select: { plannedDistanceKm: true, plannedDurationMin: true, routeSource: true } }),
+    db.tripHistory.findFirst({ where: { driverId, date: { gte: start, lt: end } }, orderBy: { createdAt: "desc" }, select: { plannedDistanceKm: true, plannedDurationMin: true, routeSource: true, routePolyline: true } }),
   ]);
 
   const stops = rows.map((d, i) => {
@@ -80,6 +80,7 @@ export const GET = route("admin.deliveries.route", async (req: NextRequest) => {
     route: {
       plannedKm: r2(trip?.plannedDistanceKm), plannedMin: trip?.plannedDurationMin ?? null,
       source: trip?.routeSource ?? stops.find((s) => s.routeSource)?.routeSource ?? null,
+      polyline: trip?.routePolyline ?? null,   // road geometry for the map (ROAD only)
       totalStops: stops.length, completedStops: completed, remainingStops: stops.length - completed,
     },
     stops,
