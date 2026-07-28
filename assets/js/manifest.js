@@ -482,6 +482,7 @@ window.DOODLY_MANIFEST = (function () {
       { type:"opsCutoffAlert" },
       { type:"deliveryDateBar" },
       { type:"kpis", items:[{n:"312",l:"Scheduled"},{n:"4",l:"Zones"},{n:"236 L",l:"Milk required"},{n:"4",l:"Drivers"}] },
+      { type:"packingSummary" },
       { type:"deliveryAnalytics" },
       tbl("adminDeliveries",{filters:["All","Scheduled","Assigned","Out for delivery","Delivered","Failed"]}),
       tbl("routes",{toolbar:false,pager:false}),

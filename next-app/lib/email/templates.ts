@@ -312,6 +312,7 @@ export interface OpsSummaryData {
     paymentSummary: { paid: number; pending: number; cod: number }; pendingPayments: { count: number; amountPaise: number };
     bottleDepositsPaise: number; specialNotes: { customer: string; note: string }[];
     areaBreakdown: { area: string; orders: number; bottles: number }[];
+    packing?: { sizes: { label: string; ml: number; bottles: number; litres: number }[]; bottles: number; litres: number };
   };
   missed: { confirmedNotAssigned: number; assignedNotPacked: number; packedNotDispatched: number; overdue: number; ordersWithoutDelivery: number };
   manifestUrl?: string;   // signed link to the full delivery-manifest PDF (WhatsApp can't carry it)
@@ -329,13 +330,17 @@ export function opsDailySummary(d: OpsSummaryData): Email {
   const html = compose(`Tomorrow's delivery summary — ${d.dmy}`, [
     hero({ emoji: "📦", title: "Tomorrow's delivery summary", subtitle: `Delivery day ${d.dmy} — review before dispatch.` }),
     card(`${heading("At a glance")}${infoRow("Total orders", String(s.totalOrders))}${infoRow("Customers", String(s.totalCustomers))}${infoRow("Milk required", `${s.milkLitres} L`)}${infoRow("Total bottles", String(s.totalBottles))}${infoRow("Glass bottles required", String(s.glassBottlesRequired), true)}`),
+    s.packing && s.packing.sizes.length
+      ? card(`${heading("📦 Packing by bottle size")}${s.packing.sizes.map((z) => infoRow(z.label, `${z.bottles} bottle(s) · ${z.litres} L`)).join("")}${infoRow("Total bottles to pack", String(s.packing.bottles), true)}`)
+      : "",
     card(`${heading("Order mix")}${infoRow("Subscription", String(s.subscriptionOrders))}${infoRow("One-time", String(s.oneTimeOrders))}${infoRow("Trial", String(s.trialOrders))}${infoRow("B2B", String(s.b2bOrders))}`),
     card(`${heading("Payments")}${infoRow("Prepaid", String(s.paymentSummary.paid))}${infoRow("COD", String(s.paymentSummary.cod))}${infoRow("Pending", `${s.pendingPayments.count} · ${rs(s.pendingPayments.amountPaise)}`)}${infoRow("Bottle deposits held", rs(s.bottleDepositsPaise), true)}`),
     warnCard,
     notes,
     card(`<div style="text-align:center">${button("Open Delivery Management", url("/admin/deliveries.html"))}${d.manifestUrl ? `<div style="margin-top:12px">${button("Download full manifest (PDF)", d.manifestUrl)}</div>` : ""}</div>`),
   ]);
-  const text = `DOODLY — Tomorrow's Delivery Summary (${d.dmy})\nOrders: ${s.totalOrders} | Customers: ${s.totalCustomers} | Milk: ${s.milkLitres} L | Bottles: ${s.totalBottles}\nSubscription ${s.subscriptionOrders} · One-time ${s.oneTimeOrders} · Trial ${s.trialOrders} · B2B ${s.b2bOrders}\nUnassigned: ${m.confirmedNotAssigned} | Not packed: ${m.assignedNotPacked}\nReview: ${url("/admin/deliveries.html")}${d.manifestUrl ? `\nFull manifest (PDF): ${d.manifestUrl}` : ""}`;
+  const packText = s.packing && s.packing.sizes.length ? `\nPacking by size: ${s.packing.sizes.map((z) => `${z.label} ${z.bottles}`).join(" · ")} · Total ${s.packing.bottles} bottle(s)` : "";
+  const text = `DOODLY — Tomorrow's Delivery Summary (${d.dmy})\nOrders: ${s.totalOrders} | Customers: ${s.totalCustomers} | Milk: ${s.milkLitres} L | Bottles: ${s.totalBottles}${packText}\nSubscription ${s.subscriptionOrders} · One-time ${s.oneTimeOrders} · Trial ${s.trialOrders} · B2B ${s.b2bOrders}\nUnassigned: ${m.confirmedNotAssigned} | Not packed: ${m.assignedNotPacked}\nReview: ${url("/admin/deliveries.html")}${d.manifestUrl ? `\nFull manifest (PDF): ${d.manifestUrl}` : ""}`;
   return { subject: `DOODLY — Tomorrow's Delivery Summary (${d.dmy})`, html, text };
 }
 

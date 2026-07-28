@@ -17,6 +17,7 @@ import "server-only";
 import type { DeliveryStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { istDayWindow } from "@/lib/delivery/stats";
+import { packingSummary } from "@/lib/delivery/packing";
 import { ensureDeliveryForOrder } from "@/lib/orders/delivery-bridge";
 import { audit } from "@/lib/auth/audit";
 import { log } from "@/lib/logger";
@@ -154,11 +155,12 @@ export interface DeliverySummary {
   bottleDepositsPaise: number;
   specialNotes: { customer: string; note: string }[];
   areaBreakdown: { area: string; orders: number; bottles: number }[];
+  packing: { sizes: { label: string; ml: number; bottles: number; litres: number }[]; bottles: number; litres: number };
 }
 
 export async function buildSummary(dateIso?: string | null): Promise<DeliverySummary> {
   const { start, end, iso } = istDayWindow(dateIso ?? nextDeliveryDayIso());
-  const [rows, variants, b2bCount] = await Promise.all([
+  const [rows, variants, b2bCount, pack] = await Promise.all([
     db.delivery.findMany({
       where: { date: { gte: start, lt: end }, status: { not: "DELIVERED" } },
       select: {
@@ -184,6 +186,7 @@ export async function buildSummary(dateIso?: string | null): Promise<DeliverySum
     }),
     db.variant.findMany({ select: { label: true, ml: true, product: { select: { slug: true } } } }),
     db.businessOrder.count({ where: { deliveryDate: { gte: start, lt: end }, status: { not: "CANCELLED" } } }),
+    packingSummary(iso),
   ]);
 
   const mlByKey = new Map<string, number>();
@@ -249,6 +252,7 @@ export async function buildSummary(dateIso?: string | null): Promise<DeliverySum
     bottleDepositsPaise,
     specialNotes: specialNotes.slice(0, 50),
     areaBreakdown: [...areaMap.entries()].map(([area, v]) => ({ area, orders: v.orders, bottles: v.bottles })).sort((x, y) => y.orders - x.orders),
+    packing: { sizes: pack.sizes.map((s) => ({ label: s.label, ml: s.ml, bottles: s.bottles, litres: s.litres })), bottles: pack.totals.bottles, litres: pack.totals.litres },
   };
 }
 

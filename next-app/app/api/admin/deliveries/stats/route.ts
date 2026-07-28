@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 import { ok, route } from "@/lib/http";
 import { requirePermission } from "@/lib/auth/authorize";
 import { deliveryStats } from "@/lib/delivery/stats";
+import { packingSummary } from "@/lib/delivery/packing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,5 +13,6 @@ export const dynamic = "force-dynamic";
 export const GET = route("admin.deliveries.stats", async (req: NextRequest) => {
   requirePermission(req, "deliveries", "view");
   const date = new URL(req.url).searchParams.get("date");
-  return ok(await deliveryStats(date));
+  const [stats, packing] = await Promise.all([deliveryStats(date), packingSummary(date)]);
+  return ok({ ...stats, packing });
 });

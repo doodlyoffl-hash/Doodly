@@ -1730,6 +1730,46 @@
       }).join("") || '<tr><td colspan="6" class="muted-sm">No executive activity yet.</td></tr>';
     }
   }
+  /* Packing Summary card — bottles to pack BY SIZE for the selected delivery date.
+     Fed by stats.packing (lib/delivery/packing.ts) so it always matches the live DB,
+     the packing sheet export, the manifest and the 8 PM ops summary. Re-rendered on
+     every date change (called from wireDeliveriesBackend). Reuses existing card classes. */
+  function renderPackingSummary(p, iso) {
+    var mount = document.getElementById("packingSummaryMount");
+    if (!mount) return;
+    if (!p || !p.totals) { mount.innerHTML = ""; return; }
+    var t = p.totals, sizes = p.sizes || [];
+    var kpis = [["Total orders", t.orders || 0], ["Customers", t.customers || 0], ["Total milk", (t.litres || 0) + " L"]];
+    sizes.forEach(function (s) { kpis.push([esc(s.label) + " bottles", s.bottles]); });
+    kpis.push(["Total bottles", t.bottles || 0]);
+    var kpiHtml = kpis.map(function (x) { return '<div class="dl-an-kpi"><div class="n">' + x[1] + '</div><div class="l">' + x[0] + "</div></div>"; }).join("");
+
+    var sizeHtml = sizes.length ? sizes.map(function (s) {
+      var custs = (s.customers || []).map(function (c) {
+        var meta = [c.route, c.executive].filter(Boolean).map(esc).join(" · ");
+        return '<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 14px;border-top:1px solid var(--line,#eef2ef)"><span>' + esc(c.customer) + (meta ? ' <span class="muted-sm">· ' + meta + "</span>" : "") + "</span><b>" + c.bottles + "</b></div>";
+      }).join("");
+      return '<details style="border:1px solid var(--line,#e3ece3);border-radius:12px;margin-top:10px;overflow:hidden">' +
+        '<summary style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;font-weight:700;background:var(--mint-soft,#f6faf6)"><span>' + esc(s.label) + "</span><span class=\"muted-sm\" style=\"font-weight:600\">" + s.bottles + " bottle(s) · " + (s.customers || []).length + " customer(s) · " + s.litres + " L</span></summary>" +
+        "<div>" + (custs || '<div class="muted-sm" style="padding:10px 14px">No customers.</div>') + "</div></details>";
+    }).join("") : '<div class="muted-sm" style="padding:14px 2px">No bottles to pack for this date.</div>';
+
+    var btn = function (fmt, lbl) { return '<button type="button" class="btn btn-ghost sm" data-pk-export="' + fmt + '" title="Export the packing sheet (' + fmt.toUpperCase() + ')">' + lbl + "</button>"; };
+    mount.innerHTML =
+      '<div class="panel" style="margin-top:16px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">' +
+          '<h3 style="margin:0">📦 Packing Summary <span class="muted-sm" style="font-weight:600">— bottles to pack by size</span></h3>' +
+          '<span style="display:flex;gap:8px;flex-wrap:wrap">' + btn("pdf", icon("download", 14) + " PDF") + btn("xls", "Excel") + btn("csv", "CSV") + "</span>" +
+        "</div>" +
+        '<div class="dl-an-kpis">' + kpiHtml + "</div>" +
+        '<div style="margin-top:4px">' + sizeHtml + "</div>" +
+      "</div>";
+
+    mount.querySelectorAll("[data-pk-export]").forEach(function (b) {
+      b.addEventListener("click", function () { exportPackingSheet(iso || _delDate, b.dataset.pkExport); });
+    });
+  }
+
   // ---- date-based delivery operations ----
   var _delDate = "";
   var PAY_BADGE = { PAID: ["green", "Paid"], PENDING: ["amber", "Pending"], FAILED: ["red", "Failed"], REFUNDED: ["blue", "Refunded"], SUBSCRIPTION: ["blue", "Subscription"] };
@@ -2066,6 +2106,7 @@
       var k = stats.kpis || {};
       bkKpis({ "scheduled": String(k.scheduled || 0), "zones": String(k.zones || 0), "milk required": (k.milkLitres || 0) + " L", "drivers": String(k.activeExecutives || 0) });
       updateDeliveryAnalytics(k, stats.executives);
+      renderPackingSummary(stats.packing, iso);
       try { var dr = await DOODLY_API.get("/api/admin/drivers"); _delDrivers = dr.drivers || dr || []; } catch (e1) { _delDrivers = []; }
       try {
         var rt = await DOODLY_API.get("/api/admin/routes");
@@ -2647,6 +2688,7 @@
      Fetch it WITH the auth headers and download the blob — same pattern as invAdminPdf(). */
   var OPS_REPORTS = {
     packing: { path: "/api/admin/deliveries/packing/export", name: "DOODLY_Packing_List", label: "packing list" },
+    packingSheet: { path: "/api/admin/deliveries/packing-sheet/export", name: "DOODLY_Packing_Sheet", label: "packing sheet" },
     manifest: { path: "/api/admin/deliveries/manifest/export", name: "DOODLY_Delivery_Manifest", label: "delivery manifest" },
   };
   function exportOpsReport(kind, iso, format) {
@@ -2668,8 +2710,10 @@
       .catch(function (e) { dacToast(e.message || "Couldn't export the " + cfg.label + "."); });
   }
   function exportPackingList(iso, format) { exportOpsReport("packing", iso, format); }
+  function exportPackingSheet(iso, format) { exportOpsReport("packingSheet", iso, format); }
   function exportManifest(iso, format) { exportOpsReport("manifest", iso, format); }
   window.DOODLY_ADMIN.exportPackingList = exportPackingList;
+  window.DOODLY_ADMIN.exportPackingSheet = exportPackingSheet;
   window.DOODLY_ADMIN.exportManifest = exportManifest;
 
   // ---- Drivers (admin/drivers → live list + dashboard + Add/Manage; reuses /api/admin/drivers*) ----
