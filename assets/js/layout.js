@@ -471,8 +471,22 @@
     </aside>`;
   }
 
+  // Real signed-in executive's name + initials for the staff profile chip — NEVER
+  // the demo "Ramesh K." placeholder. Reads the live session (publicUser); falls
+  // back to a generic label only when no real user is present.
+  function execChipIdentity() {
+    const u = publicUser();
+    const raw = (u && (u.name || (u.email ? String(u.email).split("@")[0] : ""))) || "";
+    const parts = String(raw).trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return { name: "Executive", initials: "EX" };
+    const initials = parts.map((w) => w[0] || "").slice(0, 2).join("").toUpperCase() || "EX";
+    const label = parts.length >= 2 ? parts[0] + " " + String(parts[parts.length - 1][0] || "").toUpperCase() + "." : parts[0];
+    return { name: label, initials };
+  }
+
   function topbar(surface) {
     const me = window.DOODLY_DATA.me;
+    const staff = (surface === "driver" || surface === "delivery") ? execChipIdentity() : null;
     return `
     <div class="topbar">
       <button class="icon-btn burger" id="sbBurger" aria-label="Menu">${icon("menu",18)}</button>
@@ -482,7 +496,7 @@
         <button class="icon-btn" id="themeBtn" aria-label="Toggle dark mode">${icon("sun",18)}</button>
         <a class="tb-icon" href="${surface === "account" ? "/account/notifications.html" : surface === "admin" ? "/admin/notifications.html" : SURFACE_HOME[surface] || "/"}" aria-label="Notifications">${icon("bell",18)}<span class="dot-badge"></span></a>
         <details class="acct-dd tb-user-dd">
-          <summary class="tb-user" aria-haspopup="menu" aria-label="Account menu"><span class="av">${surface === "driver" || surface === "delivery" ? "RK" : surface === "admin" ? "AD" : me.initials}</span><span class="nm">${surface === "driver" || surface === "delivery" ? "Ramesh K." : surface === "admin" ? "Admin" : me.name.split(" ")[0]}</span></summary>
+          <summary class="tb-user" aria-haspopup="menu" aria-label="Account menu"><span class="av">${staff ? esc(staff.initials) : surface === "admin" ? "AD" : me.initials}</span><span class="nm">${staff ? esc(staff.name) : surface === "admin" ? "Admin" : me.name.split(" ")[0]}</span></summary>
           <div class="acct-menu" role="menu">
             <a href="${surface === "account" ? "/account/profile.html" : surface === "delivery" || surface === "driver" ? "/delivery/profile.html" : "/admin/settings.html"}" class="acct-mi" role="menuitem">${icon("user",17)} ${surface === "account" ? "My profile" : "Profile & settings"}</a>
             <a href="/" class="acct-mi" role="menuitem">${icon("home",17)} Back to site</a>
