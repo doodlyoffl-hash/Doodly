@@ -11,6 +11,7 @@ import { requirePermission } from "@/lib/auth/authorize";
 import { readUserId } from "@/lib/auth/identity";
 import { reqContext } from "@/lib/auth/request";
 import { listRewards, getRewardDetail, adminIssueReward, cancelReward, resendRewardNotification } from "@/lib/rewards/admin";
+import { rewardAnalytics } from "@/lib/rewards/reports";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +19,7 @@ export const dynamic = "force-dynamic";
 export const GET = route("admin.rewards", async (req: NextRequest) => {
   requirePermission(req, "rewards", "view");
   const sp = req.nextUrl.searchParams;
+  if (sp.get("view") === "analytics") return ok(await rewardAnalytics());
   const id = sp.get("id");
   if (id) return ok(await getRewardDetail(id));
   return ok(await listRewards({

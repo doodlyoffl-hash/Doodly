@@ -71,7 +71,28 @@ window.DOODLY_REWARDS_ADMIN = (function () {
       ".rwa-f2{display:grid;grid-template-columns:1fr 1fr;gap:12px}" +
       ".rwa-check{display:flex;gap:8px;align-items:center;font-size:.88rem;color:var(--ink-2,#37463d);margin:10px 0}" +
       ".rwa-err{color:#c0392b;font-size:.85rem;font-weight:600;margin:8px 0}.rwa-ok2{color:#169A57;font-weight:700}" +
-      ".rwa-btn-red{color:#c0392b;border-color:rgba(192,57,43,.4)}";
+      ".rwa-btn-red{color:#c0392b;border-color:rgba(192,57,43,.4)}" +
+      /* analytics / reports */
+      ".rwa-report{border:1px solid var(--line,#e3ece3);border-radius:16px;padding:18px;margin:0 0 18px;background:var(--surface,#fff)}" +
+      ".rwa-report h3{font-family:'Fraunces',serif;color:var(--forest,#0F3D2E);font-size:1.05rem;margin:0 0 14px;display:flex;align-items:center;gap:8px}" +
+      ".rwa-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}" +
+      "@media(max-width:820px){.rwa-stats{grid-template-columns:repeat(2,1fr)}}" +
+      ".rwa-stat{border:1px solid var(--line,#eef3ef);border-radius:14px;padding:12px 14px}" +
+      ".rwa-stat-v{font-family:'Fraunces',serif;font-weight:700;font-size:1.5rem;color:var(--leaf-600,#169A57);line-height:1}" +
+      ".rwa-stat-l{color:var(--ink-3,#6b7c72);font-size:.78rem;margin-top:5px;font-weight:600}" +
+      ".rwa-stat-s{color:var(--ink-3,#9aa79f);font-size:.72rem;margin-top:2px}" +
+      ".rwa-2col{display:grid;grid-template-columns:1fr 1fr;gap:18px}@media(max-width:760px){.rwa-2col{grid-template-columns:1fr}}" +
+      ".rwa-h4{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3,#6b7c72);margin:0 0 10px;font-weight:700}" +
+      ".rwa-mini{width:100%;border-collapse:collapse;font-size:.84rem}.rwa-mini th,.rwa-mini td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--line,#eef3ef)}.rwa-mini th{color:var(--ink-3,#6b7c72);font-weight:700}.rwa-mini td.r,.rwa-mini th.r{text-align:right;font-variant-numeric:tabular-nums}" +
+      ".rwa-chart{display:flex;align-items:flex-end;gap:10px;height:112px;padding-top:6px}" +
+      ".rwa-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}" +
+      ".rwa-cbars{display:flex;align-items:flex-end;gap:3px;height:88px}" +
+      ".rwa-cbar{width:9px;border-radius:3px 3px 0 0;background:var(--line,#cfe0d6)}.rwa-cbar.c{background:var(--leaf,#1FAE66)}" +
+      ".rwa-col-l{font-size:.66rem;color:var(--ink-3,#6b7c72);white-space:nowrap}" +
+      ".rwa-legend{display:flex;gap:14px;font-size:.75rem;color:var(--ink-3,#6b7c72);margin-top:8px}.rwa-legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}" +
+      ".rwa-dl{display:inline-flex;gap:6px;align-items:center;color:var(--ink-3,#6b7c72)}" +
+      ".rwa-dl button{padding:.5rem .7rem;border:1.5px solid var(--line,#e3ece3);border-radius:10px;background:var(--surface,#fff);color:var(--forest,#0F3D2E);font:inherit;font-size:.82rem;font-weight:600;cursor:pointer}" +
+      ".rwa-dl button:hover{border-color:var(--leaf,#1FAE66)}";
     document.head.appendChild(s);
   }
 
@@ -115,8 +136,10 @@ window.DOODLY_REWARDS_ADMIN = (function () {
         '<input class="rwa-search" id="rwaSearch" placeholder="Search code or campaign…" value="' + esc(state.search) + '">' +
         '<select class="rwa-sel" id="rwaSource"><option value="">All sources</option><option value="puzzle_challenge"' + (state.source === "puzzle_challenge" ? " selected" : "") + ">Puzzle winners</option><option value=\"manual\"" + (state.source === "manual" ? " selected" : "") + ">Manual</option></select>" +
         '<span class="rwa-grow"></span>' +
+        (can("export") ? '<span class="rwa-dl">' + icon("download", 15) + '<button data-dl="csv">CSV</button><button data-dl="xls">Excel</button><button data-dl="pdf">PDF</button></span>' : "") +
         (can("create") ? '<button class="btn btn-primary" id="rwaIssue">' + icon("plus", 16) + " Issue reward</button>" : "") +
       "</div>" +
+      '<div id="rwaAnalytics"></div>' +
       '<div class="table-wrap"><table class="tbl"><thead><tr><th>Code</th><th>Campaign</th><th>Product</th><th>Status</th><th>Issued to</th><th>Issued</th><th>Expires</th><th></th></tr></thead><tbody>' +
         (rows || '<tr><td colspan="8"><div class="rwa-empty">No rewards yet. Issue one, or wait for a puzzle winner to be decided.</div></td></tr>') +
       "</tbody></table></div>";
@@ -128,7 +151,71 @@ window.DOODLY_REWARDS_ADMIN = (function () {
     var deb; search.addEventListener("input", function () { clearTimeout(deb); deb = setTimeout(function () { state.search = search.value.trim(); mountAdmin(); }, 350); });
     host.querySelector("#rwaSource").addEventListener("change", function (e) { state.source = e.target.value; mountAdmin(); });
     var issue = host.querySelector("#rwaIssue"); if (issue) issue.addEventListener("click", openIssue);
+    host.querySelectorAll("[data-dl]").forEach(function (b) { b.addEventListener("click", function () { downloadReport(b.getAttribute("data-dl")); }); });
     host.querySelectorAll(".rwa-row").forEach(function (tr) { tr.addEventListener("click", function () { openDetail(tr.getAttribute("data-id")); }); });
+    loadAnalytics(host);
+  }
+
+  /* ---------------- analytics panel ---------------- */
+  var inr = function (p) { try { return "₹" + Math.round((p || 0) / 100).toLocaleString("en-IN"); } catch (e) { return "₹0"; } };
+  var pct = function (x) { return Math.round((x || 0) * 100) + "%"; };
+  function loadAnalytics(host) {
+    var box = host.querySelector("#rwaAnalytics"); if (!box || !API()) return;
+    API().get("/api/admin/rewards?view=analytics").then(function (a) { renderAnalytics(box, a); }).catch(function () { box.innerHTML = ""; });
+  }
+  function renderAnalytics(box, a) {
+    if (!a || !a.counts || !a.counts.ALL) { box.innerHTML = ""; return; }  // nothing issued yet → no panel
+    var stat = function (v, l, s) { return '<div class="rwa-stat"><div class="rwa-stat-v">' + v + '</div><div class="rwa-stat-l">' + l + "</div>" + (s ? '<div class="rwa-stat-s">' + s + "</div>" : "") + "</div>"; };
+    var srcRows = (a.bySource || []).map(function (s) {
+      var rate = s.total ? Math.round((s.redeemed / s.total) * 100) : 0;
+      return "<tr><td>" + (s.source === "puzzle_challenge" ? "Puzzle winners" : s.source === "manual" ? "Manual" : esc(s.source)) + '</td><td class="r">' + s.total + '</td><td class="r">' + s.redeemed + '</td><td class="r">' + s.expired + '</td><td class="r">' + rate + "%</td></tr>";
+    }).join("");
+    var months = (a.monthly || []).slice(-12);
+    var maxV = 1; months.forEach(function (m) { maxV = Math.max(maxV, m.issued, m.claimed); });
+    var chart = months.map(function (m) {
+      var hi = Math.max(2, Math.round((m.issued / maxV) * 84)), hc = Math.max(2, Math.round((m.claimed / maxV) * 84));
+      return '<div class="rwa-col"><div class="rwa-cbars"><span class="rwa-cbar" style="height:' + hi + 'px" title="' + m.issued + ' issued"></span><span class="rwa-cbar c" style="height:' + hc + 'px" title="' + m.claimed + ' claimed"></span></div><div class="rwa-col-l">' + esc(m.month.slice(2)) + "</div></div>";
+    }).join("");
+    box.innerHTML =
+      '<div class="rwa-report"><h3>' + icon("chart", 18) + " Reward performance</h3>" +
+        '<div class="rwa-stats">' +
+          stat(pct(a.redemptionRate), "Redemption rate", pct(a.redemptionRateResolved) + " of resolved") +
+          stat(inr(a.valueDeliveredPaise), "Value delivered", "free milk claimed") +
+          stat(a.avgDaysToClaim == null ? "—" : a.avgDaysToClaim + "d", "Avg time to claim") +
+          stat(String(a.expiringSoon || 0), "Expiring in 7 days", inr(a.valueAtRiskPaise) + " unclaimed") +
+        "</div>" +
+        '<div class="rwa-2col">' +
+          '<div><div class="rwa-h4">By source</div><table class="rwa-mini"><thead><tr><th>Source</th><th class="r">Total</th><th class="r">Claimed</th><th class="r">Expired</th><th class="r">Rate</th></tr></thead><tbody>' + (srcRows || '<tr><td colspan="5" class="rwa-muted">No data</td></tr>') + "</tbody></table></div>" +
+          '<div><div class="rwa-h4">Issued vs claimed by month</div>' + (months.length ? '<div class="rwa-chart">' + chart + '</div><div class="rwa-legend"><span><i style="background:var(--line,#cfe0d6)"></i>Issued</span><span><i style="background:var(--leaf,#1FAE66)"></i>Claimed</span></div>' : '<div class="rwa-muted">Not enough history yet.</div>') + "</div>" +
+        "</div>" +
+      "</div>";
+  }
+
+  /* ---------------- authenticated download ---------------- */
+  function bridgeHeaders() {
+    var h = {};
+    try { var t = localStorage.getItem("doodly-token"); if (t) h["Authorization"] = "Bearer " + t; } catch (e) {}
+    try { if (window.DOODLY_RBAC) { h["X-Doodly-Actor"] = DOODLY_RBAC.activeRole(); var cu = DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser(); if (cu && cu.id) h["X-Doodly-Actor-Id"] = cu.id; } } catch (e) {}
+    return h;
+  }
+  function downloadReport(format) {
+    var base = API() && API().base ? API().base() : "";
+    var q = ["format=" + encodeURIComponent(format)];
+    if (state.status) q.push("status=" + encodeURIComponent(state.status));
+    if (state.source) q.push("source=" + encodeURIComponent(state.source));
+    if (state.search) q.push("search=" + encodeURIComponent(state.search));
+    var ext = format === "xls" ? "xls" : format === "pdf" ? "pdf" : "csv";
+    toast("Preparing the reward report (" + ext.toUpperCase() + ")…");
+    fetch(base + "/api/admin/rewards/export?" + q.join("&"), { headers: bridgeHeaders(), credentials: "include" })
+      .then(function (r) { if (!r.ok) throw new Error(r.status === 403 ? "Your role can't export rewards (403)." : "Export failed (" + r.status + ")"); return r.blob(); })
+      .then(function (blob) {
+        var url = URL.createObjectURL(blob), a = document.createElement("a");
+        a.href = url; a.download = "DOODLY_Rewards." + ext;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+        toast("Reward report downloaded (" + ext.toUpperCase() + ").");
+      })
+      .catch(function (e) { toast((e && e.message) || "Couldn't export the report."); });
   }
 
   /* ---------------- detail drawer ---------------- */
