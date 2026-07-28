@@ -2185,10 +2185,15 @@
     var packMap = { PENDING: "Pending", PACKING: "Packing", PACKED: "Packed", READY: "Ready for dispatch" };
     var payMap = { PAID: "Paid", PENDING: "Pending", FAILED: "Failed", REFUNDED: "Refunded", SUBSCRIPTION: "Subscription" };
     var mapUrl = (d.lat && d.lng) ? ("https://www.google.com/maps?q=" + d.lat + "," + d.lng) : "";
+    var navUrl = (d.lat && d.lng) ? ("https://www.google.com/maps/dir/?api=1&destination=" + d.lat + "," + d.lng + "&travelmode=driving") : "";
+    var rsMap = { NO_COORDS: "No location pinned", FAR: "Far — check location", OK: "" };
+    var distLine = (d.distanceKm != null || d.travelTimeMin != null || (d.routeStatus && d.routeStatus !== "OK")) ?
+      ('<div><b>Warehouse distance</b> — ' + (d.distanceKm != null ? esc(d.distanceKm) + " km" : "—") + (d.travelTimeMin != null ? " · ~" + esc(d.travelTimeMin) + " min" : "") + (d.distanceSource ? ' <span class="muted-sm">(' + (d.distanceSource === "ROAD" ? "road" : "straight-line") + ")</span>" : "") + (d.routeStatus && rsMap[d.routeStatus] ? ' · <span class="badge amber">' + esc(rsMap[d.routeStatus]) + "</span>" : "") + (navUrl ? ' · <a href="' + navUrl + '" target="_blank" rel="noopener">Open navigation &#8599;</a>' : "") + "</div>") : "";
     var detail =
       '<div class="dac-detail" style="background:rgba(0,0,0,.035);border-radius:10px;padding:12px 14px;margin:-2px 0 14px;font-size:.88rem;line-height:1.75">' +
         '<div><b>Customer</b> — ' + esc(d.customer) + (d.mobile && d.mobile !== "—" ? ' · <a href="tel:' + esc(d.mobile) + '">' + esc(d.mobile) + "</a>" : "") + "</div>" +
         '<div><b>Address</b> — ' + esc(d.address || "—") + (mapUrl ? ' · <a href="' + mapUrl + '" target="_blank" rel="noopener">Open in Maps &#8599;</a>' : "") + "</div>" +
+        distLine +
         (d.deliveryNote ? '<div><b>Note</b> — ' + esc(d.deliveryNote) + "</div>" : "") +
         '<div><b>Order</b> — ' + esc(d.orderRef || "—") + " · " + esc(d.type || "") + (d.plan ? " (" + esc(d.plan) + ")" : "") + "</div>" +
         '<div><b>Products</b> — ' + esc(d.products || "—") + "</div>" +
@@ -5284,7 +5289,8 @@
   function setFieldText(s, key, label, ro, ph) { return '<label class="dac-f"><span>' + label + '</span><input class="input" data-k="' + key + '" data-t="text" value="' + esc(s[key] == null ? "" : String(s[key])) + '"' + (ro ? " disabled" : "") + (ph ? ' placeholder="' + esc(ph) + '"' : "") + "></label>"; }
   function setFieldNum(s, key, label, ro) { return '<label class="dac-f"><span>' + label + '</span><input class="input" data-k="' + key + '" data-t="num" type="number" min="0" value="' + esc(s[key] == null ? "" : String(s[key])) + '"' + (ro ? " disabled" : "") + "></label>"; }
   function setFieldBool(s, key, label, ro) { return '<label class="help-toggle" style="display:flex;gap:8px;align-items:center;padding:6px 0"><input type="checkbox" data-k="' + key + '" data-t="bool" ' + (s[key] ? "checked" : "") + (ro ? " disabled" : "") + "> <span>" + label + "</span></label>"; }
-  function settingsFormHtml(s, canEdit, managed) {
+  function whField(wh, key, label, ro, num) { var val = wh && wh[key] != null ? String(wh[key]) : ""; return '<label class="dac-f"><span>' + label + '</span><input class="input" data-k="wh:' + key + '" data-t="wh"' + (num ? ' type="number" step="any"' : "") + ' value="' + esc(val) + '"' + (ro ? " disabled" : "") + "></label>"; }
+  function settingsFormHtml(s, canEdit, managed, wh) {
     var ro = !canEdit;
     var panel = function (t, inner) { return '<div class="panel" style="margin-bottom:16px"><div class="panel-head"><h3>' + t + '</h3></div><div class="panel-pad">' + inner + "</div></div>"; };
     var general = '<div class="dac-row">' + setFieldText(s, "general.brandName", "Brand name", ro) + setFieldText(s, "general.companyName", "Legal company name", ro) + "</div>"
@@ -5294,13 +5300,21 @@
     var notify = '<p class="muted-sm" style="margin-bottom:8px">Enable channels platform-wide. Actual sending still needs provider credentials (see remaining config).</p>'
       + setFieldBool(s, "notify.email", "Email notifications", ro) + setFieldBool(s, "notify.sms", "SMS notifications", ro) + setFieldBool(s, "notify.push", "Push notifications", ro) + setFieldBool(s, "notify.whatsapp", "WhatsApp notifications", ro);
     var security = '<div class="dac-row">' + setFieldNum(s, "security.passwordMinLength", "Password min length", ro) + setFieldNum(s, "security.sessionTimeoutMin", "Session timeout (min)", ro) + setFieldNum(s, "security.maxLoginAttempts", "Max login attempts", ro) + "</div>" + setFieldBool(s, "security.require2FA", "Require two-factor authentication (future-ready)", ro);
+    var warehouse = '<p class="muted-sm" style="margin-bottom:8px">The delivery origin for every distance &amp; travel-time calculation (Delivery Management, routing, reports). Super Admin only.</p>'
+      + '<div class="dac-row">' + whField(wh, "name", "Warehouse name", ro) + whField(wh, "address", "Address", ro) + "</div>"
+      + '<div class="dac-row">' + whField(wh, "lat", "Latitude", ro, true) + whField(wh, "lng", "Longitude", ro, true) + whField(wh, "maxDeliveryRadiusKm", "Max delivery radius (km)", ro, true) + "</div>";
     var links = (managed || []).map(function (m) { return '<a class="link" href="' + esc(m.href) + '" style="display:block;padding:4px 0">' + esc(m.label) + " →</a>"; }).join("");
-    return panel("General", general) + panel("Notifications", notify) + panel("Security", security) + panel("Managed on their own pages", links)
+    return panel("General", general) + panel("Notifications", notify) + panel("Security", security) + panel("Warehouse (delivery origin)", warehouse) + panel("Managed on their own pages", links)
       + (canEdit ? '<div style="display:flex;justify-content:flex-end;margin-top:4px"><button class="btn btn-primary" id="set-save">Save settings</button></div>' : '<p class="badge amber" style="margin-top:8px">Read-only — only the Super Admin can change platform settings.</p>');
   }
   async function saveSettingsForm(host) {
-    var patch = {};
-    host.querySelectorAll("[data-k]").forEach(function (el) { var k = el.dataset.k, t = el.dataset.t; if (t === "bool") patch[k] = el.checked; else if (t === "num") patch[k] = Number(el.value) || 0; else patch[k] = (el.value || "").trim(); });
+    var patch = {}, wh = {};
+    host.querySelectorAll("[data-k]").forEach(function (el) {
+      var k = el.dataset.k, t = el.dataset.t;
+      if (t === "wh") { var wk = k.slice(3); wh[wk] = (wk === "lat" || wk === "lng" || wk === "maxDeliveryRadiusKm") ? (parseFloat(el.value) || 0) : (el.value || "").trim(); return; }
+      if (t === "bool") patch[k] = el.checked; else if (t === "num") patch[k] = Number(el.value) || 0; else patch[k] = (el.value || "").trim();
+    });
+    if (Object.keys(wh).length) patch.warehouse = wh;
     var btn = host.querySelector("#set-save"); if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
     try { await DOODLY_API.post("/api/admin/app-settings", { patch: patch }); if (window.dacToast) dacToast("Settings saved to the DOODLY database"); await wireSettingsBackend(); }
     catch (e) { if (window.dacToast) dacToast(e.code === "forbidden" ? "Only Super Admin can change settings (403)." : (e.message || "Couldn't save.")); if (btn) { btn.disabled = false; btn.textContent = "Save settings"; } }
@@ -5312,7 +5326,7 @@
     try {
       var d = await DOODLY_API.get("/api/admin/app-settings");
       var s = d.settings || {}, canEdit = !!d.canEdit;
-      host.innerHTML = settingsFormHtml(s, canEdit, d.managedElsewhere || []);
+      host.innerHTML = settingsFormHtml(s, canEdit, d.managedElsewhere || [], d.warehouse || {});
       if (canEdit) { var btn = host.querySelector("#set-save"); if (btn) btn.addEventListener("click", function () { saveSettingsForm(host); }); }
       bkBanner(host, "● Live — platform settings from the DOODLY database (" + DOODLY_API.base() + ")." + (canEdit ? " Edits persist to Postgres + are audited." : " View-only for your role."), "ok");
     } catch (e) {

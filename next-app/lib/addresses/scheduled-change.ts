@@ -134,6 +134,8 @@ export async function applyChange(changeId: string, actor: Actor, opts?: { force
   if (result.applied) {
     await audit({ userId: change.userId, actorRole: actor.actorRole ?? "system", action: "address.change.apply", target: change.id, ctx: opts?.ctx });
     await notify(change.userId, { title: "Delivery address updated", body: "Your delivery address has been updated successfully.", email: true, whatsapp: true });
+    // Warehouse distance/time is stale for the repointed stops → recompute for the new address.
+    try { const { recomputeDeliveriesForAddress } = await import("@/lib/warehouse/distance"); await recomputeDeliveriesForAddress(change.newAddressId); } catch { /* non-blocking; cron backfills */ }
     for (const driverId of result.affectedDriverIds) {
       try {
         const drv = await db.driver.findUnique({ where: { id: driverId }, select: { userId: true } });

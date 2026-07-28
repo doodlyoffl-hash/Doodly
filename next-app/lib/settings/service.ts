@@ -9,6 +9,10 @@
    ============================================================= */
 import "server-only";
 import { db } from "@/lib/db";
+import type { DeliveryStatus } from "@prisma/client";
+import { getWarehouse, patchWarehouse, type Warehouse } from "@/lib/warehouse/config";
+
+const NON_TERMINAL: DeliveryStatus[] = ["SCHEDULED", "ASSIGNED", "ACCEPTED", "PACKED", "OUT_FOR_DELIVERY", "ON_THE_WAY", "REACHED"];
 
 const DEFAULTS: Record<string, unknown> = {
   // general
@@ -45,6 +49,7 @@ export async function getSettings() {
   map["general.gstin"] = billing.gstin ?? "";
   return {
     settings: map,
+    warehouse: await getWarehouse(),   // Super-Admin-only delivery origin (distance engine)
     managedElsewhere: [
       { label: "Delivery (cut-off, slots, auto-assign)", href: "/admin/delivery-settings.html" },
       { label: "Serviceable areas / pincodes", href: "/admin/serviceable-areas.html" },
@@ -62,6 +67,8 @@ export async function saveSettings(patch: Record<string, unknown>, actorId?: str
   const billingData: Record<string, unknown> = {};
   const ops: Promise<unknown>[] = [];
   for (const [key, value] of entries) {
+    // warehouse origin → its own AppSetting blob (Super-Admin only; gated at the route)
+    if (key === "warehouse" && value && typeof value === "object") { ops.push(saveWarehouse(value as Partial<Warehouse>, actorId)); continue; }
     // company + GSTIN → BillingConfig (single source of truth)
     if (key === "general.companyName") { if (typeof value === "string" && value.trim()) billingData.companyName = value.trim(); continue; }
     if (key === "general.gstin") { billingData.gstin = typeof value === "string" && value.trim() ? value.trim() : null; continue; }
@@ -72,6 +79,15 @@ export async function saveSettings(patch: Record<string, unknown>, actorId?: str
   if (Object.keys(billingData).length) ops.push(db.billingConfig.upsert({ where: { id: BILLING_ID }, create: { id: BILLING_ID, ...billingData }, update: billingData }));
   await Promise.all(ops);
   return getSettings();
+}
+
+/** Persist the warehouse origin. If the coordinates/radius move, every FUTURE delivery's
+    distance is stale → mark it for recompute (the daily cron backfill refills them). */
+async function saveWarehouse(patch: Partial<Warehouse>, actorId?: string) {
+  const before = await getWarehouse();
+  const after = await patchWarehouse(patch, actorId);
+  const moved = before.lat !== after.lat || before.lng !== after.lng || before.maxDeliveryRadiusKm !== after.maxDeliveryRadiusKm;
+  if (moved) await db.delivery.updateMany({ where: { status: { in: NON_TERMINAL } }, data: { distanceCalcAt: null } }).catch(() => {});
 }
 
 // coerce values to the type implied by the key's default (checkbox → boolean, numeric policy → int)

@@ -21,6 +21,7 @@ export const GET = route("driver.route", async (req: NextRequest) => {
     select: {
       id: true, date: true, status: true, slot: true, sequence: true,
       bottlesOut: true, bottlesIn: true, cashCollected: true, customerRemark: true, deliveredAt: true, bottleCount: true,
+      address: { select: { line1: true, line2: true, city: true, pincode: true, lat: true, lng: true } },   // delivery's own snapshot
       subscription: {
         select: {
           user: { select: { name: true, phone: true } },
@@ -28,14 +29,15 @@ export const GET = route("driver.route", async (req: NextRequest) => {
           items: { select: { qty: true, variant: { select: { label: true, product: { select: { name: true } } } } } },
         },
       },
-      order: { select: { user: { select: { name: true, phone: true } } } },
+      order: { select: { user: { select: { name: true, phone: true } }, address: { select: { line1: true, line2: true, city: true, pincode: true, lat: true, lng: true } } } },
     },
   });
 
-  const stops = rows.map(({ subscription, order, ...d }) => ({
+  const stops = rows.map(({ subscription, order, address, ...d }) => ({
     ...d,
     customer: subscription?.user ?? order?.user ?? { name: null, phone: null },
-    address: subscription?.address ?? null,
+    // authoritative stop location: delivery snapshot → subscription → one-time order
+    address: address ?? subscription?.address ?? order?.address ?? null,
     items: subscription?.items.map((i) => ({ product: i.variant.product.name, label: i.variant.label, qty: i.qty })) ?? [],
   }));
 

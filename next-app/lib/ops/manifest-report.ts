@@ -49,12 +49,14 @@ export interface ManifestRow {
   executive: string;      // "Unassigned" when nobody has it yet
   status: string;
   instructions: string;   // customer remark, else the address's standing delivery note
+  distanceKm: number | null;    // warehouse → stop (km)
+  travelTimeMin: number | null; // estimated travel time (min)
 }
 export interface ManifestReport {
   date: string;
   rows: ManifestRow[];
   byExecutive: { executive: string; stops: number; bottles: number }[];
-  totals: { stops: number; bottles: number; litres: number; customers: number; unassigned: number };
+  totals: { stops: number; bottles: number; litres: number; customers: number; unassigned: number; missingAddress: number; invalidCoords: number };
 }
 
 export async function manifestReport(dateIso?: string | null): Promise<ManifestReport> {
@@ -66,6 +68,7 @@ export async function manifestReport(dateIso?: string | null): Promise<ManifestR
       take: 5000,
       select: {
         id: true, orderId: true, status: true, slot: true, sequence: true, bottleCount: true, customerRemark: true,
+        distanceKm: true, travelTimeMin: true, routeStatus: true,
         address: ADDR,
         driver: { select: { employeeId: true, user: { select: { name: true } } } },
         subscription: {
@@ -85,7 +88,7 @@ export async function manifestReport(dateIso?: string | null): Promise<ManifestR
   for (const v of variants) if (v.product?.slug) mlByKey.set(`${v.product.slug}|${normLabel(v.label)}`, v.ml);
 
   const customers = new Set<string>();
-  const out: ManifestRow[] = rows.map((d) => {
+  const out = rows.map((d) => {
     const isSub = !!d.subscription;
     const user = d.subscription?.user ?? d.order?.user ?? null;
     if (user?.id) customers.add(user.id);
@@ -124,8 +127,11 @@ export async function manifestReport(dateIso?: string | null): Promise<ManifestR
       executive: d.driver ? `${d.driver.user?.name ?? "—"}${d.driver.employeeId ? " (" + d.driver.employeeId + ")" : ""}` : "Unassigned",
       status: d.status,
       instructions: d.customerRemark || addr?.deliveryNote || "",
+      distanceKm: d.distanceKm ?? null,
+      travelTimeMin: d.travelTimeMin ?? null,
+      _routeStatus: d.routeStatus ?? null,
     };
-  });
+  }) as (ManifestRow & { _routeStatus: string | null })[];
 
   // Group by executive (unassigned last) — a manifest is handed out per round.
   out.sort((a, b) => {
@@ -138,9 +144,14 @@ export async function manifestReport(dateIso?: string | null): Promise<ManifestR
   const grp = new Map<string, { stops: number; bottles: number }>();
   for (const r of out) { const g = grp.get(r.executive) ?? { stops: 0, bottles: 0 }; g.stops++; g.bottles += r.bottles; grp.set(r.executive, g); }
 
+  // exceptions: stops the distance engine flagged as un-locatable (NO_COORDS) or implausible (FAR)
+  const missingAddress = out.filter((r) => r._routeStatus === "NO_COORDS").length;
+  const invalidCoords = out.filter((r) => r._routeStatus === "FAR").length;
+  for (const r of out) delete (r as { _routeStatus?: string | null })._routeStatus;
+
   return {
     date: iso,
-    rows: out,
+    rows: out as ManifestRow[],
     byExecutive: [...grp.entries()].map(([executive, v]) => ({ executive, ...v })),
     totals: {
       stops: out.length,
@@ -148,6 +159,8 @@ export async function manifestReport(dateIso?: string | null): Promise<ManifestR
       litres: Math.round(out.reduce((s, r) => s + r.litres, 0) * 100) / 100,
       customers: customers.size,
       unassigned: out.filter((r) => r.executive === "Unassigned").length,
+      missingAddress,
+      invalidCoords,
     },
   };
 }
@@ -155,13 +168,14 @@ export async function manifestReport(dateIso?: string | null): Promise<ManifestR
 // ---------- exports ----------
 export function manifestFilename(date: string, ext: string) { return `DOODLY_Delivery_Manifest_${date}.${ext}`; }
 
-const HEAD = ["#", "Order", "Customer", "Mobile", "Address", "Pincode", "Products", "Qty", "Bottles", "Type", "Plan", "Slot", "Executive", "Special instructions"];
-const rowsOf = (r: ManifestReport) => r.rows.map((x) => [String(x.seq), x.orderRef, x.customer, x.mobile, x.address, x.pincode, x.products, String(x.qty), String(x.bottles), x.type, x.plan, x.slot, x.executive, x.instructions]);
+const HEAD = ["#", "Order", "Customer", "Mobile", "Address", "Pincode", "Products", "Qty", "Bottles", "Type", "Plan", "Slot", "Executive", "Special instructions", "Warehouse dist (km)", "Travel (min)"];
+const rowsOf = (r: ManifestReport) => r.rows.map((x) => [String(x.seq), x.orderRef, x.customer, x.mobile, x.address, x.pincode, x.products, String(x.qty), String(x.bottles), x.type, x.plan, x.slot, x.executive, x.instructions, x.distanceKm != null ? String(x.distanceKm) : "—", x.travelTimeMin != null ? String(x.travelTimeMin) : "—"]);
 
 export function manifestCsv(r: ManifestReport): string {
   const q = (c: string) => '"' + String(c ?? "").replace(/"/g, '""') + '"';
-  const total = ["", "", `TOTAL: ${r.totals.stops} stop(s)`, "", "", "", "", "", String(r.totals.bottles), "", "", "", "", ""];
-  return [HEAD, ...rowsOf(r), total].map((row) => row.map(q).join(",")).join("\r\n");
+  const total = ["", "", `TOTAL: ${r.totals.stops} stop(s)`, "", "", "", "", "", String(r.totals.bottles), "", "", "", "", "", "", ""];
+  const exceptions = ["", "", `EXCEPTIONS: ${r.totals.missingAddress} missing-location · ${r.totals.invalidCoords} invalid-coordinate`, "", "", "", "", "", "", "", "", "", "", "", "", ""];
+  return [HEAD, ...rowsOf(r), total, exceptions].map((row) => row.map(q).join(",")).join("\r\n");
 }
 
 /** Excel (.xls) — HTML table as application/vnd.ms-excel, matching the admin's
@@ -170,8 +184,9 @@ export function manifestXls(r: ManifestReport): string {
   const esc = (s: string) => String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c] as string));
   const th = HEAD.map((h) => `<th style="background:#E4F6EC;border:1px solid #ccc;padding:6px 8px;text-align:left">${esc(h)}</th>`).join("");
   const body = rowsOf(r).map((row) => "<tr>" + row.map((c) => `<td style="border:1px solid #ccc;padding:6px 8px;mso-number-format:'\\@'">${esc(c)}</td>`).join("") + "</tr>").join("");
-  const tot = `<tr><td colspan="8" style="border:1px solid #ccc;padding:6px 8px;font-weight:700;background:#F6FAF6">TOTAL — ${r.totals.stops} stop(s), ${r.totals.customers} customer(s), ${r.totals.litres} L${r.totals.unassigned ? `, ${r.totals.unassigned} unassigned` : ""}</td><td style="border:1px solid #ccc;padding:6px 8px;font-weight:700;background:#F6FAF6">${r.totals.bottles}</td><td colspan="5" style="border:1px solid #ccc;background:#F6FAF6"></td></tr>`;
+  const tot = `<tr><td colspan="8" style="border:1px solid #ccc;padding:6px 8px;font-weight:700;background:#F6FAF6">TOTAL — ${r.totals.stops} stop(s), ${r.totals.customers} customer(s), ${r.totals.litres} L${r.totals.unassigned ? `, ${r.totals.unassigned} unassigned` : ""}</td><td style="border:1px solid #ccc;padding:6px 8px;font-weight:700;background:#F6FAF6">${r.totals.bottles}</td><td colspan="7" style="border:1px solid #ccc;background:#F6FAF6"></td></tr>`;
+  const exc = (r.totals.missingAddress || r.totals.invalidCoords) ? `<p style="color:#c0392b;font-weight:600">Exceptions: ${r.totals.missingAddress} missing-location · ${r.totals.invalidCoords} invalid-coordinate stop(s) — fix before dispatch.</p>` : "";
   return `<html><head><meta charset="utf-8"></head><body>
-<h3>DOODLY — Delivery Manifest</h3><p>Delivery day ${esc(r.date)} · ${r.totals.stops} stop(s) · generated ${esc(new Date().toLocaleString("en-IN"))}</p>
+<h3>DOODLY — Delivery Manifest</h3><p>Delivery day ${esc(r.date)} · ${r.totals.stops} stop(s) · generated ${esc(new Date().toLocaleString("en-IN"))}</p>${exc}
 <table><thead><tr>${th}</tr></thead><tbody>${body}${tot}</tbody></table></body></html>`;
 }

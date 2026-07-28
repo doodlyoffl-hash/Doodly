@@ -79,6 +79,7 @@ function toDeliveryInput(d: DeliveryWithAddr): DeliveryInput {
     zoneId: addr?.zoneId ?? null,
     lat: addr?.lat ?? null,
     lng: addr?.lng ?? null,
+    distanceFromWarehouseKm: d.distanceKm ?? null,   // warehouse distance engine (future route/pay optimisation)
   };
 }
 

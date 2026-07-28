@@ -20,6 +20,8 @@ export interface DeliveryInput extends GeoPoint {
   lockedTo?: string | null;
   /** Higher = assigned sooner from the queue (FIFO tiebreak by insertion order). */
   priority?: number;
+  /** Warehouse→customer distance (km) — available to future route optimisation & driver pay. */
+  distanceFromWarehouseKm?: number | null;
 }
 
 /** An executive available to carry deliveries. */
@@ -76,4 +78,6 @@ export interface PlanOptions {
   zoneAffinity?: boolean;
   /** Optimise stop order within each trip via nearest-neighbour. Default true. */
   optimizeRoute?: boolean;
+  /** The warehouse origin — route start/return anchor for future optimisation. */
+  warehouse?: GeoPoint;
 }

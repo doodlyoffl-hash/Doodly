@@ -37,8 +37,9 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
   let dayEnd = new Date(dayStart.getTime() + 86_400_000);
 
   const include = {
+    address: true,   // the delivery's own pinned address snapshot — the authoritative stop location
     subscription: { include: { user: { select: { id: true, name: true, phone: true } }, address: true, items: { include: { variant: { select: { label: true, product: { select: { name: true } } } } } }, plan: { select: { name: true } } } },
-    order: { include: { user: { select: { id: true, name: true, phone: true } }, payment: { select: { method: true, status: true } } } },
+    order: { include: { user: { select: { id: true, name: true, phone: true } }, address: true, payment: { select: { method: true, status: true } } } },
     route: { select: { id: true, name: true, code: true } },
   } as const;
 
@@ -58,7 +59,9 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
 
   const stops = rows.map((d, i) => {
     const cust = d.subscription?.user ?? d.order?.user ?? null;
-    const addr = d.subscription?.address ?? null;
+    // authoritative stop location: the delivery's own snapshot, else the subscription's,
+    // else the one-time order's address (one-time orders have no subscription).
+    const addr = d.address ?? d.subscription?.address ?? d.order?.address ?? null;
     const item = d.subscription?.items?.[0];
     const cod = d.order && d.order.status === "PENDING" && d.order.payment?.method === "CASH";
     return {

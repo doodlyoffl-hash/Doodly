@@ -170,10 +170,19 @@ export async function optimizeRoute(id: string, _actor: Actor) {
   if (!route) throw Errors.notFound("Route not found.");
   const deliveries = await db.delivery.findMany({
     where: { routeId: id },
-    select: { id: true, subscription: { select: { address: { select: { lat: true, lng: true } } } } },
+    select: {
+      id: true,
+      address: { select: { lat: true, lng: true } },
+      subscription: { select: { address: { select: { lat: true, lng: true } } } },
+      order: { select: { address: { select: { lat: true, lng: true } } } },
+    },
   });
   if (deliveries.length < 1) throw Errors.badRequest("This route has no stops to optimise.");
-  const pts = deliveries.map((d) => ({ id: d.id, lat: d.subscription?.address?.lat ?? null, lng: d.subscription?.address?.lng ?? null }));
+  // authoritative stop location: delivery snapshot → subscription → one-time order
+  const pts = deliveries.map((d) => {
+    const a = d.address ?? d.subscription?.address ?? d.order?.address ?? null;
+    return { id: d.id, lat: a?.lat ?? null, lng: a?.lng ?? null };
+  });
   const ordered = orderByNearestNeighbor(pts);
   let distanceKm = 0;
   for (let i = 1; i < ordered.length; i++) {

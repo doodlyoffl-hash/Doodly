@@ -209,6 +209,9 @@ export async function generateAllForSubscription(subscriptionId: string, deliver
   const target = Math.max(1, Math.min(cap, Math.floor(deliveryDays) || 1));
   await db.subscription.updateMany({ where: { id: subscriptionId, targetDeliveries: null }, data: { targetDeliveries: target } }).catch(() => {});
   const rec = await reconcileSchedule(subscriptionId);
+  // Stamp warehouse distance/time on the newly-created stops (one API call for the whole
+  // subscription; non-blocking — the daily cron backfills anything missed).
+  try { const { computeSubscriptionDeliveries } = await import("@/lib/warehouse/distance"); await computeSubscriptionDeliveries(subscriptionId); } catch { /* non-blocking */ }
   return rec.created;
 }
 

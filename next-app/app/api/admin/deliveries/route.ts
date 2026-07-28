@@ -51,6 +51,7 @@ export const GET = route("admin.deliveries.list", async (req: NextRequest) => {
     select: {
       id: true, orderId: true, date: true, status: true, packingStatus: true, slot: true, sequence: true,
       bottleCount: true, bottlesIn: true, cashCollected: true, customerRemark: true,
+      distanceKm: true, travelTimeMin: true, routeStatus: true, distanceSource: true,   // warehouse distance engine
       driver: { select: { id: true, employeeId: true, user: { select: { name: true } } } },
       route: { select: { id: true, code: true, name: true } },
       address: ADDR,
@@ -63,7 +64,7 @@ export const GET = route("admin.deliveries.list", async (req: NextRequest) => {
       },
       order: {
         select: {
-          user: { select: { name: true, phone: true } }, status: true, invoice: { select: { number: true } },
+          user: { select: { name: true, phone: true } }, status: true, invoice: { select: { number: true } }, address: ADDR,
           payment: { select: { method: true } }, items: { select: { productName: true, variantLabel: true, quantity: true } },
         },
       },
@@ -73,7 +74,7 @@ export const GET = route("admin.deliveries.list", async (req: NextRequest) => {
   const deliveries = rows.map((d) => {
     const isSub = !!d.subscription;
     const user = d.subscription?.user ?? d.order?.user ?? null;
-    const addr = d.address ?? d.subscription?.address ?? null;
+    const addr = d.address ?? d.subscription?.address ?? d.order?.address ?? null;
     const oid = d.orderId ?? d.subscription?.order?.id ?? null;
     const products = isSub
       ? (d.subscription?.items ?? []).map((i) => `${i.variant.product?.name ? i.variant.product.name + " " : ""}${i.variant.label} ×${i.qty}`.trim()).join(", ")
@@ -86,6 +87,7 @@ export const GET = route("admin.deliveries.list", async (req: NextRequest) => {
       customer: user?.name ?? "—", mobile: user?.phone ?? "—",
       address: fmtAddr(addr), area: addr?.area ?? addr?.city ?? "—", pincode: addr?.pincode ?? null,
       lat: addr?.lat ?? null, lng: addr?.lng ?? null, deliveryNote: addr?.deliveryNote ?? null,
+      distanceKm: d.distanceKm, travelTimeMin: d.travelTimeMin, routeStatus: d.routeStatus, distanceSource: d.distanceSource,
       driver: d.driver ? { id: d.driver.id, name: d.driver.user.name, employeeId: d.driver.employeeId } : null,
       route: d.route ? (d.route.code || d.route.name || null) : null,
       products: products || "—",

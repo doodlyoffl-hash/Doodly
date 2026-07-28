@@ -100,5 +100,6 @@ export async function ensureDeliveryForOrder(orderId: string): Promise<{ deliver
   const d = await db.delivery.create({
     data: { orderId: order.id, addressId, date, slot: order.deliverySlot ?? DEFAULT_SLOT, status: "SCHEDULED", bottleCount },
   });
+  try { const { recomputeDeliveryDistance } = await import("@/lib/warehouse/distance"); await recomputeDeliveryDistance(d.id); } catch { /* non-blocking; cron backfills */ }
   return { deliveryId: d.id, created: true };
 }

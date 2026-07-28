@@ -42,6 +42,7 @@ const createSchema = z.object({
   startDate: z.string().datetime().optional(),
   deliverySlot: z.string().min(1).optional(),
   autoRenew: z.boolean().optional(),
+  override: z.boolean().optional(),   // Super-Admin bypass of the deliverable-address gate (audited)
 });
 
 export const POST = route("admin.subscriptions.create", async (req: NextRequest) => {

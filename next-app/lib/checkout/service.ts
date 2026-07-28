@@ -25,6 +25,7 @@ import { maybeAwardReferralForPaidOrder } from "@/lib/referrals/service";
 import { earn } from "@/lib/loyalty/service";
 import { notify, notifyOrderConfirmed } from "@/lib/notifications/dispatch";
 import { audit } from "@/lib/auth/audit";
+import { assertDeliverableAddress } from "@/lib/addresses/deliverable";
 import type { ReqContext } from "@/lib/auth/request";
 
 const TX = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30_000 } as const;
@@ -99,16 +100,13 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
   if (!input.address || !input.address.id) {
     throw Errors.badRequest("Please add or select a valid delivery address before proceeding to payment.");
   }
-  const addr = await db.address.findFirst({
-    where: { id: input.address.id, userId },
-    select: { id: true, line1: true, city: true, pincode: true },
-  });
-  if (!addr) throw Errors.forbidden("That delivery address isn't on your account — please choose one of your saved addresses.");
-  if (!addr.line1 || !addr.city || !addr.pincode || !/^[1-9]\d{5}$/.test(addr.pincode)) {
-    throw Errors.badRequest("Your delivery address is incomplete — please edit it and add the missing details before checkout.");
-  }
-  const addressId = addr.id;
-  const pincode = addr.pincode;                      // serviceability uses the SAVED pincode, not the client's
+  // MANDATORY deliverable-address gate — owned + complete + serviceable + geocoded
+  // + plausible (within the warehouse radius). An order/subscription can NEVER be
+  // created without this. Coordinates are geocode-backfilled here; an unresolvable
+  // or implausibly-far address is rejected (ask the customer to pin the location).
+  const deliverable = await assertDeliverableAddress({ userId, addressId: input.address.id, label: "checkout", ctx });
+  const addressId = deliverable.addressId;
+  const pincode = deliverable.pincode;               // serviceability uses the SAVED pincode, not the client's
 
   /* ---- 3. coupon (server-validated) + wallet (server-capped) — NEVER trust the
        client's amounts. Coupon discounts the product only, not the refundable
@@ -134,12 +132,8 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     throw Errors.conflict("Your wallet balance isn't enough for this order — add money or pick another method.");
   }
 
-  /* ---- serviceable-pincode check against the saved address (when coverage set) ---- */
-  const coverage = await db.serviceablePincode.count({ where: { enabled: true, deletedAt: null } });
-  if (coverage > 0) {
-    const pin = await db.serviceablePincode.findFirst({ where: { pincode, enabled: true, deletedAt: null } });
-    if (!pin) throw Errors.conflict(`Sorry! DOODLY does not currently deliver to ${pincode}. Please choose a serviceable delivery address.`);
-  }
+  /* ---- serviceability + geocoding + plausibility already enforced above by
+       assertDeliverableAddress (single source of truth for a deliverable address). ---- */
 
   /* ---- 3b. inventory — resolve the DB variant + block overselling filled-bottle
        stock. The check reads the SERVER stock (never trusts the client); the

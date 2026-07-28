@@ -881,6 +881,13 @@ model Delivery {
   // ---- Auto-assignment system ----
   bottleCount    Int            @default(1)        // bottles for THIS delivery (capacity unit)
   slot           String?                           // delivery slot key (e.g. "6:00-8:00 AM")
+  // ---- Warehouse distance engine (origin = configurable DOODLY warehouse) ----
+  distanceKm     Float?                            // warehouse → customer distance (km)
+  travelTimeMin  Int?                              // estimated one-way travel time (minutes)
+  distanceSource String?                           // "ROAD" (Google Distance Matrix) | "HAVERSINE" (fallback)
+  routeStatus    String?                           // "OK" | "NO_COORDS" | "FAR" — distance calc outcome
+  distanceCalcAt DateTime?                         // when distance/time was last computed
+  distanceMeta   Json?                             // { warehouse:{lat,lng}, provider } — audit/debug
   assignment     DeliveryAssignment?
   queueEntry     AssignmentQueue?
   @@index([date, status])

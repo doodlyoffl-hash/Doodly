@@ -10,6 +10,7 @@ import { Prisma, type SubStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { Errors } from "@/lib/http";
 import { shouldDeliver, type Sub as SubRule } from "@/lib/subscription";
+import { assertDeliverableAddress } from "@/lib/addresses/deliverable";
 import { adminCredit } from "@/lib/wallet/service";
 import type {
   SubListItem, SubListResponse, SubStats, SubDetail, SubReports, SubScheduleDay, SubEventRow,
@@ -295,6 +296,7 @@ export interface CreateArgs {
   userId: string; planId: string; addressId: string;
   items: { variantId: string; qty: number }[];
   startDate?: string; deliverySlot?: string; autoRenew?: boolean;
+  override?: boolean;   // super-admin bypass of the deliverable-address gate (audited)
 }
 
 export async function createSubscription(args: CreateArgs, actor: Actor) {
@@ -307,6 +309,9 @@ export async function createSubscription(args: CreateArgs, actor: Actor) {
   if (!user) throw Errors.notFound("Customer not found.");
   if (!plan) throw Errors.notFound("Plan not found.");
   if (!address || address.userId !== args.userId) throw Errors.badRequest("Address does not belong to the customer.");
+  // MANDATORY deliverable-address gate (serviceable + geocoded + plausible). A
+  // Super-Admin may explicitly override (audited) — the only sanctioned exception.
+  await assertDeliverableAddress({ userId: args.userId, addressId: args.addressId, actorRole: actor.actorRole, override: args.override, label: "admin.subscription" });
   const known = new Set(variants.map((v) => v.id));
   if (!args.items.length || args.items.some((i) => !known.has(i.variantId) || i.qty < 1)) throw Errors.badRequest("Invalid subscription items.");
 

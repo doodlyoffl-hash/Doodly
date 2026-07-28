@@ -17,6 +17,7 @@ import { Errors } from "@/lib/http";
 import { rateLimit } from "@/lib/auth/ratelimit";
 import { checkServiceable } from "@/lib/addresses/serviceability";
 import { assertServiceable, buildAddressData, NOT_SERVICEABLE } from "@/lib/addresses/helpers";
+import { assertDeliverableAddress } from "@/lib/addresses/deliverable";
 import { geocodeAddress } from "@/lib/geo/geocode";
 import { generateAllForSubscription } from "@/lib/subscriptions/deliveries";
 import { log } from "@/lib/logger";
@@ -213,6 +214,9 @@ export async function redeemReward(input: RedeemInput): Promise<{ subscriptionId
     if (!(await checkServiceable(addr.pincode)).serviceable) throw Errors.badRequest(NOT_SERVICEABLE, { pincode: NOT_SERVICEABLE });
     addressId = addr.id;
   }
+  // Guarantee real coordinates + plausibility (geocode-backfill; reject an unlocatable
+  // or implausibly-far address) so the reward subscription is a mappable, deliverable stop.
+  await assertDeliverableAddress({ userId: input.userId, addressId, label: "reward", ctx: input.ctx });
 
   const plan = await db.plan.findUnique({ where: { slug: reward.planSlug } });
   if (!plan) throw Errors.notFound("Reward plan not found.");

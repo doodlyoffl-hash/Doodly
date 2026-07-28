@@ -169,6 +169,7 @@ export async function reorderCustomer(userId: string, id: string) {
       data: {
         userId, type: "ONE_TIME", subtotalPaise: src.subtotalPaise, discountPaise: src.discountPaise, depositPaise: src.depositPaise,
         taxPaise: src.taxPaise, deliveryPaise: src.deliveryPaise, totalPaise: src.totalPaise, status: "PENDING",
+        addressId: src.addressId,   // carry the original delivery address (never leave a reorder addressless)
         items: { create: src.items.map((i) => ({ productSlug: i.productSlug, productName: i.productName, variantLabel: i.variantLabel, quantity: i.quantity, unitPricePaise: i.unitPricePaise, lineTotalPaise: i.lineTotalPaise })) },
       },
     });

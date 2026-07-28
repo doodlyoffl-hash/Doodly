@@ -11,6 +11,7 @@ import { reqContext } from "@/lib/auth/request";
 import { audit } from "@/lib/auth/audit";
 import { addressFields, assertServiceable, buildAddressData } from "@/lib/addresses/helpers";
 import { geocodeAddress } from "@/lib/geo/geocode";
+import { isWithinServiceRadius } from "@/lib/warehouse/distance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +44,13 @@ export const POST = route("addresses.create", async (req: NextRequest) => {
     const geo = await geocodeAddress({ ...(data as Record<string, unknown>), pincode: body.pincode });
     if (geo) { data.lat = geo.lat; data.lng = geo.lng; }
   }
+  // Plausibility: a serviceable pincode must resolve near the warehouse. Discard an
+  // implausibly-far coordinate (a mis-geocode — the 262 km bug) so a wrong location is
+  // NEVER persisted; the customer is asked to drop a pin (enforced at checkout).
+  let needsPin = false;
+  if (data.lat != null && data.lng != null) {
+    if (!(await isWithinServiceRadius({ lat: data.lat, lng: data.lng }))) { data.lat = null; data.lng = null; needsPin = true; }
+  } else { needsPin = true; }
 
   const count = await db.address.count({ where: { userId } });
   const makeDefault = body.isDefault || count === 0;
@@ -53,5 +61,5 @@ export const POST = route("addresses.create", async (req: NextRequest) => {
   });
 
   await audit({ userId, actorRole: "customer", action: "address.create", target: address.id, ctx: reqContext(req) });
-  return ok({ address }, { status: 201 });
+  return ok({ address, needsPin }, { status: 201 });
 });

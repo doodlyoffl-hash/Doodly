@@ -12,6 +12,7 @@ import { reqContext } from "@/lib/auth/request";
 import { audit } from "@/lib/auth/audit";
 import { addressFields, assertServiceable, buildAddressData, cleanStr, LOCATION_KEYS } from "@/lib/addresses/helpers";
 import { geocodeAddress } from "@/lib/geo/geocode";
+import { isWithinServiceRadius } from "@/lib/warehouse/distance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +40,7 @@ export const PATCH = route("addresses.update", async (req: NextRequest, { params
 
   const editingLocation = LOCATION_KEYS.some((k) => body[k] !== undefined);
   let data: Record<string, unknown>;
+  let needsPin = false;
 
   if (editingLocation) {
     // any location change re-validates serviceability + recomposes the address
@@ -51,6 +53,10 @@ export const PATCH = route("addresses.update", async (req: NextRequest, { params
       const geo = await geocodeAddress({ ...data, pincode });
       if (geo) { data.lat = geo.lat; data.lng = geo.lng; }
     }
+    // Plausibility: never persist an implausibly-far coordinate for a serviceable pincode.
+    if (data.lat != null && data.lng != null) {
+      if (!(await isWithinServiceRadius({ lat: data.lat as number, lng: data.lng as number }))) { data.lat = null; data.lng = null; needsPin = true; }
+    } else { needsPin = true; }
   } else {
     // simple partial (set default / edit note / label / contact) — no location touch
     data = {};
@@ -63,7 +69,7 @@ export const PATCH = route("addresses.update", async (req: NextRequest, { params
   });
 
   await audit({ userId, actorRole: "customer", action: "address.update", target: address.id, ctx: reqContext(req) });
-  return ok({ address });
+  return ok({ address, needsPin });
 });
 
 export const DELETE = route("addresses.delete", async (req: NextRequest, { params }: Ctx) => {

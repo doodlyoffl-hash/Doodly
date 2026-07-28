@@ -87,7 +87,11 @@ async function handle(req: NextRequest) {
   // unclaimed prize expires in 7/3/1 days. Idempotent (exact day-windows).
   const { runRewardExpiryReminders } = await import("@/lib/rewards/expiry");
   const rewardExpiry = await runRewardExpiryReminders().catch((e) => ({ error: (e as Error)?.message ?? "failed" }));
-  return NextResponse.json({ ok: true, ...result, whatsapp, autopay, addressChanges, addressChangeReminders, subDeliveries, cutoff, cutoffWa, cutoffHealth, loyalty, rewardExpiry });
+  // Warehouse distance backfill: compute distance/time for any delivery that never got one
+  // (legacy rows, or an inline compute that was skipped). Runs after new deliveries are generated.
+  const { backfillDeliveryDistances } = await import("@/lib/warehouse/distance");
+  const distances = await backfillDeliveryDistances(500).catch((e) => ({ error: (e as Error)?.message ?? "failed" }));
+  return NextResponse.json({ ok: true, ...result, whatsapp, autopay, addressChanges, addressChangeReminders, subDeliveries, cutoff, cutoffWa, cutoffHealth, loyalty, rewardExpiry, distances });
 }
 
 export const GET = handle;

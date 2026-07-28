@@ -36,15 +36,14 @@ window.DOODLY_DELIVERY = (function () {
   function loadLive() {
     if (!execUser() || !API()) return Promise.resolve(false);
     return API().get("/api/delivery/my-route").then((r) => {
-      const L = (M() ? M().locs() : []);
-      r.stops = (r.stops || []).map((s, i) => {
-        const fb = L[i % Math.max(1, L.length)] || { lat: 16.5062, lng: 80.648 };
-        return Object.assign({}, s, {
-          lat: s.lat != null ? s.lat : fb.lat, lng: s.lng != null ? s.lng : fb.lng,
-          instructions: s.instructions || "Deliver before 7 AM",
-          plan: s.itemLabel ? s.plan + " · " + s.itemLabel : s.plan,
-        });
-      });
+      // Use the REAL coordinates from the address. Never fabricate a synthetic pin —
+      // a stop without coordinates is flagged (noCoords) so the map can skip it and
+      // the exec sees an honest "location not pinned" state instead of a wrong marker.
+      r.stops = (r.stops || []).map((s) => Object.assign({}, s, {
+        noCoords: (s.lat == null || s.lng == null),
+        instructions: s.instructions || "Deliver before 7 AM",
+        plan: s.itemLabel ? s.plan + " · " + s.itemLabel : s.plan,
+      }));
       _live = r;
       return true;
     }).catch(() => false);
