@@ -47,6 +47,21 @@ export async function detachAssignment(deliveryId: string, driverId: string | nu
   await db.assignmentLog.create({ data: { action: "UNASSIGN", deliveryId, driverId: driverId ?? null, actorId: null, actorRole: actorRole ?? "system", note: "subscription_lifecycle" } }).catch(() => {});
 }
 
+/** After a disruption, re-optimise each affected executive's remaining route (once per
+    driver+day). Completed stops stay frozen. Best-effort, non-blocking. */
+export async function reoptimizeAffected(pairs: { driverId: string | null | undefined; date: Date }[]) {
+  const seen = new Set<string>();
+  try {
+    const { reoptimizeDriverDay } = await import("@/lib/routes/exec-route");
+    for (const p of pairs) {
+      if (!p.driverId) continue;
+      const key = p.driverId + "|" + p.date.toISOString().slice(0, 10);
+      if (seen.has(key)) continue; seen.add(key);
+      await reoptimizeDriverDay(p.driverId, p.date);
+    }
+  } catch { /* non-blocking — the next sweep recovers */ }
+}
+
 /* =============================================================
    reconcileSchedule — the engine. Ensures counted deliveries == target.
    ============================================================= */
@@ -122,10 +137,12 @@ export async function skipOrCancelDates(subscriptionId: string, dates: (Date | s
   const oldEndDate = sub.endDate;
   const days = [...new Set(dates.map((d) => dayKey(new Date(d))))].map((t) => new Date(t));
   const newSkips = [...sub.skipDates];
+  const affected: { driverId: string | null | undefined; date: Date }[] = [];
   let skipped = 0;
   for (const day of days) {
     const del = await db.delivery.findFirst({ where: { subscriptionId, date: { gte: day, lt: addDays(day, 1) }, status: { not: "DELIVERED" } }, select: { id: true, status: true, driverId: true } });
     if (del && del.status !== "SKIPPED") {
+      if (del.driverId) affected.push({ driverId: del.driverId, date: day });   // capture BEFORE detach nulls it
       await detachAssignment(del.id, del.driverId, actor?.actorRole);
       await db.delivery.update({ where: { id: del.id }, data: { status: "SKIPPED", adjustReason: "CUSTOMER_REQUESTED", adjustNote: null } });
       skipped++;
@@ -134,6 +151,7 @@ export async function skipOrCancelDates(subscriptionId: string, dates: (Date | s
   }
   await db.subscription.update({ where: { id: subscriptionId }, data: { skipDates: newSkips } }).catch(() => {});
   const rec = await reconcileSchedule(subscriptionId);
+  await reoptimizeAffected(affected);   // mid-route cancel → re-optimise each executive's remaining stops
   await logEvent(subscriptionId, "DATE_CANCELLED", `${skipped} delivery date(s) cancelled — schedule extended`, { dates: days.map((d) => d.toISOString()), oldEndDate, newEndDate: rec.endDate }, actor);
   try { const uid = (await db.subscription.findUnique({ where: { id: subscriptionId }, select: { userId: true } }))?.userId; if (uid && skipped > 0) { const { notifyDeliveryCancelled } = await import("@/lib/notifications/dispatch"); await notifyDeliveryCancelled(uid, { count: skipped, newEndDate: rec.endDate }); } } catch { /* non-blocking */ }
   return { skipped, created: rec.created, oldEndDate, endDate: rec.endDate };
@@ -142,14 +160,16 @@ export async function skipOrCancelDates(subscriptionId: string, dates: (Date | s
 /** Admin marks a delivery MISSED (our fault) with a reason → FAILED + reason, detach,
     reconcile (append a make-up, extend endDate). Returns the customer id for notifying. */
 export async function adjustMissedDelivery(deliveryId: string, reason: string, note: string | null | undefined, actor?: Actor): Promise<{ subscriptionId: string; userId: string | null; created: number; oldEndDate: Date | null; endDate: Date | null } | null> {
-  const del = await db.delivery.findUnique({ where: { id: deliveryId }, select: { id: true, status: true, driverId: true, subscriptionId: true, subscription: { select: { endDate: true, userId: true } } } });
+  const del = await db.delivery.findUnique({ where: { id: deliveryId }, select: { id: true, status: true, driverId: true, date: true, subscriptionId: true, subscription: { select: { endDate: true, userId: true } } } });
   if (!del || !del.subscriptionId) return null;
   const oldEndDate = del.subscription?.endDate ?? null;
+  const missedDriverId = del.driverId;   // capture before detach
   if (del.status !== "FAILED") {
     await detachAssignment(del.id, del.driverId, actor?.actorRole);
     await db.delivery.update({ where: { id: del.id }, data: { status: "FAILED", adjustReason: reason, adjustNote: note ?? null } });
   }
   const rec = await reconcileSchedule(del.subscriptionId);
+  await reoptimizeAffected([{ driverId: missedDriverId, date: del.date }]);
   await logEvent(del.subscriptionId, "ADJUSTED", `Missed delivery adjusted (${reason}) — schedule extended`, { deliveryId, reason, note: note ?? null, oldEndDate, newEndDate: rec.endDate }, actor);
   // Apology to the customer + ops alert for an operational failure (best-effort).
   try { if (del.subscription?.userId) { const { notifyMissedDeliveryAdjusted } = await import("@/lib/notifications/dispatch"); await notifyMissedDeliveryAdjusted(del.subscription.userId, { newEndDate: rec.endDate }); } } catch { /* non-blocking */ }
@@ -192,10 +212,12 @@ export async function extendSubscription(subscriptionId: string, days: number, r
 /** Detach + delete EVERY future non-delivered delivery (used on full cancellation). */
 export async function cancelAllFutureDeliveries(subscriptionId: string, actorRole?: string): Promise<number> {
   const today = startOfDay(new Date());
-  const future = await db.delivery.findMany({ where: { subscriptionId, date: { gte: today }, status: { not: "DELIVERED" } }, select: { id: true, driverId: true, assignment: { select: { id: true } }, queueEntry: { select: { id: true } } } });
+  const future = await db.delivery.findMany({ where: { subscriptionId, date: { gte: today }, status: { not: "DELIVERED" } }, select: { id: true, driverId: true, date: true, assignment: { select: { id: true } }, queueEntry: { select: { id: true } } } });
+  const affected = future.filter((d) => d.driverId).map((d) => ({ driverId: d.driverId, date: d.date }));
   for (const d of future) if (d.assignment || d.queueEntry || d.driverId) await detachAssignment(d.id, d.driverId, actorRole);
   const ids = future.map((d) => d.id);
   if (ids.length) await db.delivery.deleteMany({ where: { id: { in: ids } } });
+  await reoptimizeAffected(affected);   // removed stops → re-optimise each executive's remaining route
   return ids.length;
 }
 

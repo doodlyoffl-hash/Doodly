@@ -96,4 +96,30 @@
 .dl-an-kpi .n { font-family:"Fraunces",serif; font-weight:600; color:var(--forest); font-size:1.35rem; line-height:1; }
 .dl-an-kpi .l { font-size:.7rem; color:var(--ink-3); font-weight:600; margin-top:5px; }
 
+/* ---- Route optimisation: current/next-stop navigation card ---- */
+.dl-navcard { padding:16px; background:linear-gradient(135deg,var(--mint-soft),var(--surface)); border-color:var(--mint); }
+.dl-navcard.done { background:var(--surface-2); }
+.dl-navcard-h { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+.dl-navcard-tag { display:inline-flex; align-items:center; gap:.35rem; font-weight:800; font-size:.72rem; letter-spacing:.03em; text-transform:uppercase; color:#fff; background:var(--leaf); padding:.28rem .6rem; border-radius:999px; }
+.dl-navcard-tag svg { vertical-align:-1px; }
+.dl-navcard-tag.ok { background:var(--forest); }
+.dl-navcard-prog { margin-left:auto; font-size:.78rem; font-weight:700; color:var(--ink-3); }
+.dl-navcard-name { font-family:"Fraunces",serif; font-weight:600; color:var(--forest); font-size:1.3rem; line-height:1.15; }
+.dl-navcard-addr { display:flex; align-items:flex-start; gap:.4rem; color:var(--ink-2); font-size:.88rem; margin-top:6px; }
+.dl-navcard-addr svg { color:var(--leaf-600); flex:0 0 auto; margin-top:2px; }
+.dl-navcard-meta { display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:10px; font-size:.8rem; font-weight:700; color:var(--leaf-600); }
+.dl-navcard-meta svg { vertical-align:-1px; }
+.dl-navcard-btns { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+.dl-navcard-btns .btn { flex:1; min-width:150px; }
+.dl-navcard-next { margin-top:12px; padding-top:10px; border-top:1px dashed var(--line); font-size:.82rem; color:var(--ink-2); }
+.dl-navcard-next b { color:var(--forest); }
+.dl-navcard-next svg { color:var(--leaf-600); vertical-align:-1px; }
+
+/* current-stop emphasis in the list + per-stop leg distance */
+.dl-stop.cur { border-color:var(--leaf); box-shadow:0 0 0 1.5px var(--leaf), var(--shadow-sm); }
+.dl-stop-cur { display:inline-flex; align-items:center; gap:.3rem; font-size:.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--leaf-600); margin-bottom:8px; }
+.dl-stop-cur svg { vertical-align:-1px; }
+.dl-stop-leg { display:flex; align-items:center; gap:.4rem; color:var(--ink-3); font-size:.78rem; font-weight:600; margin-top:8px; }
+.dl-stop-leg svg { color:var(--leaf-600); flex:0 0 auto; }
+
 @media (prefers-reduced-motion: reduce) { .dl-modal-card { transition:none; } }

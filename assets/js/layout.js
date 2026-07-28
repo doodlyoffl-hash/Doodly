@@ -1742,8 +1742,18 @@
         return '<tr><td><span class="strong">' + esc(e.name) + "</span>" + (e.employeeId ? ' <span class="muted-sm">' + esc(e.employeeId) + "</span>" : "") + "</td>" +
           '<td><span class="badge ' + toneOf(e.shiftStatus) + '">' + esc(e.shiftStatus || "—") + "</span></td>" +
           "<td>" + (e.assigned || 0) + "</td><td>" + (e.pending || 0) + "</td><td>" + (e.delivered || 0) + "</td><td>" + (e.failed || 0) + "</td>" +
-          "<td>" + (e.remainingCapacity != null ? e.remainingCapacity + " / " + (e.capacity || 0) : "—") + "</td></tr>";
-      }).join("") || '<tr><td colspan="7" class="muted-sm">No executives on shift yet.</td></tr>';
+          "<td>" + (e.remainingCapacity != null ? e.remainingCapacity + " / " + (e.capacity || 0) : "—") + "</td>" +
+          '<td>' + (e.id && (e.assigned || 0) ? '<button type="button" class="btn btn-ghost sm" data-exec-route="' + esc(e.id) + '" data-exec-name="' + esc(e.name) + '">View route</button>' : '<span class="muted-sm">—</span>') + "</td></tr>";
+      }).join("") || '<tr><td colspan="8" class="muted-sm">No executives on shift yet.</td></tr>';
+      tb.querySelectorAll("[data-exec-route]").forEach(function (b) {
+        b.addEventListener("click", function () { openExecRoute(b.dataset.execRoute, b.dataset.execName, _delDate || istTodayISO()); });
+      });
+    }
+    // Route-report export buttons (per delivery day) live in the "Deliveries per executive" panel head.
+    var rroot = document.getElementById("delAnalytics");
+    if (rroot) {
+      var wireRte = function (id, fmt) { var b = rroot.querySelector(id); if (b && !b._rteWired) { b._rteWired = true; b.addEventListener("click", function () { exportRouteReport(_delDate || istTodayISO(), fmt); }); } };
+      wireRte("#del-rte-pdf", "pdf"); wireRte("#del-rte-xls", "xls"); wireRte("#del-rte-csv", "csv");
     }
   }
   /* Packing Summary card — bottles to pack BY SIZE for the selected delivery date.
@@ -2740,6 +2750,7 @@
     packing: { path: "/api/admin/deliveries/packing/export", name: "DOODLY_Packing_List", label: "packing list" },
     packingSheet: { path: "/api/admin/deliveries/packing-sheet/export", name: "DOODLY_Packing_Sheet", label: "packing sheet" },
     manifest: { path: "/api/admin/deliveries/manifest/export", name: "DOODLY_Delivery_Manifest", label: "delivery manifest" },
+    routeReport: { path: "/api/admin/deliveries/route-report/export", name: "DOODLY_Route_Report", label: "route report" },
   };
   function exportOpsReport(kind, iso, format) {
     var cfg = OPS_REPORTS[kind]; if (!cfg) return;
@@ -2762,9 +2773,64 @@
   function exportPackingList(iso, format) { exportOpsReport("packing", iso, format); }
   function exportPackingSheet(iso, format) { exportOpsReport("packingSheet", iso, format); }
   function exportManifest(iso, format) { exportOpsReport("manifest", iso, format); }
+  function exportRouteReport(iso, format) { exportOpsReport("routeReport", iso, format); }
   window.DOODLY_ADMIN.exportPackingList = exportPackingList;
   window.DOODLY_ADMIN.exportPackingSheet = exportPackingSheet;
   window.DOODLY_ADMIN.exportManifest = exportManifest;
+  window.DOODLY_ADMIN.exportRouteReport = exportRouteReport;
+
+  /* ---- "View route" modal: one executive's OPTIMISED round trip for a day ----
+     Ordered stops with per-leg + cumulative distance/ETA + a warehouse-anchored map,
+     from GET /api/admin/deliveries/route. Reuses the routes-board routeMap pattern. */
+  function openExecRoute(driverId, name, iso) {
+    if (!driverId || !window.DOODLY_API) return;
+    var ov = document.createElement("div"); ov.className = "dac-overlay"; ov.style.cssText = "position:fixed;inset:0;background:rgba(15,61,46,.42);display:flex;align-items:center;justify-content:center;z-index:9000;padding:16px";
+    ov.innerHTML = '<div class="panel" style="width:100%;max-width:760px;max-height:92vh;overflow:auto;padding:0">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--line,#eef2ef);position:sticky;top:0;background:var(--surface,#fff);z-index:1">' +
+        '<h3 style="margin:0">Route · ' + esc(name || "Executive") + '</h3>' +
+        '<button class="btn btn-ghost sm dac-x" aria-label="Close">✕</button></div>' +
+      '<div class="panel-pad" id="er-body"><div class="muted-sm">Loading the optimised route…</div></div></div>';
+    document.body.appendChild(ov);
+    var close = function () { ov.remove(); document.removeEventListener("keydown", onKey); };
+    var onKey = function (e) { if (e.key === "Escape") close(); };
+    ov.addEventListener("click", function (e) { if (e.target === ov) close(); });
+    ov.querySelector(".dac-x").addEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+
+    DOODLY_API.get("/api/admin/deliveries/route?driverId=" + encodeURIComponent(driverId) + "&date=" + encodeURIComponent(iso))
+      .then(function (r) {
+        var body = ov.querySelector("#er-body"); if (!body) return;
+        var stops = r.stops || [], R = r.route || {}, wh = r.warehouse || null;
+        var n1 = function (v) { return (v == null) ? "—" : (Math.round(v * 10) / 10).toFixed(1); };
+        var kpis = [["Total stops", R.totalStops || stops.length], ["Completed", R.completedStops || 0], ["Remaining", R.remainingStops || 0],
+          ["Planned distance", n1(R.plannedKm) + " km"], ["Est. travel", (R.plannedMin != null ? R.plannedMin + " min" : "—")], ["Optimiser", R.source === "ROAD" ? "Road" : R.source === "HAVERSINE" ? "Distance" : "—"]];
+        var kpiHtml = kpis.map(function (x) { return '<div class="dl-an-kpi"><div class="n">' + x[1] + '</div><div class="l">' + x[0] + "</div></div>"; }).join("");
+        var STA = { DELIVERED: ["green", "Delivered"], FAILED: ["red", "Failed"], SKIPPED: ["red", "Skipped"], OUT_FOR_DELIVERY: ["amber", "Out"], ON_THE_WAY: ["amber", "On the way"], REACHED: ["amber", "Near"] };
+        var rows = stops.map(function (s) {
+          var m = STA[s.status] || ["blue", "Assigned"];
+          return '<tr><td><b>' + s.seq + '</b></td><td><span class="strong">' + esc(s.customer) + '</span><br><span class="muted-sm">' + esc(s.address) + '</span></td>' +
+            '<td>' + n1(s.legKm) + ' km' + (s.legMin != null ? '<br><span class="muted-sm">~' + s.legMin + ' min</span>' : '') + '</td>' +
+            '<td>' + n1(s.cumulativeKm) + ' km</td>' +
+            '<td><span class="badge ' + m[0] + '">' + m[1] + '</span></td></tr>';
+        }).join("") || '<tr><td colspan="5" class="muted-sm">No stops for this day.</td></tr>';
+        body.innerHTML =
+          '<div class="dl-an-kpis" style="grid-template-columns:repeat(3,1fr)">' + kpiHtml + "</div>" +
+          '<div id="er-map" style="margin-top:14px;border-radius:14px;overflow:hidden"></div>' +
+          '<div class="table-wrap" style="margin-top:14px"><table class="tbl"><thead><tr><th>#</th><th>Stop</th><th>From prev</th><th>Cumulative</th><th>Status</th></tr></thead><tbody>' + rows + "</tbody></table></div>" +
+          (wh ? '<div class="muted-sm" style="margin-top:10px">Round trip from ' + esc(wh.name) + ' and back — planned distance includes the return leg.</div>' : "");
+        try {
+          if (window.DOODLY_MAPS) {
+            var cur = -1; for (var i = 0; i < stops.length; i++) { if (stops[i].status !== "DELIVERED" && stops[i].status !== "SKIPPED" && stops[i].status !== "FAILED") { cur = i; break; } }
+            DOODLY_MAPS.routeMap(ov.querySelector("#er-map"), {
+              stops: stops.map(function (s) { return { lat: s.lat, lng: s.lng, name: s.customer, status: s.status === "DELIVERED" ? "delivered" : "" }; }),
+              origin: wh, roundTrip: true, currentIndex: cur, plannedKm: R.plannedKm, plannedMin: R.plannedMin,
+            });
+          }
+        } catch (e) {}
+      })
+      .catch(function (e) { var body = ov.querySelector("#er-body"); if (body) body.innerHTML = '<div class="muted-sm">' + esc((e && e.message) || "Couldn't load this route.") + "</div>"; });
+  }
+  window.DOODLY_ADMIN.openExecRoute = openExecRoute;
 
   // ---- Drivers (admin/drivers → live list + dashboard + Add/Manage; reuses /api/admin/drivers*) ----
   var _drDrivers = [], _drZones = [];

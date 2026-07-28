@@ -388,20 +388,33 @@ window.DOODLY_MAPS = (function () {
     // Only stops with REAL coordinates are mapped; unmapped ones are honestly omitted
     // (never fabricated onto a synthetic pin). Original index is preserved for labels/clicks.
     const mapped = allStops.map((s, i) => ({ s: s, i: i })).filter((x) => fin(x.s.lat) && fin(x.s.lng));
-    const cur = locs()[0] || BASE;                 // executive "current location"
+    // Origin = the configured WAREHOUSE when the caller anchors there (the route's true
+    // start AND end); else the executive's cached "current location". Round-trips return here.
+    const anchored = !!(o.origin && fin(o.origin.lat) && fin(o.origin.lng));
+    const cur = anchored ? o.origin : (locs()[0] || BASE);
+    const roundTrip = anchored && o.roundTrip !== false;
+    // current stop = the caller's explicit currentIndex, else the first not-yet-done stop.
+    const curI = (o.currentIndex != null) ? o.currentIndex
+      : (mapped.find((x) => !(x.s.status === "delivered" || x.s.status === "completed")) || { i: -1 }).i;
     let dist = 0, prev = cur; mapped.forEach((x) => { dist += distanceKm(prev, x.s); prev = x.s; });
+    if (roundTrip && mapped.length) dist += distanceKm(prev, cur);   // return-to-warehouse leg
     const eta = Math.round(dist / 18 * 60 + mapped.length * 3);   // ~18km/h city + 3min/stop
-    const meta = `<div class="mp-route-meta"><span>${svgPin(13)} ${allStops.length} stops</span><span>${dist.toFixed(1)} km</span><span>~${eta} min</span></div>`;
+    // Prefer the SERVER's optimised round-trip totals when supplied → the map meta matches the KPIs.
+    const dispDist = (o.plannedKm != null) ? Number(o.plannedKm) : dist;
+    const dispEta = (o.plannedMin != null) ? Number(o.plannedMin) : eta;
+    const originLabel = anchored ? (o.origin.name || "Warehouse") : "Current location";
+    const meta = `<div class="mp-route-meta"><span>${svgPin(13)} ${allStops.length} stops</span><span>${dispDist.toFixed(1)} km</span><span>~${dispEta} min</span></div>`;
 
     function svgVariant() {
       const pts = mapped.map((x) => toXY(x.s.lat, x.s.lng)), cp = toXY(cur.lat, cur.lng);
-      const line = `M${cp.x},${cp.y} ` + pts.map((p) => `L${p.x},${p.y}`).join(" ");
+      let line = `M${cp.x},${cp.y} ` + pts.map((p) => `L${p.x},${p.y}`).join(" ");
+      if (roundTrip && pts.length) line += ` L${cp.x},${cp.y}`;   // close the loop back to the warehouse
       host.classList.add("mp-route");
       host.innerHTML = `
         <svg viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid slice" aria-label="Delivery route">${mapBg()}
           <path d="${line}" class="mp-route-line"/>
           <g class="mp-cur" transform="translate(${cp.x},${cp.y})"><circle r="11" class="mp-cur-halo"/><circle r="6" class="mp-cur-dot"/></g>
-          ${mapped.map((x, k) => { const p = pts[k]; const done = x.s.status === "delivered" || x.s.status === "completed"; return `<g class="mp-stop ${done ? "done" : ""}" data-i="${x.i}" transform="translate(${p.x},${p.y})"><circle r="15" class="mp-stop-c"/><text y="5" text-anchor="middle" class="mp-stop-n">${x.i + 1}</text></g>`; }).join("")}
+          ${mapped.map((x, k) => { const p = pts[k]; const done = x.s.status === "delivered" || x.s.status === "completed"; const isCur = x.i === curI; return `<g class="mp-stop ${done ? "done" : ""} ${isCur ? "cur" : ""}" data-i="${x.i}" transform="translate(${p.x},${p.y})">${isCur ? '<circle r="21" fill="none" stroke="#1FAE66" stroke-width="3" opacity="0.95"/>' : ""}<circle r="15" class="mp-stop-c"${isCur ? ' fill="#1FAE66"' : ""}/><text y="5" text-anchor="middle" class="mp-stop-n"${isCur ? ' fill="#fff"' : ""}>${x.i + 1}</text></g>`; }).join("")}
         </svg>${meta}`;
       if (o.onStop) host.querySelectorAll(".mp-stop").forEach((g) => g.addEventListener("click", () => o.onStop(Number(g.dataset.i))));
     }
@@ -411,21 +424,23 @@ window.DOODLY_MAPS = (function () {
       const map = new gm.Map(host.querySelector(".mp-gmap"), { disableDefaultUI: true, zoomControl: true, clickableIcons: false, gestureHandling: "greedy" });
       const bounds = new gm.LatLngBounds();
       const path = [{ lat: cur.lat, lng: cur.lng }];
-      new gm.Marker({ position: { lat: cur.lat, lng: cur.lng }, map, label: "•", title: "Current location" });
+      new gm.Marker({ position: { lat: cur.lat, lng: cur.lng }, map, label: anchored ? { text: "W", fontWeight: "800" } : "•", title: originLabel });
       mapped.forEach((x) => {
         const s = x.s, ll = { lat: s.lat, lng: s.lng };
         const done = s.status === "delivered" || s.status === "completed";
-        const m = new gm.Marker({ position: ll, map, label: String(x.i + 1), title: s.name || ("Stop " + (x.i + 1)), opacity: done ? 0.5 : 1 });
+        const isCur = x.i === curI;
+        const m = new gm.Marker({ position: ll, map, label: isCur ? { text: String(x.i + 1), fontWeight: "800", color: "#0F3D2E" } : String(x.i + 1), title: s.name || ("Stop " + (x.i + 1)), opacity: done ? 0.45 : 1, zIndex: isCur ? 999 : undefined });
         if (o.onStop) m.addListener("click", () => o.onStop(x.i));
         path.push(ll); bounds.extend(ll);
       });
+      if (roundTrip && mapped.length) path.push({ lat: cur.lat, lng: cur.lng });
       bounds.extend({ lat: cur.lat, lng: cur.lng });
       new gm.Polyline({ path, map, strokeColor: "#1FAE66", strokeOpacity: 0.9, strokeWeight: 3 });
       if (mapped.length) map.fitBounds(bounds, 40); else { map.setCenter({ lat: cur.lat, lng: cur.lng }); map.setZoom(13); }
     }
     if (window.google && window.google.maps) realVariant(window.google.maps);
     else { svgVariant(); ensureGoogle().then((gm) => { if (gm && document.body.contains(host)) realVariant(gm); }); }
-    return { distance: dist, eta };
+    return { distance: dispDist, eta: dispEta };
   }
 
   /* ============================================================

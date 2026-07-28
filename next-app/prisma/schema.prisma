@@ -888,6 +888,12 @@ model Delivery {
   routeStatus    String?                           // "OK" | "NO_COORDS" | "FAR" — distance calc outcome
   distanceCalcAt DateTime?                         // when distance/time was last computed
   distanceMeta   Json?                             // { warehouse:{lat,lng}, provider } — audit/debug
+  // ---- Route optimisation (per-stop leg metrics along the optimised sequence) ----
+  legDistanceKm  Float?                            // distance from the PREVIOUS stop (warehouse → first stop)
+  legTravelMin   Int?                              // travel time from the previous stop (min)
+  cumulativeKm   Float?                            // running distance from the warehouse up to & incl. this stop
+  etaMinutes     Int?                              // estimated arrival, minutes after leaving the warehouse
+  routeSource    String?                           // "ROAD" (Directions) | "HAVERSINE" (fallback)
   assignment     DeliveryAssignment?
   queueEntry     AssignmentQueue?
   @@index([date, status])
@@ -2046,6 +2052,11 @@ model TripHistory {
   stops        Int                  @default(0)
   startedAt    DateTime?
   returnedAt   DateTime?
+  // ---- Route optimisation (planned round-trip from the warehouse) ----
+  plannedDistanceKm Float?                          // optimised round-trip distance (warehouse → stops → warehouse)
+  plannedDurationMin Int?                           // estimated route duration (min)
+  routeSource       String?                         // "ROAD" | "HAVERSINE"
+  routePlanHash     String?                         // hash of ordered stop ids + coords + warehouse → skip no-op recompute
   createdAt    DateTime             @default(now())
   assignments  DeliveryAssignment[]
   @@index([driverId, date, slot])

@@ -119,7 +119,8 @@ export async function runAutoAssignment(args: SlotArgs) {
     return { ok: true, assigned: 0, queued: 0, executives: 0, strategy, message: "Manual mode — auto-assignment is switched off. Assign deliveries from the board." };
   }
 
-  return withRetry(() =>
+  let assignedDriverIds: string[] = [];
+  const result = await withRetry(() =>
     db.$transaction(async (tx) => {
       // 1) Confirmed deliveries for the slot that aren't assigned or queued yet.
       const deliveries = await tx.delivery.findMany({
@@ -148,6 +149,7 @@ export async function runAutoAssignment(args: SlotArgs) {
         strategy === "EQUAL" ? planEqualAssignments(dInputs, eInputs)
         : strategy === "CAPACITY" ? planAssignments(dInputs, eInputs, { zoneAffinity: false })
         : planAssignments(dInputs, eInputs);
+      assignedDriverIds = plan.assignments.map((a) => a.executiveId);   // for the post-commit route optimise
 
       // 3) Persist assignments (one trip per executive).
       for (const a of plan.assignments) {
@@ -219,6 +221,15 @@ export async function runAutoAssignment(args: SlotArgs) {
       };
     }, TX),
   );
+
+  // Post-commit: generate the warehouse-anchored OPTIMISED route (road-first, per exec).
+  // Runs outside the tx (Directions API call + its own writes); non-blocking — the
+  // manual/cron re-run recovers if it hiccups.
+  try {
+    const { reoptimizeDriverDay } = await import("@/lib/routes/exec-route");
+    for (const driverId of assignedDriverIds) await reoptimizeDriverDay(driverId, date);
+  } catch (e) { console.error("route.optimise.onAssign", (e as Error)?.message); }
+  return result;
 }
 
 // ---------- AUTOMATIC TRIGGER (sweep) ----------

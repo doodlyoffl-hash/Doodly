@@ -9,7 +9,8 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { Errors } from "@/lib/http";
-import { orderByNearestNeighbor, haversineKm } from "@/lib/assignment/engine";
+import { getWarehouse } from "@/lib/warehouse/config";
+import { optimizeStops } from "@/lib/routes/optimize-engine";
 import { istDayWindow, istTodayBounds } from "@/lib/delivery/stats";
 import { slaPromiseMin, deliveredOnTime } from "@/lib/delivery/late";
 
@@ -164,7 +165,8 @@ export async function duplicateRoute(id: string, _actor: Actor) {
   return mapRoute(r);
 }
 
-/** Optimise stop order via nearest-neighbour; stamp distance + estimated duration. */
+/** Optimise stop order via the warehouse-anchored route engine (Directions when keyed,
+    else nearest-neighbour + 2-opt); stamp per-stop leg metrics + the route total. */
 export async function optimizeRoute(id: string, _actor: Actor) {
   const route = await db.route.findUnique({ where: { id }, select: { id: true } });
   if (!route) throw Errors.notFound("Route not found.");
@@ -179,25 +181,20 @@ export async function optimizeRoute(id: string, _actor: Actor) {
   });
   if (deliveries.length < 1) throw Errors.badRequest("This route has no stops to optimise.");
   // authoritative stop location: delivery snapshot → subscription → one-time order
-  const pts = deliveries.map((d) => {
+  const stopsIn = deliveries.map((d) => {
     const a = d.address ?? d.subscription?.address ?? d.order?.address ?? null;
     return { id: d.id, lat: a?.lat ?? null, lng: a?.lng ?? null };
   });
-  const ordered = orderByNearestNeighbor(pts);
-  let distanceKm = 0;
-  for (let i = 1; i < ordered.length; i++) {
-    // Guard BOTH coords: haversineKm returns Infinity if any of lat/lng is null, and a
-    // half-geocoded stop would persist Infinity km/min onto the Route (poisoning fleet avgs).
-    const leg = haversineKm(ordered[i - 1], ordered[i]);
-    if (Number.isFinite(leg)) distanceKm += leg;
-  }
-  distanceKm = Math.round(distanceKm * 10) / 10;
-  const durationMin = Math.round(distanceKm / 20 * 60 + ordered.length * 3); // ~20 km/h + 3 min/stop
-  await db.$transaction([
-    ...ordered.map((o, i) => db.delivery.update({ where: { id: o.id }, data: { sequence: i + 1 } })),
-    db.route.update({ where: { id }, data: { distanceKm, durationMin } }),
-  ]);
-  return { id, stops: ordered.length, distanceKm, durationMin };
+  const wh = await getWarehouse();
+  const res = await optimizeStops({ lat: wh.lat, lng: wh.lng }, stopsIn);
+  let cum = 0, eta = 0;
+  const updates = res.order.map((sid, i) => {
+    const leg = res.legs[i];
+    cum = Math.round((cum + leg.km) * 100) / 100; eta += leg.min;
+    return db.delivery.update({ where: { id: sid }, data: { sequence: i + 1, legDistanceKm: leg.km, legTravelMin: leg.min, cumulativeKm: cum, etaMinutes: eta, routeSource: res.source } });
+  });
+  await db.$transaction([...updates, db.route.update({ where: { id }, data: { distanceKm: res.totalKm, durationMin: res.totalMin } })]);
+  return { id, stops: res.order.length, distanceKm: res.totalKm, durationMin: res.totalMin, source: res.source };
 }
 
 export type RouteBulkAction = "activate" | "deactivate" | "assignDriver" | "delete" | "restore";

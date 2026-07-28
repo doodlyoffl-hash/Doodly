@@ -149,12 +149,56 @@ window.DOODLY_DELIVERY = (function () {
       all.forEach((s) => { st[s.id] = { status: s.status || "assigned", bottles: s.bottlesCollected || 0 }; });
     }
 
+    // current stop = first not-yet-delivered (in optimised sequence order); the one after it = next.
+    function currentStop() { return all.find((s) => stStatus(st, s.id) !== "delivered") || null; }
+    function upcomingAfter(cur) { if (!cur) return null; let seen = false; for (const s of all) { if (s.id === cur.id) { seen = true; continue; } if (seen && stStatus(st, s.id) !== "delivered") return s; } return null; }
+
     function summary() {
       const total = all.length, done = all.filter((s) => stStatus(st, s.id) === "delivered").length;
       const pending = total - done;
       const bottles = all.reduce((n, s) => n + Math.max(0, s.bottlesExpected - stBottles(st, s.id)), 0);
-      const r = M() ? M().routeMap(document.createElement("div"), { stops: all.filter((s) => stStatus(st, s.id) !== "delivered") }) : { distance: 0 };
-      return { total, done, pending, bottles, distance: (r.distance || 0).toFixed(1) };
+      const R = (_live && _live.route) || null;
+      // Distance TRAVELLED = the optimised legs of the stops already completed locally
+      // (kept in sync with optimistic on-device completes, not just the server snapshot).
+      const doneStops = all.filter((s) => stStatus(st, s.id) === "delivered");
+      const travelledKm = doneStops.reduce((a, s) => a + (Number(s.legKm) || 0), 0);
+      const travelledMin = doneStops.reduce((a, s) => a + (Number(s.legMin) || 0), 0);
+      let plannedKm = R && R.plannedKm != null ? Number(R.plannedKm) : null;
+      let plannedMin = R && R.plannedMin != null ? Number(R.plannedMin) : null;
+      // fallback (demo / metrics not yet computed): estimate a warehouse-anchored round trip
+      if (plannedKm == null && M()) { const r = M().routeMap(document.createElement("div"), { stops: all, origin: R && R.warehouse, roundTrip: true }); plannedKm = r.distance || 0; plannedMin = r.eta || 0; }
+      plannedKm = plannedKm || 0;
+      const remainingKm = Math.max(0, plannedKm - travelledKm);
+      const remainingMin = plannedMin != null ? Math.max(0, plannedMin - travelledMin) : null;
+      return { total, done, pending, bottles, plannedKm, travelledKm, remainingKm, plannedMin, remainingMin };
+    }
+
+    function fmtClock(minFromNow) {
+      if (minFromNow == null) return "—";
+      try { return new Date(Date.now() + minFromNow * 60000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); } catch (e) { return "—"; }
+    }
+
+    function navCard(s) {
+      if (!all.length) return "";
+      const cur = currentStop();
+      if (!cur) return `<div class="dl-card dl-navcard done"><div class="dl-navcard-h"><span class="dl-navcard-tag ok">${svg("check", 15)} Route complete</span></div><div class="dl-navcard-name">All ${all.length} stops delivered</div><div class="dl-navcard-addr">Head back to the warehouse${_live && _live.route && _live.route.warehouse ? " · " + esc(_live.route.warehouse.name) : ""}.</div></div>`;
+      const nxt = upcomingAfter(cur);
+      const curNav = M() ? M().navUrl(cur.lat, cur.lng, "driving") : "#";
+      const bits = [];
+      if (cur.legKm != null) bits.push(`${svg("nav", 12)} ${Number(cur.legKm).toFixed(1)} km from previous`);
+      if (cur.legMin != null) bits.push(`~${cur.legMin} min`);
+      if (cur.distanceFromWarehouseKm != null) bits.push(`${Number(cur.distanceFromWarehouseKm).toFixed(1)} km from warehouse`);
+      return `<div class="dl-card dl-navcard">
+        <div class="dl-navcard-h"><span class="dl-navcard-tag">Current stop · #${cur.seq}</span>${cur.noCoords ? '<span class="badge amber">Location not pinned</span>' : ""}<span class="dl-navcard-prog">${s.done}/${s.total} done</span></div>
+        <div class="dl-navcard-name">${esc(cur.name)}</div>
+        <div class="dl-navcard-addr">${svg("pin", 13)} ${esc(cur.address)}</div>
+        ${bits.length ? `<div class="dl-navcard-meta">${bits.map((b) => `<span>${b}</span>`).join("")}</div>` : ""}
+        <div class="dl-navcard-btns">
+          <a class="btn btn-primary"${cur.noCoords ? ' aria-disabled="true" style="opacity:.5;pointer-events:none"' : ` href="${curNav}" target="_blank" rel="noopener"`}>${svg("nav", 16)} Navigate to stop</a>
+          <button class="btn btn-ghost" id="dlGoCur">View stop details</button>
+        </div>
+        <div class="dl-navcard-next">${nxt ? `${svg("nav", 12)} Next: <b>#${nxt.seq} ${esc(nxt.name)}</b>${nxt.legKm != null ? ` · ${Number(nxt.legKm).toFixed(1)} km further` : ""}` : "This is your final stop before returning to the warehouse."}</div>
+      </div>`;
     }
 
     function render() {
@@ -170,19 +214,22 @@ window.DOODLY_DELIVERY = (function () {
             : ""}<span class="badge green">${_live ? "Live" : "On shift"}</span></span>
         </div>
         <div class="dl-kpis">
-          <div class="dl-kpi"><div class="n">${s.total}</div><div class="l">Assigned</div></div>
+          <div class="dl-kpi"><div class="n">${s.total}</div><div class="l">Total stops</div></div>
           <div class="dl-kpi"><div class="n">${s.done}</div><div class="l">Completed</div></div>
-          <div class="dl-kpi"><div class="n">${s.pending}</div><div class="l">Pending</div></div>
-          <div class="dl-kpi"><div class="n">${s.pending}</div><div class="l">Remaining stops</div></div>
+          <div class="dl-kpi"><div class="n">${s.pending}</div><div class="l">Remaining</div></div>
+          <div class="dl-kpi"><div class="n">${s.plannedKm.toFixed(1)}<small>km</small></div><div class="l">Planned distance</div></div>
+          <div class="dl-kpi"><div class="n">${s.travelledKm.toFixed(1)}<small>km</small></div><div class="l">Travelled</div></div>
+          <div class="dl-kpi"><div class="n">${s.remainingKm.toFixed(1)}<small>km</small></div><div class="l">Distance left</div></div>
+          <div class="dl-kpi"><div class="n">${s.pending ? fmtClock(s.remainingMin) : "—"}</div><div class="l">Est. completion</div></div>
           <div class="dl-kpi"><div class="n">${s.bottles}</div><div class="l">Bottles to collect</div></div>
-          <div class="dl-kpi"><div class="n">${s.distance}<small>km</small></div><div class="l">Distance left</div></div>
         </div>
+        ${navCard(s)}
         <div class="dl-card dl-routewrap">
-          <div class="dl-card-h"><h3>${svg("pin", 18)} Today's route</h3></div>
+          <div class="dl-card-h"><h3>${svg("pin", 18)} Today's route${_live && _live.route && _live.route.source ? ` <small class="muted-sm" style="font-weight:600">· ${_live.route.source === "ROAD" ? "road-optimised" : "distance-optimised"}</small>` : ""}</h3></div>
           <div id="dlRouteMap"></div>
           <div class="dl-route-btns">
             <button class="btn btn-primary" id="dlStart">Start route</button>
-            <a class="btn btn-ghost" id="dlNav" href="#" target="_blank" rel="noopener">${svg("nav", 16)} Open navigation</a>
+            <a class="btn btn-ghost" id="dlNav" href="#" target="_blank" rel="noopener">${svg("nav", 16)} Navigate current stop</a>
             <button class="btn btn-ghost" id="dlRefresh">Refresh route</button>
           </div>
         </div>
@@ -196,9 +243,18 @@ window.DOODLY_DELIVERY = (function () {
       // the whole block so a map failure can't ever kill the portal's interactivity.
       try {
         if (M()) {
-          M().routeMap(host.querySelector("#dlRouteMap"), { stops: all, onStop: (i) => { const c = host.querySelector(`#card-${all[i].id}`); if (c) c.scrollIntoView({ behavior: "smooth", block: "center" }); } });
-          const next = all.find((x) => stStatus(st, x.id) !== "delivered") || all[0];
-          const navBtn = host.querySelector("#dlNav"); if (navBtn && next) navBtn.href = M().navUrl(next.lat, next.lng, "driving");
+          const cur = currentStop();
+          const R = (_live && _live.route) || null;
+          M().routeMap(host.querySelector("#dlRouteMap"), {
+            stops: all,
+            origin: (R && R.warehouse) || null,   // warehouse-anchored polyline (start AND end)
+            roundTrip: true,
+            currentIndex: cur ? all.indexOf(cur) : -1,
+            plannedKm: R ? R.plannedKm : null, plannedMin: R ? R.plannedMin : null,
+            onStop: (i) => { const c = host.querySelector(`#card-${all[i].id}`); if (c) c.scrollIntoView({ behavior: "smooth", block: "center" }); },
+          });
+          // header "Navigate" always points at the CURRENT stop
+          const navBtn = host.querySelector("#dlNav"); if (navBtn && cur && !cur.noCoords) navBtn.href = M().navUrl(cur.lat, cur.lng, "driving");
         }
       } catch (e) { /* map is non-critical — keep the portal interactive */ }
       wire();
@@ -208,7 +264,10 @@ window.DOODLY_DELIVERY = (function () {
       const status = stStatus(st, s2.id), collected = stBottles(st, s2.id), pendingB = Math.max(0, s2.bottlesExpected - collected);
       const stepIdx = WORKFLOW.findIndex((w) => w[0] === status);
       const done = status === "delivered";
-      return `<div class="dl-stop ${done ? "done" : ""}" id="card-${s2.id}" data-id="${s2.id}">
+      const isCur = !done && (currentStop() || {}).id === s2.id;
+      const legTxt = s2.legKm != null ? `${Number(s2.legKm).toFixed(1)} km from previous${s2.legMin != null ? ` · ~${s2.legMin} min` : ""}` : "";
+      return `<div class="dl-stop ${done ? "done" : ""} ${isCur ? "cur" : ""}" id="card-${s2.id}" data-id="${s2.id}">
+        ${isCur ? `<div class="dl-stop-cur">${svg("nav", 12)} Current stop</div>` : ""}
         <div class="dl-stop-top">
           <span class="dl-seq">${s2.seq}</span>
           <div class="dl-stop-id"><b>${esc(s2.name)}</b><small>${esc(s2.plan)} · ${s2.qty} bottle${s2.qty > 1 ? "s" : ""}</small></div>
@@ -223,6 +282,7 @@ window.DOODLY_DELIVERY = (function () {
             (xtra ? `<div class="muted-sm" style="margin-top:2px">${esc(xtra)}</div>` : "") +
             (s2.customerName && s2.customerName !== s2.name ? `<div class="muted-sm" style="margin-top:2px">Account: ${esc(s2.customerName)}</div>` : "");
         })()}
+        ${legTxt ? `<div class="dl-stop-leg">${svg("nav", 12)} ${legTxt}${s2.cumulativeKm != null ? ` · ${Number(s2.cumulativeKm).toFixed(1)} km cumulative` : ""}</div>` : ""}
         ${s2.instructions ? `<div class="dl-instr">${svg("alert", 13)} ${esc(s2.instructions)}</div>` : ""}
         <div class="dl-steps">${WORKFLOW.map((w, i) => `<span class="dl-step ${i <= stepIdx ? "on" : ""}">${esc(w[1])}</span>`).join('<span class="dl-step-sep"></span>')}</div>
         <div class="dl-bottles">
@@ -262,7 +322,9 @@ window.DOODLY_DELIVERY = (function () {
       host.querySelector("#dlStart").addEventListener("click", () => { all.forEach((s2) => { if (stStatus(st, s2.id) === "assigned") setStatus(s2.id, "onway"); }); startLocationPolling(); toast("Route started — drive safe!"); render(); });
       // resume live GPS reporting if the route is already in progress (e.g. after a page reload)
       if (_live && all.some((s2) => { var ss = stStatus(st, s2.id); return ss === "onway" || ss === "reached"; })) startLocationPolling();
-      host.querySelector("#dlRefresh").addEventListener("click", () => { render(); toast("Route refreshed"); });
+      host.querySelector("#dlRefresh").addEventListener("click", () => { if (_live) { loadLive().then(() => { mountPortalNow(host); toast("Route refreshed"); }); } else { render(); toast("Route refreshed"); } });
+      const goCur = host.querySelector("#dlGoCur");
+      if (goCur) goCur.addEventListener("click", () => { const c = currentStop(); const el = c && host.querySelector(`#card-${c.id}`); if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); });
       host.querySelectorAll("[data-next]").forEach((b) => b.addEventListener("click", () => {
         const id = b.dataset.next, status = stStatus(st, id), i = WORKFLOW.findIndex((w) => w[0] === status);
         if (i >= 2) { confirmDelivery(id); return; }
@@ -304,7 +366,12 @@ window.DOODLY_DELIVERY = (function () {
             if (res && res.late) toast(`⚠ Late by ${res.delayMin} min — apology sent to ${s2.name}`);
           }
         } catch (e) {}
-        close(); toast(`Delivered to ${s2.name} ✓`); render();
+        close(); render();
+        // Auto-advance: the just-delivered stop drops out of the sequence, so currentStop()
+        // now points at the next pending stop — scroll it into view and refresh the nav link.
+        const nc = currentStop();
+        if (nc && nc.id !== id) { const el = host.querySelector(`#card-${nc.id}`); if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); toast(`Delivered ✓ · Next: #${nc.seq} ${nc.name}`); }
+        else toast(`Delivered to ${s2.name} ✓ · Route complete 🎉`);
       });
     }
 

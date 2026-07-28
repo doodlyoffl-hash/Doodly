@@ -105,9 +105,10 @@ export async function applyChange(changeId: string, actor: Actor, opts?: { force
         date: { gte: startOfDay(change.effectiveDate) },
         status: { in: ["SCHEDULED", "ASSIGNED", "ACCEPTED"] },
       },
-      select: { id: true, driverId: true, assignment: { select: { id: true } }, queueEntry: { select: { id: true } } },
+      select: { id: true, driverId: true, date: true, assignment: { select: { id: true } }, queueEntry: { select: { id: true } } },
     });
     const affectedDriverIds = new Set<string>();
+    const affectedRoutePairs: { driverId: string | null | undefined; date: Date }[] = future.filter((d) => d.driverId).map((d) => ({ driverId: d.driverId, date: d.date }));
     for (const d of future) {
       if (d.assignment) await tx.deliveryAssignment.delete({ where: { deliveryId: d.id } });
       if (d.queueEntry) await tx.assignmentQueue.delete({ where: { deliveryId: d.id } });
@@ -127,7 +128,7 @@ export async function applyChange(changeId: string, actor: Actor, opts?: { force
 
     await logSubEvent(tx, change.subscriptionId, "ADDRESS_CHANGED", "Delivery address updated", { address: { from: change.oldAddressId, to: change.newAddressId } }, actor);
 
-    return { applied: true, affectedDriverIds: Array.from(affectedDriverIds) };
+    return { applied: true, affectedDriverIds: Array.from(affectedDriverIds), affectedRoutePairs };
   }, { timeout: 20000 });
 
   // ---- side-effects (never throw) ----
@@ -136,6 +137,8 @@ export async function applyChange(changeId: string, actor: Actor, opts?: { force
     await notify(change.userId, { title: "Delivery address updated", body: "Your delivery address has been updated successfully.", email: true, whatsapp: true });
     // Warehouse distance/time is stale for the repointed stops → recompute for the new address.
     try { const { recomputeDeliveriesForAddress } = await import("@/lib/warehouse/distance"); await recomputeDeliveriesForAddress(change.newAddressId); } catch { /* non-blocking; cron backfills */ }
+    // The departed stops left their old trips → re-optimise those executives' remaining routes.
+    try { const { reoptimizeAffected } = await import("@/lib/subscriptions/deliveries"); await reoptimizeAffected(result.affectedRoutePairs ?? []); } catch { /* non-blocking */ }
     for (const driverId of result.affectedDriverIds) {
       try {
         const drv = await db.driver.findUnique({ where: { id: driverId }, select: { userId: true } });
