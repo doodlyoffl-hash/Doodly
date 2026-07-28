@@ -55,7 +55,17 @@ async function handle(req: NextRequest) {
   } else if (!isVercelCron) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  const limit = Math.min(1000, Math.max(1, Number(new URL(req.url).searchParams.get("limit")) || 200));
+  const url = new URL(req.url);
+  const limit = Math.min(1000, Math.max(1, Number(url.searchParams.get("limit")) || 200));
+
+  // ?only=drain — flush PENDING notifications ONLY (no day-window reminder generators),
+  // so an on-demand run never double-sends today's reminders. Safe to call any time.
+  if (url.searchParams.get("only") === "drain") {
+    const result = await drainPending(limit);
+    const whatsapp = await pollWhatsAppStatuses().catch(() => ({ polled: 0, updated: 0 }));
+    return NextResponse.json({ ok: true, mode: "drain-only", ...result, whatsapp });
+  }
+
   const result = await drainPending(limit);
   const whatsapp = await pollWhatsAppStatuses().catch(() => ({ polled: 0, updated: 0 }));
   const { autopayRenewalReminders } = await import("@/lib/autopay/service");
