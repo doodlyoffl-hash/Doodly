@@ -6,7 +6,7 @@
    ============================================================= */
 import "server-only";
 import { db } from "@/lib/db";
-import { outstandingCustomers } from "@/lib/bottles/balance";
+import { outstandingCustomers, allBottleCustomers } from "@/lib/bottles/balance";
 
 const rup = (p: number) => "Rs." + (Math.round(p) / 100).toLocaleString("en-IN");
 
@@ -22,10 +22,11 @@ export interface BottleReport {
   totals: { delivered: number; returned: number; lost: number; pending: number; overdueCustomers: number };
 }
 
-/** Per-customer outstanding + lifetime issued/returned/lost + deposit held. */
-export async function bottleReport(): Promise<BottleReport> {
+/** Per-customer outstanding + lifetime issued/returned/lost + deposit held.
+    `scope: "all"` includes settled customers (held 0); default lists only current holders. */
+export async function bottleReport(scope: "outstanding" | "all" = "outstanding"): Promise<BottleReport> {
   const [holders, byUserEvent, deposits] = await Promise.all([
-    outstandingCustomers(),
+    scope === "all" ? allBottleCustomers() : outstandingCustomers(),
     db.bottleLedger.groupBy({ by: ["userId", "event"], _sum: { qty: true } }),
     db.order.groupBy({ by: ["userId"], where: { status: "PAID" }, _sum: { depositPaise: true } }),
   ]);
@@ -58,17 +59,22 @@ export async function bottleReport(): Promise<BottleReport> {
     overdueCustomers: holders.filter((c) => c.overdueDays >= 2).length,
   };
 
+  const settled = holders.filter((c) => c.held === 0).length;
+  const subtitle = scope === "all"
+    ? `${holders.length} customer(s) · ${settled} settled · ${totals.pending} bottle(s) outstanding · ${totals.overdueCustomers} overdue · generated ${new Date().toLocaleString("en-IN")}`
+    : `${holders.length} customer(s) holding ${totals.pending} bottle(s) · ${totals.overdueCustomers} overdue · generated ${new Date().toLocaleString("en-IN")}`;
+
   return {
     type: "bottles",
-    title: "Bottle Return Report",
-    subtitle: `${holders.length} customer(s) holding ${totals.pending} bottle(s) · ${totals.overdueCustomers} overdue · generated ${new Date().toLocaleString("en-IN")}`,
+    title: scope === "all" ? "Bottle Report — all customers" : "Bottle Return Report",
+    subtitle,
     rowCount: rows.length,
     columns: [
       { label: "Customer" }, { label: "Mobile" }, { label: "Delivered", right: true }, { label: "Returned", right: true }, { label: "Lost", right: true },
       { label: "Pending", right: true }, { label: "Overdue" }, { label: "Subscription" }, { label: "Deposit held", right: true },
     ],
     rows,
-    totalRow: ["TOTAL", `${holders.length} holder(s)`, String(totals.delivered), String(totals.returned), String(totals.lost), String(totals.pending), `${totals.overdueCustomers} overdue`, "", ""],
+    totalRow: ["TOTAL", `${holders.length} customer(s)`, String(totals.delivered), String(totals.returned), String(totals.lost), String(totals.pending), `${totals.overdueCustomers} overdue`, "", ""],
     data: holders,
     totals,
   };

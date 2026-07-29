@@ -21,8 +21,9 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const kind = (sp.get("kind") || "customers").toLowerCase();
   const format = (sp.get("format") || "pdf").toLowerCase();
-  const report: BottleReport = kind === "executives" ? await bottleExecReport() : await bottleReport();
-  const fkind = kind === "executives" ? "Executives" : "Customers";
+  const scope = (sp.get("scope") || "outstanding").toLowerCase() === "all" ? "all" : "outstanding";
+  const report: BottleReport = kind === "executives" ? await bottleExecReport() : await bottleReport(scope);
+  const fkind = kind === "executives" ? "Executives" : scope === "all" ? "Customers_All" : "Customers";
   const log = (fmt: string) => audit({ userId: readUserId(req) ?? null, actorRole: readRole(req), action: "bottle.report.export", target: `${fkind} · ${fmt.toUpperCase()} · ${report.rowCount} row(s)`, ctx: reqContext(req) }).catch(() => {});
 
   try {

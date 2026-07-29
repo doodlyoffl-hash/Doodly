@@ -79,13 +79,24 @@ export interface OutstandingCustomer {
     powers the admin outstanding/overdue board + recovery. Bounded by the (small)
     set of customers with a positive balance. */
 export async function outstandingCustomers(): Promise<OutstandingCustomer[]> {
+  return bottleCustomers(false);
+}
+
+/** Every customer who has ever held a bottle — settled ones INCLUDED (held 0).
+    Powers the report's "include settled" scope. Outstanding sort first, settled last. */
+export async function allBottleCustomers(): Promise<OutstandingCustomer[]> {
+  return bottleCustomers(true);
+}
+
+/** Shared builder: `includeSettled` keeps held-0 customers (else only positive balances). */
+async function bottleCustomers(includeSettled: boolean): Promise<OutstandingCustomer[]> {
   // 1) net balance per user (fast groupBy)
   const groups = await db.bottleLedger.groupBy({
     by: ["userId", "event"], where: { event: { in: ["ISSUED", "RETURNED", "LOST"] } }, _sum: { qty: true },
   });
   const bal = new Map<string, number>();
   for (const g of groups) bal.set(g.userId, (bal.get(g.userId) ?? 0) + (g.event === "ISSUED" ? 1 : -1) * (g._sum.qty ?? 0));
-  const holders = [...bal.entries()].filter(([, v]) => v > 0).map(([id]) => id);
+  const holders = [...bal.entries()].filter(([, v]) => includeSettled || v > 0).map(([id]) => id);
   if (!holders.length) return [];
 
   // 2) aging: walk the ordered ledger for holders only
@@ -112,5 +123,5 @@ export async function outstandingCustomers(): Promise<OutstandingCustomer[]> {
     const { held, heldSince } = balanceFromRows(byUser.get(id) ?? []);
     const u = nameOf.get(id);
     return { userId: id, name: u?.name ?? "Customer", phone: u?.phone ?? null, held, heldSince, overdueDays: overdueDays(heldSince), lastDeliveredAt: lastOf.get(id) ?? null, subStatus: subOf.get(id) ?? null };
-  }).sort((a, b) => b.overdueDays - a.overdueDays || b.held - a.held);
+  }).sort((a, b) => b.overdueDays - a.overdueDays || b.held - a.held || a.name.localeCompare(b.name));
 }

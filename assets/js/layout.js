@@ -1522,7 +1522,7 @@
     mount.innerHTML =
       '<div class="panel" style="margin-bottom:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">' +
         '<h3 style="margin:0">🍼 Bottles with customers <span class="muted-sm" style="font-weight:600">— ' + (t.bottles || 0) + " bottle(s) · " + (t.overdue || 0) + " overdue</span></h3>" +
-        '<span style="display:flex;gap:6px;flex-wrap:wrap">' + rep("customers", "pdf", "⬇ PDF") + rep("customers", "xls", "Excel") + rep("customers", "csv", "CSV") + rep("executives", "pdf", "Exec PDF") + "</span></div>" +
+        '<span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' + '<label class="muted-sm" style="display:inline-flex;align-items:center;gap:4px;margin-right:4px" title="Include customers who have returned everything (Pending 0)"><input type="checkbox" id="bottleInclSettled"> Include settled</label>' + rep("customers", "pdf", "⬇ PDF") + rep("customers", "xls", "Excel") + rep("customers", "csv", "CSV") + rep("executives", "pdf", "Exec PDF") + "</span></div>" +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">' + fbtn("all", "All") + fbtn("overdue", "Overdue") + fbtn("high", "High (5+)") + "</div>" +
         '<div class="table-wrap"><table class="tbl"><thead><tr><th>Customer</th><th>Held</th><th>Overdue</th><th>Subscription</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div></div>" +
       '<div class="panel" style="margin-bottom:16px"><div class="panel-head"><h3>Bottle recovery <span class="muted-sm" style="font-weight:600">— open cases (' + (t.openRecoveries || 0) + ")</span></h3></div>" +
@@ -1564,10 +1564,12 @@
     var h = {}; try { var tok = localStorage.getItem("doodly-token"); if (tok) h["Authorization"] = "Bearer " + tok; } catch (e) {}
     try { if (window.DOODLY_RBAC) { h["X-Doodly-Actor"] = DOODLY_RBAC.activeRole(); var cu = DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser(); if (cu && cu.id) h["X-Doodly-Actor-Id"] = cu.id; } } catch (e) {}
     var ext = fmt === "xls" ? "xls" : fmt === "csv" ? "csv" : "pdf";
-    dacToast("Preparing the bottle report (" + ext.toUpperCase() + ")…");
-    fetch(base + "/api/admin/bottles/report/export?kind=" + kind + "&format=" + ext, { headers: h, credentials: "include" })
+    var scope = "outstanding";
+    try { var cb = document.getElementById("bottleInclSettled"); if (cb && cb.checked && kind === "customers") scope = "all"; } catch (e) {}
+    dacToast("Preparing the bottle report (" + ext.toUpperCase() + (scope === "all" ? ", incl. settled" : "") + ")…");
+    fetch(base + "/api/admin/bottles/report/export?kind=" + kind + "&scope=" + scope + "&format=" + ext, { headers: h, credentials: "include" })
       .then(function (r) { if (!r.ok) throw new Error(r.status === 403 ? "Your role can't export this (403)." : "Export failed (" + r.status + ")"); return r.blob(); })
-      .then(function (blob) { var url = URL.createObjectURL(blob); var a = document.createElement("a"); a.href = url; a.download = "DOODLY_Bottle_" + kind + "." + ext; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 60000); dacToast("Bottle report downloaded (" + ext.toUpperCase() + ")."); })
+      .then(function (blob) { var url = URL.createObjectURL(blob); var a = document.createElement("a"); a.href = url; a.download = "DOODLY_Bottle_" + kind + (scope === "all" ? "_all" : "") + "." + ext; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 60000); dacToast("Bottle report downloaded (" + ext.toUpperCase() + ")."); })
       .catch(function (e) { dacToast(e.message || "Couldn't export the report."); });
   }
 
