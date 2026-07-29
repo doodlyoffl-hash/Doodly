@@ -1484,11 +1484,92 @@
       if (window.DOODLY_DATA) DOODLY_DATA.bottleMoves = rows;
       bkRemount("bottleMoves");
       bkBanner(document.querySelector('.dt-host[data-dataset="bottleMoves"]'), "● Live — fleet of " + (k.totalOwned || 0).toLocaleString("en-IN") + " bottles · " + rows.length + " recent movement(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
+      await loadBottleOutstanding();
     } catch (e) {
       bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live fleet." : e.code === "forbidden" ? "⚠ Your role can't view bottle inventory (403)." : "⚠ " + (e.message || "Couldn't load bottle inventory."), "err");
     }
   }
   window.DOODLY_ADMIN.wireBottlesBackend = wireBottlesBackend;
+
+  // ---- Outstanding-with-customers + recovery board (per-customer bottle accountability) ----
+  var _bottleOut = { customers: [], recoveries: [], totals: {} }, _bottleFilter = "all";
+  async function loadBottleOutstanding() {
+    var anchor = document.querySelector('.dt-host[data-dataset="bottleMoves"]'); if (!anchor) return;
+    var panel = anchor.closest(".panel") || anchor;
+    var mount = document.getElementById("bottleOutstandingMount");
+    if (!mount) { mount = document.createElement("div"); mount.id = "bottleOutstandingMount"; panel.parentNode.insertBefore(mount, panel); }
+    try { renderBottleOutstanding(mount, await DOODLY_API.get("/api/admin/bottles/outstanding")); }
+    catch (e) { mount.innerHTML = ""; }
+  }
+  function renderBottleOutstanding(mount, r) {
+    _bottleOut = r || _bottleOut; var t = _bottleOut.totals || {};
+    var custs = (_bottleOut.customers || []).filter(function (c) { return _bottleFilter === "overdue" ? c.overdueDays >= 2 : _bottleFilter === "high" ? c.held >= 5 : true; });
+    var fbtn = function (k, lbl) { return '<button type="button" class="btn ' + (_bottleFilter === k ? "btn-primary" : "btn-ghost") + ' sm" data-bof="' + k + '">' + lbl + "</button>"; };
+    var rep = function (kind, fmt, lbl) { return '<button type="button" class="btn btn-ghost sm" data-brep="' + kind + '" data-bfmt="' + fmt + '">' + lbl + "</button>"; };
+    var rows = custs.map(function (c) {
+      return '<tr><td><span class="strong">' + esc(c.name) + "</span>" + (c.phone ? ' <span class="muted-sm">' + esc(c.phone) + "</span>" : "") + "</td>" +
+        "<td><b>" + c.held + "</b></td>" +
+        "<td>" + (c.overdueDays >= 2 ? '<span class="badge red">' + c.overdueDays + "d overdue</span>" : c.overdueDays > 0 ? c.overdueDays + "d" : "—") + "</td>" +
+        "<td>" + esc(c.subStatus || "—") + "</td>" +
+        '<td><button class="btn btn-ghost sm" data-badj="' + esc(c.userId) + '" data-bname="' + esc(c.name) + '">Adjust</button></td></tr>';
+    }).join("") || '<tr><td colspan="5" class="muted-sm">No customers are holding bottles.</td></tr>';
+    var recRows = (_bottleOut.recoveries || []).map(function (rec) {
+      return '<tr><td><span class="strong">' + esc(rec.name) + "</span>" + (rec.phone ? ' <span class="muted-sm">' + esc(rec.phone) + "</span>" : "") + "</td>" +
+        "<td><b>" + rec.outstandingQty + "</b> bottle(s)</td>" +
+        '<td><button class="btn btn-ghost sm" data-brec="' + rec.id + '" data-mode="RECOVERED">Mark returned</button> ' +
+        '<button class="btn btn-ghost sm" data-brec="' + rec.id + '" data-mode="WRITTEN_OFF" style="color:#b3261e">Write off lost</button></td></tr>';
+    }).join("") || '<tr><td colspan="3" class="muted-sm">No open recoveries.</td></tr>';
+    mount.innerHTML =
+      '<div class="panel" style="margin-bottom:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">' +
+        '<h3 style="margin:0">🍼 Bottles with customers <span class="muted-sm" style="font-weight:600">— ' + (t.bottles || 0) + " bottle(s) · " + (t.overdue || 0) + " overdue</span></h3>" +
+        '<span style="display:flex;gap:6px;flex-wrap:wrap">' + rep("customers", "pdf", "⬇ PDF") + rep("customers", "xls", "Excel") + rep("customers", "csv", "CSV") + rep("executives", "pdf", "Exec PDF") + "</span></div>" +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">' + fbtn("all", "All") + fbtn("overdue", "Overdue") + fbtn("high", "High (5+)") + "</div>" +
+        '<div class="table-wrap"><table class="tbl"><thead><tr><th>Customer</th><th>Held</th><th>Overdue</th><th>Subscription</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div></div>" +
+      '<div class="panel" style="margin-bottom:16px"><div class="panel-head"><h3>Bottle recovery <span class="muted-sm" style="font-weight:600">— open cases (' + (t.openRecoveries || 0) + ")</span></h3></div>" +
+        '<div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Customer</th><th>Outstanding</th><th>Action</th></tr></thead><tbody>' + recRows + "</tbody></table></div></div></div>";
+    mount.querySelectorAll("[data-bof]").forEach(function (b) { b.addEventListener("click", function () { _bottleFilter = b.dataset.bof; renderBottleOutstanding(mount, _bottleOut); }); });
+    mount.querySelectorAll("[data-brep]").forEach(function (b) { b.addEventListener("click", function () { exportBottleReport(b.dataset.brep, b.dataset.bfmt); }); });
+    mount.querySelectorAll("[data-brec]").forEach(function (b) { b.addEventListener("click", function () { closeBottleRecovery(b.dataset.brec, b.dataset.mode); }); });
+    mount.querySelectorAll("[data-badj]").forEach(function (b) { b.addEventListener("click", function () { openBottleAdjust(b.dataset.badj, b.dataset.bname); }); });
+  }
+  function closeBottleRecovery(id, mode) {
+    if (!confirm(mode === "RECOVERED" ? "Mark these bottles as returned? This records the empties back to inventory." : "Write these bottles off as lost? This records a permanent loss.")) return;
+    DOODLY_API.post("/api/admin/bottles/recovery/" + encodeURIComponent(id), { mode: mode })
+      .then(function () { dacToast(mode === "RECOVERED" ? "Bottles recovered ✓" : "Written off as lost"); wireBottlesBackend(); })
+      .catch(function (e) { dacToast((e && e.message) || "Couldn't close the recovery."); });
+  }
+  function openBottleAdjust(userId, name) {
+    if (document.querySelector(".dac-ov")) return;
+    var ov = document.createElement("div"); ov.className = "dac-ov";
+    ov.innerHTML = '<div class="dac-card" role="dialog" aria-modal="true" style="max-width:420px"><div class="dac-hd"><h3>Adjust bottles — ' + esc(name) + '</h3><button class="dac-x" type="button">&times;</button></div>' +
+      '<div class="dac-bd"><div class="dac-row"><label class="dac-f"><span>Movement</span><select class="input" id="ba-event"><option value="RETURNED">Returned (−)</option><option value="ISSUED">Issued (+)</option><option value="LOST">Lost (−)</option></select></label>' +
+      '<label class="dac-f"><span>Quantity</span><input class="input" id="ba-qty" type="number" min="1" value="1"></label></div>' +
+      '<label class="dac-f"><span>Note</span><input class="input" id="ba-note" placeholder="reason for the manual adjustment"></label>' +
+      '<p class="dac-err" id="ba-err"></p></div>' +
+      '<div class="dac-ft"><button class="btn btn-ghost" type="button" id="ba-cancel">Cancel</button><button class="btn btn-primary" type="button" id="ba-save">Save adjustment</button></div></div>';
+    document.body.appendChild(ov);
+    var close = function () { ov.remove(); };
+    ov.addEventListener("click", function (e) { if (e.target === ov) close(); });
+    ov.querySelector(".dac-x").addEventListener("click", close); ov.querySelector("#ba-cancel").addEventListener("click", close);
+    ov.querySelector("#ba-save").addEventListener("click", function () {
+      var qty = parseInt(ov.querySelector("#ba-qty").value, 10);
+      if (!qty || qty < 1) { ov.querySelector("#ba-err").textContent = "Enter a valid quantity."; return; }
+      DOODLY_API.post("/api/admin/bottles/adjust", { userId: userId, event: ov.querySelector("#ba-event").value, qty: qty, note: (ov.querySelector("#ba-note").value || "").trim() || undefined })
+        .then(function () { dacToast("Adjustment recorded ✓"); close(); wireBottlesBackend(); })
+        .catch(function (e) { ov.querySelector("#ba-err").textContent = (e && e.message) || "Couldn't save."; });
+    });
+  }
+  function exportBottleReport(kind, fmt) {
+    var base = window.DOODLY_API ? DOODLY_API.base() : "";
+    var h = {}; try { var tok = localStorage.getItem("doodly-token"); if (tok) h["Authorization"] = "Bearer " + tok; } catch (e) {}
+    try { if (window.DOODLY_RBAC) { h["X-Doodly-Actor"] = DOODLY_RBAC.activeRole(); var cu = DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser(); if (cu && cu.id) h["X-Doodly-Actor-Id"] = cu.id; } } catch (e) {}
+    var ext = fmt === "xls" ? "xls" : fmt === "csv" ? "csv" : "pdf";
+    dacToast("Preparing the bottle report (" + ext.toUpperCase() + ")…");
+    fetch(base + "/api/admin/bottles/report/export?kind=" + kind + "&format=" + ext, { headers: h, credentials: "include" })
+      .then(function (r) { if (!r.ok) throw new Error(r.status === 403 ? "Your role can't export this (403)." : "Export failed (" + r.status + ")"); return r.blob(); })
+      .then(function (blob) { var url = URL.createObjectURL(blob); var a = document.createElement("a"); a.href = url; a.download = "DOODLY_Bottle_" + kind + "." + ext; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 60000); dacToast("Bottle report downloaded (" + ext.toUpperCase() + ")."); })
+      .catch(function (e) { dacToast(e.message || "Couldn't export the report."); });
+  }
 
   function openBottleMovement() {
     if (document.querySelector(".dac-ov")) return;
@@ -2210,7 +2291,7 @@
         '<div><b>Order</b> — ' + esc(d.orderRef || "—") + " · " + esc(d.type || "") + (d.plan ? " (" + esc(d.plan) + ")" : "") + "</div>" +
         '<div><b>Products</b> — ' + esc(d.products || "—") + "</div>" +
         '<div><b>Payment</b> — ' + esc(payMap[d.paymentStatus] || d.paymentStatus || "—") + (d.paymentMethod ? " (" + esc(d.paymentMethod) + ")" : "") + ' · <b>Invoice</b> — ' + (d.invoiceNumber ? esc(d.invoiceNumber) : "—") + "</div>" +
-        '<div><b>Packing</b> — ' + esc(packMap[d.packingStatus] || d.packingStatus || "—") + ' · <b>Slot</b> — ' + esc(d.slot || "—") + ' · <b>Bottles</b> — ' + ((d.bottlesIn || 0) + "/" + (d.bottleCount || 0)) + "</div>" +
+        '<div><b>Packing</b> — ' + esc(packMap[d.packingStatus] || d.packingStatus || "—") + ' · <b>Slot</b> — ' + esc(d.slot || "—") + ' · <b>Bottles</b> — ' + ((d.bottlesIn || 0) + "/" + (d.bottleCount || 0)) + (d.bottlesOutstanding != null ? ' · <b>Empties owed</b> — ' + d.bottlesOutstanding + (d.bottlesOutstanding > 0 ? ' <span class="badge amber">to collect</span>' : "") : "") + "</div>" +
       "</div>";
     var statusOpts = Object.keys(DEL_STATUS).map(function (s) { return '<option value="' + s + '"' + (s === d.status ? " selected" : "") + ">" + DEL_STATUS[s][1] + "</option>"; }).join("");
     var curDrv = d.driver ? d.driver.id : "";
@@ -6718,6 +6799,8 @@
       walletPaise: summary.walletPaise != null ? summary.walletPaise : D.me.walletPaise,
       points: summary.loyaltyPoints != null ? summary.loyaltyPoints : D.me.points,
       bottlesPending: summary.bottlesPending != null ? summary.bottlesPending : D.me.bottlesPending,
+      bottlesOverdueDays: (bottles && bottles.summary) ? (bottles.summary.overdueDays || 0) : 0,
+      bottlesOverdue: (bottles && bottles.summary) ? !!bottles.summary.overdue : false,
       depositPaise: (bottles && bottles.summary) ? bottles.summary.depositPaise : D.me.depositPaise,
       plan: sub ? sub.planName : "No active plan",
       variant: it0 ? (it0.label + (it0.product ? " · " + it0.product : "")) : "—",

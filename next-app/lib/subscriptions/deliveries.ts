@@ -218,6 +218,11 @@ export async function cancelAllFutureDeliveries(subscriptionId: string, actorRol
   const ids = future.map((d) => d.id);
   if (ids.length) await db.delivery.deleteMany({ where: { id: { in: ids } } });
   await reoptimizeAffected(affected);   // removed stops → re-optimise each executive's remaining route
+  // Subscription ending with empties still out → open a bottle-recovery so ops can chase them.
+  try {
+    const sub = await db.subscription.findUnique({ where: { id: subscriptionId }, select: { userId: true } });
+    if (sub?.userId) { const { openRecovery } = await import("@/lib/bottles/recovery"); await openRecovery(sub.userId, subscriptionId); }
+  } catch { /* non-blocking */ }
   return ids.length;
 }
 

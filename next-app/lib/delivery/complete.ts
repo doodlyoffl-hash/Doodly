@@ -14,6 +14,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { notify, notifyDelivered } from "@/lib/notifications/dispatch";
 import { earn } from "@/lib/loyalty/service";
+import { moveBottleStockLenient } from "@/lib/bottles/service";
 
 export interface CompleteDeliveryOpts {
   bottlesIn?: number;                 // empties collected (RETURNED)
@@ -27,7 +28,7 @@ export async function completeDelivery(deliveryId: string, opts: CompleteDeliver
     where: { id: deliveryId },
     select: {
       id: true, status: true, bottleCount: true, addressId: true, subscriptionId: true, orderId: true,
-      subscription: { select: { userId: true, addressId: true } },
+      subscription: { select: { userId: true, addressId: true, items: { select: { qty: true, variant: { select: { ml: true } } } } } },
       order: { select: { userId: true } },
     },
   });
@@ -58,6 +59,30 @@ export async function completeDelivery(deliveryId: string, opts: CompleteDeliver
     }
     return d;
   });
+
+  // ---- fleet inventory auto-movement (best-effort, never blocks) ----
+  // Handover moves stock AVAILABLE→IN_CIRCULATION; collected empties move
+  // IN_CIRCULATION→CLEANING. Split by bottle size from the subscription items
+  // (one-time orders default to 1000 ml). Washing (CLEANING→AVAILABLE) stays manual.
+  try {
+    const items = del.subscription?.items ?? [];
+    const totalQty = items.reduce((s, it) => s + it.qty, 0);
+    const sizes = items.length && totalQty > 0
+      ? items.map((it) => ({ ml: it.variant?.ml ?? 1000, w: it.qty / totalQty }))
+      : [{ ml: 1000, w: 1 }];
+    const actor = { actorRole: "system", actorId: "delivery.complete" };
+    const splitMove = async (total: number, from: "AVAILABLE" | "IN_CIRCULATION", to: "IN_CIRCULATION" | "CLEANING", reason: string) => {
+      if (total <= 0) return;
+      let assigned = 0;
+      for (let i = 0; i < sizes.length; i++) {
+        const q = i === sizes.length - 1 ? total - assigned : Math.round(total * sizes[i].w);
+        assigned += q;
+        await moveBottleStockLenient({ capacityMl: sizes[i].ml, from, to, qty: q, reason, note: `delivery ${del.id}` }, actor);
+      }
+    };
+    await splitMove(bottlesOut, "AVAILABLE", "IN_CIRCULATION", "Delivery handover");
+    await splitMove(bottlesIn, "IN_CIRCULATION", "CLEANING", "Empties collected");
+  } catch { /* non-blocking */ }
 
   // ---- side-effects (best-effort, never block the completion) ----
   if (custId) {

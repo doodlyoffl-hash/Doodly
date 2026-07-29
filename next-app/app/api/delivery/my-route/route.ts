@@ -11,6 +11,7 @@ import { readRole } from "@/lib/auth/identity";
 import { getWarehouse } from "@/lib/warehouse/config";
 import { optimizeExecutiveRoute } from "@/lib/routes/exec-route";
 import { istDayWindow } from "@/lib/delivery/stats";
+import { heldByUsers } from "@/lib/bottles/balance";
 
 const IST_MS = 5.5 * 60 * 60 * 1000;
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -71,6 +72,10 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
     } catch { /* keep the rows we have */ }
   }
 
+  // Rolled-forward empties each customer still holds (the spec's "expected" to collect),
+  // batched over every stop's customer so there's no N+1.
+  const held = await heldByUsers(rows.map((d) => d.subscription?.user?.id ?? d.order?.user?.id).filter(Boolean) as string[]);
+
   const stops = rows.map((d, i) => {
     const cust = d.subscription?.user ?? d.order?.user ?? null;
     // authoritative stop location: the delivery's own snapshot, else the subscription's,
@@ -97,8 +102,9 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
       qty: item?.qty ?? 1,
       itemLabel: item ? `${item.variant.label} ${item.variant.product.name}` : "",
       instructions: addr?.deliveryNote ?? "",
-      bottlesExpected: d.bottleCount ?? 1,
-      bottlesCollected: d.bottlesIn ?? 0,
+      bottlesExpected: d.bottleCount ?? 1,          // milk bottles to HAND OVER today
+      bottlesCollected: d.bottlesIn ?? 0,           // empties collected today
+      bottlesOutstanding: cust?.id ? (held.get(cust.id) ?? 0) : 0,   // empties the customer still holds (EXPECTED to collect)
       payment: cod && d.order ? `COD ₹${Math.round(d.order.totalPaise / 100)}` : "Paid",
       status: STATUS_MAP[d.status] ?? "assigned",
       slot: d.slot, deliveredAt: d.deliveredAt,
@@ -134,6 +140,8 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
     travelledMin,
     remainingKm: trip?.plannedDistanceKm != null ? round2(Math.max(0, trip.plannedDistanceKm - travelledKm)) : null,
     remainingMin: trip?.plannedDurationMin != null ? Math.max(0, trip.plannedDurationMin - travelledMin) : null,
+    // empties still to collect across the not-yet-delivered stops (outstanding − collected)
+    emptiesToCollect: stops.filter((s) => s.status !== "delivered").reduce((a, s) => a + Math.max(0, (s.bottlesOutstanding ?? 0) - (s.bottlesCollected ?? 0)), 0),
   };
 
   return ok({

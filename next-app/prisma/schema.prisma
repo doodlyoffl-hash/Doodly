@@ -170,6 +170,7 @@ model User {
   billings      SubscriptionBilling[]
   paymentRecords PaymentRecord[]
   bottleLedger  BottleLedger[]
+  bottleRecoveries BottleRecovery[]
   recurringMethods RecurringPaymentMethod[]
   walletTxns    WalletTxn[]
   loyaltyLedger LoyaltyLedger[]                    // DOODLY Pure Rewards: per-lot points ledger
@@ -968,6 +969,30 @@ model BottleMovement {
   @@index([capacityMl])
   @@index([toStage])
   @@index([createdAt])
+}
+
+// Bottle recovery — opened when a subscription ends with empties still outstanding,
+// so ops can chase (or write off) the held bottles. Closing writes the matching
+// BottleLedger row (RECOVERED → RETURNED, WRITTEN_OFF → LOST).
+enum BottleRecoveryStatus {
+  OPEN
+  RECOVERED
+  WRITTEN_OFF
+}
+
+model BottleRecovery {
+  id             String               @id @default(cuid())
+  userId         String
+  user           User                 @relation(fields: [userId], references: [id])
+  subscriptionId String?
+  outstandingQty Int                                          // bottles held when the recovery opened
+  status         BottleRecoveryStatus @default(OPEN)
+  note           String?
+  openedAt       DateTime             @default(now())
+  closedAt       DateTime?
+  closedById     String?                                      // admin/ops user who closed it
+  @@index([status])
+  @@index([userId])
 }
 
 // ----------------------------------------------------------------

@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { ok, route } from "@/lib/http";
 import { requireUserId } from "@/lib/auth/authorize";
+import { customerHeld } from "@/lib/bottles/balance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,12 +30,18 @@ export const GET = route("bottles.list", async (req: NextRequest) => {
 
   const qty = (e: string) => groups.find((g) => g.event === e)?._sum.qty ?? 0;
   const issued = qty("ISSUED"), returned = qty("RETURNED"), lost = qty("LOST");
+  // Aging: when the current outstanding streak began → overdue if held past the next delivery.
+  const { held, heldSince, overdueDays } = await customerHeld(userId);
 
   return ok({
     ledger,
     summary: {
       issued, returned, lost,
       pending: Math.max(0, issued - returned - lost),
+      withYou: held,                                   // bottles currently with the customer (= pending)
+      heldSince: heldSince ? heldSince.toISOString() : null,
+      overdueDays,                                     // days the oldest outstanding bottle has been held
+      overdue: overdueDays >= 2,                        // due back by the next delivery
       depositPaise: Math.max(0, (depositCharged._sum.depositPaise ?? 0) - (depositRefunded._sum.amountPaise ?? 0)),
     },
   });

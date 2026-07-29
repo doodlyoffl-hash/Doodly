@@ -102,7 +102,7 @@ window.DOODLY_DELIVERY = (function () {
         label: labels[i], address: `${10 + i}-${i + 2}, ${l.area}, ${l.city} ${l.pincode}`,
         area: l.area, pincode: l.pincode, lat: l.lat, lng: l.lng,
         plan: pl.name, qty: (i % 2) + 1, instructions: instr[i],
-        bottlesExpected: (i % 3) + 1, payment: i % 3 === 0 ? "COD ₹70" : "Paid",
+        bottlesExpected: (i % 3) + 1, bottlesOutstanding: i % 2, payment: i % 3 === 0 ? "COD ₹70" : "Paid",
       };
     });
   }
@@ -112,6 +112,9 @@ window.DOODLY_DELIVERY = (function () {
   function save(st) { try { localStorage.setItem("doodly-del-state", JSON.stringify(st)); } catch (e) {} }
   function stStatus(st, id) { return (st[id] && st[id].status) || "assigned"; }
   function stBottles(st, id) { return (st[id] && st[id].bottles) || 0; }
+  // Empties the customer still holds = what's EXPECTED to be collected on this stop
+  // (rolled forward from prior deliveries by the server). Falls back to today's count for demo/old payloads.
+  function stOwed(s2) { return s2.bottlesOutstanding != null ? s2.bottlesOutstanding : (s2.bottlesExpected || 0); }
 
   /* ---------- icons ---------- */
   const ic = {
@@ -156,7 +159,7 @@ window.DOODLY_DELIVERY = (function () {
     function summary() {
       const total = all.length, done = all.filter((s) => stStatus(st, s.id) === "delivered").length;
       const pending = total - done;
-      const bottles = all.reduce((n, s) => n + Math.max(0, s.bottlesExpected - stBottles(st, s.id)), 0);
+      const bottles = all.reduce((n, s) => n + Math.max(0, stOwed(s) - stBottles(st, s.id)), 0);
       const R = (_live && _live.route) || null;
       // Distance TRAVELLED = the optimised legs of the stops already completed locally
       // (kept in sync with optimistic on-device completes, not just the server snapshot).
@@ -251,7 +254,7 @@ window.DOODLY_DELIVERY = (function () {
           const R = (_live && _live.route) || null;
           M().routeMap(host.querySelector("#dlRouteMap"), {
             // rich per-stop data so the numbered markers can pop a full customer card
-            stops: all.map(function (s2) { return { lat: s2.lat, lng: s2.lng, name: s2.name, mobile: s2.mobile, address: s2.address, seq: s2.seq, status: stStatus(st, s2.id), bottles: s2.bottlesExpected, bottlesPending: Math.max(0, (s2.bottlesExpected || 0) - stBottles(st, s2.id)), legKm: s2.legKm, cumulativeKm: s2.cumulativeKm, distanceFromWarehouseKm: s2.distanceFromWarehouseKm, etaMinutes: s2.etaMinutes }; }),
+            stops: all.map(function (s2) { return { lat: s2.lat, lng: s2.lng, name: s2.name, mobile: s2.mobile, address: s2.address, seq: s2.seq, status: stStatus(st, s2.id), bottles: s2.bottlesExpected, bottlesPending: Math.max(0, stOwed(s2) - stBottles(st, s2.id)), legKm: s2.legKm, cumulativeKm: s2.cumulativeKm, distanceFromWarehouseKm: s2.distanceFromWarehouseKm, etaMinutes: s2.etaMinutes }; }),
             origin: (R && R.warehouse) || null,   // warehouse-anchored polyline (start AND end)
             roundTrip: true,
             currentIndex: cur ? all.indexOf(cur) : -1,
@@ -266,7 +269,7 @@ window.DOODLY_DELIVERY = (function () {
     }
 
     function stopCard(s2) {
-      const status = stStatus(st, s2.id), collected = stBottles(st, s2.id), pendingB = Math.max(0, s2.bottlesExpected - collected);
+      const status = stStatus(st, s2.id), collected = stBottles(st, s2.id), owed = stOwed(s2), pendingB = Math.max(0, owed - collected);
       const stepIdx = WORKFLOW.findIndex((w) => w[0] === status);
       const done = status === "delivered";
       const isCur = !done && (currentStop() || {}).id === s2.id;
@@ -293,7 +296,7 @@ window.DOODLY_DELIVERY = (function () {
         ${s2.instructions ? `<div class="dl-instr">${svg("alert", 13)} ${esc(s2.instructions)}</div>` : ""}
         <div class="dl-steps">${WORKFLOW.map((w, i) => `<span class="dl-step ${i <= stepIdx ? "on" : ""}">${esc(w[1])}</span>`).join('<span class="dl-step-sep"></span>')}</div>
         <div class="dl-bottles">
-          <span>${svg("bottle", 14)} Bottles — expected <b>${s2.bottlesExpected}</b> · collected <b>${collected}</b> · pending <b>${pendingB}</b></span>
+          <span>${svg("bottle", 14)} Empties to collect <b>${owed}</b> · collected <b>${collected}</b> · pending <b>${pendingB}</b>${s2.bottlesExpected ? ` <small class="muted-sm">· deliver ${s2.bottlesExpected} today</small>` : ""}</span>
           <span class="dl-bottle-btns"><button class="dl-mini" data-bdec="${s2.id}">−</button><button class="dl-mini" data-binc="${s2.id}">+</button></span>
         </div>
         <div class="dl-comm">
@@ -315,7 +318,7 @@ window.DOODLY_DELIVERY = (function () {
       st[id] = Object.assign({}, st[id], { status }); save(st);
       if (_live && (status === "onway" || status === "reached")) postStop(id, { action: "status", status: status });
     }
-    function setBottles(id, n) { const s2 = all.find((x) => x.id === id); st[id] = Object.assign({}, st[id], { bottles: Math.max(0, Math.min(s2.bottlesExpected, n)) }); save(st); }
+    function setBottles(id, n) { const s2 = all.find((x) => x.id === id); st[id] = Object.assign({}, st[id], { bottles: Math.max(0, Math.min(stOwed(s2), n)) }); save(st); }
 
     function wire() {
       const av = host.querySelector("#dlAvail");
@@ -351,14 +354,14 @@ window.DOODLY_DELIVERY = (function () {
         <p class="dl-modal-sub">${esc(s2.name)} · ${esc(s2.address)}</p>
         <label class="dl-pod"><input type="file" accept="image/*" capture="environment" id="dlPod"><span id="dlPodLabel">${svg("check", 16)} Upload proof of delivery (optional)</span></label>
         <div class="dl-pod-prev" id="dlPodPrev" hidden></div>
-        <div class="dl-bcollect"><span>Empty bottles collected</span><div class="dl-step-q"><button class="dl-mini" id="podDec">−</button><b id="podN">${stBottles(st, id)}</b><button class="dl-mini" id="podInc">+</button><small>of ${s2.bottlesExpected}</small></div></div>
+        <div class="dl-bcollect"><span>Empty bottles collected</span><div class="dl-step-q"><button class="dl-mini" id="podDec">−</button><b id="podN">${stBottles(st, id)}</b><button class="dl-mini" id="podInc">+</button><small>of ${stOwed(s2)} owed</small></div></div>
         <textarea class="dl-notes" id="dlNotes" placeholder="Delivery notes (optional)"></textarea>
         <button class="btn btn-primary dl-confirm">${svg("check", 16)} Mark delivered</button></div>`;
       document.body.appendChild(m); requestAnimationFrame(() => m.classList.add("show"));
       let bottles = stBottles(st, id);
       const close = () => { m.classList.remove("show"); setTimeout(() => m.remove(), 250); };
       m.addEventListener("click", (e) => { if (e.target === m || e.target.closest(".dl-x")) close(); });
-      m.querySelector("#podInc").addEventListener("click", () => { bottles = Math.min(s2.bottlesExpected, bottles + 1); m.querySelector("#podN").textContent = bottles; });
+      m.querySelector("#podInc").addEventListener("click", () => { bottles = Math.min(stOwed(s2), bottles + 1); m.querySelector("#podN").textContent = bottles; });
       m.querySelector("#podDec").addEventListener("click", () => { bottles = Math.max(0, bottles - 1); m.querySelector("#podN").textContent = bottles; });
       m.querySelector("#dlPod").addEventListener("change", (e) => { const f = e.target.files[0]; if (f) { const url = URL.createObjectURL(f); const pv = m.querySelector("#dlPodPrev"); pv.hidden = false; pv.innerHTML = `<img src="${url}" alt="Proof">`; m.querySelector("#dlPodLabel").innerHTML = `${svg("check", 16)} Photo attached`; } });
       m.querySelector(".dl-confirm").addEventListener("click", () => {

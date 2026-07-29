@@ -176,3 +176,32 @@ export async function recordBottleMovement(
     };
   });
 }
+
+/** LENIENT auto-mover for the delivery/collection hooks: never throws and never
+    blocks a delivery. Moves `qty` into `to`; decrements `from` only by what it has
+    (clamped at 0, so understocked/unseeded fleet data can't fail the delivery), and
+    always records the BottleMovement for the audit trail. Unknown sizes are skipped. */
+export async function moveBottleStockLenient(
+  args: { capacityMl: number; from: BottleStage | null; to: BottleStage; qty: number; reason: string; note?: string },
+  actor: Actor,
+): Promise<void> {
+  const qty = Math.round(Number(args.qty));
+  if (!Number.isFinite(qty) || qty <= 0) return;
+  if (!CAPACITIES.includes(args.capacityMl as (typeof CAPACITIES)[number])) return;
+  if (!STAGES.includes(args.to) || (args.from != null && !STAGES.includes(args.from)) || args.from === args.to) return;
+  try {
+    await db.$transaction(async (tx) => {
+      if (args.from != null) {
+        const src = await tx.bottleStock.findUnique({ where: { capacityMl_stage: { capacityMl: args.capacityMl, stage: args.from } } });
+        const dec = Math.min(src?.qty ?? 0, qty);
+        if (dec > 0) await tx.bottleStock.update({ where: { capacityMl_stage: { capacityMl: args.capacityMl, stage: args.from } }, data: { qty: (src!.qty) - dec } });
+      }
+      await tx.bottleStock.upsert({
+        where: { capacityMl_stage: { capacityMl: args.capacityMl, stage: args.to } },
+        create: { capacityMl: args.capacityMl, stage: args.to, qty },
+        update: { qty: { increment: qty } },
+      });
+      await tx.bottleMovement.create({ data: { capacityMl: args.capacityMl, fromStage: args.from, toStage: args.to, qty, reason: args.reason, note: args.note ?? null, actorRole: actor.actorRole, actorId: actor.actorId, ip: actor.ip } });
+    });
+  } catch { /* best-effort — fleet stock is advisory; a hiccup never fails the delivery */ }
+}

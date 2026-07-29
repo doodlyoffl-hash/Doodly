@@ -11,6 +11,7 @@ import { requirePermission } from "@/lib/auth/authorize";
 import { istDayWindow } from "@/lib/delivery/stats";
 import { getWarehouse } from "@/lib/warehouse/config";
 import { optimizeExecutiveRoute } from "@/lib/routes/exec-route";
+import { heldByUsers } from "@/lib/bottles/balance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,12 +50,14 @@ export const GET = route("admin.deliveries.route", async (req: NextRequest) => {
         id: true, status: true, slot: true, sequence: true, bottleCount: true,
         legDistanceKm: true, legTravelMin: true, cumulativeKm: true, etaMinutes: true, distanceKm: true, routeSource: true,
         address: ADDR,
-        subscription: { select: { user: { select: { name: true, phone: true } }, address: ADDR, plan: { select: { name: true } }, items: { select: { qty: true, variant: { select: { ml: true } } } } } },
-        order: { select: { user: { select: { name: true, phone: true } }, address: ADDR } },
+        subscription: { select: { user: { select: { id: true, name: true, phone: true } }, address: ADDR, plan: { select: { name: true } }, items: { select: { qty: true, variant: { select: { ml: true } } } } } },
+        order: { select: { user: { select: { id: true, name: true, phone: true } }, address: ADDR } },
       },
     }),
     db.tripHistory.findFirst({ where: { driverId, date: { gte: start, lt: end } }, orderBy: { createdAt: "desc" }, select: { plannedDistanceKm: true, plannedDurationMin: true, routeSource: true, routePolyline: true } }),
   ]);
+
+  const held = await heldByUsers(rows.map((d) => d.subscription?.user?.id ?? d.order?.user?.id).filter(Boolean) as string[]);
 
   const stops = rows.map((d, i) => {
     const user = d.subscription?.user ?? d.order?.user ?? null;
@@ -68,7 +71,7 @@ export const GET = route("admin.deliveries.route", async (req: NextRequest) => {
       address: fmtAddr(addr), area: addr?.area ?? addr?.city ?? "—", pincode: addr?.pincode ?? null,
       lat: addr?.lat ?? null, lng: addr?.lng ?? null,
       plan: d.subscription?.plan?.name ?? "One-time",
-      bottles: d.bottleCount ?? 1, litres,
+      bottles: d.bottleCount ?? 1, litres, bottlesOutstanding: user?.id ? (held.get(user.id) ?? 0) : 0,
       legKm: r2(d.legDistanceKm), legMin: d.legTravelMin ?? null,
       cumulativeKm: r2(d.cumulativeKm), etaMinutes: d.etaMinutes ?? null,
       distanceFromWarehouseKm: r2(d.distanceKm), routeSource: d.routeSource ?? null,

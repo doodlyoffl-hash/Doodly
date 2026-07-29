@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { ok, route } from "@/lib/http";
 import { requirePermission } from "@/lib/auth/authorize";
 import { istDayWindow } from "@/lib/delivery/stats";
+import { heldByUsers } from "@/lib/bottles/balance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,19 +58,22 @@ export const GET = route("admin.deliveries.list", async (req: NextRequest) => {
       address: ADDR,
       subscription: {
         select: {
-          user: { select: { name: true, phone: true } }, address: ADDR, plan: { select: { name: true } },
+          user: { select: { id: true, name: true, phone: true } }, address: ADDR, plan: { select: { name: true } },
           items: { select: { qty: true, variant: { select: { label: true, product: { select: { name: true } } } } } },
           order: { select: { id: true, status: true, invoice: { select: { number: true } } } },
         },
       },
       order: {
         select: {
-          user: { select: { name: true, phone: true } }, status: true, invoice: { select: { number: true } }, address: ADDR,
+          user: { select: { id: true, name: true, phone: true } }, status: true, invoice: { select: { number: true } }, address: ADDR,
           payment: { select: { method: true } }, items: { select: { productName: true, variantLabel: true, quantity: true } },
         },
       },
     },
   });
+
+  // Outstanding empties each customer still holds — the "expected to collect" total, batched.
+  const held = await heldByUsers(rows.map((d) => d.subscription?.user?.id ?? d.order?.user?.id).filter(Boolean) as string[]);
 
   const deliveries = rows.map((d) => {
     const isSub = !!d.subscription;
@@ -84,6 +88,7 @@ export const GET = route("admin.deliveries.list", async (req: NextRequest) => {
       orderRef: oid ? "DOO-" + oid.slice(-6).toUpperCase() : "—",
       date: d.date, status: d.status, packingStatus: d.packingStatus, slot: d.slot ?? null, sequence: d.sequence,
       bottleCount: d.bottleCount, bottlesIn: d.bottlesIn, cashCollected: d.cashCollected, note: d.customerRemark ?? null,
+      bottlesOutstanding: user?.id ? (held.get(user.id) ?? 0) : 0,   // empties still with this customer
       customer: user?.name ?? "—", mobile: user?.phone ?? "—",
       address: fmtAddr(addr), area: addr?.area ?? addr?.city ?? "—", pincode: addr?.pincode ?? null,
       lat: addr?.lat ?? null, lng: addr?.lng ?? null, deliveryNote: addr?.deliveryNote ?? null,

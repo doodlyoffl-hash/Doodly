@@ -60,6 +60,7 @@ window.DOODLY_CUSTOMER = (function () {
       // badges are EARNED from real thresholds (Early Bird ≥30 deliveries, Eco Hero ≥40 returns, Connector ≥2 referrals) — never a fixed count
       badges: (dels.filter(function (x) { return st1(x) === "Delivered"; }).length >= 30 ? 1 : 0) + (bl.filter(function (b) { return b.type && b.type[1] === "Returned"; }).length >= 40 ? 1 : 0) + (refs.filter(function (r) { return st1(r) === "Joined"; }).length >= 2 ? 1 : 0),
       bottlesPending: m.bottlesPending || 0, deposit: (m.depositPaise || 0) / 100,
+      bottlesOverdueDays: m.bottlesOverdueDays || 0, bottlesOverdue: !!m.bottlesOverdue,
       bottlesIssued: bl.filter(function (b) { return b.type && b.type[1] === "Issued"; }).length,
       bottlesReturned: bl.filter(function (b) { return b.type && b.type[1] === "Returned"; }).length,
       unreadNotifs: notifs.filter(function (n) { return n.unread; }).length, totalNotifs: notifs.length,
@@ -91,7 +92,7 @@ window.DOODLY_CUSTOMER = (function () {
       { l: "Bottles Pending", v: s.bottlesPending, sub: inr(s.deposit) + " deposit held", href: "/account/bottles.html", ic: "bottle" }
     ];
   }
-  function bottlesCards() { var s = stats(); return [{ l: "Total issued", v: s.bottlesIssued, href: "/account/bottles.html", ic: "bottle" }, { l: "Returned", v: s.bottlesReturned, href: "/account/bottles.html", ic: "refresh" }, { l: "Pending", v: s.bottlesPending, sub: "awaiting collection", href: "/bottle-return.html", ic: "bottle" }, { l: "Deposit held", v: inr(s.deposit), sub: "refundable", href: "/account/wallet.html", ic: "card" }]; }
+  function bottlesCards() { var s = stats(); return [{ l: "Total issued", v: s.bottlesIssued, href: "/account/bottles.html", ic: "bottle" }, { l: "Returned", v: s.bottlesReturned, href: "/account/bottles.html", ic: "refresh" }, { l: "With you", v: s.bottlesPending, sub: s.bottlesPending > 0 ? (s.bottlesOverdue ? "⚠ overdue " + s.bottlesOverdueDays + "d — please return" : "return on your next delivery") : "all returned ✓", href: "/bottle-return.html", ic: "bottle" }, { l: "Deposit held", v: inr(s.deposit), sub: "refundable", href: "/account/wallet.html", ic: "card" }]; }
   function rewardsCards() { var s = stats(); return [{ l: "Points", v: s.points.toLocaleString("en-IN") }, { l: "Tier", v: s.tier }, { l: "Badges", v: s.badges }, { l: "Redeemable", v: inr(s.redeemable), sub: "10 pts = ₹1" }].map(function (c) { return Object.assign(c, { ic: "award" }); }); }
 
   function mountKpis(host) {
