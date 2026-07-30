@@ -934,6 +934,7 @@ model Delivery {
   driverId       String?
   driver         Driver?        @relation(fields: [driverId], references: [id])
   sequence       Int?                              // stop order on the route
+  reachedAt      DateTime?                         // arrival time at the stop (delivery timeline)
   deliveredAt    DateTime?
   otp            String?                           // delivery OTP
   podPhotoUrl    String?                           // proof-of-delivery (Cloudinary)
@@ -962,6 +963,7 @@ model Delivery {
   cumulativeKm   Float?                            // running distance from the warehouse up to & incl. this stop
   etaMinutes     Int?                              // estimated arrival, minutes after leaving the warehouse
   routeSource    String?                           // "ROAD" (Directions) | "HAVERSINE" (fallback)
+  actualLegKm    Float?                            // GPS-measured distance travelled since the previous stop (timeline)
   assignment     DeliveryAssignment?
   queueEntry     AssignmentQueue?
   geoCorrections GeoCorrection[]                   // GPS pin corrections made while this delivery was in hand
@@ -2168,12 +2170,39 @@ model Shift {
   endedAt          DateTime?
   workedMinutes    Int?                              // computed on close
   deliveriesCount  Int         @default(0)           // delivered stops during the shift
-  distanceKm       Float       @default(0)           // Σ leg distance of delivered stops
+  distanceKm       Float       @default(0)           // Σ leg distance of delivered stops (planned-ish, back-compat)
   bottlesDelivered Int         @default(0)           // Σ bottlesOut over the shift
   bottlesCollected Int         @default(0)           // Σ bottlesIn over the shift
+  // ---- GPS distance tracking (actual travelled km) ----
+  startLat          Float?                           // shift start location
+  startLng          Float?
+  endLat            Float?                           // shift end location
+  endLng            Float?
+  actualDistanceKm  Float      @default(0)           // GPS-computed travelled distance (fraud-filtered)
+  plannedDistanceKm Float?                           // optimised round-trip planned distance (for comparison)
+  gpsPointCount     Int        @default(0)           // number of accepted GPS track points
+  trackPoints       ShiftGpsPoint[]
   createdAt        DateTime    @default(now())
   @@index([driverId, startedAt])
   @@index([driverId, status])
+}
+
+// A single GPS reading during a shift — the raw track from which actual travelled
+// distance is computed (fraud-filtered server-side). clientId dedupes offline replays.
+model ShiftGpsPoint {
+  id         String   @id @default(cuid())
+  shiftId    String
+  shift      Shift    @relation(fields: [shiftId], references: [id])
+  driverId   String
+  lat        Float
+  lng        Float
+  accuracyM  Float?                                  // GPS accuracy (m); high = noisy → filtered out
+  speed      Float?                                  // device-reported speed (m/s) if available
+  capturedAt DateTime                                // when the reading was taken on-device
+  clientId   String   @unique                        // idempotency: an offline replay never double-counts
+  createdAt  DateTime @default(now())
+  @@index([shiftId, capturedAt])
+  @@index([driverId, capturedAt])
 }
 
 enum ShiftStatus {
