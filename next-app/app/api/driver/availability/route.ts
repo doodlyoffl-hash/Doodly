@@ -10,6 +10,7 @@ import { db } from "@/lib/db";
 import { ok, parseBody, route, Errors } from "@/lib/http";
 import { requireUserId } from "@/lib/auth/authorize";
 import { openShift, closeShift, currentShift } from "@/lib/delivery/shift";
+import { getGpsTrackingConfig } from "@/lib/delivery/gps-config";
 import type { DeliveryStatus } from "@prisma/client";
 
 export const runtime = "nodejs";
@@ -29,11 +30,13 @@ export const GET = route("driver.availability.get", async (req: NextRequest) => 
   const userId = requireUserId(req);
   const d = await driverOf(userId);
   const availability = d.execStatus?.availability ?? "OFFLINE";
-  const shift = await currentShift(d.id).catch(() => null);   // the open shift → drives the live duration timer
-  return ok({ availability, available: availability === "AVAILABLE" || availability === "RETURNED_TO_DAIRY", onTrip: (ON_TRIP as readonly string[]).includes(availability), shift });
+  const [shift, gps] = await Promise.all([currentShift(d.id).catch(() => null), getGpsTrackingConfig().catch(() => null)]);
+  // gpsConfig tells the exec app how to sample GPS (cadence + client-side filters) during a shift.
+  const gpsConfig = gps ? { enabled: gps.enabled, sampleIntervalS: gps.sampleIntervalS, minMoveM: gps.minMoveM, maxAccuracyM: gps.maxAccuracyM } : null;
+  return ok({ availability, available: availability === "AVAILABLE" || availability === "RETURNED_TO_DAIRY", onTrip: (ON_TRIP as readonly string[]).includes(availability), shift, gpsConfig });
 });
 
-const Body = z.object({ available: z.boolean() });
+const Body = z.object({ available: z.boolean(), lat: z.number().gte(-90).lte(90).optional(), lng: z.number().gte(-180).lte(180).optional() });
 
 export const POST = route("driver.availability.set", async (req: NextRequest) => {
   const userId = requireUserId(req);

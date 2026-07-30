@@ -39,22 +39,33 @@ export function lastClosedShift(driverId: string) {
   return db.shift.findFirst({ where: { driverId, status: "CLOSED" }, orderBy: { endedAt: "desc" } });
 }
 
-/** Open a shift when the exec starts. Idempotent — reuse an already-open one. */
-export async function openShift(driverId: string) {
+export interface ShiftLoc { lat?: number | null; lng?: number | null }
+const hasLoc = (l?: ShiftLoc | null): l is { lat: number; lng: number } => !!l && typeof l.lat === "number" && typeof l.lng === "number";
+
+/** Open a shift when the exec starts. Idempotent — reuse an already-open one.
+    Stamps the start GPS location when supplied (GPS distance tracking). */
+export async function openShift(driverId: string, loc?: ShiftLoc | null) {
   const existing = await currentShift(driverId);
   if (existing) return existing;
-  return db.shift.create({ data: { driverId, status: "OPEN" } });
+  return db.shift.create({ data: { driverId, status: "OPEN", ...(hasLoc(loc) ? { startLat: loc.lat, startLng: loc.lng } : {}) } });
 }
 
-/** Close the open shift and stamp its worked-minutes + totals. null if none open. */
-export async function closeShift(driverId: string) {
+/** Close the open shift and stamp worked-minutes + totals. Finalises the GPS actual
+    distance (recomputed from the stored track) and records the planned round-trip for
+    the planned-vs-actual comparison. Stamps the end location when supplied. null if none open. */
+export async function closeShift(driverId: string, loc?: ShiftLoc | null) {
   const open = await currentShift(driverId);
   if (!open) return null;
   const endedAt = new Date();
   const totals = await shiftTotals(driverId, open.startedAt, endedAt);
   const workedMinutes = Math.max(0, Math.round((endedAt.getTime() - open.startedAt.getTime()) / 60000));
+  // finalise GPS actual distance from the full stored track (offline-safe reconciliation)
+  try { const { recomputeShiftDistance } = await import("@/lib/delivery/gps-track"); await recomputeShiftDistance(open.id); } catch { /* non-blocking */ }
+  // planned round-trip for this driver's day (for the planned-vs-actual comparison)
+  const trip = await db.tripHistory.findFirst({ where: { driverId }, orderBy: { date: "desc" }, select: { plannedDistanceKm: true } }).catch(() => null);
+  const plannedDistanceKm = trip?.plannedDistanceKm ?? (totals.distanceKm || null);
   return db.shift.update({
     where: { id: open.id },
-    data: { status: "CLOSED", endedAt, workedMinutes, ...totals },
+    data: { status: "CLOSED", endedAt, workedMinutes, ...totals, plannedDistanceKm, ...(hasLoc(loc) ? { endLat: loc.lat, endLng: loc.lng } : {}) },
   });
 }
