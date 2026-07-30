@@ -7,6 +7,7 @@ import { z } from "zod";
 import { createOrder } from "@/lib/razorpay";
 import { quote } from "@/lib/pricing";
 import { resolveCheckoutPricing } from "@/lib/catalogue/service";
+import { depositForCheckout } from "@/lib/bottles/ownership";
 
 export const runtime = "nodejs";
 
@@ -39,10 +40,12 @@ export async function POST(req: NextRequest) {
       { type: variant.type, ml: variant.ml, dailyPaise: variant.dailyPaise, fixedPaise: variant.fixedPaise, fixedDays: variant.fixedDays },
       plan ? { days: plan.days, discountBps: plan.discountBps } : undefined,
     );
-    // quote() prices ONE bottle per delivery — scale the milk line by the bottles ordered
-    // (same fix as lib/checkout/service.ts; without it a multi-bottle order is charged for one).
-    // Subscriptions carry a refundable glass-bottle deposit per bottle (DB-authoritative).
-    amountPaise = q.totalPaise * bottles + (variant.type === "SUBSCRIPTION" ? pricing.depositPaise * bottles : 0);
+    // quote() prices ONE bottle per delivery — scale the milk line by the bottles ordered.
+    // Deposit: this route is unauthenticated (no customer), so it prices the new-customer
+    // baseline via the unified rate (bottle.deposit.config). The AUTHORITATIVE held-aware
+    // charge is created by lib/checkout/service.ts placeOrder for a signed-in customer.
+    const dep = await depositForCheckout({ requiredBottles: bottles });
+    amountPaise = q.totalPaise * bottles + dep.depositPaise;
   } catch {
     return NextResponse.json({ error: "Could not price this selection" }, { status: 422 });
   }

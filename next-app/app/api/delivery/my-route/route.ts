@@ -133,6 +133,13 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
       verified: addr?.verified ?? false,                 // pin present + agrees with pincode + serviceable
       hasPin: addr?.lat != null && addr?.lng != null,    // whether any pin is dropped
       canCorrectGeo: canCorrectBase && d.status !== "DELIVERED" && d.status !== "FAILED" && d.status !== "SKIPPED",
+      // ---- bottle ownership at a glance (Step 7): the deposit decision is already made,
+      //      so the exec just sees what's existing vs new vs to-collect. No money decision. ----
+      ownership: {
+        existingWithCustomer: cust?.id ? (held.get(cust.id) ?? 0) : 0,   // reusable bottles the customer already holds
+        newToDeliver: isPickup ? 0 : (d.bottleCount ?? 1),               // fresh bottles to hand over today
+        toCollect: isPickup ? (d.bottleCount ?? 0) : (cust?.id ? (held.get(cust.id) ?? 0) : 0),   // empties expected back
+      },
     };
   });
 

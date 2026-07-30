@@ -19,6 +19,7 @@ const Body = z.object({
   autoRefundOnCollection: z.boolean().optional(),
   partialRefundAllowed: z.boolean().optional(),
   depositPerBottlePaise: z.number().int().min(0).max(100000).nullable().optional(),
+  maxBottleOwnership: z.number().int().min(1).max(100).optional(),
 });
 
 export const GET = route("admin.bottles.depositConfig.get", async (req: NextRequest) => {

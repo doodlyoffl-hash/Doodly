@@ -13,8 +13,10 @@ export interface BottleDepositConfig {
   requireVerification: boolean;  // ops must Verify a collection before the refund credits
   autoRefundOnCollection: boolean; // when !requireVerification, refund the instant the exec collects
   partialRefundAllowed: boolean; // refund the collected portion on a partial return
-  /** Per-bottle deposit used for refund math. null → fall back to the catalogue default. */
+  /** Per-bottle deposit — the SINGLE rate for both the checkout charge and refunds. null → catalogue default. */
   depositPerBottlePaise: number | null;
+  /** Max reusable bottles a customer may hold (caps voluntary extra-bottle requests at checkout). */
+  maxBottleOwnership: number;
 }
 
 export const BOTTLE_DEPOSIT_KEY = "bottle.deposit.config";
@@ -25,6 +27,7 @@ export const BOTTLE_DEPOSIT_DEFAULTS: BottleDepositConfig = {
   autoRefundOnCollection: true,
   partialRefundAllowed: true,
   depositPerBottlePaise: null,
+  maxBottleOwnership: 10,
 };
 
 function sanitize(c: Partial<BottleDepositConfig>): BottleDepositConfig {
@@ -38,6 +41,7 @@ function sanitize(c: Partial<BottleDepositConfig>): BottleDepositConfig {
     autoRefundOnCollection: bool(c.autoRefundOnCollection, BOTTLE_DEPOSIT_DEFAULTS.autoRefundOnCollection),
     partialRefundAllowed: bool(c.partialRefundAllowed, BOTTLE_DEPOSIT_DEFAULTS.partialRefundAllowed),
     depositPerBottlePaise: dep,
+    maxBottleOwnership: (() => { const n = Number(c.maxBottleOwnership); return Number.isFinite(n) ? Math.max(1, Math.min(100, Math.round(n))) : BOTTLE_DEPOSIT_DEFAULTS.maxBottleOwnership; })(),
   };
 }
 

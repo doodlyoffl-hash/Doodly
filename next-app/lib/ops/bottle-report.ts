@@ -159,6 +159,40 @@ export async function pickupReport(): Promise<BottleReport> {
   };
 }
 
+/** Bottle-ownership summary: per-customer owned / returned / deposit paid / refunded / held / status.
+    Drives the smart-deposit eligibility view (who still holds bottles = who isn't re-charged). */
+export async function ownershipReport(): Promise<BottleReport> {
+  const [holders, byUserEvent, charged, refunded] = await Promise.all([
+    allBottleCustomers(),
+    db.bottleLedger.groupBy({ by: ["userId", "event"], _sum: { qty: true } }),
+    db.order.groupBy({ by: ["userId"], where: { status: "PAID", depositPaise: { gt: 0 } }, _sum: { depositPaise: true } }),
+    db.bottleLedger.groupBy({ by: ["userId"], where: { event: "DEPOSIT_REFUNDED" }, _sum: { amountPaise: true } }),
+  ]);
+  const issuedOf = new Map<string, number>(), returnedOf = new Map<string, number>();
+  for (const g of byUserEvent) { const q = g._sum.qty ?? 0; if (g.event === "ISSUED") issuedOf.set(g.userId, q); else if (g.event === "RETURNED") returnedOf.set(g.userId, q); }
+  const paidOf = new Map(charged.map((c) => [c.userId, c._sum.depositPaise ?? 0]));
+  const refOf = new Map(refunded.map((r) => [r.userId, r._sum.amountPaise ?? 0]));
+
+  const data = holders.map((c) => {
+    const owned = c.held, issued = issuedOf.get(c.userId) ?? 0, returned = returnedOf.get(c.userId) ?? 0;
+    const paid = paidOf.get(c.userId) ?? 0, ref = refOf.get(c.userId) ?? 0, held = Math.max(0, paid - ref);
+    const status = owned > 0 ? "Owns bottles" : issued > 0 ? "Returned all" : "New";
+    return { name: c.name, phone: c.phone ?? "—", owned, returned, paid, ref, held, status };
+  }).sort((a, b) => b.owned - a.owned || a.name.localeCompare(b.name));
+
+  const T = { owned: data.reduce((s, r) => s + r.owned, 0), returned: data.reduce((s, r) => s + r.returned, 0), paid: data.reduce((s, r) => s + r.paid, 0), ref: data.reduce((s, r) => s + r.ref, 0), held: data.reduce((s, r) => s + r.held, 0) };
+  const withBottles = data.filter((r) => r.owned > 0).length;
+  return {
+    type: "ownership", title: "Bottle Ownership Report",
+    subtitle: `${data.length} customer(s) · ${withBottles} still hold bottles · ${T.owned} bottle(s) out · ${rup(T.held)} deposit held · generated ${new Date().toLocaleString("en-IN")}`,
+    rowCount: data.length,
+    columns: [{ label: "Customer" }, { label: "Mobile" }, { label: "Owned", right: true }, { label: "Returned", right: true }, { label: "Deposit paid", right: true }, { label: "Refunded", right: true }, { label: "Held", right: true }, { label: "Status" }],
+    rows: data.map((r) => [r.name, r.phone, String(r.owned), String(r.returned), rup(r.paid), rup(r.ref), rup(r.held), r.status]),
+    totalRow: ["TOTAL", `${data.length} customer(s)`, String(T.owned), String(T.returned), rup(T.paid), rup(T.ref), rup(T.held), `${withBottles} with bottles`],
+    data, totals: { delivered: 0, returned: T.returned, lost: 0, pending: T.owned, overdueCustomers: 0 },
+  };
+}
+
 // ---------- exports (CSV/XLS mirror route-report) ----------
 export function bottleReportFilename(kind: string, ext: string) { return `DOODLY_Bottle_${kind}_${new Date().toISOString().slice(0, 10)}.${ext}`; }
 

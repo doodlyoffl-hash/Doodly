@@ -19,6 +19,7 @@ const Body = z.object({
   variantId: z.string().min(1).max(30),
   planId: z.string().min(1).max(30).optional(),
   bottles: z.number().int().min(1).max(20).optional(),
+  extraBottles: z.number().int().min(0).max(20).optional(),  // voluntary spare bottles beyond the plan requirement
   method: z.enum(["upi", "card", "netbanking", "wallet"]).optional(),   // instrument is chosen in the Razorpay popup; kept optional for back-compat
   autopay: z.boolean().optional(),                           // opt-in recurring mandate (subscription plans only)
   couponCode: z.string().trim().max(40).optional(),          // validated + applied server-side

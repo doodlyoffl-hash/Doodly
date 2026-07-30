@@ -29,7 +29,7 @@ window.DOODLY_CHECKOUT = (function () {
   // The payment instrument (UPI / Card / Net Banking / Wallet) is chosen on
   // Razorpay's hosted popup — NOT on this page — so there is no on-page method list.
 
-  let mount, coPicker, state = { step: 0, slot: 0, addr: 0, reached: 0, coupon: null, useWallet: false, walletPaise: 0, autopay: false };
+  let mount, coPicker, state = { step: 0, slot: 0, addr: 0, reached: 0, coupon: null, useWallet: false, walletPaise: 0, autopay: false, ownership: null, extraBottles: 0 };
 
   /* ---------------- markup ---------------- */
   function stepperHTML() {
@@ -133,7 +133,9 @@ window.DOODLY_CHECKOUT = (function () {
     const original = trial ? (v.fixedPrice || 0) : dailyPrice * days;
     const discount = trial ? 0 : Math.round(original * (p ? (p.discount || 0) : 0));
     const net = original - discount;
-    const deposit = (pr.deposit || 0) * bottles;
+    // Smart deposit: when the server preview is available (signed-in customer), use its
+    // held-aware amount so the displayed deposit == what's charged. Else the catalogue ₹120.
+    const deposit = (state.ownership && state.ownership.deposit) ? Math.round(state.ownership.deposit.depositPaise / 100) : (pr.deposit || 0) * bottles;
     const delivery = pr.deliveryCharge || 0;
     const gst = Math.round(net * ((pr.taxPct || 0) / 100));
     const total = net + deposit + delivery + gst;
@@ -186,6 +188,13 @@ window.DOODLY_CHECKOUT = (function () {
     // subscription flow (empty one-off cart) → derive the summary from the sub context
     const sd = (cartT && cartT.bottles) ? null : subDisplay();
     const t = (cartT && cartT.bottles) ? cartT : (sd ? sd.totals : { subtotal: 0, savings: 0, deposit: 0, delivery: 0, gst: 0, total: 0, bottles: 0 });
+    // The one-off cart computes its own client-side deposit; when the server preview is
+    // available, use its held-aware amount so cart-flow display + charge match too.
+    // (The subscription flow's deposit is already server-smart via subDisplay().)
+    const usingCart = !!(cartT && cartT.bottles);
+    const serverDep = (state.ownership && state.ownership.deposit) ? state.ownership.deposit.depositPaise / 100 : null;
+    const depShown = (usingCart && serverDep != null) ? serverDep : t.deposit;
+    const totalShown = (usingCart && serverDep != null) ? (t.total - t.deposit + serverDep) : t.total;
     // Trial-Pack cashback reminder — shown when a Trial Pack is being purchased and the
     // promo is enabled. Amount + min eligible plan length come from the admin wallet config.
     const trialInCart = !!((CART() && CART().lines && CART().lines().some(l => (l.variant && l.variant.type === "trial") || l.type === "trial")) || (sd && sd.trial));
@@ -195,16 +204,37 @@ window.DOODLY_CHECKOUT = (function () {
     const promoOn = (window.DOODLY_WALLET && DOODLY_WALLET.promoActive) ? DOODLY_WALLET.promoActive() : (wc.enabled !== false);
     const trialNote = (trialInCart && promoOn)
       ? `<div class="tp-note co-tp-note"><span class="tp-note-ic" aria-hidden="true">🎁</span><div><b>Good news!</b> If you upgrade to a ${minDays}-day or longer subscription later, your ${inr(wc.amount)} Trial Pack amount will be credited back to your DOODLY Wallet. One-time benefit per customer.</div></div>` : "";
+    // Smart bottle-ownership block: explains WHY the deposit is / isn't charged (Step 6).
+    const ownBlock = (function () {
+      const o = state.ownership; if (!o || !o.signedIn || !o.deposit) return "";
+      const dep = o.deposit, own = o.ownership || {}, owned = own.owned || 0;
+      if (owned > 0) {
+        return '<div class="co-own" style="margin:10px 0;padding:10px 12px;border-radius:10px;background:rgba(31,174,102,.08)">' +
+          '<div style="font-weight:700;margin-bottom:4px">🍼 You already have DOODLY bottles</div>' +
+          '<div class="co-sum"><div class="row"><span>Bottles currently with you</span><b>' + owned + '</b></div>' +
+          '<div class="row"><span>Deposit already paid</span><b>' + inr((own.depositPaidPaise || 0) / 100) + '</b></div>' +
+          '<div class="row"><span>Additional deposit required</span><b>' + inr(dep.depositPaise / 100) + '</b></div></div>' +
+          (dep.depositBottles === 0 ? '<div class="muted-sm" style="margin-top:4px">✓ Continue using your existing bottles — no new deposit.</div>'
+            : '<div class="muted-sm" style="margin-top:4px">Deposit for ' + dep.depositBottles + ' new bottle' + (dep.depositBottles === 1 ? "" : "s") + '.</div>') +
+          '<div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="muted-sm">➕ Request additional spare bottles</span>' +
+          '<button type="button" class="btn btn-ghost sm" id="coExtraDec">−</button><b id="coExtraN">' + (state.extraBottles || 0) + '</b><button type="button" class="btn btn-ghost sm" id="coExtraInc">+</button></div>' +
+          '</div>';
+      }
+      return '<div class="co-own" style="margin:10px 0;padding:10px 12px;border-radius:10px;background:rgba(163,91,18,.08)">' +
+        '<div style="font-weight:700">🍼 Bottle deposit required</div>' +
+        '<div class="muted-sm" style="margin-top:3px">A refundable ' + inr(dep.depositPaise / 100) + ' deposit is added for your ' + (dep.depositBottles || 1) + ' new glass bottle' + ((dep.depositBottles || 1) === 1 ? "" : "s") + ' — fully refundable when you return them.</div></div>';
+    })();
     return `<div class="co-summary">
       <h3>${icon("box", 17)} Order summary</h3>
       <div class="co-sum">
         <div class="row"><span>Subtotal (${t.bottles})</span><b>${inr(t.subtotal)}</b></div>
         ${t.savings > 0 ? `<div class="row save"><span>Savings</span><b>− ${inr(t.savings)}</b></div>` : ""}
-        <div class="row"><span>Refundable Bottle Deposit</span><b>${inr(t.deposit)}</b></div>
+        <div class="row"><span>Refundable Bottle Deposit</span><b>${inr(depShown)}</b></div>
         <div class="row ${t.delivery > 0 ? "" : "free"}"><span>Delivery</span><b>${t.delivery > 0 ? inr(t.delivery) : "Free"}</b></div>
         ${t.gst > 0 ? `<div class="row"><span>GST</span><b>${inr(t.gst)}</b></div>` : ""}
-        <div class="row total"><span>Total</span><b>${inr(t.total)}</b></div>
+        <div class="row total"><span>Total</span><b>${inr(totalShown)}</b></div>
       </div>
+      ${ownBlock}
       ${trialNote}
       <div class="co-trust"><span>${icon("lock", 13)} Secure</span><span>${icon("bottle", 13)} Refundable deposit</span><span>${icon("refresh", 13)} Cancel anytime</span></div>
     </div>`;
@@ -333,6 +363,21 @@ window.DOODLY_CHECKOUT = (function () {
     }).catch(() => { row.hidden = true; });
   }
 
+  /* ---------- smart bottle-deposit preview (held-aware) ---------- */
+  function requiredBottles() { const s = subContext(); return (s && s.bottles) || 1; }
+  function refreshSummary() {
+    // Re-render the summary aside; the extra-bottle steppers are handled by the delegated
+    // click listener on `mount` (in wire()), so they survive this re-render.
+    const aside = mount && mount.querySelector(".co-aside");
+    if (aside) aside.innerHTML = summaryHTML();
+  }
+  function hydrateOwnership() {
+    if (!coSignedIn() || !window.DOODLY_API) { state.ownership = null; return; }
+    DOODLY_API.get("/api/checkout/deposit-preview?bottles=" + requiredBottles() + "&extra=" + (state.extraBottles || 0))
+      .then(function (r) { state.ownership = r || null; refreshSummary(); })
+      .catch(function () { state.ownership = null; });
+  }
+
   /* ---------------- payment ---------------- */
   // NOTE: the payment instrument (UPI/Card/Net Banking/Wallet) is entered inside
   // Razorpay's own secure popup — DOODLY collects no card/UPI details on-page, so
@@ -427,6 +472,8 @@ window.DOODLY_CHECKOUT = (function () {
     const walletIntent = (!autopay && state.useWallet) ? Math.min(state.walletPaise, Math.max(0, orderTotalPaise() - (state.coupon ? state.coupon.discountPaise : 0))) : 0;
     const payload = {
       variantId: sub.variantId, planId: sub.planId || undefined,
+      bottles: requiredBottles(),
+      extraBottles: (state.extraBottles || 0) > 0 ? state.extraBottles : undefined,
       autopay: autopay,
       couponCode: (!autopay && state.coupon) ? state.coupon.code : undefined,
       walletAmountPaise: walletIntent > 0 ? walletIntent : undefined,
@@ -618,6 +665,8 @@ window.DOODLY_CHECKOUT = (function () {
       if (t.closest(".js-editcart") && CART()) { CART().open(); return; }
       const dot = t.closest(".co-stepdot"); if (dot && !dot.disabled) { goto(Number(dot.dataset.goto)); return; }
       if (t.closest(".co-coupon-apply")) { applyCoupon(); return; }
+      if (t.closest("#coExtraInc")) { state.extraBottles = (state.extraBottles || 0) + 1; hydrateOwnership(); return; }
+      if (t.closest("#coExtraDec")) { state.extraBottles = Math.max(0, (state.extraBottles || 0) - 1); hydrateOwnership(); return; }
       if (t.closest(".co-next")) {
         if (t.closest(".co-pay")) { pay(); return; }
         if (state.step === 1 && !addrChosen()) { showAddrReq(true); return; }   // an address MUST be selected first
@@ -816,9 +865,10 @@ window.DOODLY_CHECKOUT = (function () {
       }
     } catch (e) {}
     mount.dataset.built = "1";
-    state = { step: 0, slot: 0, addr: 0, addrId: null, reached: 0, realOrder: null, coupon: null, useWallet: false, walletPaise: 0, autopay: false };
+    state = { step: 0, slot: 0, addr: 0, addrId: null, reached: 0, realOrder: null, coupon: null, useWallet: false, walletPaise: 0, autopay: false, ownership: null, extraBottles: 0 };
     build(); wire();
     try { hydrateAddresses(); } catch (e) {}   // signed-in customer → real saved addresses + map pin
+    try { hydrateOwnership(); } catch (e) {}    // smart bottle deposit — held-aware (existing owners pay ₹0 new)
     // mount the delivery start-date picker into the schedule step
     if (window.DOODLY_SCHEDULE) {
       const host = mount.querySelector("#coDateHost");

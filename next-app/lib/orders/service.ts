@@ -10,6 +10,7 @@ import type { OrderEventType, PaymentStatus, OrderType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { sendInvoiceEmail } from "@/lib/auth/email";
 import { assertDeliverableAddress } from "@/lib/addresses/deliverable";
+import { depositForCheckout } from "@/lib/bottles/ownership";
 import type { OrderFulfilment, OrderListItem, OrderDetail } from "./types";
 
 const TX = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30_000 } as const;
@@ -162,20 +163,24 @@ export async function getCustomerOrderDetail(userId: string, id: string): Promis
 // ---------- actions ----------
 
 export async function reorderCustomer(userId: string, id: string) {
-  const src0 = await db.order.findFirst({ where: { id, userId }, select: { addressId: true, items: { select: { id: true } } } });
+  const src0 = await db.order.findFirst({ where: { id, userId }, select: { addressId: true, stockUnits: true, items: { select: { id: true } } } });
   if (!src0) throw new Error("Order not found");
   if (!src0.items.length) throw new Error("This order has no items to reorder.");
   // Re-validate the delivery address (verified pin + serviceable) before creating the reorder —
   // closes the bypass where a reorder inherited an unverified/stale address with no gate.
   if (src0.addressId) await assertDeliverableAddress({ userId, addressId: src0.addressId, label: "reorder" });
+  // Smart deposit: recompute against the customer's CURRENT bottle ownership instead of
+  // copying the original — an existing owner reordering isn't re-charged for bottles they hold.
+  const dep = await depositForCheckout({ userId, requiredBottles: src0.stockUnits || 1 });
   return db.$transaction(async (tx) => {
     const src = await tx.order.findFirst({ where: { id, userId }, include: { items: true } });
     if (!src) throw new Error("Order not found");
     if (!src.items.length) throw new Error("This order has no items to reorder.");
+    const totalPaise = src.totalPaise - src.depositPaise + dep.depositPaise;   // swap old deposit for the recomputed one
     const order = await tx.order.create({
       data: {
-        userId, type: "ONE_TIME", subtotalPaise: src.subtotalPaise, discountPaise: src.discountPaise, depositPaise: src.depositPaise,
-        taxPaise: src.taxPaise, deliveryPaise: src.deliveryPaise, totalPaise: src.totalPaise, status: "PENDING",
+        userId, type: "ONE_TIME", subtotalPaise: src.subtotalPaise, discountPaise: src.discountPaise, depositPaise: dep.depositPaise,
+        taxPaise: src.taxPaise, deliveryPaise: src.deliveryPaise, totalPaise, status: "PENDING",
         addressId: src.addressId,   // carry the original delivery address (never leave a reorder addressless)
         items: { create: src.items.map((i) => ({ productSlug: i.productSlug, productName: i.productName, variantLabel: i.variantLabel, quantity: i.quantity, unitPricePaise: i.unitPricePaise, lineTotalPaise: i.lineTotalPaise })) },
       },

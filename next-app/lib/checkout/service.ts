@@ -25,6 +25,7 @@ import { maybeAwardReferralForPaidOrder } from "@/lib/referrals/service";
 import { earn } from "@/lib/loyalty/service";
 import { notify, notifyOrderConfirmed } from "@/lib/notifications/dispatch";
 import { audit } from "@/lib/auth/audit";
+import { depositForCheckout } from "@/lib/bottles/ownership";
 import { assertDeliverableAddress } from "@/lib/addresses/deliverable";
 import type { ReqContext } from "@/lib/auth/request";
 
@@ -35,6 +36,7 @@ export interface CheckoutInput {
   variantId: string;
   planId?: string;
   bottles?: number;
+  extraBottles?: number;                    // voluntary spare bottles beyond the plan requirement (deposit charged)
   method?: "upi" | "card" | "netbanking" | "wallet" | "cod";  // instrument chosen in the Razorpay popup
   autopay?: boolean;                        // opt-in recurring mandate (subscription plans only)
   couponCode?: string;                      // optional coupon (validated + applied server-side)
@@ -70,11 +72,14 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
       plan ? { days: plan.days, discountBps: plan.discountBps } : undefined,
     );
   } catch { throw Errors.badRequest("Could not price this selection."); }
-  // Refundable bottle deposit applies to EVERY glass-bottle order — including the trial
-  // pack — matching the checkout summary + the FAQ ("a refundable deposit is added per
-  // bottle on your first order"). (Was SUBSCRIPTION-only, which undercharged the trial:
-  // the page showed the deposit but the gateway didn't collect it.)
-  const depositPaise = pricing.depositPaise * bottles;
+  // Smart bottle deposit (held-aware): charge ONLY for newly-issued bottles — the shortfall
+  // between what the plan needs and what the customer already holds, plus any voluntary
+  // extras. Existing owners renewing pay ₹0; new customers / owners who returned everything
+  // pay the mandatory deposit. Single per-bottle rate from bottle.deposit.config (charge +
+  // refund unified). Never charges twice for a bottle the customer already owns.
+  const dep = await depositForCheckout({ userId, requiredBottles: bottles, extraBottles: input.extraBottles });
+  const depositPaise = dep.depositPaise;
+  const isSubscriptionOrder = variant.type === "SUBSCRIPTION" || variant.type === "TRIAL";
   // quote() prices ONE bottle per delivery (dailyPaise × days) — it takes no quantity.
   // Scale the milk line by the bottles ordered, or a multi-bottle order is charged for a
   // single bottle while the subscription is created with qty: bottles, stock is decremented
@@ -170,7 +175,10 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
         couponCode: couponCode || null, couponDiscountPaise, walletAppliedPaise,
         status: "PENDING",
         addressId, deliveryDate: startDate, deliverySlot: slot,   // delivery details → become a Delivery on payment
-        stockVariantId, stockUnits: stockVariantId ? bottles : 0,  // filled-bottle stock to decrement on payment
+        // Reserve only NEWLY-ISSUED bottles (deposit-bearing) for a subscription — the customer's
+        // existing bottles aren't re-reserved. Deliveries read SubscriptionItem.qty, so this
+        // doesn't affect how many bottles are delivered. One-time orders keep the full count.
+        stockVariantId, stockUnits: stockVariantId ? (isSubscriptionOrder ? dep.depositBottles : bottles) : 0,
         items: {
           create: [{
             productSlug: variant.productSlug, productName: variant.productName,
@@ -238,7 +246,10 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     return { order, subscriptionId };
   }, TX);
 
-  const base = { orderId: order.id, number: num(order.id), totalPaise, depositPaise, subscriptionId, type: orderType, couponDiscountPaise, walletAppliedPaise, payablePaise };
+  // Smart-deposit decision trail (Step 12): why this order was / wasn't charged a deposit.
+  await audit({ userId, actorRole: "customer", action: "bottle.deposit.smart", target: `order ${order.id} · owned ${dep.ownedBottles} · required ${dep.requiredBottles} · new ${dep.depositBottles} · ₹${Math.round(dep.depositPaise / 100)} · ${dep.reason}`, ctx }).catch(() => {});
+
+  const base = { orderId: order.id, number: num(order.id), totalPaise, depositPaise, subscriptionId, type: orderType, couponDiscountPaise, walletAppliedPaise, payablePaise, bottleOwnership: { owned: dep.ownedBottles, newBottles: dep.depositBottles, reason: dep.reason } };
 
   /* ---- 4b. AUTOPAY — create the Razorpay recurring mandate for the plan and hand
        the client the subscription id to authorise in Checkout. Falls back cleanly

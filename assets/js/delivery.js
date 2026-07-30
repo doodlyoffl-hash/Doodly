@@ -337,6 +337,7 @@ window.DOODLY_DELIVERY = (function () {
           ${s2.canCorrectGeo ? `<button class="btn btn-ghost" style="padding:3px 10px;font-size:.8rem" data-geo="${s2.id}">${svg("pin", 13)} Verify / Update location</button>` : ""}
         </div>` : ""}
         <div class="dl-steps">${WORKFLOW.map((w, i) => `<span class="dl-step ${i <= stepIdx ? "on" : ""}">${esc(w[1])}</span>`).join('<span class="dl-step-sep"></span>')}</div>
+        ${s2.ownership ? `<div class="muted-sm" style="margin:2px 0 4px">${svg("bottle", 12)} Existing with customer <b>${s2.ownership.existingWithCustomer}</b>${s2.ownership.newToDeliver ? ` · new to deliver <b>${s2.ownership.newToDeliver}</b>` : ""} · to collect <b>${s2.ownership.toCollect}</b></div>` : ""}
         <div class="dl-bottles">
           <span>${svg("bottle", 14)} Empties to collect <b>${owed}</b> · collected <b>${collected}</b> · pending <b>${pendingB}</b>${s2.bottlesExpected ? ` <small class="muted-sm">· deliver ${s2.bottlesExpected} today</small>` : ""}</span>
           <span class="dl-bottle-btns"><button class="dl-mini" data-bdec="${s2.id}">−</button><button class="dl-mini" data-binc="${s2.id}">+</button></span>
