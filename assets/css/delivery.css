@@ -123,3 +123,41 @@
 .dl-stop-leg svg { color:var(--leaf-600); flex:0 0 auto; }
 
 @media (prefers-reduced-motion: reduce) { .dl-modal-card { transition:none; } }
+
+/* =============================================================
+   Redesign v2 (P5) — elevated, one-hand mobile-first exec UI.
+   Additive layer: refines hierarchy, tap targets and the new
+   P1–P4 elements (nav, shift timer, products, outcomes) while
+   keeping the exact markup/class contract the JS relies on.
+   ============================================================= */
+/* Hero → a branded panel carrying the greeting + live shift status */
+.dl-hero { background:linear-gradient(135deg, var(--forest), #12503b); border-radius:22px; padding:18px 18px 20px; box-shadow:0 10px 30px -18px rgba(15,61,46,.6); align-items:flex-start; }
+.dl-greet { color:#fff; font-size:1.6rem; line-height:1.1; }
+.dl-sub { color:rgba(255,255,255,.8); }
+.dl-hero #dlAvail { font-size:.8rem; padding:.42rem .72rem; box-shadow:0 2px 8px -3px rgba(0,0,0,.4); }
+#dlShiftClock { font-variant-numeric:tabular-nums; }
+
+/* KPI strip — larger numbers; the two headline metrics get a leaf accent */
+.dl-kpis { gap:8px; margin-top:14px; }
+.dl-kpi { padding:13px 12px; border-radius:16px; }
+.dl-kpi .n { font-size:1.5rem; }
+.dl-kpi:nth-child(1), .dl-kpi:nth-child(2) { border-top:2.5px solid var(--leaf); }
+
+/* Bigger, tactile thumb targets */
+.dl-route-btns .btn, .dl-navcard-btns .btn, .dl-acts .btn { min-height:46px; border-radius:13px; font-weight:700; }
+.dl-mini { width:32px; height:32px; border-radius:9px; }
+
+/* Product list on a stop — clean rows */
+.dl-items { line-height:1.55; }
+.dl-items b { color:var(--forest); }
+
+/* Resolved-outcome + partial pills sit inline with the actions */
+.dl-acts .badge { display:inline-flex; align-items:center; gap:.3rem; align-self:center; padding:.44rem .74rem; font-size:.82rem; font-weight:800; }
+.dl-partial-ck { color:var(--ink-2); }
+
+/* Current stop — stronger presence for the one you're on */
+.dl-stop.cur { box-shadow:0 0 0 2px var(--leaf), 0 10px 26px -14px rgba(31,174,102,.55); }
+.dl-navcard { border-radius:20px; }
+.dl-navcard-name { font-size:1.35rem; }
+
+@media (min-width:680px){ .dl-hero { align-items:center; } }
