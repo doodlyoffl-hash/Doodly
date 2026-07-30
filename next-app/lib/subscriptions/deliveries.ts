@@ -26,8 +26,10 @@ const dayKey = (d: Date) => startOfDay(d).getTime();
 export interface Actor { actorId?: string; actorRole?: string; ip?: string }
 
 // Delivery statuses that COUNT toward the paid target (fulfilled OR still on track).
-// SKIPPED (customer cancel/skip) and FAILED (we missed it) do NOT count — they get made up.
-const COUNTING: DeliveryStatus[] = ["SCHEDULED", "ASSIGNED", "ACCEPTED", "PACKED", "OUT_FOR_DELIVERY", "ON_THE_WAY", "REACHED", "DELIVERED"];
+// SKIPPED (customer skip), FAILED (we missed it), CUSTOMER_UNAVAILABLE + RESCHEDULED (exec
+// miss at the door) do NOT count — they get made up. PARTIALLY_DELIVERED (day served) and
+// CANCELLED (day forfeited at the door) DO count — no make-up.
+const COUNTING: DeliveryStatus[] = ["SCHEDULED", "ASSIGNED", "ACCEPTED", "PACKED", "OUT_FOR_DELIVERY", "ON_THE_WAY", "REACHED", "DELIVERED", "PARTIALLY_DELIVERED", "CANCELLED"];
 const COUNTING_SET = new Set<string>(COUNTING);
 
 /** Append-only subscription event (avoids a circular import on admin.logSubEvent). */

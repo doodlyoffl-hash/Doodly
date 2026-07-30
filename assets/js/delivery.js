@@ -16,6 +16,12 @@ window.DOODLY_DELIVERY = (function () {
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const WORKFLOW = [["assigned", "Assigned"], ["onway", "On the way"], ["reached", "Reached"], ["delivered", "Delivered"]];
   const ISSUES = ["Customer unavailable", "Wrong address", "Damaged bottle", "Payment issue", "Product issue", "Delivery failed"];
+  // A stop is "resolved" once it reaches any terminal outcome — it drops out of the active route.
+  const RESOLVED = ["delivered", "partial", "failed", "skipped", "unavailable", "rescheduled", "cancelled"];
+  function isResolved(s) { return RESOLVED.indexOf(s) > -1; }
+  const OUTCOME_LABEL = { delivered: ["green", "Delivered"], partial: ["amber", "Partially delivered"], failed: ["red", "Failed"], skipped: ["grey", "Skipped"], unavailable: ["red", "Customer unavailable"], rescheduled: ["blue", "Rescheduled"], cancelled: ["grey", "Cancelled"] };
+  // Door outcomes an exec can pick when they can't complete a delivery.
+  const OUTCOMES = [["unavailable", "Customer not available"], ["reschedule", "Reschedule for later"], ["cancel", "Cancel this stop"]];
 
   /* ---------- LIVE route (signed-in executive) ---------- */
   const API = () => window.DOODLY_API;
@@ -114,7 +120,7 @@ window.DOODLY_DELIVERY = (function () {
   function pingLocation() {
     if (!execUser() || !API() || !navigator.geolocation) return;
     // Stop reporting once every stop on the live route is done.
-    if (_live && Array.isArray(_live.stops) && _live.stops.length && _live.stops.every((s) => String(s.status) === "delivered")) { stopLocationPolling(); return; }
+    if (_live && Array.isArray(_live.stops) && _live.stops.length && _live.stops.every((s) => isResolved(String(s.status)))) { stopLocationPolling(); return; }
     navigator.geolocation.getCurrentPosition(
       (pos) => { API().post("/api/delivery/location", { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }).catch(() => {}); },
       () => {},                                                    // permission denied / unavailable → silently skip
@@ -199,17 +205,17 @@ window.DOODLY_DELIVERY = (function () {
     }
 
     // current stop = first not-yet-delivered (in optimised sequence order); the one after it = next.
-    function currentStop() { return all.find((s) => stStatus(st, s.id) !== "delivered") || null; }
-    function upcomingAfter(cur) { if (!cur) return null; let seen = false; for (const s of all) { if (s.id === cur.id) { seen = true; continue; } if (seen && stStatus(st, s.id) !== "delivered") return s; } return null; }
+    function currentStop() { return all.find((s) => !isResolved(stStatus(st, s.id))) || null; }
+    function upcomingAfter(cur) { if (!cur) return null; let seen = false; for (const s of all) { if (s.id === cur.id) { seen = true; continue; } if (seen && !isResolved(stStatus(st, s.id))) return s; } return null; }
 
     function summary() {
-      const total = all.length, done = all.filter((s) => stStatus(st, s.id) === "delivered").length;
+      const total = all.length, done = all.filter((s) => isResolved(stStatus(st, s.id))).length;
       const pending = total - done;
       const bottles = all.reduce((n, s) => n + Math.max(0, stOwed(s) - stBottles(st, s.id)), 0);
       const R = (_live && _live.route) || null;
       // Distance TRAVELLED = the optimised legs of the stops already completed locally
       // (kept in sync with optimistic on-device completes, not just the server snapshot).
-      const doneStops = all.filter((s) => stStatus(st, s.id) === "delivered");
+      const doneStops = all.filter((s) => isResolved(stStatus(st, s.id)));
       const travelledKm = doneStops.reduce((a, s) => a + (Number(s.legKm) || 0), 0);
       const travelledMin = doneStops.reduce((a, s) => a + (Number(s.legMin) || 0), 0);
       let plannedKm = R && R.plannedKm != null ? Number(R.plannedKm) : null;
@@ -341,7 +347,7 @@ window.DOODLY_DELIVERY = (function () {
     function stopCard(s2) {
       const status = stStatus(st, s2.id), collected = stBottles(st, s2.id), owed = stOwed(s2), pendingB = Math.max(0, owed - collected);
       const stepIdx = WORKFLOW.findIndex((w) => w[0] === status);
-      const done = status === "delivered";
+      const done = isResolved(status);
       const isCur = !done && (currentStop() || {}).id === s2.id;
       const legTxt = (!s2.noCoords && s2.legKm != null) ? `${Number(s2.legKm).toFixed(1)} km from previous${s2.legMin != null ? ` · ~${s2.legMin} min` : ""}` : "";
       return `<div class="dl-stop ${done ? "done" : ""} ${isCur ? "cur" : ""}" id="card-${s2.id}" data-id="${s2.id}">
@@ -382,7 +388,9 @@ window.DOODLY_DELIVERY = (function () {
         </div>
         <div class="dl-acts">
           <button class="btn btn-ghost dl-navbtn" data-nav="${s2.id}">${svg("nav", 15)} Navigate</button>
-          ${done ? `<span class="dl-delivered">${svg("check", 15)} Delivered</span>` : `<button class="btn btn-primary" data-next="${s2.id}">${stepIdx < 2 ? WORKFLOW[stepIdx + 1][1] : "Mark delivered"}</button>`}
+          ${done
+            ? `<span class="badge ${(OUTCOME_LABEL[status] || ["green", "Done"])[0]}">${status === "delivered" ? svg("check", 15) + " " : ""}${(OUTCOME_LABEL[status] || ["", "Done"])[1]}</span>`
+            : `<button class="btn btn-primary" data-next="${s2.id}">${stepIdx < 2 ? WORKFLOW[stepIdx + 1][1] : "Mark delivered"}</button><button class="btn btn-ghost" data-outcome="${s2.id}" style="color:#b3261e">Can't deliver</button>`}
           <button class="btn btn-ghost dl-issue" data-issue="${s2.id}">Report issue</button>
         </div>
         <div class="dl-navmodes" data-modes="${s2.id}" hidden>
@@ -395,6 +403,12 @@ window.DOODLY_DELIVERY = (function () {
       if (_live && (status === "onway" || status === "reached")) postStop(id, { action: "status", status: status });
     }
     function setBottles(id, n) { const s2 = all.find((x) => x.id === id); st[id] = Object.assign({}, st[id], { bottles: Math.max(0, Math.min(stOwed(s2), n)) }); save(st); }
+    // Record a door outcome (can't deliver). Maps to the server's outcome action + local resolved state.
+    function setOutcome(id, outcome, remark) {
+      const cli = { unavailable: "unavailable", reschedule: "rescheduled", cancel: "cancelled" }[outcome] || "failed";
+      st[id] = Object.assign({}, st[id], { status: cli }); save(st);
+      if (_live) postStop(id, { action: "outcome", outcome: outcome, execRemark: remark || undefined });
+    }
 
     function wire() {
       const av = host.querySelector("#dlAvail");
@@ -431,6 +445,7 @@ window.DOODLY_DELIVERY = (function () {
       host.querySelectorAll("[data-binc]").forEach((b) => b.addEventListener("click", () => { setBottles(b.dataset.binc, stBottles(st, b.dataset.binc) + 1); render(); }));
       host.querySelectorAll("[data-bdec]").forEach((b) => b.addEventListener("click", () => { setBottles(b.dataset.bdec, stBottles(st, b.dataset.bdec) - 1); render(); }));
       host.querySelectorAll("[data-issue]").forEach((b) => b.addEventListener("click", () => issueModal(b.dataset.issue)));
+      host.querySelectorAll("[data-outcome]").forEach((b) => b.addEventListener("click", () => outcomeModal(b.dataset.outcome)));
       host.querySelectorAll("[data-nav]").forEach((b) => b.addEventListener("click", () => { const m = host.querySelector(`[data-modes="${b.dataset.nav}"]`); if (m) m.hidden = !m.hidden; }));
       host.querySelectorAll("[data-geo]").forEach((b) => b.addEventListener("click", () => verifyGeoModal(b.dataset.geo)));
       // replay any offline GPS corrections now + whenever connectivity returns
@@ -446,7 +461,10 @@ window.DOODLY_DELIVERY = (function () {
         <label class="dl-pod"><input type="file" accept="image/*" capture="environment" id="dlPod"><span id="dlPodLabel">${svg("check", 16)} Upload proof of delivery (optional)</span></label>
         <div class="dl-pod-prev" id="dlPodPrev" hidden></div>
         <div class="dl-bcollect"><span>Empty bottles collected</span><div class="dl-step-q"><button class="dl-mini" id="podDec">−</button><b id="podN">${stBottles(st, id)}</b><button class="dl-mini" id="podInc">+</button><small>of ${stOwed(s2)} owed</small></div></div>
-        <textarea class="dl-notes" id="dlNotes" placeholder="Delivery notes (optional)"></textarea>
+        <label class="dl-partial-ck" style="display:flex;gap:8px;align-items:center;margin:8px 0;font-size:.9rem"><input type="checkbox" id="dlPartial"> Partial delivery — handed over fewer than planned</label>
+        <div class="dl-bcollect" id="dlPartialRow" hidden><span>Bottles handed over</span><div class="dl-step-q"><button class="dl-mini" id="poutDec">−</button><b id="poutN">${s2.bottlesExpected || 1}</b><button class="dl-mini" id="poutInc">+</button><small>of ${s2.bottlesExpected || 1} planned</small></div></div>
+        <textarea class="dl-notes" id="dlNotes" placeholder="Delivery notes for the customer (optional)"></textarea>
+        <textarea class="dl-notes" id="dlExecRemark" placeholder="Internal note for ops (optional)"></textarea>
         <button class="btn btn-primary dl-confirm">${svg("check", 16)} Mark delivered</button></div>`;
       document.body.appendChild(m); requestAnimationFrame(() => m.classList.add("show"));
       let bottles = stBottles(st, id);
@@ -454,12 +472,19 @@ window.DOODLY_DELIVERY = (function () {
       m.addEventListener("click", (e) => { if (e.target === m || e.target.closest(".dl-x")) close(); });
       m.querySelector("#podInc").addEventListener("click", () => { bottles = Math.min(stOwed(s2), bottles + 1); m.querySelector("#podN").textContent = bottles; });
       m.querySelector("#podDec").addEventListener("click", () => { bottles = Math.max(0, bottles - 1); m.querySelector("#podN").textContent = bottles; });
+      const planned = s2.bottlesExpected || 1; let handedOver = planned;
+      const partialRow = m.querySelector("#dlPartialRow"), partialCk = m.querySelector("#dlPartial");
+      partialCk.addEventListener("change", () => { partialRow.hidden = !partialCk.checked; });
+      m.querySelector("#poutInc").addEventListener("click", () => { handedOver = Math.min(planned, handedOver + 1); m.querySelector("#poutN").textContent = handedOver; });
+      m.querySelector("#poutDec").addEventListener("click", () => { handedOver = Math.max(0, handedOver - 1); m.querySelector("#poutN").textContent = handedOver; });
       m.querySelector("#dlPod").addEventListener("change", (e) => { const f = e.target.files[0]; if (f) { const url = URL.createObjectURL(f); const pv = m.querySelector("#dlPodPrev"); pv.hidden = false; pv.innerHTML = `<img src="${url}" alt="Proof">`; m.querySelector("#dlPodLabel").innerHTML = `${svg("check", 16)} Photo attached`; } });
       m.querySelector(".dl-confirm").addEventListener("click", () => {
-        setBottles(id, bottles); setStatus(id, "delivered");
+        const partial = partialCk.checked, execRemark = m.querySelector("#dlExecRemark").value.trim();
+        setBottles(id, bottles);
+        st[id] = Object.assign({}, st[id], { status: partial ? "partial" : "delivered" });
         st[id].deliveredAt = new Date().toISOString(); st[id].notes = m.querySelector("#dlNotes").value.trim(); save(st);
         // live mode: record the completion (bottles → customer's bottle ledger)
-        if (_live) postStop(id, { action: "deliver", bottles: bottles, notes: st[id].notes || undefined });
+        if (_live) postStop(id, { action: "deliver", bottles: bottles, bottlesOut: partial ? handedOver : undefined, partial: partial || undefined, notes: st[id].notes || undefined, execRemark: execRemark || undefined });
         // automatic late-delivery monitoring: detect lateness vs the 7:00 AM promise, apologise + record if late
         try {
           if (window.DOODLY_LATE) {
@@ -532,6 +557,29 @@ window.DOODLY_DELIVERY = (function () {
             else if (res.queued) { close(); toast("Saved offline — will sync when you're back online"); }
             else { saveBtn.disabled = false; showWarn(res.error || "Update failed", "err"); toast(res.error || "Update failed"); }
           });
+      });
+    }
+
+    function outcomeModal(id) {
+      const s2 = all.find((x) => x.id === id); if (!s2) return;
+      const m = document.createElement("div"); m.className = "dl-modal";
+      m.innerHTML = `<div class="dl-modal-card" role="dialog" aria-modal="true" aria-label="Can't deliver">
+        <div class="dl-modal-head"><h3>Can't deliver</h3><button class="dl-x" aria-label="Close">${svg("x", 18)}</button></div>
+        <p class="dl-modal-sub">${esc(s2.name)} · stop ${s2.seq}</p>
+        <div class="dl-issue-types">${OUTCOMES.map((o, i) => `<button type="button" class="dl-itype ${i === 0 ? "sel" : ""}" data-o="${o[0]}">${esc(o[1])}</button>`).join("")}</div>
+        <p class="muted-sm" style="margin:6px 0">Not-available &amp; reschedule automatically add a make-up day to the customer's plan. Cancel forfeits today's delivery.</p>
+        <textarea class="dl-notes" id="dlOReason" placeholder="Reason / note (optional)"></textarea>
+        <button class="btn btn-primary dl-osubmit">Confirm</button></div>`;
+      document.body.appendChild(m); requestAnimationFrame(() => m.classList.add("show"));
+      const close = () => { m.classList.remove("show"); setTimeout(() => m.remove(), 250); };
+      m.addEventListener("click", (e) => { if (e.target === m || e.target.closest(".dl-x")) close(); });
+      m.querySelectorAll(".dl-itype").forEach((b) => b.addEventListener("click", () => m.querySelectorAll(".dl-itype").forEach((x) => x.classList.toggle("sel", x === b))));
+      m.querySelector(".dl-osubmit").addEventListener("click", () => {
+        const outcome = (m.querySelector(".dl-itype.sel") || {}).dataset.o || "unavailable";
+        setOutcome(id, outcome, m.querySelector("#dlOReason").value.trim());
+        close(); render();
+        const lbl = (OUTCOMES.find((o) => o[0] === outcome) || [, outcome])[1];
+        toast(lbl + " recorded" + (outcome === "cancel" ? "" : " · make-up day added"));
       });
     }
 

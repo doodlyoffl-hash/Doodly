@@ -11,7 +11,7 @@ import { readRole } from "@/lib/auth/identity";
 import { audit } from "@/lib/auth/audit";
 import { reqContext } from "@/lib/auth/request";
 import { notifyOutForDelivery } from "@/lib/notifications/dispatch";
-import { completeDelivery } from "@/lib/delivery/complete";
+import { completeDelivery, setDeliveryOutcome } from "@/lib/delivery/complete";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,10 +24,14 @@ const ISSUE_MAP: Record<string, "CUSTOMER_UNAVAILABLE" | "WRONG_ADDRESS" | "DAMA
 };
 
 const Body = z.object({
-  action: z.enum(["status", "deliver", "issue"]),
+  action: z.enum(["status", "deliver", "issue", "outcome"]),
   status: z.enum(["onway", "reached"]).optional(),
-  bottles: z.number().int().min(0).max(50).optional(),
+  bottles: z.number().int().min(0).max(50).optional(),        // empties collected (RETURNED)
+  bottlesOut: z.number().int().min(0).max(50).optional(),     // bottles handed over (partial < planned)
+  partial: z.boolean().optional(),                            // PARTIALLY_DELIVERED when only some handed over
+  execRemark: z.string().trim().max(400).optional(),         // the executive's own note
   notes: z.string().trim().max(400).optional(),
+  outcome: z.enum(["unavailable", "reschedule", "cancel"]).optional(),
   issueType: z.string().max(40).optional(),
   priority: z.enum(["Low", "Medium", "High"]).optional(),
   comments: z.string().trim().max(500).optional(),
@@ -61,13 +65,28 @@ export const POST = route("delivery.stop", async (req: NextRequest, { params }: 
   }
 
   if (body.action === "deliver") {
-    if (delivery.status === "DELIVERED") return ok({ status: "delivered", idempotent: true });
+    if (delivery.status === "DELIVERED" || delivery.status === "PARTIALLY_DELIVERED") return ok({ status: "delivered", idempotent: true });
     const bottles = body.bottles ?? 0;
+    const partial = !!body.partial;
     // Single source of truth for the full completion side-effects (ledger ISSUED+RETURNED,
     // loyalty, delivered notification, one-time review request, address snapshot).
-    await completeDelivery(delivery.id, { bottlesIn: bottles, customerRemark: body.notes || null });
-    await audit({ userId, actorRole: role, action: "delivery.completed", target: `${delivery.id} bottles=${bottles}`, ctx });
-    return ok({ status: "delivered", bottles });
+    await completeDelivery(delivery.id, {
+      bottlesIn: bottles,
+      bottlesOut: body.bottlesOut,                 // partial handover (undefined → full bottleCount)
+      customerRemark: body.notes || null,
+      execRemark: body.execRemark || null,
+      status: partial ? "PARTIALLY_DELIVERED" : "DELIVERED",
+    });
+    await audit({ userId, actorRole: role, action: partial ? "delivery.partial" : "delivery.completed", target: `${delivery.id} out=${body.bottlesOut ?? "full"} in=${bottles}`, ctx });
+    return ok({ status: partial ? "partial" : "delivered", bottles });
+  }
+
+  if (body.action === "outcome") {
+    if (!body.outcome) throw Errors.badRequest("Missing outcome.");
+    // unavailable / reschedule → subscription make-up; cancel → forfeit. Detaches + re-optimises.
+    const result = await setDeliveryOutcome(delivery.id, body.outcome, { execRemark: body.execRemark || null, actorId: userId, actorRole: role });
+    await audit({ userId, actorRole: role, action: `delivery.${body.outcome}`, target: `${delivery.id}${body.execRemark ? " · " + body.execRemark.slice(0, 60) : ""}`, ctx });
+    return ok({ outcome: body.outcome, result });
   }
 
   // issue

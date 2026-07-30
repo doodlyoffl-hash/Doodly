@@ -23,8 +23,13 @@ export const dynamic = "force-dynamic";
 const STATUS_MAP: Record<string, string> = {
   SCHEDULED: "assigned", ASSIGNED: "assigned", ACCEPTED: "assigned", PACKED: "assigned",
   OUT_FOR_DELIVERY: "onway", ON_THE_WAY: "onway", REACHED: "reached",
-  DELIVERED: "delivered", FAILED: "assigned", SKIPPED: "delivered",
+  DELIVERED: "delivered", PARTIALLY_DELIVERED: "partial",
+  FAILED: "failed", SKIPPED: "skipped",
+  CUSTOMER_UNAVAILABLE: "unavailable", RESCHEDULED: "rescheduled", CANCELLED: "cancelled",
 };
+// A stop the exec has finished with (any resolved outcome) — the exec visited it, so its
+// leg counts as travelled and it drops out of "remaining".
+const RESOLVED = new Set(["delivered", "partial", "failed", "skipped", "unavailable", "rescheduled", "cancelled"]);
 
 export const GET = route("delivery.myRoute", async (req: NextRequest) => {
   const userId = requireUserId(req);
@@ -146,7 +151,7 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
   // ---- Live route summary (Step 4): warehouse origin + planned/travelled/remaining ----
   const wh = await getWarehouse();
   const trip = await db.tripHistory.findFirst({ where: { driverId: driver.id, date: { gte: dayStart, lt: dayEnd } }, select: { plannedDistanceKm: true, plannedDurationMin: true, routeSource: true, routePolyline: true } });
-  const done = stops.filter((s) => s.status === "delivered");
+  const done = stops.filter((s) => RESOLVED.has(s.status));
   const travelledKm = round2(done.reduce((a, s) => a + (s.legKm ?? 0), 0));
   const travelledMin = done.reduce((a, s) => a + (s.legMin ?? 0), 0);
   const source = trip?.routeSource ?? stops.find((s) => s.routeSource)?.routeSource ?? null;
@@ -165,8 +170,8 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
     travelledMin,
     remainingKm: trip?.plannedDistanceKm != null ? round2(Math.max(0, trip.plannedDistanceKm - travelledKm)) : null,
     remainingMin: trip?.plannedDurationMin != null ? Math.max(0, trip.plannedDurationMin - travelledMin) : null,
-    // empties still to collect across the not-yet-delivered stops (outstanding − collected)
-    emptiesToCollect: stops.filter((s) => s.status !== "delivered").reduce((a, s) => a + Math.max(0, (s.bottlesOutstanding ?? 0) - (s.bottlesCollected ?? 0)), 0),
+    // empties still to collect across the not-yet-resolved stops (outstanding − collected)
+    emptiesToCollect: stops.filter((s) => !RESOLVED.has(s.status)).reduce((a, s) => a + Math.max(0, (s.bottlesOutstanding ?? 0) - (s.bottlesCollected ?? 0)), 0),
   };
 
   return ok({

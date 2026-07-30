@@ -9,7 +9,7 @@ import { ok, parseBody, route, Errors } from "@/lib/http";
 import { requireUserId } from "@/lib/auth/authorize";
 import { reqContext } from "@/lib/auth/request";
 import { audit } from "@/lib/auth/audit";
-import { completeDelivery } from "@/lib/delivery/complete";
+import { completeDelivery, setDeliveryOutcome } from "@/lib/delivery/complete";
 import { notifyOutForDelivery } from "@/lib/notifications/dispatch";
 
 export const runtime = "nodejs";
@@ -17,7 +17,8 @@ export const dynamic = "force-dynamic";
 
 type Ctx = { params: { id: string } };
 
-const DRIVER_STATUSES = ["ACCEPTED", "PACKED", "OUT_FOR_DELIVERY", "ON_THE_WAY", "REACHED", "DELIVERED", "FAILED", "SKIPPED"] as const;
+const DRIVER_STATUSES = ["ACCEPTED", "PACKED", "OUT_FOR_DELIVERY", "ON_THE_WAY", "REACHED", "DELIVERED", "PARTIALLY_DELIVERED", "FAILED", "SKIPPED", "CUSTOMER_UNAVAILABLE", "RESCHEDULED", "CANCELLED"] as const;
+const OUTCOME_OF: Record<string, "unavailable" | "reschedule" | "cancel"> = { CUSTOMER_UNAVAILABLE: "unavailable", RESCHEDULED: "reschedule", CANCELLED: "cancel" };
 
 const patchSchema = z.object({
   status: z.enum(DRIVER_STATUSES).optional(),
@@ -25,6 +26,7 @@ const patchSchema = z.object({
   bottlesOut: z.number().int().min(0).max(99).optional(),
   cashCollected: z.number().int().min(0).optional(),
   customerRemark: z.string().trim().max(200).optional(),
+  execRemark: z.string().trim().max(400).optional(),
 });
 
 export const PATCH = route("driver.delivery.update", async (req: NextRequest, { params }: Ctx) => {
@@ -40,7 +42,9 @@ export const PATCH = route("driver.delivery.update", async (req: NextRequest, { 
   });
   if (!del) throw Errors.notFound("Delivery not found on your route.");
 
-  const becomingDelivered = body.status === "DELIVERED" && del.status !== "DELIVERED";
+  const TERMINAL = ["DELIVERED", "PARTIALLY_DELIVERED", "CANCELLED"];
+  const becomingDelivered = (body.status === "DELIVERED" || body.status === "PARTIALLY_DELIVERED") && !TERMINAL.includes(del.status);
+  const outcome = body.status ? OUTCOME_OF[body.status] : undefined;
 
   // Completion → the shared side-effect path (ledger ISSUED+RETURNED, loyalty, delivered
   // notification, one-time review request, address snapshot) — identical to /delivery/stop.
@@ -50,9 +54,19 @@ export const PATCH = route("driver.delivery.update", async (req: NextRequest, { 
       bottlesOut: body.bottlesOut,
       cashCollected: body.cashCollected,
       customerRemark: body.customerRemark ?? null,
+      execRemark: body.execRemark ?? null,
+      status: body.status === "PARTIALLY_DELIVERED" ? "PARTIALLY_DELIVERED" : "DELIVERED",
     });
-    await audit({ userId, actorRole: "delivery_executive", action: "delivery.delivered", target: del.id, ctx: reqContext(req) });
-    return ok({ delivery: res?.delivery ?? { id: del.id, status: "DELIVERED" } });
+    await audit({ userId, actorRole: "delivery_executive", action: body.status === "PARTIALLY_DELIVERED" ? "delivery.partial" : "delivery.delivered", target: del.id, ctx: reqContext(req) });
+    return ok({ delivery: res?.delivery ?? { id: del.id, status: body.status } });
+  }
+
+  // Non-handover outcome (customer unavailable / reschedule / cancel) → subscription make-up
+  // for a miss (unavailable/reschedule), forfeit for cancel; detaches + re-optimises.
+  if (outcome && !TERMINAL.includes(del.status)) {
+    const result = await setDeliveryOutcome(del.id, outcome, { execRemark: body.execRemark ?? null, actorId: userId, actorRole: "delivery_executive" });
+    await audit({ userId, actorRole: "delivery_executive", action: `delivery.${outcome}`, target: del.id, ctx: reqContext(req) });
+    return ok({ delivery: { id: del.id, status: body.status }, result });
   }
 
   // Non-completion status / field update.

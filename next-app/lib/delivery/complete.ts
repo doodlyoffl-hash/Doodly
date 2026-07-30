@@ -21,6 +21,9 @@ export interface CompleteDeliveryOpts {
   bottlesOut?: number;                // bottles handed over (ISSUED); defaults to bottleCount
   cashCollected?: number;             // COD collected, paise
   customerRemark?: string | null;
+  execRemark?: string | null;         // the executive's own note on the outcome
+  podPhotoUrl?: string | null;        // proof-of-delivery photo URL (when uploaded)
+  status?: "DELIVERED" | "PARTIALLY_DELIVERED";   // PARTIALLY_DELIVERED when only some bottles were handed over
 }
 
 export async function completeDelivery(deliveryId: string, opts: CompleteDeliveryOpts = {}) {
@@ -35,7 +38,8 @@ export async function completeDelivery(deliveryId: string, opts: CompleteDeliver
     },
   });
   if (!del) return null;
-  if (del.status === "DELIVERED") return { idempotent: true as const, delivery: { id: del.id, status: "DELIVERED" as const } };
+  if (del.status === "DELIVERED" || del.status === "PARTIALLY_DELIVERED") return { idempotent: true as const, delivery: { id: del.id, status: del.status } };
+  const finalStatus = opts.status ?? "DELIVERED";
 
   // A PICKUP has no subscription/order — its customer is the direct Delivery.userId.
   const custId = del.subscription?.userId ?? del.order?.userId ?? del.userId ?? null;
@@ -49,10 +53,12 @@ export async function completeDelivery(deliveryId: string, opts: CompleteDeliver
     const d = await tx.delivery.update({
       where: { id: del.id },
       data: {
-        status: "DELIVERED", deliveredAt: new Date(),
+        status: finalStatus, deliveredAt: new Date(),
         bottlesIn, bottlesOut,
         ...(opts.cashCollected !== undefined ? { cashCollected: opts.cashCollected } : {}),
         customerRemark: opts.customerRemark ?? null,
+        ...(opts.execRemark !== undefined ? { execRemark: opts.execRemark } : {}),
+        ...(opts.podPhotoUrl ? { podPhotoUrl: opts.podPhotoUrl } : {}),
         addressId: snapshotAddressId,
       },
       select: { id: true, status: true, bottlesIn: true, bottlesOut: true, cashCollected: true, deliveredAt: true },
@@ -134,4 +140,46 @@ export async function completeDelivery(deliveryId: string, opts: CompleteDeliver
   }
 
   return { idempotent: false as const, delivery };
+}
+
+/* Non-handover outcomes an executive can record at the door (no bottles move):
+     unavailable → CUSTOMER_UNAVAILABLE   reschedule → RESCHEDULED   cancel → CANCELLED
+   A miss (unavailable / reschedule) is NOT a COUNTING status, so reconcileSchedule appends
+   a make-up day and extends endDate — the customer keeps their paid day. CANCELLED COUNTS
+   (the day is forfeited at the door), so no make-up. Detaches the stop from the route and
+   re-optimises the executive's remaining run. Best-effort side-effects never throw. */
+export interface DeliveryOutcomeOpts { execRemark?: string | null; actorId?: string; actorRole?: string }
+const OUTCOME_STATUS = { unavailable: "CUSTOMER_UNAVAILABLE", reschedule: "RESCHEDULED", cancel: "CANCELLED" } as const;
+export type DeliveryOutcome = keyof typeof OUTCOME_STATUS;
+
+export async function setDeliveryOutcome(deliveryId: string, outcome: DeliveryOutcome, opts: DeliveryOutcomeOpts = {}) {
+  const status = OUTCOME_STATUS[outcome];
+  const del = await db.delivery.findUnique({
+    where: { id: deliveryId },
+    select: { id: true, status: true, driverId: true, date: true, subscriptionId: true, subscription: { select: { userId: true } } },
+  });
+  if (!del) return null;
+  const TERMINAL = ["DELIVERED", "PARTIALLY_DELIVERED", "CANCELLED"];
+  if (TERMINAL.includes(del.status)) return { idempotent: true as const, status: del.status };
+
+  const missedDriverId = del.driverId;   // capture before detach clears it
+  const { detachAssignment, reconcileSchedule, reoptimizeAffected } = await import("@/lib/subscriptions/deliveries");
+  await detachAssignment(del.id, del.driverId, opts.actorRole).catch(() => {});
+  await db.delivery.update({
+    where: { id: del.id },
+    data: { status, execRemark: opts.execRemark ?? null, adjustReason: outcome.toUpperCase(), adjustNote: opts.execRemark ?? null },
+  });
+
+  // A miss (not counting) → make up the day. CANCELLED counts → no make-up.
+  let reconcile: { created: number; endDate: Date | null } | null = null;
+  if (del.subscriptionId && (outcome === "unavailable" || outcome === "reschedule")) {
+    try {
+      const rec = await reconcileSchedule(del.subscriptionId);
+      reconcile = { created: rec.created, endDate: rec.endDate };
+      await db.subscriptionEvent.create({ data: { subscriptionId: del.subscriptionId, type: "ADJUSTED", summary: `Stop ${outcome} at the door — schedule extended`, byId: opts.actorId ?? null, byRole: opts.actorRole ?? "delivery_executive" } }).catch(() => {});
+      if (del.subscription?.userId) { const { notifyMissedDeliveryAdjusted } = await import("@/lib/notifications/dispatch"); await notifyMissedDeliveryAdjusted(del.subscription.userId, { newEndDate: rec.endDate }).catch(() => {}); }
+    } catch { /* non-blocking */ }
+  }
+  await reoptimizeAffected([{ driverId: missedDriverId, date: del.date }]).catch(() => {});
+  return { idempotent: false as const, status, reconcile };
 }
