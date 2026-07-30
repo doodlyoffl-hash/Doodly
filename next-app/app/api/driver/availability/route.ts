@@ -10,11 +10,14 @@ import { db } from "@/lib/db";
 import { ok, parseBody, route, Errors } from "@/lib/http";
 import { requireUserId } from "@/lib/auth/authorize";
 import { openShift, closeShift, currentShift } from "@/lib/delivery/shift";
+import type { DeliveryStatus } from "@prisma/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const ON_TRIP = ["ASSIGNED", "ACCEPTED", "OUT_FOR_DELIVERY"] as const;
+// Deliveries that represent real, unfinished work in the exec's hands.
+const ACTIVE_DELIVERY_STATUSES: DeliveryStatus[] = ["SCHEDULED", "ASSIGNED", "ACCEPTED", "PACKED", "OUT_FOR_DELIVERY", "ON_THE_WAY", "REACHED"];
 
 async function driverOf(userId: string) {
   const d = await db.driver.findUnique({ where: { userId }, select: { id: true, active: true, execStatus: { select: { availability: true } } } });
@@ -38,14 +41,20 @@ export const POST = route("driver.availability.set", async (req: NextRequest) =>
   const d = await driverOf(userId);
   const current = d.execStatus?.availability ?? "OFFLINE";
 
+  // Only block a mid-trip exec when they GENUINELY have active deliveries. A stale on-trip
+  // status (a trip that ended without the status being reset) must never trap them off-shift —
+  // so we verify against real deliveries, not just the status flag. No active work → clear it.
+  let staleTrip = false;
   if ((ON_TRIP as readonly string[]).includes(current)) {
-    throw Errors.conflict("You have an active trip — complete your deliveries (or mark returned to dairy) before changing availability.");
+    const activeCount = await db.delivery.count({ where: { driverId: d.id, status: { in: ACTIVE_DELIVERY_STATUSES } } });
+    if (activeCount > 0) throw Errors.conflict("You have an active trip — complete your deliveries (or mark returned to dairy) before changing availability.");
+    staleTrip = true;
   }
   const next = available ? "AVAILABLE" : "OFFLINE";
   await db.executiveStatus.upsert({
     where: { driverId: d.id },
     create: { driverId: d.id, availability: next },
-    update: { availability: next, ...(available ? {} : { currentTripId: null, assignedBottles: 0 }) },
+    update: { availability: next, ...(available && !staleTrip ? {} : { currentTripId: null, assignedBottles: 0 }) },
   });
   // shift change in the assignment audit trail (actorId = the driver's own real User row)
   await db.assignmentLog.create({
