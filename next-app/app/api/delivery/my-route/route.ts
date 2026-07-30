@@ -135,6 +135,9 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
       payment: cod && d.order ? `COD ₹${Math.round(d.order.totalPaise / 100)}` : "Paid",
       status: STATUS_MAP[d.status] ?? "assigned",
       slot: d.slot, deliveredAt: d.deliveredAt,
+      // ---- delivery timeline (GPS) ----
+      reachedAt: d.reachedAt,                                            // arrival at the door
+      actualLegKm: d.actualLegKm != null ? round2(d.actualLegKm) : null, // GPS distance travelled to reach this stop
       // route-optimisation metrics (warehouse-anchored, populated by the optimiser)
       legKm: d.legDistanceKm != null ? round2(d.legDistanceKm) : null,   // from the previous stop (warehouse → first)
       legMin: d.legTravelMin ?? null,

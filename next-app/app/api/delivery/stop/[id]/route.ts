@@ -12,6 +12,7 @@ import { audit } from "@/lib/auth/audit";
 import { reqContext } from "@/lib/auth/request";
 import { notifyOutForDelivery } from "@/lib/notifications/dispatch";
 import { completeDelivery, setDeliveryOutcome } from "@/lib/delivery/complete";
+import { actualLegKmBetween } from "@/lib/delivery/gps-track";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,7 +57,9 @@ export const POST = route("delivery.stop", async (req: NextRequest, { params }: 
 
   if (body.action === "status") {
     const next = body.status === "reached" ? "REACHED" : "ON_THE_WAY";
-    await db.delivery.update({ where: { id: delivery.id }, data: { status: next } });
+    // Stamp the arrival time once (delivery timeline) — first REACHED wins, never overwritten.
+    const stampReached = next === "REACHED" && !delivery.reachedAt;
+    await db.delivery.update({ where: { id: delivery.id }, data: { status: next, ...(stampReached ? { reachedAt: new Date() } : {}) } });
     // Tell the customer their milk is en route (only on the first en-route flip, not on "reached").
     if (next === "ON_THE_WAY" && delivery.status !== "ON_THE_WAY" && custId) {
       try { await notifyOutForDelivery(custId); } catch { /* non-blocking */ }
@@ -78,6 +81,19 @@ export const POST = route("delivery.stop", async (req: NextRequest, { params }: 
       status: partial ? "PARTIALLY_DELIVERED" : "DELIVERED",
     });
     await audit({ userId, actorRole: role, action: partial ? "delivery.partial" : "delivery.completed", target: `${delivery.id} out=${body.bottlesOut ?? "full"} in=${bottles}`, ctx });
+    // Delivery timeline: stamp the GPS distance of the leg that ended at this stop
+    // (previous stop's departure → this arrival). Best-effort; only when a tracked shift exists.
+    try {
+      const shift = await db.shift.findFirst({ where: { driverId: driver.id, status: "OPEN" }, orderBy: { startedAt: "desc" }, select: { id: true, startedAt: true } });
+      if (shift) {
+        const t = await db.delivery.findUnique({ where: { id: delivery.id }, select: { reachedAt: true, deliveredAt: true } });
+        const to = t?.reachedAt ?? t?.deliveredAt ?? new Date();
+        const prev = await db.delivery.findFirst({ where: { driverId: driver.id, id: { not: delivery.id }, deliveredAt: { not: null, lt: to } }, orderBy: { deliveredAt: "desc" }, select: { deliveredAt: true } });
+        const from = prev?.deliveredAt ?? shift.startedAt;
+        const legKm = await actualLegKmBetween(shift.id, from, to);
+        if (legKm > 0) await db.delivery.update({ where: { id: delivery.id }, data: { actualLegKm: legKm } });
+      }
+    } catch { /* timeline is non-blocking */ }
     return ok({ status: partial ? "partial" : "delivered", bottles });
   }
 

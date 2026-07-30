@@ -177,3 +177,7 @@
 .dl-gps-cell .v small { font-size:.72rem; color:var(--ink-3); font-family:var(--font-body); font-weight:600; }
 .dl-gps-cell .k { font-size:.72rem; color:var(--ink-3); font-weight:600; margin-top:6px; }
 .dl-gps-note { margin-top:10px; font-size:.74rem; color:var(--ink-3); line-height:1.4; }
+
+/* GPS delivery timeline line on a stop card */
+.dl-timeline { display:flex; align-items:center; gap:.35rem; flex-wrap:wrap; margin-top:5px; font-size:.8rem; font-weight:600; color:var(--leaf-600); }
+.dl-timeline svg { flex:0 0 auto; }

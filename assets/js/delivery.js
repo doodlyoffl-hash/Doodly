@@ -143,6 +143,7 @@ window.DOODLY_DELIVERY = (function () {
     try { if (_avail && _avail.available && _avail.shift && _avail.shift.startedAt) base = new Date(_avail.shift.startedAt).getTime(); } catch (e) {}
     try { return new Date(base + s2.etaMinutes * 60000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; }
   }
+  function fmtHM(t) { if (!t) return ""; try { return new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } }
   let _shiftTimer = null;
   function ensureShiftClock() {
     if (_shiftTimer) { clearInterval(_shiftTimer); _shiftTimer = null; }
@@ -315,6 +316,8 @@ window.DOODLY_DELIVERY = (function () {
     // current stop = first not-yet-delivered (in optimised sequence order); the one after it = next.
     function currentStop() { return all.find((s) => !isResolved(stStatus(st, s.id))) || null; }
     function upcomingAfter(cur) { if (!cur) return null; let seen = false; for (const s of all) { if (s.id === cur.id) { seen = true; continue; } if (seen && !isResolved(stStatus(st, s.id))) return s; } return null; }
+    // Cumulative GPS distance travelled up to and including this stop (sum of measured legs).
+    function cumulativeActualKm(s2) { let sum = 0; for (const x of all) { if (x.actualLegKm != null) sum += Number(x.actualLegKm) || 0; if (x.id === s2.id) break; } return sum; }
 
     function summary() {
       const total = all.length, done = all.filter((s) => isResolved(stStatus(st, s.id))).length;
@@ -489,6 +492,16 @@ window.DOODLY_DELIVERY = (function () {
         ${s2.noCoords
           ? `<div class="dl-stop-leg" style="color:#a15b12">${svg("pin", 12)} Location not pinned — distance unavailable. Ask the customer to set their map pin.</div>`
           : (legTxt ? `<div class="dl-stop-leg">${svg("nav", 12)} ${legTxt}${s2.cumulativeKm != null ? ` · ${Number(s2.cumulativeKm).toFixed(1)} km cumulative` : ""}${(!done && stopEtaClock(s2)) ? ` · ETA ~${stopEtaClock(s2)}` : ""}</div>` : "")}
+        ${(function () {
+          // GPS delivery timeline — arrival / departure / measured leg / cumulative (once tracked).
+          const arr = s2.reachedAt, dep = s2.deliveredAt, leg = s2.actualLegKm;
+          if (arr == null && leg == null) return "";
+          const bits = [];
+          if (arr) bits.push(`Arrived ${fmtHM(arr)}`);
+          if (dep) bits.push(`Departed ${fmtHM(dep)}`);
+          if (leg != null) { bits.push(`${Number(leg).toFixed(1)} km GPS leg`); const cum = cumulativeActualKm(s2); if (cum > 0) bits.push(`${cum.toFixed(1)} km cumulative`); }
+          return bits.length ? `<div class="dl-timeline">${svg("nav", 11)} ${bits.join(" · ")}</div>` : "";
+        })()}
         ${(s2.items && s2.items.length) ? `<div class="dl-items" style="margin:5px 0;padding:7px 10px;border-radius:8px;background:rgba(15,61,46,.05);font-size:.85rem">
           ${s2.items.map((it) => `<div style="display:flex;justify-content:space-between;gap:8px"><span>${svg("bottle", 12)} <b>${esc(it.label || (it.ml ? it.ml + "ml" : ""))}</b>${it.product ? " " + esc(it.product) : ""}</span><span>×${it.qty}${it.litres != null ? ` · ${it.litres} L` : ""}</span></div>`).join("")}
           ${s2.totalLitres ? `<div style="text-align:right;font-weight:700;margin-top:3px;color:#0F3D2E">Total ${s2.totalLitres} L</div>` : ""}

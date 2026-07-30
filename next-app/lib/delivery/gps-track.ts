@@ -89,6 +89,19 @@ export async function ingestGpsPoints(driverId: string, points: RawGpsPoint[]): 
   return { shiftId: shift.id, accepted: rows.length, actualDistanceKm: round2(updated.actualDistanceKm), gpsPointCount: updated.gpsPointCount };
 }
 
+/** GPS distance travelled between two moments of a shift (delivery-timeline leg).
+    Sums the fraud-filtered segments of the stored track whose points fall in
+    [from, to]. Returns 0 when there's no usable track in that window. */
+export async function actualLegKmBetween(shiftId: string, from: Date, to: Date): Promise<number> {
+  if (!(to.getTime() > from.getTime())) return 0;
+  const cfg = await getGpsTrackingConfig();
+  const pts = await db.shiftGpsPoint.findMany({ where: { shiftId, capturedAt: { gte: from, lte: to } }, orderBy: { capturedAt: "asc" }, select: { lat: true, lng: true, capturedAt: true } });
+  let total = 0;
+  let prev: { lat: number; lng: number; capturedAt: Date } | null = null;
+  for (const p of pts) { if (prev) total += segmentKm(prev, p, cfg); prev = p; }
+  return round2(total);
+}
+
 /** Rebuild actualDistanceKm from the whole stored track (offline-sync reconciliation / close). */
 export async function recomputeShiftDistance(shiftId: string): Promise<number> {
   const cfg = await getGpsTrackingConfig();

@@ -1973,6 +1973,42 @@
     });
   }
 
+  /* Live executive tracking panel — every exec currently ON SHIFT with their last
+     GPS fix, the distance their device has actually recorded so far (fraud-filtered),
+     how fresh the fix is, and route progress. Injected above the analytics panel and
+     refreshed by the deliveries poll. Reuses Driver.lat/lng/lastSeenAt + open Shift. */
+  function renderLiveTracking(iso) {
+    if (!window.DOODLY_API) return;
+    var anchor = document.getElementById("delAnalytics");
+    if (!anchor || !anchor.parentNode) return;
+    var mount = document.getElementById("doodlyLiveTrack");
+    if (!mount) { mount = document.createElement("div"); mount.id = "doodlyLiveTrack"; mount.className = "reveal"; anchor.parentNode.insertBefore(mount, anchor); }
+    DOODLY_API.get("/api/admin/deliveries/live-tracking?date=" + encodeURIComponent(iso)).then(function (r) {
+      var execs = (r && r.execs) || [], t = (r && r.totals) || {};
+      if (!execs.length) {
+        mount.innerHTML = '<div class="panel mt-3"><div class="panel-head"><h3>Live executive tracking</h3></div><div class="panel-pad"><p class="muted-sm">No executive is on shift right now. Live GPS distance and position appear here the moment a shift starts.</p></div></div>';
+        return;
+      }
+      var ageTxt = function (s) { return s == null ? "—" : s < 90 ? "just now" : s < 3600 ? Math.round(s / 60) + "m ago" : Math.round(s / 3600) + "h ago"; };
+      var ageColor = function (s) { return s != null && s < 180 ? "#1FAE66" : s != null && s < 900 ? "#c8811a" : "#b3261e"; };
+      var rows = execs.map(function (e) {
+        var dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle;margin-right:5px;background:' + ageColor(e.gpsAgeSec) + '"></span>';
+        var map = e.hasFix ? '<a class="btn btn-ghost sm" href="https://www.google.com/maps?q=' + e.lat + ',' + e.lng + '" target="_blank" rel="noopener">Map</a>' : '<span class="muted-sm">no fix</span>';
+        return '<tr><td><b>' + esc(e.name) + '</b><br><span class="muted-sm">' + esc(e.employeeId) + '</span></td>' +
+          '<td>' + dot + esc(ageTxt(e.gpsAgeSec)) + '</td>' +
+          '<td style="text-align:right"><b>' + Number(e.actualDistanceKm).toFixed(1) + '</b> km</td>' +
+          '<td style="text-align:right">' + (e.plannedKm != null ? Number(e.plannedKm).toFixed(1) + " km" : "—") + '</td>' +
+          '<td style="text-align:right">' + (e.efficiencyPct != null ? e.efficiencyPct + "%" : "—") + '</td>' +
+          '<td style="text-align:right">' + e.deliveries.done + "/" + e.deliveries.total + '</td>' +
+          '<td style="text-align:right">' + map + '</td></tr>';
+      }).join("");
+      mount.innerHTML = '<div class="panel mt-3"><div class="panel-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">' +
+        '<h3>Live executive tracking <span class="muted-sm" style="font-weight:600">· ' + t.onShift + ' on shift · ' + Number(t.actualKm || 0).toFixed(1) + ' km travelled today</span></h3>' +
+        '<span class="badge green">● Live</span></div>' +
+        '<div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Executive</th><th>Last GPS</th><th style="text-align:right">Distance so far</th><th style="text-align:right">Planned</th><th style="text-align:right">Efficiency</th><th style="text-align:right">Progress</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></div></div>';
+    }).catch(function () { /* keep the last good render on a transient error */ });
+  }
+
   // ---- date-based delivery operations ----
   var _delDate = "";
   var PAY_BADGE = { PAID: ["green", "Paid"], PENDING: ["amber", "Pending"], FAILED: ["red", "Failed"], REFUNDED: ["blue", "Refunded"], SUBSCRIPTION: ["blue", "Subscription"] };
@@ -2315,6 +2351,7 @@
       bkKpis({ "scheduled": String(k.scheduled || 0), "zones": String(k.zones || 0), "milk required": (k.milkLitres || 0) + " L", "drivers": String(k.activeExecutives || 0) });
       updateDeliveryAnalytics(k, stats.executives);
       renderPackingSummary(stats.packing, iso);
+      renderLiveTracking(iso);
       var data = await DOODLY_API.get("/api/admin/deliveries?date=" + iso);
       _delItems = data.deliveries || [];
       if (window.DOODLY_DATA) DOODLY_DATA.adminDeliveries = _delItems.map(function (d) { return { id: "#" + d.id.slice(-6), order: d.orderRef || "—", customer: d.customer, area: d.area, driver: d.driver ? d.driver.name : "—", slot: d.slot || "—", bottles: (d.bottlesIn || 0) + "/" + (d.bottleCount || 0), pay: payBadge(d.paymentStatus), status: delStatusMeta(d.status), _id: d.id, _driverId: d.driver ? d.driver.id : "", _status: d.status }; });
@@ -2338,6 +2375,7 @@
       bkKpis({ "scheduled": String(k.scheduled || 0), "zones": String(k.zones || 0), "milk required": (k.milkLitres || 0) + " L", "drivers": String(k.activeExecutives || 0) });
       updateDeliveryAnalytics(k, stats.executives);
       renderPackingSummary(stats.packing, iso);
+      renderLiveTracking(iso);
       try { var dr = await DOODLY_API.get("/api/admin/drivers"); _delDrivers = dr.drivers || dr || []; } catch (e1) { _delDrivers = []; }
       try {
         var rt = await DOODLY_API.get("/api/admin/routes");
