@@ -543,11 +543,37 @@ window.DOODLY_MAPS = (function () {
       });
       if (roundTrip && mapped.length) path.push({ lat: cur.lat, lng: cur.lng });
       bounds.extend({ lat: cur.lat, lng: cur.lng });
-      // Draw the actual road path when the optimiser supplied one; else straight segments.
+      // Draw the actual road path when the optimiser supplied one; else straight segments as a
+      // fallback that we then try to REPLACE with the real road route below.
       const drawPath = hasRoad ? road : path;
       if (hasRoad) road.forEach((p) => bounds.extend(p));
-      new gm.Polyline({ path: drawPath, map, strokeColor: "#1FAE66", strokeOpacity: 0.9, strokeWeight: hasRoad ? 5 : 3 });
+      const line = new gm.Polyline({ path: drawPath, map, strokeColor: "#1FAE66", strokeOpacity: hasRoad ? 0.9 : 0.6, strokeWeight: hasRoad ? 5 : 4 });
       if (mapped.length || hasRoad) map.fitBounds(bounds, 40); else { map.setCenter({ lat: cur.lat, lng: cur.lng }); map.setZoom(13); }
+
+      // No server road geometry (server-side Directions unavailable) → ask Google's CLIENT
+      // Directions service (uses the working browser Maps key) to draw the true road-following
+      // route and refine the distance/ETA. Keeps the straight line on any failure (Directions API
+      // not enabled, > 23 stops, quota) and auto-skips entirely once the server supplies a polyline.
+      if (!hasRoad && mapped.length && mapped.length <= 23 && gm.DirectionsService && gm.TravelMode) {
+        try {
+          const stopLL = mapped.map((x) => ({ lat: x.s.lat, lng: x.s.lng }));
+          const destination = roundTrip ? { lat: cur.lat, lng: cur.lng } : stopLL[stopLL.length - 1];
+          const waypoints = (roundTrip ? stopLL : stopLL.slice(0, -1)).map((ll) => ({ location: ll, stopover: true }));
+          new gm.DirectionsService().route(
+            { origin: { lat: cur.lat, lng: cur.lng }, destination: destination, waypoints: waypoints, optimizeWaypoints: false, travelMode: gm.TravelMode.DRIVING },
+            (res, status) => {
+              if (status !== "OK" || !res || !res.routes || !res.routes[0] || !document.body.contains(host)) return;   // keep the straight line
+              line.setMap(null);
+              const r = res.routes[0];
+              new gm.Polyline({ path: r.overview_path, map, strokeColor: "#1FAE66", strokeOpacity: 0.95, strokeWeight: 5 });
+              let km = 0, min = 0; (r.legs || []).forEach((l) => { km += ((l.distance && l.distance.value) || 0) / 1000; min += ((l.duration && l.duration.value) || 0) / 60; });
+              const metaEl = host.querySelector(".mp-route-meta");
+              if (metaEl && km > 0) metaEl.innerHTML = `<span>${svgPin(13)} ${allStops.length} stops</span><span>${km.toFixed(1)} km</span><span>~${Math.round(min)} min</span>`;
+              try { const b2 = new gm.LatLngBounds(); r.overview_path.forEach((p) => b2.extend(p)); map.fitBounds(b2, 40); } catch (e) {}
+            }
+          );
+        } catch (e) { /* keep the straight line */ }
+      }
     }
     if (window.google && window.google.maps) realVariant(window.google.maps);
     else { svgVariant(); ensureGoogle().then((gm) => { if (gm && document.body.contains(host)) realVariant(gm); }); }
