@@ -511,12 +511,17 @@ window.DOODLY_MAPS = (function () {
         if (roundTrip && pts.length) line += ` L${cp.x},${cp.y}`;   // close the loop back to the warehouse
       }
       host.classList.add("mp-route");
+      host.style.position = "relative";   // anchor the "approximate map" notice
+      // The schematic fallback map is active → tell the viewer the roads/distances are estimates.
+      // This element is replaced by the real Google canvas in realVariant() once Maps loads, so the
+      // notice only ever shows while the fallback is in use.
+      const approxNote = `<div class="mp-approx" style="position:absolute;top:8px;left:8px;z-index:2;display:inline-flex;align-items:center;gap:5px;max-width:calc(100% - 16px);padding:4px 9px;border-radius:999px;background:rgba(255,255,255,.94);color:#8a5a00;font-size:11px;font-weight:700;box-shadow:0 1px 5px rgba(0,0,0,.18);line-height:1.2" title="A real Google map with live roads shows here once Google Maps is enabled.">≈ Approximate map · estimated distances</div>`;
       host.innerHTML = `
         <svg viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid meet" aria-label="Delivery route">${mapBg()}
           <path d="${line}" class="mp-route-line"/>
           <g transform="translate(${cp.x},${cp.y})"><circle r="12" fill="${MARK.wh}" opacity="0.22"/><circle r="8" fill="${MARK.wh}" stroke="#fff" stroke-width="2"/><text y="4" text-anchor="middle" fill="#fff" font-weight="800" font-size="10">W</text></g>
           ${mapped.map((x, k) => { const p = pts[k]; const cls = clsOf(x.s, x.i); const isCur = cls === "cur"; const col = MARK[cls] || MARK.up; return `<g class="mp-stop ${cls}" data-i="${x.i}" transform="translate(${p.x},${p.y})">${isCur ? '<circle r="21" fill="none" stroke="#1FAE66" stroke-width="3" opacity="0.95"/>' : ""}<circle r="15" fill="${col}" stroke="#fff" stroke-width="2"/><text y="5" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">${x.i + 1}</text></g>`; }).join("")}
-        </svg>${meta}`;
+        </svg>${approxNote}${meta}`;
       if (o.onStop) host.querySelectorAll(".mp-stop").forEach((g) => g.addEventListener("click", () => o.onStop(Number(g.dataset.i))));
     }
     function realVariant(gm) {
