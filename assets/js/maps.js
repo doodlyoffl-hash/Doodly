@@ -43,6 +43,33 @@ window.DOODLY_MAPS = (function () {
   }
   function mapsUrl(lat, lng) { return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`; }
 
+  // ---------- multi-stop turn-by-turn deep-link ----------
+  // Google consumer Maps (`dir/?api=1`) takes an origin, a destination and up to ~9
+  // intermediate waypoints per URL. A longer route is split into LEGS of ≤10 stops, each
+  // leg starting where the previous ended, so the whole OPTIMISED sequence stays navigable.
+  // `origin` is {lat,lng} (the warehouse or the exec's live position); `stops` are the
+  // ordered stops (unpinned ones are skipped). Returns [{ url, count, to }] in visit order.
+  const NAV_MODE = (mode) => ({ walking: "walking", bike: "bicycling", bicycling: "bicycling", scooter: "two-wheeler", twowheeler: "two-wheeler", car: "driving", driving: "driving" }[(mode || "driving").toLowerCase()] || "driving");
+  const WAYPOINTS_PER_LEG = 10;   // one destination + ≤9 waypoints per leg (Google's consumer cap)
+  function routeNavLegs(origin, stops, mode) {
+    const m = NAV_MODE(mode);
+    const pts = (stops || []).filter((s) => s && typeof s.lat === "number" && typeof s.lng === "number");
+    if (!pts.length || !origin || origin.lat == null || origin.lng == null) return [];
+    const legs = [];
+    let from = { lat: origin.lat, lng: origin.lng };
+    for (let k = 0; k < pts.length; k += WAYPOINTS_PER_LEG) {
+      const chunk = pts.slice(k, k + WAYPOINTS_PER_LEG);
+      const dest = chunk[chunk.length - 1], wps = chunk.slice(0, -1);
+      const url = `https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lng}&destination=${dest.lat},${dest.lng}`
+        + (wps.length ? `&waypoints=${wps.map((w) => `${w.lat},${w.lng}`).join("|")}` : "")
+        + `&travelmode=${m}&dir_action=navigate`;
+      legs.push({ url: url, count: chunk.length, to: dest });
+      from = dest;
+    }
+    return legs;
+  }
+  function routeNavUrl(origin, stops, mode) { const l = routeNavLegs(origin, stops, mode); return l.length ? l[0].url : null; }
+
   /* ---------- base map SVG (streets / river / parks) ---------- */
   function mapBg() {
     let roads = "";
@@ -638,5 +665,5 @@ window.DOODLY_MAPS = (function () {
   function svgX(s) { return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>`; }
   function svgChk(s) { return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12 5 5L20 6"/></svg>`; }
 
-  return { mountPicker, miniMap, routeMap, trackMap, mountAddressManager, navUrl, mapsUrl, distanceKm, locs, nearest, BASE, ready, ensureGoogle };
+  return { mountPicker, miniMap, routeMap, trackMap, mountAddressManager, navUrl, mapsUrl, routeNavLegs, routeNavUrl, distanceKm, locs, nearest, BASE, ready, ensureGoogle };
 })();

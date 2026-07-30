@@ -218,6 +218,30 @@ window.DOODLY_DELIVERY = (function () {
       try { return new Date(Date.now() + minFromNow * 60000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); } catch (e) { return "—"; }
     }
 
+    // ---- multi-stop navigation (Google Maps, warehouse-anchored, optimised order) ----
+    function routeOrigin() {
+      const R = (_live && _live.route) || null;
+      // approximate "from here": start at the last completed pinned stop, else the warehouse.
+      const done = all.filter((s2) => stStatus(st, s2.id) === "delivered" && s2.lat != null && s2.lng != null);
+      if (done.length) { const last = done[done.length - 1]; return { lat: last.lat, lng: last.lng }; }
+      return (R && R.warehouse && R.warehouse.lat != null) ? { lat: R.warehouse.lat, lng: R.warehouse.lng } : null;
+    }
+    function remainingNavStops() { return all.filter((s2) => stStatus(st, s2.id) !== "delivered" && s2.lat != null && s2.lng != null); }
+    // Open turn-by-turn Google Maps navigation across the remaining stops in optimised order.
+    // Must run inside the click gesture (window.open) so the tab isn't popup-blocked.
+    function openRouteNav() {
+      if (!M() || !M().routeNavLegs) { toast("Navigation unavailable."); return false; }
+      const rem = remainingNavStops();
+      if (!rem.length) { toast("No pinned stops left to navigate."); return false; }
+      const origin = routeOrigin() || { lat: rem[0].lat, lng: rem[0].lng };
+      const legs = M().routeNavLegs(origin, rem, "driving");
+      if (!legs.length) { toast("Couldn't build a navigation route."); return false; }
+      window.open(legs[0].url, "_blank", "noopener");
+      if (legs.length > 1) toast(`Navigating stops 1–${legs[0].count} of ${rem.length}. Complete them, then tap “Navigate route” for the next leg.`);
+      else toast("Opening turn-by-turn navigation for your route.");
+      return true;
+    }
+
     function navCard(s) {
       if (!all.length) return "";
       const cur = currentStop();
@@ -239,6 +263,7 @@ window.DOODLY_DELIVERY = (function () {
         ${bits.length ? `<div class="dl-navcard-meta">${bits.map((b) => `<span>${b}</span>`).join("")}</div>` : ""}
         <div class="dl-navcard-btns">
           <a class="btn btn-primary"${cur.noCoords ? ' aria-disabled="true" style="opacity:.5;pointer-events:none"' : ` href="${curNav}" target="_blank" rel="noopener"`}>${svg("nav", 16)} Navigate to stop</a>
+          <button class="btn btn-ghost" data-navroute>${svg("nav", 15)} Navigate route</button>
           <button class="btn btn-ghost" id="dlGoCur">View stop details</button>
         </div>
         <div class="dl-navcard-next">${nxt ? `${svg("nav", 12)} Next: <b>#${nxt.seq} ${esc(nxt.name)}</b>${nxt.noCoords ? " · 📍 location not pinned" : (nxt.legKm != null ? ` · ${Number(nxt.legKm).toFixed(1)} km further` : "")}` : "This is your final stop before returning to the warehouse."}</div>
@@ -272,8 +297,8 @@ window.DOODLY_DELIVERY = (function () {
           <div class="dl-card-h"><h3>${svg("pin", 18)} Today's route${_live && _live.route && _live.route.source ? ` <small class="muted-sm" style="font-weight:600">· ${_live.route.source === "ROAD" ? "road-optimised" : "distance-optimised"}</small>` : ""}</h3></div>
           <div id="dlRouteMap"></div>
           <div class="dl-route-btns">
-            <button class="btn btn-primary" id="dlStart">Start route</button>
-            <a class="btn btn-ghost" id="dlNav" href="#" target="_blank" rel="noopener">${svg("nav", 16)} Navigate current stop</a>
+            <button class="btn btn-primary" id="dlStart">${svg("nav", 16)} Start route &amp; navigate</button>
+            <button class="btn btn-ghost" data-navroute>${svg("nav", 16)} Navigate route</button>
             <button class="btn btn-ghost" id="dlRefresh">Refresh route</button>
           </div>
         </div>
@@ -298,8 +323,6 @@ window.DOODLY_DELIVERY = (function () {
             plannedKm: R ? R.plannedKm : null, plannedMin: R ? R.plannedMin : null, polyline: R ? R.polyline : null,
             onStop: (i) => { const c = host.querySelector(`#card-${all[i].id}`); if (c) c.scrollIntoView({ behavior: "smooth", block: "center" }); },
           });
-          // header "Navigate" always points at the CURRENT stop
-          const navBtn = host.querySelector("#dlNav"); if (navBtn && cur && !cur.noCoords) navBtn.href = M().navUrl(cur.lat, cur.lng, "driving");
         }
       } catch (e) { /* map is non-critical — keep the portal interactive */ }
       wire();
@@ -372,7 +395,14 @@ window.DOODLY_DELIVERY = (function () {
           .then((r) => { _avail = Object.assign({}, _avail, r || {}, { available: next }); toast(next ? "Shift started — you're available" : "Shift ended"); render(); })
           .catch((e) => { av.disabled = false; toast((e && e.message) || "Couldn't update availability"); });
       });
-      host.querySelector("#dlStart").addEventListener("click", () => { all.forEach((s2) => { if (stStatus(st, s2.id) === "assigned") setStatus(s2.id, "onway"); }); startLocationPolling(); toast("Route started — drive safe!"); render(); });
+      host.querySelector("#dlStart").addEventListener("click", () => {
+        const opened = openRouteNav();   // launch multi-stop Google Maps navigation (inside the click gesture)
+        all.forEach((s2) => { if (stStatus(st, s2.id) === "assigned") setStatus(s2.id, "onway"); });
+        startLocationPolling();
+        if (!opened) toast("Route started — drive safe!");
+        render();
+      });
+      host.querySelectorAll("[data-navroute]").forEach((b) => b.addEventListener("click", () => openRouteNav()));
       // resume live GPS reporting if the route is already in progress (e.g. after a page reload)
       if (_live && all.some((s2) => { var ss = stStatus(st, s2.id); return ss === "onway" || ss === "reached"; })) startLocationPolling();
       host.querySelector("#dlRefresh").addEventListener("click", () => { if (_live) { loadLive().then(() => { mountPortalNow(host); toast("Route refreshed"); }); } else { render(); toast("Route refreshed"); } });
