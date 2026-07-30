@@ -15,7 +15,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, View, Pressable } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Screen, Card, Text, Button, Badge, useTheme, statusIntent, statusLabel } from "@doodly/ui";
-import { getRoute, updateStop, ApiError, type RouteStop, type DeliveryAction } from "@doodly/core";
+import { getRoute, updateStop, ApiError, getDeviceLocation, previewGeoCorrection, submitGeoCorrection, type RouteStop, type DeliveryAction } from "@doodly/core";
 
 export default function StopScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -28,6 +28,7 @@ export default function StopScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [bottlesIn, setBottlesIn] = useState<number | null>(null);
+  const [geoBusy, setGeoBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -95,6 +96,49 @@ export default function StopScreen() {
         onPress: () => void act(status, { remark: title }),
       },
     ]);
+  }
+
+  // Verify / update the customer's GPS pin from the executive's current position.
+  // Only the coordinates change; the written address is never touched.
+  async function verifyLocation() {
+    if (!stop) return;
+    setGeoBusy(true); setError(null); setNotice(null);
+    try {
+      const fix = await getDeviceLocation();
+      const accTxt = fix.accuracyM != null ? `±${Math.round(fix.accuracyM)} m` : "unknown accuracy";
+      let msg = "This sets the customer's delivery pin.";
+      try {
+        const p = await previewGeoCorrection({ deliveryId: stop.id, lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM ?? undefined, capturedAt: fix.capturedAt });
+        if (p && !p.ok) { setError(p.reason || "This location can't be used here."); setGeoBusy(false); return; }
+        if (p && p.distanceMovedKm != null) msg = `This moves the pin about ${p.distanceMovedKm} km.`;
+      } catch (e) {
+        if (!(e instanceof ApiError && e.code === "offline")) throw e;
+        msg = "You're offline — this will sync automatically.";
+      }
+      Alert.alert(
+        "Update customer location?",
+        `${msg}\n\nYou're about to update the delivery location using your current GPS position (${accTxt}). The address text is not changed.`,
+        [
+          { text: "Cancel", style: "cancel", onPress: () => setGeoBusy(false) },
+          {
+            text: "Update",
+            onPress: async () => {
+              try {
+                const clientId = `geo-${stop.id}-${Date.now()}`;
+                const res = await submitGeoCorrection({ deliveryId: stop.id, lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM ?? undefined, capturedAt: fix.capturedAt, clientId });
+                setNotice(res.synced ? "Location updated — distance & route refreshed." : "Saved on your phone — it will sync when you're back online.");
+                if (res.synced) await load();
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "Could not update the location.");
+              } finally { setGeoBusy(false); }
+            },
+          },
+        ],
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not get your GPS location.");
+      setGeoBusy(false);
+    }
   }
 
   if (loading) {
@@ -174,16 +218,24 @@ export default function StopScreen() {
             <Text variant="small" tone="muted" style={{ marginTop: space.xs }}>{doorParts.join(" · ")}</Text>
           ) : null}
           {stop.landmark ? <Text variant="small" tone="muted">Landmark: {stop.landmark}</Text> : null}
+          {"verified" in stop ? (
+            <Text variant="small" tone={stop.verified ? "brand" : "muted"} style={{ marginTop: space.xs }}>
+              {stop.verified ? "✓ Verified location" : stop.hasPin ? "Unverified pin" : "No pin set"}
+            </Text>
+          ) : null}
           {stop.instructions ? (
             <View style={{ marginTop: space.md, padding: space.md, backgroundColor: colors.goldSoft, borderRadius: radius.sm }}>
               <Text variant="label" tone="muted">Customer note</Text>
               <Text variant="small" style={{ marginTop: 2 }}>{stop.instructions}</Text>
             </View>
           ) : null}
-          <View style={{ flexDirection: "row", gap: space.sm, marginTop: space.base }}>
+          <View style={{ flexDirection: "row", gap: space.sm, marginTop: space.base, flexWrap: "wrap" }}>
             <Button label="Navigate" onPress={navigate} variant="secondary" size="sm" />
             {stop.mobile ? (
               <Button label="Call customer" variant="ghost" size="sm" onPress={() => Linking.openURL(`tel:${stop.mobile}`).catch(() => {})} />
+            ) : null}
+            {stop.canCorrectGeo ? (
+              <Button label={geoBusy ? "Getting GPS…" : "Verify / update location"} variant="ghost" size="sm" disabled={geoBusy} onPress={() => void verifyLocation()} />
             ) : null}
           </View>
         </Card>

@@ -22,9 +22,12 @@ export { isOnline, onConnectivityChange, startConnectivityWatch } from "./net";
 export { AuthProvider, useAuth, WrongAppError, type AuthStatus } from "./AuthContext";
 export {
   getSummary as getDriverSummary, getRoute, getAvailability, setAvailability, updateStop, pingLocation,
+  previewGeoCorrection, submitGeoCorrection,
   type DriverSummary, type RouteStop, type StopStatus, type MyRoute,
   type Availability, type DeliveryAction, type StopUpdate,
+  type GeoCorrectionInput, type GeoCorrectionResult,
 } from "./driver";
+export { getDeviceLocation, type DeviceFix } from "./location";
 export {
   getCatalogue, variantsFor, variantPricePaise, isBuyable, isTrial, toPaise,
   type Catalogue, type CatalogueProduct, type CatalogueVariant,

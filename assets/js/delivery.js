@@ -53,6 +53,43 @@ window.DOODLY_DELIVERY = (function () {
     return API().post("/api/delivery/stop/" + encodeURIComponent(id), body).catch((e) => { toast(e.message || "Couldn't sync — will keep your local note."); return null; });
   }
 
+  /* ---------- GPS pin correction + offline queue ----------
+     A correction captured with no connectivity is persisted to localStorage with a
+     client-generated idempotency key (clientId) and replayed when the device is back
+     online — the server dedupes on clientId so a replay never double-applies. */
+  function geoClientId() {
+    try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+    return "geo-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+  }
+  function geoQueueLoad() { try { return JSON.parse(localStorage.getItem("doodly-geo-queue") || "[]"); } catch (e) { return []; } }
+  function geoQueueSave(q) { try { localStorage.setItem("doodly-geo-queue", JSON.stringify(q)); } catch (e) {} }
+  function geoQueueCount() { return geoQueueLoad().length; }
+  // Try live; on a network outage queue it. Resolves { ok, queued, result, error, code }.
+  function submitGeoCorrection(body) {
+    if (!API()) return Promise.resolve({ ok: false, error: "No connection" });
+    return API().post("/api/delivery/geo-correction", body).then((r) => ({ ok: true, result: r }))
+      .catch((e) => {
+        if (e && e.code === "offline") { const q = geoQueueLoad(); q.push(body); geoQueueSave(q); return { ok: false, queued: true }; }
+        return { ok: false, error: (e && e.message) || "Update failed", code: e && e.code };
+      });
+  }
+  // Replay queued corrections; keep only the ones that are still offline (drop permanent failures).
+  function drainGeoQueue() {
+    if (!API() || !execUser()) return Promise.resolve(0);
+    const q = geoQueueLoad(); if (!q.length) return Promise.resolve(0);
+    let done = 0; const rest = [];
+    return q.reduce((p, item) => p.then(() =>
+      API().post("/api/delivery/geo-correction", item).then(() => { done++; })
+        .catch((e) => { if (e && e.code === "offline") rest.push(item); /* else: permanent → drop (idempotent, safe) */ })
+    ), Promise.resolve()).then(() => { geoQueueSave(rest); return done; });
+  }
+  let _geoOnlineWired = false;
+  function wireGeoSync(onDrained) {
+    drainGeoQueue().then((n) => { if (n > 0 && typeof onDrained === "function") onDrained(n); });
+    if (_geoOnlineWired) return; _geoOnlineWired = true;
+    window.addEventListener("online", () => drainGeoQueue().then((n) => { if (n > 0 && typeof onDrained === "function") onDrained(n); }));
+  }
+
   /* ---------- shift availability (signed-in executive only) ---------- */
   let _avail = null;   // { availability, available, onTrip } from /api/driver/availability — stays null (no pill) unless the GET succeeds
   function loadAvailability() {
@@ -294,6 +331,10 @@ window.DOODLY_DELIVERY = (function () {
           ? `<div class="dl-stop-leg" style="color:#a15b12">${svg("pin", 12)} Location not pinned — distance unavailable. Ask the customer to set their map pin.</div>`
           : (legTxt ? `<div class="dl-stop-leg">${svg("nav", 12)} ${legTxt}${s2.cumulativeKm != null ? ` · ${Number(s2.cumulativeKm).toFixed(1)} km cumulative` : ""}</div>` : "")}
         ${s2.instructions ? `<div class="dl-instr">${svg("alert", 13)} ${esc(s2.instructions)}</div>` : ""}
+        ${("verified" in s2) ? `<div class="dl-geo" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:5px;font-size:.85rem">
+          <span>${svg("pin", 12)} Location: ${s2.verified ? '<b style="color:#1FAE66">Verified pin</b>' : (s2.hasPin ? '<b style="color:#a15b12">Unverified pin</b>' : '<b style="color:#b3261e">No pin set</b>')}</span>
+          ${s2.canCorrectGeo ? `<button class="btn btn-ghost" style="padding:3px 10px;font-size:.8rem" data-geo="${s2.id}">${svg("pin", 13)} Verify / Update location</button>` : ""}
+        </div>` : ""}
         <div class="dl-steps">${WORKFLOW.map((w, i) => `<span class="dl-step ${i <= stepIdx ? "on" : ""}">${esc(w[1])}</span>`).join('<span class="dl-step-sep"></span>')}</div>
         <div class="dl-bottles">
           <span>${svg("bottle", 14)} Empties to collect <b>${owed}</b> · collected <b>${collected}</b> · pending <b>${pendingB}</b>${s2.bottlesExpected ? ` <small class="muted-sm">· deliver ${s2.bottlesExpected} today</small>` : ""}</span>
@@ -344,6 +385,9 @@ window.DOODLY_DELIVERY = (function () {
       host.querySelectorAll("[data-bdec]").forEach((b) => b.addEventListener("click", () => { setBottles(b.dataset.bdec, stBottles(st, b.dataset.bdec) - 1); render(); }));
       host.querySelectorAll("[data-issue]").forEach((b) => b.addEventListener("click", () => issueModal(b.dataset.issue)));
       host.querySelectorAll("[data-nav]").forEach((b) => b.addEventListener("click", () => { const m = host.querySelector(`[data-modes="${b.dataset.nav}"]`); if (m) m.hidden = !m.hidden; }));
+      host.querySelectorAll("[data-geo]").forEach((b) => b.addEventListener("click", () => verifyGeoModal(b.dataset.geo)));
+      // replay any offline GPS corrections now + whenever connectivity returns
+      if (_live) wireGeoSync((n) => { toast(n + " location update" + (n > 1 ? "s" : "") + " synced"); loadLive().then(() => mountPortalNow(host)); });
     }
 
     function confirmDelivery(id) {
@@ -382,6 +426,65 @@ window.DOODLY_DELIVERY = (function () {
         const nc = currentStop();
         if (nc && nc.id !== id) { const el = host.querySelector(`#card-${nc.id}`); if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); toast(`Delivered ✓ · Next: #${nc.seq} ${nc.name}`); }
         else toast(`Delivered to ${s2.name} ✓ · Route complete 🎉`);
+      });
+    }
+
+    function verifyGeoModal(id) {
+      const s2 = all.find((x) => x.id === id); if (!s2) return;
+      const hasPin = s2.lat != null && s2.lng != null;
+      const m = document.createElement("div"); m.className = "dl-modal";
+      m.innerHTML = `<div class="dl-modal-card" role="dialog" aria-modal="true" aria-label="Verify or update location">
+        <div class="dl-modal-head"><h3>Verify / update location</h3><button class="dl-x" aria-label="Close">${svg("x", 18)}</button></div>
+        <p class="dl-modal-sub">${esc(s2.name)} · ${esc(s2.address)}</p>
+        <div id="dlGeoMap" style="height:180px;border-radius:12px;overflow:hidden;margin:8px 0;background:#eef3ee"></div>
+        <div id="dlGeoInfo" style="display:flex;flex-direction:column;gap:2px;font-size:.9rem;min-height:38px"><span class="muted-sm">${svg("nav", 13)} Getting your GPS location…</span></div>
+        <div id="dlGeoWarn" style="display:none;margin-top:6px;padding:8px 10px;border-radius:8px;font-size:.85rem;font-weight:600"></div>
+        <textarea class="dl-notes" id="dlGeoReason" placeholder="Reason / note (optional)"></textarea>
+        <p class="muted-sm" style="margin:4px 0 8px">You're about to update the customer's delivery location using your current GPS position. The address text, PIN code and landmark are not changed.</p>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" id="dlGeoRe">${svg("nav", 15)} Recapture</button>
+          <button class="btn btn-primary" id="dlGeoSave" disabled style="flex:1">${svg("check", 16)} Update location</button>
+        </div></div>`;
+      document.body.appendChild(m); requestAnimationFrame(() => m.classList.add("show"));
+      const close = () => { m.classList.remove("show"); setTimeout(() => m.remove(), 250); };
+      m.addEventListener("click", (e) => { if (e.target === m || e.target.closest(".dl-x")) close(); });
+      const info = m.querySelector("#dlGeoInfo"), warn = m.querySelector("#dlGeoWarn"), saveBtn = m.querySelector("#dlGeoSave");
+      const fmtDist = (km) => km == null ? "" : (km < 0.02 ? "same as current pin" : km * 1000 < 950 ? "~" + Math.round(km * 1000) + " m from current pin" : "~" + km.toFixed(2) + " km from current pin");
+      const showWarn = (txt, tone) => { warn.style.display = "block"; warn.textContent = txt; warn.style.background = tone === "err" ? "#fdecea" : "#fff6e6"; warn.style.color = tone === "err" ? "#b3261e" : "#8a5a00"; };
+      let device = null;
+
+      function capture() {
+        device = null; saveBtn.disabled = true; warn.style.display = "none";
+        info.innerHTML = `<span class="muted-sm">${svg("nav", 13)} Getting your GPS location…</span>`;
+        if (!navigator.geolocation) { info.innerHTML = `<span style="color:#b3261e">GPS is not available on this device.</span>`; return; }
+        navigator.geolocation.getCurrentPosition((pos) => {
+          device = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: Math.round(pos.coords.accuracy || 0), capturedAt: new Date().toISOString() };
+          const clientDist = (hasPin && M()) ? M().distanceKm({ lat: s2.lat, lng: s2.lng }, device) : null;
+          if (M()) M().trackMap(m.querySelector("#dlGeoMap"), { dest: hasPin ? { lat: s2.lat, lng: s2.lng } : device, driver: device, driverLabel: "Your GPS position", destLabel: "Current customer pin", updatedText: "±" + device.accuracy + " m accuracy" });
+          info.innerHTML = `<span>${svg("pin", 13)} Your GPS: <b>${device.lat.toFixed(5)}, ${device.lng.toFixed(5)}</b> · ±${device.accuracy} m</span>` +
+            `<span class="muted-sm">${hasPin ? fmtDist(clientDist) : "No current pin — this sets the first pin"}</span>`;
+          saveBtn.disabled = false;
+          // server preview: authoritative distance + whether the gates will accept it
+          API().post("/api/delivery/geo-correction", { deliveryId: s2.id, lat: device.lat, lng: device.lng, accuracyM: device.accuracy, capturedAt: device.capturedAt, preview: true })
+            .then((res) => {
+              if (!res) return;
+              if (!res.ok) { saveBtn.disabled = true; showWarn(res.reason || "This location can't be used.", "err"); }
+              else if (res.largeMove) showWarn("Significant change (" + (res.distanceMovedKm != null ? res.distanceMovedKm.toFixed(2) + " km" : "large move") + "). Confirm you're at the customer's door.", "warn");
+            })
+            .catch((e) => { if (e && e.code === "offline") showWarn("Offline — you can still save; it'll sync automatically.", "warn"); });
+        }, (err) => { info.innerHTML = `<span style="color:#b3261e">Couldn't get GPS: ${esc((err && err.message) || "permission denied")}. Enable location and retry.</span>`; }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+      }
+      capture();
+      m.querySelector("#dlGeoRe").addEventListener("click", capture);
+      saveBtn.addEventListener("click", () => {
+        if (!device) return;
+        saveBtn.disabled = true;
+        submitGeoCorrection({ deliveryId: s2.id, lat: device.lat, lng: device.lng, accuracyM: device.accuracy, capturedAt: device.capturedAt, reason: (m.querySelector("#dlGeoReason").value || "").trim() || undefined, clientId: geoClientId() })
+          .then((res) => {
+            if (res.ok) { close(); toast("Location updated ✓ · distance & route refreshed"); if (_live) loadLive().then(() => mountPortalNow(host)); }
+            else if (res.queued) { close(); toast("Saved offline — will sync when you're back online"); }
+            else { saveBtn.disabled = false; showWarn(res.error || "Update failed", "err"); toast(res.error || "Update failed"); }
+          });
       });
     }
 

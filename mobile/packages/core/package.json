@@ -11,6 +11,7 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.1.0",
     "@react-native-community/netinfo": "^11.4.1",
+    "expo-location": "~18.0.4",
     "expo-secure-store": "~14.0.1"
   },
   "peerDependencies": {

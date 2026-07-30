@@ -264,9 +264,29 @@ window.DOODLY_ACCOUNT = (function () {
     var anchor = document.querySelector(".page-head");
     var host = document.createElement("div"); host.id = "accAddrLive";
     var host2 = document.createElement("div"); host2.id = "accAddrChanges";
-    if (anchor && anchor.parentNode) { anchor.parentNode.insertBefore(host, anchor.nextSibling); host.parentNode.insertBefore(host2, host.nextSibling); } else return;
+    var host3 = document.createElement("div"); host3.id = "accAddrGeo";
+    if (anchor && anchor.parentNode) { anchor.parentNode.insertBefore(host, anchor.nextSibling); host.parentNode.insertBefore(host2, host.nextSibling); host2.parentNode.insertBefore(host3, host2.nextSibling); } else return;
     loadAddresses(host);
     loadScheduledChanges(host2);
+    loadGeoHistory(host3);
+  }
+  /* Location History (Step 10): every GPS pin correction our delivery team made,
+     original → latest, per address. Only the latest pin is used for delivery. */
+  function loadGeoHistory(host) {
+    if (!API()) return;
+    var fmtC = function (a, b) { return (a != null && b != null) ? (Number(a).toFixed(5) + ", " + Number(b).toFixed(5)) : "—"; };
+    API().get("/api/account/geo-corrections").then(function (r) {
+      var list = (r && r.addresses) || [];
+      if (!list.length) { host.innerHTML = ""; return; }
+      host.innerHTML = '<div class="panel" style="margin:14px 0"><div class="panel-head"><h3>Location history</h3></div><div class="panel-pad">' +
+        '<p class="muted-sm" style="margin:-4px 0 10px">When our delivery team fine-tunes a delivery pin at your door, the change is recorded here. Only your latest pin is used for delivery — your written address is never changed.</p>' +
+        list.map(function (a) {
+          return '<div class="acc-addr2" style="margin-bottom:8px"><div class="acc-addr2-h"><b>' + esc(a.label) + '</b> <span class="tp-yn yes">' + a.totalCorrections + " update" + (a.totalCorrections > 1 ? "s" : "") + "</span></div>" +
+            '<div class="muted-sm">' + esc(a.address) + "</div>" +
+            '<div class="muted-sm" style="margin-top:4px">Original pin <span>' + fmtC(a.originalLat, a.originalLng) + "</span> &rarr; latest pin <b>" + fmtC(a.latestLat, a.latestLng) + "</b></div>" +
+            '<div class="muted-sm">Last updated ' + new Date(a.lastCorrectedAt).toLocaleDateString() + " by " + esc(a.lastCorrectedBy) + "</div></div>";
+        }).join("") + "</div></div>";
+    }).catch(function () { host.innerHTML = ""; });
   }
   /* Structured one-line summary of an address for the saved-list card. */
   function addrSummary(a) {

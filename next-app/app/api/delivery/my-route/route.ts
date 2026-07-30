@@ -12,6 +12,7 @@ import { getWarehouse } from "@/lib/warehouse/config";
 import { optimizeExecutiveRoute } from "@/lib/routes/exec-route";
 import { istDayWindow } from "@/lib/delivery/stats";
 import { heldByUsers } from "@/lib/bottles/balance";
+import { getGeoCorrectionConfig } from "@/lib/geo/correction-config";
 
 const IST_MS = 5.5 * 60 * 60 * 1000;
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -76,6 +77,13 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
   // batched over every stop's customer so there's no N+1.
   const held = await heldByUsers(rows.map((d) => d.subscription?.user?.id ?? d.order?.user?.id).filter(Boolean) as string[]);
 
+  // Geo-correction eligibility: the feature is on, and the executive is on-shift.
+  // Per-stop we additionally require the stop to still be active (not delivered/failed/skipped).
+  const geoCfg = await getGeoCorrectionConfig();
+  const execStatus = await db.executiveStatus.findUnique({ where: { driverId: driver.id }, select: { availability: true } }).catch(() => null);
+  const onShift = !execStatus || execStatus.availability !== "OFFLINE";
+  const canCorrectBase = geoCfg.enabled && (!geoCfg.requireShift || onShift);
+
   const stops = rows.map((d, i) => {
     const cust = d.subscription?.user ?? d.order?.user ?? null;
     // authoritative stop location: the delivery's own snapshot, else the subscription's,
@@ -115,6 +123,10 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
       etaMinutes: d.etaMinutes ?? null,                                        // minutes after leaving the warehouse
       distanceFromWarehouseKm: d.distanceKm != null ? round2(d.distanceKm) : null,
       routeSource: d.routeSource ?? null,
+      // ---- geo-location verification (Step 2) ----
+      verified: addr?.verified ?? false,                 // pin present + agrees with pincode + serviceable
+      hasPin: addr?.lat != null && addr?.lng != null,    // whether any pin is dropped
+      canCorrectGeo: canCorrectBase && d.status !== "DELIVERED" && d.status !== "FAILED" && d.status !== "SKIPPED",
     };
   });
 

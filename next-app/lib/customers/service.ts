@@ -188,10 +188,12 @@ export async function getCustomerProfile(id: string): Promise<CustomerProfile | 
   });
   if (!c) return null;
 
-  const [deliveries, bottleGroups] = await Promise.all([
+  const [deliveries, bottleGroups, geoGroups] = await Promise.all([
     db.delivery.findMany({ where: { subscription: { userId: id } }, orderBy: { date: "desc" }, take: 8, select: { id: true, date: true, status: true } }),
     db.bottleLedger.groupBy({ by: ["event"], where: { userId: id }, _sum: { qty: true } }),
+    db.geoCorrection.groupBy({ by: ["addressId"], where: { userId: id }, _count: { _all: true }, _max: { createdAt: true } }),
   ]);
+  const geoByAddr = new Map(geoGroups.map((g) => [g.addressId, { count: g._count._all, lastAt: g._max.createdAt?.toISOString() ?? null }]));
   const bsum = (e: string) => bottleGroups.find((g) => g.event === e)?._sum.qty ?? 0;
   const hasActiveSub = c.subscriptions.some((s) => s.status === "ACTIVE");
   const hasTrial = c.orders.some((o) => o.type === "SAMPLE") || !!c.trialCashback;
@@ -207,6 +209,8 @@ export async function getCustomerProfile(id: string): Promise<CustomerProfile | 
       houseNo: a.houseNo, buildingName: a.buildingName, floor: a.floor, street: a.street, landmark: a.landmark,
       block: a.block, wing: a.wing, gateNumber: a.gateNumber, doorColor: a.doorColor,
       lat: a.lat, lng: a.lng, isDefault: a.isDefault, deliveryNote: a.deliveryNote, zone: a.zone?.name ?? null, executive: a.zone?.executive ?? null,
+      verified: a.verified, verifiedAt: a.verifiedAt?.toISOString() ?? null, serviceable: a.serviceable, distanceFromWarehouseKm: a.distanceFromWarehouseKm,
+      corrections: geoByAddr.get(a.id)?.count ?? 0, lastCorrectedAt: geoByAddr.get(a.id)?.lastAt ?? null,
     })),
     subscriptions: c.subscriptions.map((s) => ({ id: s.id, shortId: shortId(s.id), status: s.status, plan: s.plan.name, nextDeliveryAt: s.nextDeliveryAt?.toISOString() ?? null, deliverySlot: s.deliverySlot, autoRenew: s.autoRenew })),
     orders: c.orders.map((o) => ({ id: o.id, type: o.type, status: o.status, totalPaise: o.totalPaise, createdAt: o.createdAt.toISOString() })),

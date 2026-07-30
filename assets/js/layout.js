@@ -1573,6 +1573,19 @@
       .catch(function (e) { dacToast(e.message || "Couldn't export the report."); });
   }
 
+  // GPS Corrections report download (customers | executives | areas). Mirrors exportBottleReport.
+  function downloadGeoReport(kind, fmt) {
+    var base = window.DOODLY_API ? DOODLY_API.base() : "";
+    var h = {}; try { var tok = localStorage.getItem("doodly-token"); if (tok) h["Authorization"] = "Bearer " + tok; } catch (e) {}
+    try { if (window.DOODLY_RBAC) { h["X-Doodly-Actor"] = DOODLY_RBAC.activeRole(); var cu = DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser(); if (cu && cu.id) h["X-Doodly-Actor-Id"] = cu.id; } } catch (e) {}
+    var ext = fmt === "xls" ? "xls" : fmt === "csv" ? "csv" : "pdf";
+    dacToast("Preparing the GPS corrections report (" + ext.toUpperCase() + ")…");
+    fetch(base + "/api/admin/geo-corrections/export?kind=" + encodeURIComponent(kind) + "&format=" + ext, { headers: h, credentials: "include" })
+      .then(function (r) { if (!r.ok) throw new Error(r.status === 403 ? "Your role can't export this (403)." : "Export failed (" + r.status + ")"); return r.blob(); })
+      .then(function (blob) { var url = URL.createObjectURL(blob); var a = document.createElement("a"); a.href = url; a.download = "DOODLY_GPS_Corrections_" + kind + "." + ext; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 60000); dacToast("GPS corrections report downloaded (" + ext.toUpperCase() + ")."); })
+      .catch(function (e) { dacToast(e.message || "Couldn't export the report."); });
+  }
+
   function openBottleMovement() {
     if (document.querySelector(".dac-ov")) return;
     if (!_bottleStages.length) { dacToast("Fleet is still loading — try again in a moment."); return; }
@@ -2289,6 +2302,7 @@
         ((d.lat && d.lng) ? '<div><b>Location</b> — ' + Number(d.lat).toFixed(5) + ", " + Number(d.lng).toFixed(5) + (d.routeStatus === "OK" || !d.routeStatus ? ' · <span class="badge green">Verified pin</span>' : ' · <span class="badge amber">' + esc(rsMap[d.routeStatus] || d.routeStatus) + "</span>") + "</div>" : '<div><b>Location</b> — <span class="badge red">No pin dropped</span></div>') +
         distLine +
         ((d.lat && d.lng) ? '<div id="dm-mini" style="height:150px;border-radius:10px;overflow:hidden;margin:8px 0;border:1px solid var(--line,#e3ece3)"></div>' : "") +
+        '<div id="dm-geo"></div>' +
         (d.deliveryNote ? '<div><b>Note</b> — ' + esc(d.deliveryNote) + "</div>" : "") +
         '<div><b>Order</b> — ' + esc(d.orderRef || "—") + " · " + esc(d.type || "") + (d.plan ? " (" + esc(d.plan) + ")" : "") + "</div>" +
         '<div><b>Products</b> — ' + esc(d.products || "—") + "</div>" +
@@ -2333,6 +2347,25 @@
     var qs = function (s) { return ov.querySelector(s); };
     // Address verification mini-map preview for ops (reuses DOODLY_MAPS.miniMap).
     if (d.lat && d.lng && window.DOODLY_MAPS && DOODLY_MAPS.miniMap) { var _mm = qs("#dm-mini"); if (_mm) try { DOODLY_MAPS.miniMap(_mm, { lat: d.lat, lng: d.lng, label: "Delivery" }); } catch (e) {} }
+    // GPS pin correction history for this address (original → latest, who/when) + report download.
+    (function () {
+      var gh = qs("#dm-geo"); if (!gh || !d.addressId || !window.DOODLY_API) return;
+      var fmtC = function (a, b) { return (a != null && b != null) ? (Number(a).toFixed(5) + ", " + Number(b).toFixed(5)) : "no pin"; };
+      DOODLY_API.get("/api/admin/geo-corrections?addressId=" + encodeURIComponent(d.addressId) + "&limit=50").then(function (r) {
+        var rows = (r && r.rows) || []; if (!rows.length) { gh.innerHTML = ""; return; }
+        var latest = rows[0], first = rows[rows.length - 1];
+        gh.innerHTML = '<div style="margin:8px 0;padding:9px 11px;border-radius:9px;background:rgba(31,174,102,.09)">' +
+          '<b>GPS corrections</b> — ' + rows.length + ' · original <span class="muted-sm">' + fmtC(first.oldLat, first.oldLng) + '</span> &rarr; latest <b>' + fmtC(latest.newLat, latest.newLng) + '</b>' +
+          '<div class="muted-sm">Last by ' + esc(latest.correctedBy || "—") + (latest.execEmployeeId ? " (" + esc(latest.execEmployeeId) + ")" : "") + " · " + new Date(latest.at).toLocaleString() + (latest.distanceMovedKm != null ? " · moved " + latest.distanceMovedKm + " km" : "") + "</div>" +
+          '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">' +
+            '<button type="button" class="btn btn-ghost sm" data-geodl="customers,pdf">&#8595; Report PDF</button>' +
+            '<button type="button" class="btn btn-ghost sm" data-geodl="customers,csv">CSV</button>' +
+            '<button type="button" class="btn btn-ghost sm" data-geodl="executives,pdf">Exec PDF</button>' +
+            '<button type="button" class="btn btn-ghost sm" data-geodl="areas,pdf">Areas PDF</button>' +
+          "</div></div>";
+        gh.querySelectorAll("[data-geodl]").forEach(function (b) { b.addEventListener("click", function () { var p = b.dataset.geodl.split(","); downloadGeoReport(p[0], p[1]); }); });
+      }).catch(function () { gh.innerHTML = ""; });
+    })();
     var close = function () { ov.remove(); document.removeEventListener("keydown", onKey); };
     async function saveAssign() {
       var err = qs("#dm-err"), btn = qs("#dm-save");

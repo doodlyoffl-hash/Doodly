@@ -204,6 +204,7 @@ model User {
   puzzleWins      PuzzleWinner[]                       // Monthly Puzzle Challenge wins
   employeeProfile EmployeeProfile? @relation("EmployeeUser")   // HR: staff employment profile (1:1)
   scheduledAddressChanges ScheduledAddressChange[]     // future-dated delivery address changes requested by this customer
+  geoCorrections  GeoCorrection[] @relation("GeoCorrectionCustomer")  // GPS pin corrections on this customer's addresses
 }
 
 enum UserStatus {
@@ -326,6 +327,53 @@ model Address {
   deliveries    Delivery[]               @relation("DeliveryAddress")  // deliveries pinned to this address (history snapshot)
   scheduledAsOld ScheduledAddressChange[] @relation("SACOld")          // scheduled changes moving AWAY from this address
   scheduledAsNew ScheduledAddressChange[] @relation("SACNew")          // scheduled changes moving TO this address
+  geoCorrections GeoCorrection[]                                       // append-only history of GPS pin corrections
+}
+
+// ----------------------------------------------------------------
+// Executive GPS pin correction — append-only history of coordinate
+// corrections made at the door. Address.lat/lng always holds the LATEST
+// pin (the only one used for deliveries); this table is the audit trail,
+// customer Location History and report source. Only coordinates change —
+// never the address text / pincode / landmark / notes.
+// ----------------------------------------------------------------
+enum GeoCorrectionSource {
+  EXEC_GPS      // captured live from a delivery executive's device at the door
+  OFFLINE_SYNC  // captured offline, synced once connectivity returned
+  ADMIN         // manual back-office correction (operations / super-admin)
+}
+
+model GeoCorrection {
+  id                String              @id @default(cuid())
+  addressId         String
+  address           Address             @relation(fields: [addressId], references: [id])
+  userId            String                                   // customer who owns the address
+  user              User                @relation("GeoCorrectionCustomer", fields: [userId], references: [id])
+  deliveryId        String?                                  // delivery in hand when corrected (exec flow)
+  delivery          Delivery?           @relation(fields: [deliveryId], references: [id])
+  driverId          String?                                  // executive's Driver row (exec flow)
+  driver            Driver?             @relation(fields: [driverId], references: [id])
+  execEmployeeId    String?                                  // "DRV-07" snapshot for reporting
+  correctedById     String?                                  // actor User id (exec / ops / admin)
+  correctedByRole   String?                                  // actor RBAC role at correction time
+  oldLat            Float?                                   // pin before (null if never pinned)
+  oldLng            Float?
+  newLat            Float                                    // corrected pin (the new latest)
+  newLng            Float
+  distanceMovedKm   Float?                                   // haversine old → new (null when no old pin)
+  deviceAccuracyM   Float?                                   // GPS accuracy radius the device reported
+  warehouseBeforeKm Float?                                   // warehouse → old pin
+  warehouseAfterKm  Float?                                   // warehouse → new pin
+  declaredPincode   String?                                  // address pincode at correction time (area anchor)
+  pinMatch          Boolean?                                 // did the new pin agree with the declared pincode
+  source            GeoCorrectionSource @default(EXEC_GPS)
+  reason            String?                                  // optional executive / admin note
+  clientId          String?             @unique              // client idempotency key (offline dedup)
+  capturedAt        DateTime?                                // device capture time (offline: may precede createdAt)
+  createdAt         DateTime            @default(now())
+  @@index([addressId, createdAt])
+  @@index([correctedById])
+  @@index([declaredPincode])
 }
 
 // ----------------------------------------------------------------
@@ -904,6 +952,7 @@ model Delivery {
   routeSource    String?                           // "ROAD" (Directions) | "HAVERSINE" (fallback)
   assignment     DeliveryAssignment?
   queueEntry     AssignmentQueue?
+  geoCorrections GeoCorrection[]                   // GPS pin corrections made while this delivery was in hand
   @@index([date, status])
   @@index([subscriptionId, date])
   @@index([driverId, date])
@@ -1664,6 +1713,7 @@ model Driver {                                    // = Delivery Executive (own /
   assignments    DeliveryAssignment[]
   trips          TripHistory[]
   assignmentLogs AssignmentLog[]
+  geoCorrections GeoCorrection[]                   // GPS pin corrections performed by this executive
 }
 
 model DeliveryIssue {

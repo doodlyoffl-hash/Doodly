@@ -34,7 +34,7 @@ window.DOODLY_RBAC = (function () {
     ["orders", "Orders", "Commerce"], ["subscriptions", "Subscriptions", "Commerce"], ["billing", "Subscription Billing", "Commerce", ["approve"]], ["customers", "Customers", "Commerce"], ["invoiceB2b", "Business Invoices", "Commerce"], ["payments", "Payments", "Finance", ["refund", "approve"]],
     ["revenue", "Revenue", "Finance"], ["expenses", "Daily Expenses", "Finance", ["approve"]], ["wallet", "Wallet Management", "Finance", ["reverse"]], ["b2b", "B2B Orders", "Commerce", ["config", "delete"]], ["b2bPricing", "B2B Pricing", "Commerce", ["override", "approve"]], ["lateDeliveries", "Late Deliveries", "Operations", ["override"]], ["coupons", "Coupons", "Marketing"], ["offers", "Offers", "Marketing"],
     ["products", "Products", "Catalogue"], ["categories", "Categories", "Catalogue"], ["inventory", "Inventory", "Inventory", ["adjust"]], ["bottleInventory", "Bottle Inventory", "Inventory", ["adjust"]], ["deliverySettings", "Delivery Settings", "Operations"],
-    ["deliveries", "Delivery Mgmt", "Operations", ["assign"]], ["assignment", "Auto Assignment", "Operations", ["override"]], ["serviceableAreas", "Serviceable Areas", "Operations"], ["drivers", "Drivers", "Operations"], ["routes", "Routes", "Operations"],
+    ["deliveries", "Delivery Mgmt", "Operations", ["assign"]], ["assignment", "Auto Assignment", "Operations", ["override"]], ["serviceableAreas", "Serviceable Areas", "Operations"], ["geoCorrection", "Update Customer Geo Location", "Operations"], ["drivers", "Drivers", "Operations"], ["routes", "Routes", "Operations"],
     ["farmers", "Farmers", "Supply"], ["procurement", "Procurement", "Supply"], ["quality", "Quality Testing", "Supply"],
     ["reports", "Reports", "Growth"], ["searchInsights", "Search Insights", "Growth"], ["referrals", "Referrals", "Growth", ["approve", "reverse"]], ["loyalty", "Pure Rewards", "Growth", ["adjust"]], ["rewards", "Reward Management", "Growth", ["cancel"]], ["blogs", "Blogs", "Content"], ["cms", "CMS", "Content"], ["brandStory", "Brand Story", "Content"], ["help", "Help Center", "Content"], ["notifications", "Notifications", "Content"],
     ["support", "Support Tickets", "System"], ["chatSupport", "Chat Support", "System"], ["users", "User Management", "System"], ["roles", "Roles & Permissions", "System"], ["permissions", "Permissions", "System"], ["auditLogs", "Audit Logs", "System"], ["gst", "GST Management", "System", ["config"]], ["settings", "Settings", "System"],
@@ -52,14 +52,14 @@ window.DOODLY_RBAC = (function () {
     super_admin: "*",
     admin: ADMIN_FULL,
     support: { dashboard: "view", customers: "view", orders: "manage", subscriptions: "view", support: "full" },
-    operations: { dashboard: "view", deliveries: "full", drivers: "manage", routes: "manage", serviceableAreas: "manage", deliverySettings: "manage", inventory: "view", reports: "view" },
+    operations: { dashboard: "view", deliveries: "full", drivers: "manage", routes: "manage", serviceableAreas: "manage", deliverySettings: "manage", geoCorrection: "manage", inventory: "view", reports: "view" },
     procurement: { dashboard: "view", farmers: "manage", procurement: "full", quality: "view", reports: "view" },
     accountant: { dashboard: "view", revenue: "view", expenses: "manage", wallet: "full", payments: "full", billing: "manage", reports: "manage", coupons: "view", employees: "view", hrDashboard: "view", attendance: "view", payroll: "full", advances: "full", leave: "view" },
     inventory: { dashboard: "view", inventory: "full", bottleInventory: "full", reports: "view" },
     quality: { dashboard: "view", quality: "full", procurement: "view", reports: "view" },
     marketing: { dashboard: "view", coupons: "full", offers: "full", blogs: "full", cms: "manage", notifications: "manage", loyalty: "manage", rewards: "manage", reports: "view" },
     customer: {},
-    delivery_executive: { dashboard: "view", deliveries: "manage", routes: "view" },
+    delivery_executive: { dashboard: "view", deliveries: "manage", routes: "view", geoCorrection: "manage" },
   };
 
   function matrix() {

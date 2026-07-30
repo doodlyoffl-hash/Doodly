@@ -61,6 +61,11 @@ export interface RouteStop {
   status: StopStatus;
   slot: string | null;
   deliveredAt: string | null;
+  /** Address geolocation verification (Step 2). */
+  verified?: boolean;
+  hasPin?: boolean;
+  /** Whether this executive may correct the customer's GPS pin right now. */
+  canCorrectGeo?: boolean;
 }
 
 export type StopStatus = "assigned" | "onway" | "reached" | "delivered";
@@ -142,4 +147,44 @@ export async function updateStop(deliveryId: string, update: StopUpdate, label?:
 export async function pingLocation(lat: number, lng: number, accuracy?: number): Promise<void> {
   try { await api.post("/api/delivery/location", { lat, lng, accuracy }, { timeoutMs: 8000 }); }
   catch { /* best-effort by design */ }
+}
+
+/* ---------- GPS pin correction (Step 3–7) ---------- */
+export interface GeoCorrectionInput {
+  deliveryId: string;
+  lat: number;
+  lng: number;
+  accuracyM?: number;
+  capturedAt?: string;
+  reason?: string;
+}
+export interface GeoCorrectionResult {
+  ok: boolean;
+  idempotent?: boolean;
+  correctionId?: string;
+  oldLat?: number | null; oldLng?: number | null;
+  newLat?: number; newLng?: number;
+  distanceMovedKm?: number | null;
+  warehouseAfterKm?: number | null;
+  largeMove?: boolean;
+  reason?: string;
+  code?: string;
+}
+
+/** Dry-run: the server evaluates the gates + distances WITHOUT writing, so the
+ *  confirm sheet can show the authoritative move + whether it will be accepted. */
+export async function previewGeoCorrection(input: GeoCorrectionInput): Promise<GeoCorrectionResult> {
+  return api.post<GeoCorrectionResult>("/api/delivery/geo-correction", { ...input, preview: true });
+}
+
+/** Submit a correction through the offline queue. Idempotent via clientId, so an
+ *  offline replay never double-applies. Only the customer's coordinates change. */
+export async function submitGeoCorrection(input: GeoCorrectionInput & { clientId: string }) {
+  return mutate<GeoCorrectionResult>({
+    method: "POST",
+    path: "/api/delivery/geo-correction",
+    body: input,
+    label: `GPS fix — stop ${input.deliveryId.slice(-4)}`,
+    idemKey: input.clientId,
+  });
 }

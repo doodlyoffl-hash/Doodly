@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const STATUSES = ["SCHEDULED", "ASSIGNED", "ACCEPTED", "PACKED", "OUT_FOR_DELIVERY", "ON_THE_WAY", "REACHED", "DELIVERED", "FAILED", "SKIPPED"];
-const ADDR = { select: { houseNo: true, buildingName: true, floor: true, line1: true, line2: true, street: true, area: true, city: true, state: true, pincode: true, landmark: true, lat: true, lng: true, deliveryNote: true } } as const;
+const ADDR = { select: { id: true, houseNo: true, buildingName: true, floor: true, line1: true, line2: true, street: true, area: true, city: true, state: true, pincode: true, landmark: true, lat: true, lng: true, deliveryNote: true } } as const;
 
 type Addr = Prisma.AddressGetPayload<typeof ADDR> | null | undefined;
 function fmtAddr(a: Addr): string {
@@ -89,8 +89,9 @@ export const GET = route("admin.deliveries.list", async (req: NextRequest) => {
       date: d.date, status: d.status, packingStatus: d.packingStatus, slot: d.slot ?? null, sequence: d.sequence,
       bottleCount: d.bottleCount, bottlesIn: d.bottlesIn, cashCollected: d.cashCollected, note: d.customerRemark ?? null,
       bottlesOutstanding: user?.id ? (held.get(user.id) ?? 0) : 0,   // empties still with this customer
-      customer: user?.name ?? "—", mobile: user?.phone ?? "—",
+      customer: user?.name ?? "—", mobile: user?.phone ?? "—", customerId: user?.id ?? null,
       address: fmtAddr(addr), area: addr?.area ?? addr?.city ?? "—", pincode: addr?.pincode ?? null,
+      addressId: addr?.id ?? null,
       lat: addr?.lat ?? null, lng: addr?.lng ?? null, deliveryNote: addr?.deliveryNote ?? null,
       distanceKm: d.distanceKm, travelTimeMin: d.travelTimeMin, routeStatus: d.routeStatus, distanceSource: d.distanceSource,
       driver: d.driver ? { id: d.driver.id, name: d.driver.user.name, employeeId: d.driver.employeeId } : null,

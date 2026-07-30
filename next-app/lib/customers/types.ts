@@ -71,7 +71,7 @@ export interface CustomerProfile {
   createdAt: string;
   deletedAt: string | null;
 
-  addresses: { id: string; label: string; line1: string; line2: string | null; city: string; pincode: string; lat: number | null; lng: number | null; isDefault: boolean; deliveryNote: string | null; zone: string | null; executive: string | null }[];
+  addresses: { id: string; label: string; line1: string; line2: string | null; city: string; pincode: string; lat: number | null; lng: number | null; isDefault: boolean; deliveryNote: string | null; zone: string | null; executive: string | null; verified: boolean; verifiedAt: string | null; serviceable: boolean | null; distanceFromWarehouseKm: number | null; corrections: number; lastCorrectedAt: string | null }[];
   subscriptions: { id: string; shortId: string; status: string; plan: string; nextDeliveryAt: string | null; deliverySlot: string; autoRenew: boolean }[];
   orders: { id: string; type: string; status: string; totalPaise: number; createdAt: string }[];
   ordersTotal: number;
