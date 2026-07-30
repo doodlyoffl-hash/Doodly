@@ -1929,6 +1929,8 @@
     if (rroot) {
       var wireRte = function (id, fmt) { var b = rroot.querySelector(id); if (b && !b._rteWired) { b._rteWired = true; b.addEventListener("click", function () { exportRouteReport(_delDate || istTodayISO(), fmt); }); } };
       wireRte("#del-rte-pdf", "pdf"); wireRte("#del-rte-xls", "xls"); wireRte("#del-rte-csv", "csv");
+      var wireGps = function (id, fmt) { var b = rroot.querySelector(id); if (b && !b._gpsWired) { b._gpsWired = true; b.addEventListener("click", function () { exportGpsDistanceReport(_delDate || istTodayISO(), fmt); }); } };
+      wireGps("#del-gps-pdf", "pdf"); wireGps("#del-gps-xls", "xls"); wireGps("#del-gps-csv", "csv");
     }
   }
   /* Packing Summary card — bottles to pack BY SIZE for the selected delivery date.
@@ -2950,6 +2952,7 @@
     packingSheet: { path: "/api/admin/deliveries/packing-sheet/export", name: "DOODLY_Packing_Sheet", label: "packing sheet" },
     manifest: { path: "/api/admin/deliveries/manifest/export", name: "DOODLY_Delivery_Manifest", label: "delivery manifest" },
     routeReport: { path: "/api/admin/deliveries/route-report/export", name: "DOODLY_Route_Report", label: "route report" },
+    gpsDistance: { path: "/api/admin/deliveries/gps-distance/export", name: "DOODLY_GPS_Distance_Report", label: "GPS distance report" },
   };
   function exportOpsReport(kind, iso, format) {
     var cfg = OPS_REPORTS[kind]; if (!cfg) return;
@@ -2973,10 +2976,12 @@
   function exportPackingSheet(iso, format) { exportOpsReport("packingSheet", iso, format); }
   function exportManifest(iso, format) { exportOpsReport("manifest", iso, format); }
   function exportRouteReport(iso, format) { exportOpsReport("routeReport", iso, format); }
+  function exportGpsDistanceReport(iso, format) { exportOpsReport("gpsDistance", iso, format); }
   window.DOODLY_ADMIN.exportPackingList = exportPackingList;
   window.DOODLY_ADMIN.exportPackingSheet = exportPackingSheet;
   window.DOODLY_ADMIN.exportManifest = exportManifest;
   window.DOODLY_ADMIN.exportRouteReport = exportRouteReport;
+  window.DOODLY_ADMIN.exportGpsDistanceReport = exportGpsDistanceReport;
 
   /* ---- "View route" modal: one executive's OPTIMISED round trip for a day ----
      Ordered stops with per-leg + cumulative distance/ETA + a warehouse-anchored map,
