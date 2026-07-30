@@ -20,9 +20,12 @@ export const GET = route("admin.bottlePickups.list", async (req: NextRequest) =>
   const limit = Math.min(500, Math.max(1, Number(sp.get("limit")) || 200));
 
   const where: Prisma.BottlePickupRequestWhereInput = {};
-  if (status && STATUSES.includes(status)) where.status = status as BottlePickupStatus;
+  // "refunded" is a durable FACT (money credited), not a status — a completed refund rests at
+  // CLOSED (REFUNDED is only a transient sub-step in refundPickup), so match on refundedPaise > 0.
+  if (status === "refunded") where.refundedPaise = { gt: 0 };
   else if (status === "refund_pending") where.status = { in: ["COLLECTED", "VERIFIED"] };
   else if (status === "open") where.status = { in: ["REQUESTED", "SCHEDULED", "ASSIGNED", "IN_PROGRESS", "COLLECTED", "VERIFIED"] };
+  else if (status && STATUSES.includes(status)) where.status = status as BottlePickupStatus;
   if (q) where.user = { OR: [{ name: { contains: q, mode: "insensitive" } }, { phone: { contains: q } }] };
 
   const rows = await db.bottlePickupRequest.findMany({

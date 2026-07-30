@@ -1513,7 +1513,9 @@
     try { renderBottlePickups(mount, await DOODLY_API.get("/api/admin/bottle-pickups?status=" + _pickupFilter)); }
     catch (e) { mount.innerHTML = ""; }
   }
-  function pickupStageBadge(s) {
+  function pickupStageBadge(s, refundedPaise) {
+    // a refund rests at CLOSED with refundedPaise>0 — surface it as "Refunded", not "Completed".
+    if (refundedPaise > 0) return '<span class="badge green">Refunded</span>';
     var map = { REQUESTED: ["amber", "Requested"], SCHEDULED: ["blue", "Scheduled"], ASSIGNED: ["blue", "Assigned"], IN_PROGRESS: ["blue", "Out for pickup"], COLLECTED: ["amber", "Collected"], VERIFIED: ["amber", "Verified"], REFUNDED: ["green", "Refunded"], CLOSED: ["green", "Completed"], CANCELLED: ["grey", "Cancelled"] };
     var m = map[s] || ["grey", s]; return '<span class="badge ' + m[0] + '">' + m[1] + "</span>";
   }
@@ -1529,7 +1531,7 @@
       return "<tr><td><span class='strong'>" + esc(q.customer) + "</span>" + (q.mobile ? " <span class='muted-sm'>" + esc(q.mobile) + "</span>" : "") + "<br><span class='muted-sm'>" + esc(q.address) + "</span></td>" +
         "<td>" + q.bottlesCollected + "/" + q.bottlesExpected + "</td>" +
         "<td>" + (q.refundedPaise > 0 ? "₹" + Math.round(q.refundedPaise / 100) + " refunded" : "₹" + Math.round(q.refundablePaise / 100)) + "</td>" +
-        "<td>" + pickupStageBadge(q.status) + (q.driver ? "<br><span class='muted-sm'>" + esc(q.driver.name) + "</span>" : "") + "</td>" +
+        "<td>" + pickupStageBadge(q.status, q.refundedPaise) + (q.driver ? "<br><span class='muted-sm'>" + esc(q.driver.name) + "</span>" : "") + "</td>" +
         "<td>" + (acts.join(" ") || "—") + "</td></tr>";
     }).join("") || '<tr><td colspan="5" class="muted-sm">No bottle-return pickups.</td></tr>';
     mount.innerHTML =
@@ -1540,7 +1542,7 @@
           '<button type="button" class="btn btn-ghost sm" data-prep="pickups,pdf">Pickups PDF</button>' +
           '<button type="button" class="btn btn-ghost sm" data-prep="pickups,csv">CSV</button>' +
         "</span></div>" +
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">' + fbtn("open", "Open") + fbtn("refund_pending", "Refund pending") + fbtn("REFUNDED", "Refunded") + fbtn("", "All") + "</div>" +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">' + fbtn("open", "Open") + fbtn("refund_pending", "Refund pending") + fbtn("refunded", "Refunded") + fbtn("", "All") + "</div>" +
         '<div class="table-wrap"><table class="tbl"><thead><tr><th>Customer</th><th>Bottles</th><th>Deposit</th><th>Status</th><th></th></tr></thead><tbody>' + body + "</tbody></table></div></div>";
     mount.querySelectorAll("[data-pf]").forEach(function (b) { b.addEventListener("click", function () { _pickupFilter = b.dataset.pf; loadBottlePickups(); }); });
     mount.querySelectorAll("[data-prep]").forEach(function (b) { b.addEventListener("click", function () { var p = b.dataset.prep.split(","); exportBottleReport(p[0], p[1]); }); });

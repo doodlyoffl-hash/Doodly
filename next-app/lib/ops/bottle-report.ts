@@ -143,7 +143,7 @@ export async function pickupReport(): Promise<BottleReport> {
     select: { status: true, bottlesExpected: true, bottlesCollected: true, refundableDepositPaise: true, refundedPaise: true, requestedAt: true, user: { select: { name: true, phone: true } }, driver: { select: { employeeId: true, user: { select: { name: true } } } } },
   });
   const rows = reqs.map((r) => [
-    r.user?.name ?? "Customer", r.user?.phone ?? "—", r.status,
+    r.user?.name ?? "Customer", r.user?.phone ?? "—", r.refundedPaise > 0 ? "REFUNDED" : r.status,
     String(r.bottlesExpected), String(r.bottlesCollected), rup(r.refundableDepositPaise), rup(r.refundedPaise),
     r.driver ? (r.driver.user?.name ?? r.driver.employeeId ?? "—") : "—", r.requestedAt.toLocaleDateString("en-IN"),
   ]);
