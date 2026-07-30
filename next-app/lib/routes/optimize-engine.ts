@@ -30,10 +30,15 @@ export interface OptimizeResult {
 
 const SPEED_KMH = 22;                 // nominal city speed for the haversine fallback ETA
 const MAX_DIRECTIONS_STOPS = 23;      // Google Directions waypoint-optimisation ceiling
+// Straight-line (great-circle) distance systematically underestimates the actual road distance.
+// When Directions is unavailable we scale the haversine legs by a city road-detour factor so the
+// displayed distance/ETA are realistic. It is a constant, so it never changes the optimised ORDER
+// (which still ranks on raw haversine); only the reported metrics improve.
+const ROAD_DETOUR = 1.3;
 const gkey = () => { const v = process.env.GOOGLE_MAPS_API_KEY; return v && v.trim() ? v.trim() : undefined; };
 const finite = (p: RouteStopIn) => typeof p.lat === "number" && typeof p.lng === "number" && Number.isFinite(p.lat) && Number.isFinite(p.lng);
 const round2 = (n: number) => Math.round(n * 100) / 100;
-const havLeg = (a: Pt, b: Pt): RouteLeg => { const km = round2(haversineKm(a, b)); return { km, min: Math.max(1, Math.round((km / SPEED_KMH) * 60)) }; };
+const havLeg = (a: Pt, b: Pt): RouteLeg => { const km = round2(haversineKm(a, b) * ROAD_DETOUR); return { km, min: Math.max(1, Math.round((km / SPEED_KMH) * 60)) }; };
 
 // ---------- Google Directions (road, optimised order) ----------
 async function directionsOptimize(origin: Pt, pts: Pt[]): Promise<{ orderIdx: number[]; legs: RouteLeg[]; returnLeg: RouteLeg; polyline?: string } | null> {

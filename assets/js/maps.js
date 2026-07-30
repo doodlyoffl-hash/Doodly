@@ -488,17 +488,31 @@ window.DOODLY_MAPS = (function () {
     }
 
     function svgVariant() {
-      const pts = mapped.map((x) => toXY(x.s.lat, x.s.lng)), cp = toXY(cur.lat, cur.lng);
+      // Fit the projection to the ACTUAL points (warehouse + every stop, and the road geometry
+      // when present) so ALL pins are visible — the old fixed ~6 km box cut off any stop outside
+      // it. Aspect-preserving (lng compressed by cos(lat)) with a margin so pins aren't on the edge.
+      const box = mapped.map((x) => ({ lat: x.s.lat, lng: x.s.lng })).concat([{ lat: cur.lat, lng: cur.lng }]);
+      if (hasRoad) road.forEach((p) => box.push({ lat: p.lat, lng: p.lng }));
+      let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+      box.forEach((p) => { if (p.lat < minLat) minLat = p.lat; if (p.lat > maxLat) maxLat = p.lat; if (p.lng < minLng) minLng = p.lng; if (p.lng > maxLng) maxLng = p.lng; });
+      const midLat = (minLat + maxLat) / 2, lngK = Math.max(0.2, Math.cos(midLat * Math.PI / 180));
+      let wLng = (maxLng - minLng) * lngK, hLat = (maxLat - minLat);
+      if (!(wLng > 1e-9)) wLng = 0.01 * lngK;    // single point / same-location stops
+      if (!(hLat > 1e-9)) hLat = 0.01;
+      const scale = Math.min(1000 / wLng, 640 / hLat) * 0.86;   // 0.86 = margin
+      const offX = (1000 - wLng * scale) / 2, offY = (640 - hLat * scale) / 2;
+      const fit = (lat, lng) => ({ x: offX + (lng - minLng) * lngK * scale, y: offY + (maxLat - lat) * scale });
+      const pts = mapped.map((x) => fit(x.s.lat, x.s.lng)), cp = fit(cur.lat, cur.lng);
       let line;
       if (hasRoad) {
-        line = "M" + road.map((p) => { const q = toXY(p.lat, p.lng); return `${q.x},${q.y}`; }).join(" L");
+        line = "M" + road.map((p) => { const q = fit(p.lat, p.lng); return `${q.x},${q.y}`; }).join(" L");
       } else {
         line = `M${cp.x},${cp.y} ` + pts.map((p) => `L${p.x},${p.y}`).join(" ");
         if (roundTrip && pts.length) line += ` L${cp.x},${cp.y}`;   // close the loop back to the warehouse
       }
       host.classList.add("mp-route");
       host.innerHTML = `
-        <svg viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid slice" aria-label="Delivery route">${mapBg()}
+        <svg viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid meet" aria-label="Delivery route">${mapBg()}
           <path d="${line}" class="mp-route-line"/>
           <g transform="translate(${cp.x},${cp.y})"><circle r="12" fill="${MARK.wh}" opacity="0.22"/><circle r="8" fill="${MARK.wh}" stroke="#fff" stroke-width="2"/><text y="4" text-anchor="middle" fill="#fff" font-weight="800" font-size="10">W</text></g>
           ${mapped.map((x, k) => { const p = pts[k]; const cls = clsOf(x.s, x.i); const isCur = cls === "cur"; const col = MARK[cls] || MARK.up; return `<g class="mp-stop ${cls}" data-i="${x.i}" transform="translate(${p.x},${p.y})">${isCur ? '<circle r="21" fill="none" stroke="#1FAE66" stroke-width="3" opacity="0.95"/>' : ""}<circle r="15" fill="${col}" stroke="#fff" stroke-width="2"/><text y="5" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">${x.i + 1}</text></g>`; }).join("")}
