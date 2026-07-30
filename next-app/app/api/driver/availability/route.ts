@@ -68,8 +68,18 @@ export const POST = route("driver.availability.set", async (req: NextRequest) =>
   let shift = null;
   try { shift = available ? await openShift(d.id, loc) : await closeShift(d.id, loc); } catch (e) { console.error("shift.toggle", (e as Error)?.message); }
   // Central audit trail (in addition to the AssignmentLog STATUS_CHANGE) so shift start/end
-  // appears in the admin Audit Logs view alongside every other executive action.
-  try { const { audit } = await import("@/lib/auth/audit"); const { reqContext } = await import("@/lib/auth/request"); await audit({ userId, actorRole: "delivery_executive", action: available ? "shift.started" : "shift.ended", target: shift?.id ?? d.id, ctx: reqContext(req) }); } catch { /* non-blocking */ }
+  // — and the GPS-tracking lifecycle — appear in the admin Audit Logs view.
+  try {
+    const { audit } = await import("@/lib/auth/audit"); const { reqContext } = await import("@/lib/auth/request"); const ctx = reqContext(req);
+    await audit({ userId, actorRole: "delivery_executive", action: available ? "shift.started" : "shift.ended", target: shift?.id ?? d.id, ctx });
+    const km = (shift as { actualDistanceKm?: number } | null)?.actualDistanceKm ?? 0;
+    if (available) await audit({ userId, actorRole: "delivery_executive", action: "gps.tracking.started", target: shift?.id ?? d.id, ctx });
+    else if (shift) {
+      // close finalises the distance via recomputeShiftDistance — record both the tracking stop and the reconciliation
+      await audit({ userId, actorRole: "delivery_executive", action: "gps.tracking.stopped", target: `${shift.id} · ${km} km`, ctx });
+      await audit({ userId, actorRole: "delivery_executive", action: "shift.distance.recomputed", target: `${shift.id} · ${km} km`, ctx });
+    }
+  } catch { /* non-blocking */ }
 
   // Automatic assignment trigger: an executive starting their shift → sweep today's
   // waiting deliveries onto the now-available executives (idempotent, MANUAL-aware).

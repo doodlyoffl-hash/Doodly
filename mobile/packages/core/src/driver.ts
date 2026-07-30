@@ -93,11 +93,21 @@ export interface MyRoute {
   stops: RouteStop[];
 }
 
+export interface GpsTrackingConfig {
+  enabled: boolean;
+  sampleIntervalS: number;
+  minMoveM: number;
+  maxAccuracyM: number;
+}
+
 export interface Availability {
   availability: string;
   available: boolean;
   onTrip?: boolean;
   assignment?: unknown;
+  /** How the app should sample GPS during a shift (server-tunable). */
+  gpsConfig?: GpsTrackingConfig | null;
+  shift?: { id: string; startedAt?: string; actualDistanceKm?: number; plannedDistanceKm?: number | null; gpsPointCount?: number } | null;
 }
 
 export async function getSummary(): Promise<DriverSummary> {
@@ -115,9 +125,10 @@ export async function getAvailability(): Promise<Availability> {
 }
 
 /** Starting a shift also triggers the server's auto-assignment sweep, so
- *  stops can appear moments after this resolves. Refresh the route after. */
-export async function setAvailability(available: boolean): Promise<Availability> {
-  return api.post<Availability>("/api/driver/availability", { available });
+ *  stops can appear moments after this resolves. Refresh the route after.
+ *  Pass the current location to stamp the shift start/end (GPS distance tracking). */
+export async function setAvailability(available: boolean, loc?: { lat: number; lng: number }): Promise<Availability> {
+  return api.post<Availability>("/api/driver/availability", { available, ...(loc ? { lat: loc.lat, lng: loc.lng } : {}) });
 }
 
 /** The delivery-status transitions the app can make.
@@ -178,6 +189,36 @@ export async function updateStop(deliveryId: string, update: StopUpdate, label?:
 export async function pingLocation(lat: number, lng: number, accuracy?: number): Promise<void> {
   try { await api.post("/api/delivery/location", { lat, lng, accuracy }, { timeoutMs: 8000 }); }
   catch { /* best-effort by design */ }
+}
+
+/* ---------- continuous GPS distance tracking (shift-scoped) ---------- */
+export interface GpsTrackPoint {
+  lat: number;
+  lng: number;
+  accuracyM?: number | null;
+  speed?: number | null;
+  capturedAt: string;   // ISO
+  clientId: string;     // idempotency key per reading
+}
+export interface TrackResult {
+  shiftId: string | null;
+  accepted: number;
+  actualDistanceKm: number;
+  gpsPointCount: number;
+}
+
+/** Stream a BATCH of GPS fixes for the OPEN shift. Queued offline (FIFO); every
+ *  point carries a clientId so a replay after reconnect never double-counts. The
+ *  server computes the fraud-filtered travelled km — the app only samples + forwards.
+ *  Returns the offline-mutation result ({synced,...}), same shape as updateStop. */
+export async function postTrack(points: GpsTrackPoint[]) {
+  return mutate<TrackResult>({
+    method: "POST",
+    path: "/api/delivery/track",
+    body: { points },
+    label: `GPS ×${points.length}`,
+    idemKey: points[0]?.clientId,
+  });
 }
 
 /* ---------- GPS pin correction (Step 3–7) ---------- */

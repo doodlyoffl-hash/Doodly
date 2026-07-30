@@ -3,14 +3,14 @@
    Answers, in one glance and before any scrolling: am I on shift, how
    many stops are left, and is anything still waiting to sync.
    ============================================================= */
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { View, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { Screen, Card, Text, Money, Button, Badge, useTheme } from "@doodly/ui";
 import {
   useAuth, getDriverSummary, getAvailability, setAvailability, onQueueChange,
-  onConnectivityChange, sync, ApiError,
-  type DriverSummary, type Availability,
+  onConnectivityChange, sync, ApiError, getDeviceLocation, postTrack, ShiftGpsTracker,
+  type DriverSummary, type Availability, type GpsTrackingConfig,
 } from "@doodly/core";
 
 export default function DashboardScreen() {
@@ -25,6 +25,21 @@ export default function DashboardScreen() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
   const [online, setOnline] = useState(true);
+  const trackerRef = useRef<ShiftGpsTracker | null>(null);
+
+  // Continuous GPS distance tracking (foreground). The server computes the
+  // fraud-filtered km; the tracker only samples + forwards batches (queued offline).
+  const startTracking = useCallback((cfg?: GpsTrackingConfig | null) => {
+    if (trackerRef.current || cfg?.enabled === false) return;
+    const t = new ShiftGpsTracker({ sampleIntervalS: cfg?.sampleIntervalS, minMoveM: cfg?.minMoveM, onBatch: postTrack });
+    trackerRef.current = t;
+    void t.start().catch(() => {});
+  }, []);
+  const stopTracking = useCallback(async () => {
+    const t = trackerRef.current; trackerRef.current = null;
+    if (t) await t.stop();
+  }, []);
+  useEffect(() => () => { void stopTracking(); }, [stopTracking]);   // final-flush on unmount
 
   const load = useCallback(async () => {
     setError(null);
@@ -32,6 +47,7 @@ export default function DashboardScreen() {
       const [s, a] = await Promise.all([getDriverSummary(), getAvailability()]);
       setSummary(s);
       setAvail(a);
+      if (a.available) startTracking(a.gpsConfig);   // resume tracking on reload while on shift
     } catch (e) {
       // Offline is not an error state worth shouting about — the banner
       // already says so, and cached numbers stay on screen.
@@ -52,8 +68,11 @@ export default function DashboardScreen() {
     setToggling(true);
     setError(null);
     try {
-      const next = await setAvailability(!avail.available);
+      // Stamp the shift start/end GPS location (best-effort — never blocks the toggle).
+      const loc = await getDeviceLocation().then((f) => ({ lat: f.lat, lng: f.lng })).catch(() => undefined);
+      const next = await setAvailability(!avail.available, loc);
       setAvail(next);
+      if (next.available) startTracking(next.gpsConfig); else await stopTracking();
       // Starting a shift triggers the server's auto-assignment sweep, so the
       // stop counts change moments later.
       await load();

@@ -22,12 +22,13 @@ export { isOnline, onConnectivityChange, startConnectivityWatch } from "./net";
 export { AuthProvider, useAuth, WrongAppError, type AuthStatus } from "./AuthContext";
 export {
   getSummary as getDriverSummary, getRoute, getAvailability, setAvailability, updateStop, pingLocation,
-  previewGeoCorrection, submitGeoCorrection, routeNavLegs, isResolvedStop,
+  postTrack, previewGeoCorrection, submitGeoCorrection, routeNavLegs, isResolvedStop,
   type DriverSummary, type RouteStop, type StopStatus, type MyRoute,
   type Availability, type DeliveryAction, type StopUpdate,
   type GeoCorrectionInput, type GeoCorrectionResult,
+  type GpsTrackPoint, type TrackResult, type GpsTrackingConfig,
 } from "./driver";
-export { getDeviceLocation, type DeviceFix } from "./location";
+export { getDeviceLocation, ShiftGpsTracker, type DeviceFix, type TrackerFix, type ShiftTrackerOptions } from "./location";
 export {
   getCatalogue, variantsFor, variantPricePaise, isBuyable, isTrial, toPaise,
   type Catalogue, type CatalogueProduct, type CatalogueVariant,
