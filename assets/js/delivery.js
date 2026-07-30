@@ -48,7 +48,8 @@ window.DOODLY_DELIVERY = (function () {
       r.stops = (r.stops || []).map((s) => Object.assign({}, s, {
         noCoords: (s.lat == null || s.lng == null),
         instructions: s.instructions || "Deliver before 7 AM",
-        plan: s.itemLabel ? s.plan + " · " + s.itemLabel : s.plan,
+        // NOTE: the product is shown in the per-stop product block, so the header keeps
+        // just the plan name (no itemLabel enrichment) — avoids showing the product twice.
       }));
       _live = r;
       return true;
@@ -403,20 +404,20 @@ window.DOODLY_DELIVERY = (function () {
         })()}
         ${s2.noCoords
           ? `<div class="dl-stop-leg" style="color:#a15b12">${svg("pin", 12)} Location not pinned — distance unavailable. Ask the customer to set their map pin.</div>`
-          : (legTxt ? `<div class="dl-stop-leg">${svg("nav", 12)} ${legTxt}${s2.cumulativeKm != null ? ` · ${Number(s2.cumulativeKm).toFixed(1)} km cumulative` : ""}${stopEtaClock(s2) ? ` · ETA ~${stopEtaClock(s2)}` : ""}</div>` : "")}
+          : (legTxt ? `<div class="dl-stop-leg">${svg("nav", 12)} ${legTxt}${s2.cumulativeKm != null ? ` · ${Number(s2.cumulativeKm).toFixed(1)} km cumulative` : ""}${(!done && stopEtaClock(s2)) ? ` · ETA ~${stopEtaClock(s2)}` : ""}</div>` : "")}
         ${(s2.items && s2.items.length) ? `<div class="dl-items" style="margin:5px 0;padding:7px 10px;border-radius:8px;background:rgba(15,61,46,.05);font-size:.85rem">
           ${s2.items.map((it) => `<div style="display:flex;justify-content:space-between;gap:8px"><span>${svg("bottle", 12)} <b>${esc(it.label || (it.ml ? it.ml + "ml" : ""))}</b>${it.product ? " " + esc(it.product) : ""}</span><span>×${it.qty}${it.litres != null ? ` · ${it.litres} L` : ""}</span></div>`).join("")}
           ${s2.totalLitres ? `<div style="text-align:right;font-weight:700;margin-top:3px;color:#0F3D2E">Total ${s2.totalLitres} L</div>` : ""}
-        </div>` : ""}
+        </div>` : (!s2.isPickup && s2.itemLabel ? `<div class="dl-items" style="margin:5px 0;padding:7px 10px;border-radius:8px;background:rgba(15,61,46,.05);font-size:.85rem"><div style="display:flex;justify-content:space-between;gap:8px"><span>${svg("bottle", 12)} <b>${esc(s2.itemLabel)}</b></span><span>×${s2.qty}</span></div></div>` : "")}
         ${s2.instructions ? `<div class="dl-instr">${svg("alert", 13)} ${esc(s2.instructions)}</div>` : ""}
         ${("verified" in s2) ? `<div class="dl-geo" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:5px;font-size:.85rem">
           <span>${svg("pin", 12)} Location: ${s2.verified ? '<b style="color:#1FAE66">Verified pin</b>' : (s2.hasPin ? '<b style="color:#a15b12">Unverified pin</b>' : '<b style="color:#b3261e">No pin set</b>')}</span>
           ${s2.canCorrectGeo ? `<button class="btn btn-ghost" style="padding:3px 10px;font-size:.8rem" data-geo="${s2.id}">${svg("pin", 13)} Verify / Update location</button>` : ""}
         </div>` : ""}
         <div class="dl-steps">${WORKFLOW.map((w, i) => `<span class="dl-step ${i <= stepIdx ? "on" : ""}">${esc(w[1])}</span>`).join('<span class="dl-step-sep"></span>')}</div>
-        ${s2.ownership ? `<div class="muted-sm" style="margin:2px 0 4px">${svg("bottle", 12)} Existing with customer <b>${s2.ownership.existingWithCustomer}</b>${s2.ownership.newToDeliver ? ` · new to deliver <b>${s2.ownership.newToDeliver}</b>` : ""} · to collect <b>${s2.ownership.toCollect}</b></div>` : ""}
+        ${(s2.ownership && s2.ownership.existingWithCustomer > 0) ? `<div class="muted-sm" style="margin:2px 0 4px">${svg("bottle", 12)} Customer already holds <b>${s2.ownership.existingWithCustomer}</b> reusable bottle${s2.ownership.existingWithCustomer === 1 ? "" : "s"}</div>` : ""}
         <div class="dl-bottles">
-          <span>${svg("bottle", 14)} Empties to collect <b>${owed}</b> · collected <b>${collected}</b> · pending <b>${pendingB}</b>${s2.bottlesExpected ? ` <small class="muted-sm">· deliver ${s2.bottlesExpected} today</small>` : ""}</span>
+          <span>${svg("bottle", 14)} Empties to collect <b>${owed}</b> · collected <b>${collected}</b> · pending <b>${pendingB}</b></span>
           <span class="dl-bottle-btns"><button class="dl-mini" data-bdec="${s2.id}">−</button><button class="dl-mini" data-binc="${s2.id}">+</button></span>
         </div>
         <div class="dl-comm">
