@@ -78,6 +78,10 @@ enum DeliveryStatus {
   DELIVERED
   FAILED
   SKIPPED
+  PARTIALLY_DELIVERED   // some (not all) of the order handed over
+  CUSTOMER_UNAVAILABLE  // nobody at the door
+  RESCHEDULED           // exec deferred the stop to another day
+  CANCELLED             // stop cancelled at the door
 }
 
 enum IssueType {
@@ -934,6 +938,7 @@ model Delivery {
   otp            String?                           // delivery OTP
   podPhotoUrl    String?                           // proof-of-delivery (Cloudinary)
   customerRemark String?
+  execRemark     String?                           // the executive's own note on the delivered / partial / failed outcome
   adjustReason   String?                           // why this stop was SKIPPED/FAILED/adjusted (OPS_MISSED, CUSTOMER_REQUESTED, …)
   adjustNote     String?                           // free-text remark for the adjustment
   cashCollected  Int            @default(0)        // paise, COD
@@ -1786,6 +1791,7 @@ model Driver {                                    // = Delivery Executive (own /
   assignmentLogs AssignmentLog[]
   geoCorrections GeoCorrection[]                   // GPS pin corrections performed by this executive
   bottlePickups  BottlePickupRequest[]             // bottle-return pickups assigned to this executive
+  shifts         Shift[]                           // work shifts (start/end + totals)
 }
 
 model DeliveryIssue {
@@ -2148,6 +2154,31 @@ model ExecutiveStatus {
   assignedBottles Int              @default(0)        // bottles currently loaded for the live trip
   lastChangedAt   DateTime         @updatedAt
   @@index([availability])
+}
+
+// A delivery executive's work shift — opened on Start Shift, closed on End Shift.
+// Durable log of hours worked + the shift's delivery/distance/bottle totals.
+// (ExecutiveStatus.availability is the LIVE state; Shift is the historical record.)
+model Shift {
+  id               String      @id @default(cuid())
+  driverId         String
+  driver           Driver      @relation(fields: [driverId], references: [id])
+  status           ShiftStatus @default(OPEN)
+  startedAt        DateTime    @default(now())
+  endedAt          DateTime?
+  workedMinutes    Int?                              // computed on close
+  deliveriesCount  Int         @default(0)           // delivered stops during the shift
+  distanceKm       Float       @default(0)           // Σ leg distance of delivered stops
+  bottlesDelivered Int         @default(0)           // Σ bottlesOut over the shift
+  bottlesCollected Int         @default(0)           // Σ bottlesIn over the shift
+  createdAt        DateTime    @default(now())
+  @@index([driverId, startedAt])
+  @@index([driverId, status])
+}
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
 }
 
 // A delivery assigned to an executive on a trip. deliveryId is UNIQUE → a
