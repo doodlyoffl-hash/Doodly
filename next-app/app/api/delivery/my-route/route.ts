@@ -44,6 +44,7 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
 
   const include = {
     address: true,   // the delivery's own pinned address snapshot — the authoritative stop location
+    user: { select: { id: true, name: true, phone: true } },   // direct customer (bottle-return PICKUP has no sub/order)
     subscription: { include: { user: { select: { id: true, name: true, phone: true } }, address: true, items: { include: { variant: { select: { label: true, product: { select: { name: true } } } } } }, plan: { select: { name: true } } } },
     order: { include: { user: { select: { id: true, name: true, phone: true } }, address: true, payment: { select: { method: true, status: true } } } },
     route: { select: { id: true, name: true, code: true } },
@@ -75,7 +76,7 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
 
   // Rolled-forward empties each customer still holds (the spec's "expected" to collect),
   // batched over every stop's customer so there's no N+1.
-  const held = await heldByUsers(rows.map((d) => d.subscription?.user?.id ?? d.order?.user?.id).filter(Boolean) as string[]);
+  const held = await heldByUsers(rows.map((d) => d.subscription?.user?.id ?? d.order?.user?.id ?? d.userId).filter(Boolean) as string[]);
 
   // Geo-correction eligibility: the feature is on, and the executive is on-shift.
   // Per-stop we additionally require the stop to still be active (not delivered/failed/skipped).
@@ -85,7 +86,8 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
   const canCorrectBase = geoCfg.enabled && (!geoCfg.requireShift || onShift);
 
   const stops = rows.map((d, i) => {
-    const cust = d.subscription?.user ?? d.order?.user ?? null;
+    const cust = d.subscription?.user ?? d.order?.user ?? d.user ?? null;
+    const isPickup = d.kind === "PICKUP";
     // authoritative stop location: the delivery's own snapshot, else the subscription's,
     // else the one-time order's address (one-time orders have no subscription).
     const addr = d.address ?? d.subscription?.address ?? d.order?.address ?? null;
@@ -106,11 +108,15 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
       block: addr?.block ?? null, wing: addr?.wing ?? null, gateNumber: addr?.gateNumber ?? null, doorColor: addr?.doorColor ?? null,
       area: addr?.area || addr?.city || "", city: addr?.city ?? "", state: addr?.state ?? "", pincode: addr?.pincode ?? "",
       lat: addr?.lat ?? null, lng: addr?.lng ?? null,
-      plan: d.subscription?.plan?.name ?? (d.order ? "One-time order" : "Delivery"),
+      plan: isPickup ? "Bottle return pickup" : (d.subscription?.plan?.name ?? (d.order ? "One-time order" : "Delivery")),
       qty: item?.qty ?? 1,
       itemLabel: item ? `${item.variant.label} ${item.variant.product.name}` : "",
-      instructions: addr?.deliveryNote ?? "",
-      bottlesExpected: d.bottleCount ?? 1,          // milk bottles to HAND OVER today
+      instructions: isPickup ? (addr?.deliveryNote ?? "Collect the customer's empty glass bottles for their deposit refund.") : (addr?.deliveryNote ?? ""),
+      // ---- bottle-return pickup (Step 4): collect empties, hand over nothing ----
+      kind: d.kind,
+      isPickup,
+      bottlesExpected: isPickup ? 0 : (d.bottleCount ?? 1),   // milk bottles to HAND OVER (0 for a pickup)
+      bottlesToCollect: isPickup ? (d.bottleCount ?? 0) : 0,  // empties the exec must collect on a pickup
       bottlesCollected: d.bottlesIn ?? 0,           // empties collected today
       bottlesOutstanding: cust?.id ? (held.get(cust.id) ?? 0) : 0,   // empties the customer still holds (EXPECTED to collect)
       payment: cod && d.order ? `COD ₹${Math.round(d.order.totalPaise / 100)}` : "Paid",

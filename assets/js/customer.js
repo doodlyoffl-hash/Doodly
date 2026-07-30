@@ -100,6 +100,65 @@ window.DOODLY_CUSTOMER = (function () {
     var page = host.dataset.page || "dashboard";
     var cards = page === "bottles" ? bottlesCards() : page === "rewards" ? rewardsCards() : dashboardCards();
     host.innerHTML = '<div class="cu-kpis">' + cards.map(kpiCard).join("") + '</div>';
+    if (page === "bottles") mountBottleDeposit(host);
+  }
+
+  /* ---------- Bottle Deposit & Return (customer-initiated final pickup + refund) ---------- */
+  function api() { return window.DOODLY_API; }
+  function rup(p) { return "₹" + Math.round((p || 0) / 100).toLocaleString("en-IN"); }
+  var PICKUP_STAGE = { REQUESTED: "Requested", SCHEDULED: "Scheduled", ASSIGNED: "Assigned", IN_PROGRESS: "Out for pickup", COLLECTED: "Bottles collected", VERIFIED: "Verified", REFUNDED: "Refunded", CLOSED: "Completed", CANCELLED: "Cancelled" };
+  function mountBottleDeposit(kpiHost) {
+    if (!api()) return;
+    var mount = document.getElementById("cuBottleDeposit");
+    if (!mount) { mount = document.createElement("div"); mount.id = "cuBottleDeposit"; kpiHost.parentNode.insertBefore(mount, kpiHost.nextSibling); }
+    api().get("/api/account/bottle-pickup").then(function (r) { renderBottleDeposit(mount, r); }).catch(function () { mount.innerHTML = ""; });
+  }
+  function renderBottleDeposit(mount, r) {
+    var d = (r && r.deposit) || {}, reqs = (r && r.requests) || [];
+    var rows = reqs.map(function (q) {
+      return '<div class="row"><span class="k">' + fmtDate(new Date(q.requestedAt)) + ' · ' + q.bottlesExpected + ' bottle' + (q.bottlesExpected === 1 ? "" : "s") + '</span>' +
+        '<span class="v"><span class="badge ' + (q.status === "REFUNDED" || q.status === "CLOSED" ? "green" : q.status === "CANCELLED" ? "grey" : "amber") + '">' + (PICKUP_STAGE[q.status] || q.status) + '</span>' +
+        (q.refundedPaise > 0 ? ' · ' + rup(q.refundedPaise) + ' refunded' : "") + '</span></div>';
+    }).join("") || '<div class="muted-sm">No pickup requests yet.</div>';
+    mount.innerHTML = '<div class="panel reveal" style="margin-top:14px"><div class="panel-head"><h3>Bottle deposit</h3>' +
+      (r && r.canRequest ? '<button class="btn btn-primary sm" id="cuReqReturn">Request bottle return</button>' : "") + '</div><div class="panel-pad">' +
+      '<div class="deflist">' +
+        '<div class="row"><span class="k">Deposit paid</span><span class="v">' + rup(d.paidPaise) + '</span></div>' +
+        '<div class="row"><span class="k">Refunded to wallet</span><span class="v">' + rup(d.refundedPaise) + '</span></div>' +
+        '<div class="row"><span class="k">Refundable (held)</span><span class="v"><b>' + rup(d.heldPaise) + '</b></span></div>' +
+        '<div class="row"><span class="k">Outstanding bottles</span><span class="v">' + (d.outstandingBottles || 0) + '</span></div>' +
+      '</div>' +
+      '<div style="margin-top:12px"><div class="strong" style="margin-bottom:6px">Pickup requests</div><div class="deflist">' + rows + '</div></div>' +
+      (r && !r.canRequest && (d.outstandingBottles || 0) > 0 ? '<p class="muted-sm" style="margin-top:8px">A pickup request is already in progress.</p>' : "") +
+      ((d.outstandingBottles || 0) === 0 ? '<p class="muted-sm" style="margin-top:8px">You have no bottles to return right now.</p>' : "") +
+      '</div></div>';
+    var btn = mount.querySelector("#cuReqReturn");
+    if (btn) btn.addEventListener("click", function () { requestReturnModal(mount, d); });
+  }
+  function requestReturnModal(mount, d) {
+    var m = document.createElement("div"); m.className = "dl-modal";
+    m.innerHTML = '<div class="dl-modal-card" role="dialog" aria-modal="true" aria-label="Request bottle return">' +
+      '<div class="dl-modal-head"><h3>Request bottle return</h3><button class="dl-x" aria-label="Close">✕</button></div>' +
+      '<p class="dl-modal-sub">' + (d.outstandingBottles || 0) + ' bottle' + ((d.outstandingBottles || 0) === 1 ? "" : "s") + ' · refundable ' + rup(d.heldPaise) + ' to your DOODLY Wallet</p>' +
+      '<label class="dl-f"><span>Preferred date</span><input type="date" id="cuPickDate" class="input"></label>' +
+      '<label class="dl-f"><span>Preferred time slot</span><select id="cuPickSlot" class="input"><option value="">Any slot</option><option>6:00-8:00 AM</option><option>8:00-10:00 AM</option><option>4:00-6:00 PM</option></select></label>' +
+      '<textarea class="dl-notes" id="cuPickNote" placeholder="Notes for the pickup (optional)"></textarea>' +
+      '<button class="btn btn-primary dl-confirm" id="cuPickSubmit">Submit pickup request</button></div>';
+    document.body.appendChild(m); requestAnimationFrame(function () { m.classList.add("show"); });
+    var close = function () { m.classList.remove("show"); setTimeout(function () { m.remove(); }, 250); };
+    m.addEventListener("click", function (e) { if (e.target === m || e.target.closest(".dl-x")) close(); });
+    m.querySelector("#cuPickSubmit").addEventListener("click", function () {
+      var btn = m.querySelector("#cuPickSubmit"); btn.disabled = true;
+      var body = {};
+      var dt = m.querySelector("#cuPickDate").value; if (dt) body.preferredDate = new Date(dt + "T00:00:00.000Z").toISOString();
+      var sl = m.querySelector("#cuPickSlot").value; if (sl) body.preferredSlot = sl;
+      var nt = (m.querySelector("#cuPickNote").value || "").trim(); if (nt) body.note = nt;
+      api().post("/api/account/bottle-pickup", body).then(function () {
+        close(); if (window.dacToast) dacToast("Bottle-return request submitted — we'll schedule your pickup."); mountBottleDeposit(mount.previousSibling || mount);
+        // re-fetch onto our own mount
+        api().get("/api/account/bottle-pickup").then(function (r) { renderBottleDeposit(mount, r); });
+      }).catch(function (e) { btn.disabled = false; if (window.dacToast) dacToast((e && e.message) || "Couldn't submit the request."); });
+    });
   }
 
   /* ---------- live subscription card (dashboard) ---------- */

@@ -199,6 +199,14 @@ export default function StopScreen() {
           <Badge label={statusLabel(stop.status)} intent={statusIntent(stop.status)} />
         </View>
 
+        {stop.isPickup ? (
+          <Card elevated={false} style={{ marginBottom: space.md, backgroundColor: colors.mintSoft, borderColor: colors.leaf }}>
+            <Text variant="label" tone="brand">Bottle return pickup</Text>
+            <Text variant="small" tone="muted" style={{ marginTop: 2 }}>
+              Collect {stop.bottlesToCollect ?? stop.bottlesExpected} empty bottle{(stop.bottlesToCollect ?? stop.bottlesExpected) === 1 ? "" : "s"} for the customer's deposit refund. Record the count below to complete the pickup.
+            </Text>
+          </Card>
+        ) : null}
         {notice ? (
           <Card elevated={false} style={{ marginBottom: space.md, backgroundColor: colors.mintSoft, borderColor: colors.leaf }}>
             <Text variant="small" tone="brand">{notice}</Text>

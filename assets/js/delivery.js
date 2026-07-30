@@ -315,9 +315,10 @@ window.DOODLY_DELIVERY = (function () {
         ${isCur ? `<div class="dl-stop-cur">${svg("nav", 12)} Current stop</div>` : ""}
         <div class="dl-stop-top">
           <span class="dl-seq">${s2.seq}</span>
-          <div class="dl-stop-id"><b>${esc(s2.name)}</b><small>${esc(s2.plan)} · ${s2.qty} bottle${s2.qty > 1 ? "s" : ""}</small></div>
-          <span class="badge ${s2.payment === "Paid" ? "green" : "amber"}">${esc(s2.payment)}</span>
+          <div class="dl-stop-id"><b>${esc(s2.name)}</b><small>${esc(s2.plan)}${s2.isPickup ? "" : ` · ${s2.qty} bottle${s2.qty > 1 ? "s" : ""}`}</small></div>
+          <span class="badge ${s2.isPickup ? "amber" : (s2.payment === "Paid" ? "green" : "amber")}">${s2.isPickup ? "Pickup" : esc(s2.payment)}</span>
         </div>
+        ${s2.isPickup ? `<div style="margin:2px 0 6px;padding:6px 10px;border-radius:8px;background:rgba(31,174,102,.1);font-size:.85rem;font-weight:600;color:#137a45">${svg("bottle", 13)} Bottle return pickup — collect <b>${(s2.bottlesToCollect != null ? s2.bottlesToCollect : stOwed(s2))}</b> empt${((s2.bottlesToCollect != null ? s2.bottlesToCollect : stOwed(s2))) === 1 ? "y" : "ies"} for the customer's deposit refund</div>` : ""}
         ${(function () {
           const main = [s2.houseNo, s2.buildingName, s2.floor].filter(Boolean).join(", ") || s2.address;
           const loc = [s2.street, s2.area, s2.pincode].filter(Boolean).join(", ");

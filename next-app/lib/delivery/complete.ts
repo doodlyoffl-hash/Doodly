@@ -28,16 +28,20 @@ export async function completeDelivery(deliveryId: string, opts: CompleteDeliver
     where: { id: deliveryId },
     select: {
       id: true, status: true, bottleCount: true, addressId: true, subscriptionId: true, orderId: true,
+      userId: true, kind: true,
       subscription: { select: { userId: true, addressId: true, items: { select: { qty: true, variant: { select: { ml: true } } } } } },
       order: { select: { userId: true } },
+      pickupRequest: { select: { id: true } },
     },
   });
   if (!del) return null;
   if (del.status === "DELIVERED") return { idempotent: true as const, delivery: { id: del.id, status: "DELIVERED" as const } };
 
-  const custId = del.subscription?.userId ?? del.order?.userId ?? null;
+  // A PICKUP has no subscription/order — its customer is the direct Delivery.userId.
+  const custId = del.subscription?.userId ?? del.order?.userId ?? del.userId ?? null;
   const bottlesIn = Math.max(0, opts.bottlesIn ?? 0);
-  const bottlesOut = Math.max(0, opts.bottlesOut ?? del.bottleCount ?? 0);
+  // A PICKUP hands over nothing (its bottleCount is empties-to-collect, not milk to issue).
+  const bottlesOut = Math.max(0, opts.bottlesOut ?? (del.kind === "PICKUP" ? 0 : del.bottleCount ?? 0));
   // Pin the address actually delivered to (history snapshot) so a later address change can't rewrite it.
   const snapshotAddressId = del.addressId ?? del.subscription?.addressId ?? null;
 
@@ -121,6 +125,12 @@ export async function completeDelivery(deliveryId: string, opts: CompleteDeliver
   // auto-renewing plans.
   if (del.subscriptionId) {
     try { const { maybeCompleteSubscription } = await import("@/lib/subscriptions/deliveries"); await maybeCompleteSubscription(del.subscriptionId); } catch { /* non-blocking */ }
+  }
+
+  // Bottle-return pickup: advance the request (→ COLLECTED) and, per policy, auto-refund
+  // the deposit to the wallet. Best-effort — never blocks the completion.
+  if (del.kind === "PICKUP" && del.pickupRequest) {
+    try { const { onPickupCollected } = await import("@/lib/bottles/pickup"); await onPickupCollected(del.pickupRequest.id, { bottlesCollected: bottlesIn }); } catch { /* non-blocking */ }
   }
 
   return { idempotent: false as const, delivery };

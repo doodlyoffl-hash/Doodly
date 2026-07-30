@@ -66,6 +66,10 @@ export interface RouteStop {
   hasPin?: boolean;
   /** Whether this executive may correct the customer's GPS pin right now. */
   canCorrectGeo?: boolean;
+  /** Bottle-return pickup (collect empties for a deposit refund) vs a normal delivery. */
+  kind?: "DELIVERY" | "PICKUP";
+  isPickup?: boolean;
+  bottlesToCollect?: number;
 }
 
 export type StopStatus = "assigned" | "onway" | "reached" | "delivered";

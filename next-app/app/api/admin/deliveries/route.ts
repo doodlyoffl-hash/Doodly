@@ -50,9 +50,10 @@ export const GET = route("admin.deliveries.list", async (req: NextRequest) => {
     orderBy: [{ slot: "asc" }, { sequence: "asc" }, { date: "asc" }],
     take: 1000,
     select: {
-      id: true, orderId: true, date: true, status: true, packingStatus: true, slot: true, sequence: true,
+      id: true, orderId: true, date: true, status: true, packingStatus: true, slot: true, sequence: true, kind: true, userId: true,
       bottleCount: true, bottlesIn: true, cashCollected: true, customerRemark: true,
       distanceKm: true, travelTimeMin: true, routeStatus: true, distanceSource: true,   // warehouse distance engine
+      user: { select: { id: true, name: true, phone: true } },   // direct customer (bottle-return PICKUP)
       driver: { select: { id: true, employeeId: true, user: { select: { name: true } } } },
       route: { select: { id: true, code: true, name: true } },
       address: ADDR,
@@ -73,11 +74,12 @@ export const GET = route("admin.deliveries.list", async (req: NextRequest) => {
   });
 
   // Outstanding empties each customer still holds — the "expected to collect" total, batched.
-  const held = await heldByUsers(rows.map((d) => d.subscription?.user?.id ?? d.order?.user?.id).filter(Boolean) as string[]);
+  const held = await heldByUsers(rows.map((d) => d.subscription?.user?.id ?? d.order?.user?.id ?? d.userId).filter(Boolean) as string[]);
 
   const deliveries = rows.map((d) => {
     const isSub = !!d.subscription;
-    const user = d.subscription?.user ?? d.order?.user ?? null;
+    const isPickup = d.kind === "PICKUP";
+    const user = d.subscription?.user ?? d.order?.user ?? d.user ?? null;
     const addr = d.address ?? d.subscription?.address ?? d.order?.address ?? null;
     const oid = d.orderId ?? d.subscription?.order?.id ?? null;
     const products = isSub
@@ -96,9 +98,10 @@ export const GET = route("admin.deliveries.list", async (req: NextRequest) => {
       distanceKm: d.distanceKm, travelTimeMin: d.travelTimeMin, routeStatus: d.routeStatus, distanceSource: d.distanceSource,
       driver: d.driver ? { id: d.driver.id, name: d.driver.user.name, employeeId: d.driver.employeeId } : null,
       route: d.route ? (d.route.code || d.route.name || null) : null,
-      products: products || "—",
-      type: isSub ? "Subscription" : "One-time",
-      plan: d.subscription?.plan?.name ?? null,
+      products: isPickup ? "Empty bottle collection" : (products || "—"),
+      kind: d.kind,
+      type: isPickup ? "Bottle pickup" : (isSub ? "Subscription" : "One-time"),
+      plan: isPickup ? "Bottle return pickup" : (d.subscription?.plan?.name ?? null),
       paymentStatus: d.order?.status ?? d.subscription?.order?.status ?? (isSub ? "SUBSCRIPTION" : "—"),
       paymentMethod: d.order?.payment?.method ?? null,
       invoiceNumber: d.order?.invoice?.number ?? d.subscription?.order?.invoice?.number ?? null,

@@ -56,6 +56,10 @@ async function postTxn(tx: Tx, p: {
   userId: string; type: "CREDIT" | "DEBIT"; kind: string; amountPaise: number;
   reason: string; description?: string; subscriptionId?: string; orderId?: string;
   createdById?: string; reversedTxnId?: string;
+  /** Caller-supplied idempotency key. When set, it becomes the WalletTxn.reference and a
+      collision (P2002) is NOT retried — it propagates so the caller can treat it as a
+      duplicate. When omitted, a unique reference is generated + retried on collision. */
+  reference?: string;
 }) {
   const user = await tx.user.update({
     where: { id: p.userId },
@@ -68,13 +72,16 @@ async function postTxn(tx: Tx, p: {
       const txn = await tx.walletTxn.create({
         data: {
           userId: p.userId, type: p.type, kind: p.kind, amountPaise: p.amountPaise, balanceAfterPaise,
-          reference: generateReference(), description: p.description, reason: p.reason,
+          reference: p.reference ?? generateReference(), description: p.description, reason: p.reason,
           subscriptionId: p.subscriptionId, orderId: p.orderId, createdById: p.createdById, reversedTxnId: p.reversedTxnId,
         },
       });
       return { txn, balancePaise: balanceAfterPaise };
     } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && String(e.meta?.target).includes("reference")) continue;
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && String(e.meta?.target).includes("reference")) {
+        if (p.reference) throw e;   // fixed idempotency key already used → let the caller dedupe
+        continue;                   // generated reference collided → try another
+      }
       throw e;
     }
   }
@@ -373,29 +380,49 @@ export async function creditReferralReward(args: { referrerId: string; refereeId
  * Guards: amount must be positive AND not exceed what the customer still has on
  * deposit (deposits charged on paid orders − deposits already refunded).
  */
-export async function refundBottleDeposit(args: { userId: string; amountPaise: number; qty?: number; note?: string } & Actor) {
+export async function refundBottleDeposit(args: { userId: string; amountPaise: number; qty?: number; note?: string; reference?: string } & Actor) {
   const amt = Math.round(args.amountPaise);
   if (!Number.isFinite(amt) || amt <= 0) throw new Error("Refund amount must be positive");
   const qty = Math.max(0, Math.round(args.qty ?? 0));
-  const result = await withRetry(() => db.$transaction(async (tx) => {
-    // deposit still held = deposits collected on PAID orders − already refunded
-    const [charged, refunded] = await Promise.all([
-      tx.order.aggregate({ where: { userId: args.userId, status: "PAID" }, _sum: { depositPaise: true } }),
-      tx.bottleLedger.aggregate({ where: { userId: args.userId, event: "DEPOSIT_REFUNDED" }, _sum: { amountPaise: true } }),
-    ]);
-    const held = (charged._sum.depositPaise ?? 0) - (refunded._sum.amountPaise ?? 0);
-    if (amt > held) throw new Error(`Refund exceeds the deposit on file (₹${Math.floor(held / 100)} held).`);
 
-    const ledger = await tx.bottleLedger.create({
-      data: { userId: args.userId, event: "DEPOSIT_REFUNDED", qty, amountPaise: amt, note: args.note || "Bottle deposit refund" },
-    });
-    const { txn, balancePaise } = await postTxn(tx, {
-      userId: args.userId, type: "CREDIT", kind: "refund", amountPaise: amt,
-      reason: "bottle_deposit_refund", description: `Bottle deposit refund${qty ? ` (${qty} bottle${qty > 1 ? "s" : ""})` : ""} · ${ledger.id}`,
-      createdById: args.actorId,
-    });
-    return { refundedPaise: amt, balancePaise, reference: txn.reference, ledgerId: ledger.id, heldAfterPaise: held - amt };
-  }, TX));
+  // Idempotency: if a refund with this key already posted, return it without double-crediting.
+  const dupResult = async () => {
+    if (!args.reference) return null;
+    const ex = await db.walletTxn.findUnique({ where: { reference: args.reference }, select: { reference: true, amountPaise: true, balanceAfterPaise: true } });
+    return ex ? { refundedPaise: ex.amountPaise, balancePaise: ex.balanceAfterPaise, reference: ex.reference, ledgerId: null as string | null, heldAfterPaise: null as number | null, idempotent: true } : null;
+  };
+  const pre = await dupResult();
+  if (pre) return pre;
+
+  let result;
+  try {
+    result = await withRetry(() => db.$transaction(async (tx) => {
+      // deposit still held = deposits collected on PAID orders − already refunded
+      const [charged, refunded] = await Promise.all([
+        tx.order.aggregate({ where: { userId: args.userId, status: "PAID" }, _sum: { depositPaise: true } }),
+        tx.bottleLedger.aggregate({ where: { userId: args.userId, event: "DEPOSIT_REFUNDED" }, _sum: { amountPaise: true } }),
+      ]);
+      const held = (charged._sum.depositPaise ?? 0) - (refunded._sum.amountPaise ?? 0);
+      if (amt > held) throw new Error(`Refund exceeds the deposit on file (₹${Math.floor(held / 100)} held).`);
+
+      const ledger = await tx.bottleLedger.create({
+        data: { userId: args.userId, event: "DEPOSIT_REFUNDED", qty, amountPaise: amt, note: args.note || "Bottle deposit refund" },
+      });
+      const { txn, balancePaise } = await postTxn(tx, {
+        userId: args.userId, type: "CREDIT", kind: "refund", amountPaise: amt,
+        reason: "bottle_deposit_refund", description: `Bottle deposit refund${qty ? ` (${qty} bottle${qty > 1 ? "s" : ""})` : ""} · ${ledger.id}`,
+        createdById: args.actorId, reference: args.reference,
+      });
+      return { refundedPaise: amt, balancePaise, reference: txn.reference, ledgerId: ledger.id as string | null, heldAfterPaise: held - amt, idempotent: false };
+    }, TX));
+  } catch (e) {
+    // Lost a race on the idempotency key → the winning refund already applied; return it.
+    if (args.reference && e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && String(e.meta?.target).includes("reference")) {
+      const dup = await dupResult();
+      if (dup) return dup;
+    }
+    throw e;
+  }
   // in-app + WhatsApp confirmation (deposit_refunded live vars: [amount])
   await notify(args.userId, {
     title: `₹${rsTxt(amt)} deposit refunded`,

@@ -1485,6 +1485,7 @@
       bkRemount("bottleMoves");
       bkBanner(document.querySelector('.dt-host[data-dataset="bottleMoves"]'), "● Live — fleet of " + (k.totalOwned || 0).toLocaleString("en-IN") + " bottles · " + rows.length + " recent movement(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
       await loadBottleOutstanding();
+      await loadBottlePickups();
     } catch (e) {
       bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live fleet." : e.code === "forbidden" ? "⚠ Your role can't view bottle inventory (403)." : "⚠ " + (e.message || "Couldn't load bottle inventory."), "err");
     }
@@ -1500,6 +1501,82 @@
     if (!mount) { mount = document.createElement("div"); mount.id = "bottleOutstandingMount"; panel.parentNode.insertBefore(mount, panel); }
     try { renderBottleOutstanding(mount, await DOODLY_API.get("/api/admin/bottles/outstanding")); }
     catch (e) { mount.innerHTML = ""; }
+  }
+
+  // ---- Bottle-return pickups + deposit refunds (customer-requested) ----
+  var _pickupFilter = "open";
+  async function loadBottlePickups() {
+    var anchor = document.querySelector('.dt-host[data-dataset="bottleMoves"]'); if (!anchor) return;
+    var panel = anchor.closest(".panel") || anchor;
+    var mount = document.getElementById("bottlePickupsMount");
+    if (!mount) { mount = document.createElement("div"); mount.id = "bottlePickupsMount"; panel.parentNode.insertBefore(mount, panel); }
+    try { renderBottlePickups(mount, await DOODLY_API.get("/api/admin/bottle-pickups?status=" + _pickupFilter)); }
+    catch (e) { mount.innerHTML = ""; }
+  }
+  function pickupStageBadge(s) {
+    var map = { REQUESTED: ["amber", "Requested"], SCHEDULED: ["blue", "Scheduled"], ASSIGNED: ["blue", "Assigned"], IN_PROGRESS: ["blue", "Out for pickup"], COLLECTED: ["amber", "Collected"], VERIFIED: ["amber", "Verified"], REFUNDED: ["green", "Refunded"], CLOSED: ["green", "Completed"], CANCELLED: ["grey", "Cancelled"] };
+    var m = map[s] || ["grey", s]; return '<span class="badge ' + m[0] + '">' + m[1] + "</span>";
+  }
+  function renderBottlePickups(mount, r) {
+    var rows = (r && r.rows) || [];
+    var fbtn = function (k, lbl) { return '<button type="button" class="btn ' + (_pickupFilter === k ? "btn-primary" : "btn-ghost") + ' sm" data-pf="' + k + '">' + lbl + "</button>"; };
+    var body = rows.map(function (q) {
+      var acts = [];
+      if (["REQUESTED", "SCHEDULED", "ASSIGNED"].indexOf(q.status) > -1) acts.push('<button class="btn btn-ghost sm" data-psched="' + q.id + '">Schedule / assign</button>');
+      if (q.status === "COLLECTED") acts.push('<button class="btn btn-ghost sm" data-pverify="' + q.id + '">Verify</button>');
+      if (["COLLECTED", "VERIFIED"].indexOf(q.status) > -1) acts.push('<button class="btn btn-ghost sm" data-prefund="' + q.id + '" style="color:#137a45">Refund</button>');
+      if (["REFUNDED", "CLOSED", "CANCELLED"].indexOf(q.status) === -1) acts.push('<button class="btn btn-ghost sm" data-pcancel="' + q.id + '" style="color:#b3261e">Cancel</button>');
+      return "<tr><td><span class='strong'>" + esc(q.customer) + "</span>" + (q.mobile ? " <span class='muted-sm'>" + esc(q.mobile) + "</span>" : "") + "<br><span class='muted-sm'>" + esc(q.address) + "</span></td>" +
+        "<td>" + q.bottlesCollected + "/" + q.bottlesExpected + "</td>" +
+        "<td>" + (q.refundedPaise > 0 ? "₹" + Math.round(q.refundedPaise / 100) + " refunded" : "₹" + Math.round(q.refundablePaise / 100)) + "</td>" +
+        "<td>" + pickupStageBadge(q.status) + (q.driver ? "<br><span class='muted-sm'>" + esc(q.driver.name) + "</span>" : "") + "</td>" +
+        "<td>" + (acts.join(" ") || "—") + "</td></tr>";
+    }).join("") || '<tr><td colspan="5" class="muted-sm">No bottle-return pickups.</td></tr>';
+    mount.innerHTML =
+      '<div class="panel" style="margin-bottom:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">' +
+        '<h3 style="margin:0">🥛 Bottle-return pickups <span class="muted-sm" style="font-weight:600">— deposit refunds</span></h3>' +
+        '<span style="display:flex;gap:6px;flex-wrap:wrap">' +
+          '<button type="button" class="btn btn-ghost sm" data-prep="deposits,pdf">⬇ Deposit PDF</button>' +
+          '<button type="button" class="btn btn-ghost sm" data-prep="pickups,pdf">Pickups PDF</button>' +
+          '<button type="button" class="btn btn-ghost sm" data-prep="pickups,csv">CSV</button>' +
+        "</span></div>" +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">' + fbtn("open", "Open") + fbtn("refund_pending", "Refund pending") + fbtn("REFUNDED", "Refunded") + fbtn("", "All") + "</div>" +
+        '<div class="table-wrap"><table class="tbl"><thead><tr><th>Customer</th><th>Bottles</th><th>Deposit</th><th>Status</th><th></th></tr></thead><tbody>' + body + "</tbody></table></div></div>";
+    mount.querySelectorAll("[data-pf]").forEach(function (b) { b.addEventListener("click", function () { _pickupFilter = b.dataset.pf; loadBottlePickups(); }); });
+    mount.querySelectorAll("[data-prep]").forEach(function (b) { b.addEventListener("click", function () { var p = b.dataset.prep.split(","); exportBottleReport(p[0], p[1]); }); });
+    mount.querySelectorAll("[data-pverify]").forEach(function (b) { b.addEventListener("click", function () { pickupAction(b.dataset.pverify, { action: "verify" }); }); });
+    mount.querySelectorAll("[data-prefund]").forEach(function (b) { b.addEventListener("click", function () { if (confirm("Refund the deposit for the collected bottles to the customer's wallet?")) pickupAction(b.dataset.prefund, { action: "refund" }); }); });
+    mount.querySelectorAll("[data-pcancel]").forEach(function (b) { b.addEventListener("click", function () { if (confirm("Cancel this pickup request?")) pickupAction(b.dataset.pcancel, { action: "cancel" }); }); });
+    mount.querySelectorAll("[data-psched]").forEach(function (b) { b.addEventListener("click", function () { openSchedulePickup(b.dataset.psched); }); });
+  }
+  function pickupAction(id, body) {
+    DOODLY_API.post("/api/admin/bottle-pickups/" + encodeURIComponent(id), body)
+      .then(function () { dacToast("Pickup updated."); loadBottlePickups(); })
+      .catch(function (e) { dacToast(e.code === "forbidden" ? "Your role can't manage pickups (403)." : (e.message || "Action failed.")); });
+  }
+  function openSchedulePickup(id) {
+    if (document.querySelector(".dac-ov")) return; dacStyles();
+    var ov = document.createElement("div"); ov.className = "dac-ov";
+    ov.innerHTML = '<div class="dac-card" role="dialog" aria-modal="true" aria-label="Schedule pickup"><div class="dac-hd"><h3>Schedule bottle pickup</h3><button class="dac-x" type="button" aria-label="Close">&times;</button></div>' +
+      '<form class="dac-bd" autocomplete="off">' +
+      '<div class="dac-row"><label class="dac-f"><span>Pickup date</span><input class="input" type="date" id="sp-date"></label>' +
+      '<label class="dac-f"><span>Slot</span><select class="input" id="sp-slot"><option value="">Any</option><option>6:00-8:00 AM</option><option>8:00-10:00 AM</option><option>4:00-6:00 PM</option></select></label></div>' +
+      '<label class="dac-f"><span>Executive</span><select class="input" id="sp-driver"><option value="">— Auto-assign later —</option></select></label>' +
+      '<p class="dac-err" id="sp-err"></p></form>' +
+      '<div class="dac-ft"><button class="btn btn-ghost" type="button" id="sp-cancel">Cancel</button><button class="btn btn-primary" type="button" id="sp-save">Schedule</button></div></div>';
+    document.body.appendChild(ov);
+    var close = function () { ov.remove(); };
+    ov.querySelector(".dac-x").addEventListener("click", close); ov.querySelector("#sp-cancel").addEventListener("click", close);
+    DOODLY_API.get("/api/admin/drivers").then(function (r) { var sel = ov.querySelector("#sp-driver"); (r.drivers || r.items || r || []).forEach(function (d) { var nm = (d.user && d.user.name) || d.name || d.employeeId; if (d.id) sel.insertAdjacentHTML("beforeend", '<option value="' + d.id + '">' + esc(nm) + "</option>"); }); }).catch(function () {});
+    ov.querySelector("#sp-save").addEventListener("click", function () {
+      var body = { action: "schedule" };
+      var dt = ov.querySelector("#sp-date").value; if (dt) body.date = dt;
+      var sl = ov.querySelector("#sp-slot").value; if (sl) body.slot = sl;
+      var dv = ov.querySelector("#sp-driver").value; if (dv) { body.driverId = dv; body.action = "assign"; }
+      DOODLY_API.post("/api/admin/bottle-pickups/" + encodeURIComponent(id), body)
+        .then(function () { close(); dacToast("Pickup scheduled."); loadBottlePickups(); })
+        .catch(function (e) { ov.querySelector("#sp-err").textContent = e.message || "Couldn't schedule."; });
+    });
   }
   function renderBottleOutstanding(mount, r) {
     _bottleOut = r || _bottleOut; var t = _bottleOut.totals || {};

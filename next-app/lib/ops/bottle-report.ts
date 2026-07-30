@@ -103,6 +103,62 @@ export async function bottleExecReport(): Promise<BottleReport> {
   };
 }
 
+/** Per-customer bottle-deposit accountability: collected / refunded / held / outstanding bottles. */
+export async function depositReport(): Promise<BottleReport> {
+  const [charged, refunded, holders] = await Promise.all([
+    db.order.groupBy({ by: ["userId"], where: { status: "PAID", depositPaise: { gt: 0 } }, _sum: { depositPaise: true } }),
+    db.bottleLedger.groupBy({ by: ["userId"], where: { event: "DEPOSIT_REFUNDED" }, _sum: { amountPaise: true } }),
+    allBottleCustomers(),
+  ]);
+  const paidOf = new Map(charged.map((c) => [c.userId, c._sum.depositPaise ?? 0]));
+  const refOf = new Map(refunded.map((r) => [r.userId, r._sum.amountPaise ?? 0]));
+  const heldOf = new Map(holders.map((h) => [h.userId, { held: h.held, name: h.name, phone: h.phone }]));
+  const ids = [...new Set([...paidOf.keys(), ...heldOf.keys()])];
+  const missing = ids.filter((id) => !heldOf.has(id));
+  const names = missing.length ? await db.user.findMany({ where: { id: { in: missing } }, select: { id: true, name: true, phone: true } }) : [];
+  const nameOf = new Map(names.map((u) => [u.id, u]));
+
+  const rows = ids.map((id) => {
+    const h = heldOf.get(id); const u = nameOf.get(id);
+    const paid = paidOf.get(id) ?? 0, ref = refOf.get(id) ?? 0, held = Math.max(0, paid - ref);
+    return { name: h?.name ?? u?.name ?? "Customer", phone: h?.phone ?? u?.phone ?? "—", paid, ref, held, bottles: h?.held ?? 0 };
+  }).filter((r) => r.paid > 0 || r.ref > 0 || r.bottles > 0).sort((a, b) => b.held - a.held);
+
+  const T = { paid: rows.reduce((s, r) => s + r.paid, 0), ref: rows.reduce((s, r) => s + r.ref, 0), held: rows.reduce((s, r) => s + r.held, 0), bottles: rows.reduce((s, r) => s + r.bottles, 0) };
+  return {
+    type: "deposits", title: "Bottle Deposit Report",
+    subtitle: `${rows.length} customer(s) · ${rup(T.held)} held · ${rup(T.ref)} refunded · generated ${new Date().toLocaleString("en-IN")}`,
+    rowCount: rows.length,
+    columns: [{ label: "Customer" }, { label: "Mobile" }, { label: "Deposit paid", right: true }, { label: "Refunded", right: true }, { label: "Held (pending)", right: true }, { label: "Outstanding bottles", right: true }],
+    rows: rows.map((r) => [r.name, r.phone, rup(r.paid), rup(r.ref), rup(r.held), String(r.bottles)]),
+    totalRow: ["TOTAL", `${rows.length} customer(s)`, rup(T.paid), rup(T.ref), rup(T.held), String(T.bottles)],
+    data: rows, totals: { delivered: 0, returned: 0, lost: 0, pending: T.bottles, overdueCustomers: 0 },
+  };
+}
+
+/** Bottle-return pickup requests: status, bottles, refundable + refunded deposit. */
+export async function pickupReport(): Promise<BottleReport> {
+  const reqs = await db.bottlePickupRequest.findMany({
+    orderBy: { requestedAt: "desc" }, take: 2000,
+    select: { status: true, bottlesExpected: true, bottlesCollected: true, refundableDepositPaise: true, refundedPaise: true, requestedAt: true, user: { select: { name: true, phone: true } }, driver: { select: { employeeId: true, user: { select: { name: true } } } } },
+  });
+  const rows = reqs.map((r) => [
+    r.user?.name ?? "Customer", r.user?.phone ?? "—", r.status,
+    String(r.bottlesExpected), String(r.bottlesCollected), rup(r.refundableDepositPaise), rup(r.refundedPaise),
+    r.driver ? (r.driver.user?.name ?? r.driver.employeeId ?? "—") : "—", r.requestedAt.toLocaleDateString("en-IN"),
+  ]);
+  const T = { expected: reqs.reduce((s, r) => s + r.bottlesExpected, 0), collected: reqs.reduce((s, r) => s + r.bottlesCollected, 0), refunded: reqs.reduce((s, r) => s + r.refundedPaise, 0) };
+  return {
+    type: "pickups", title: "Bottle Pickup Requests Report",
+    subtitle: `${reqs.length} request(s) · ${T.collected}/${T.expected} bottles collected · ${rup(T.refunded)} refunded · generated ${new Date().toLocaleString("en-IN")}`,
+    rowCount: reqs.length,
+    columns: [{ label: "Customer" }, { label: "Mobile" }, { label: "Status" }, { label: "Expected", right: true }, { label: "Collected", right: true }, { label: "Refundable", right: true }, { label: "Refunded", right: true }, { label: "Executive" }, { label: "Requested" }],
+    rows,
+    totalRow: ["TOTAL", `${reqs.length} request(s)`, "", String(T.expected), String(T.collected), "", rup(T.refunded), "", ""],
+    data: reqs, totals: { delivered: 0, returned: T.collected, lost: 0, pending: 0, overdueCustomers: 0 },
+  };
+}
+
 // ---------- exports (CSV/XLS mirror route-report) ----------
 export function bottleReportFilename(kind: string, ext: string) { return `DOODLY_Bottle_${kind}_${new Date().toISOString().slice(0, 10)}.${ext}`; }
 

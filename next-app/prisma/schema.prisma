@@ -205,6 +205,8 @@ model User {
   employeeProfile EmployeeProfile? @relation("EmployeeUser")   // HR: staff employment profile (1:1)
   scheduledAddressChanges ScheduledAddressChange[]     // future-dated delivery address changes requested by this customer
   geoCorrections  GeoCorrection[] @relation("GeoCorrectionCustomer")  // GPS pin corrections on this customer's addresses
+  bottlePickups   BottlePickupRequest[]                               // bottle-return pickup + deposit-refund requests
+  pickupDeliveries Delivery[]     @relation("DeliveryCustomer")       // deliveries linked directly to this customer (pickups)
 }
 
 enum UserStatus {
@@ -328,6 +330,7 @@ model Address {
   scheduledAsOld ScheduledAddressChange[] @relation("SACOld")          // scheduled changes moving AWAY from this address
   scheduledAsNew ScheduledAddressChange[] @relation("SACNew")          // scheduled changes moving TO this address
   geoCorrections GeoCorrection[]                                       // append-only history of GPS pin corrections
+  bottlePickups  BottlePickupRequest[] @relation("PickupAddress")      // bottle-return pickups scheduled to this address
 }
 
 // ----------------------------------------------------------------
@@ -912,6 +915,10 @@ model Delivery {
   order          Order?         @relation(fields: [orderId], references: [id])
   addressId      String?                           // delivery address snapshot — pins history so a later address change never rewrites past deliveries
   address        Address?       @relation("DeliveryAddress", fields: [addressId], references: [id])
+  // Direct customer link for deliveries with no subscription/order (e.g. a bottle-return PICKUP).
+  userId         String?
+  user           User?          @relation("DeliveryCustomer", fields: [userId], references: [id])
+  kind           DeliveryKind   @default(DELIVERY)  // DELIVERY = hand over milk · PICKUP = collect empties (bottle-return)
   date           DateTime                          // the delivery date
   status         DeliveryStatus @default(SCHEDULED)
   // --- packing workflow (warehouse stage, ops-managed, independent of the exec status) ---
@@ -953,10 +960,16 @@ model Delivery {
   assignment     DeliveryAssignment?
   queueEntry     AssignmentQueue?
   geoCorrections GeoCorrection[]                   // GPS pin corrections made while this delivery was in hand
+  pickupRequest  BottlePickupRequest?              // the bottle-return request this pickup fulfils (kind=PICKUP)
   @@index([date, status])
   @@index([subscriptionId, date])
   @@index([driverId, date])
   @@index([addressId])
+}
+
+enum DeliveryKind {
+  DELIVERY   // standard outbound delivery (hand over milk bottles)
+  PICKUP     // bottle-return pickup (collect empties for a deposit refund)
 }
 
 // ----------------------------------------------------------------
@@ -1042,6 +1055,64 @@ model BottleRecovery {
   closedById     String?                                      // admin/ops user who closed it
   @@index([status])
   @@index([userId])
+}
+
+// ----------------------------------------------------------------
+// Bottle-return pickup + deposit refund — CUSTOMER-INITIATED after a
+// subscription ends. Final empties are NEVER auto-collected; the customer
+// requests a pickup, ops schedule it (materialising a kind=PICKUP Delivery),
+// the exec collects, and the refundable deposit auto-credits to the wallet.
+// Append-only workflow via timestamped columns; refund idempotent via walletTxnRef.
+// ----------------------------------------------------------------
+enum BottlePickupStatus {
+  REQUESTED     // customer raised the request
+  SCHEDULED     // ops set a pickup date/slot (Delivery materialised)
+  ASSIGNED      // an executive is assigned
+  IN_PROGRESS   // executive out for the pickup
+  COLLECTED     // empties recorded by the executive
+  VERIFIED      // ops verified the collection (when verification is required)
+  REFUNDED      // deposit credited to the wallet
+  CLOSED         // finished
+  CANCELLED     // customer/ops cancelled or missed
+}
+
+model BottlePickupRequest {
+  id                    String             @id @default(cuid())
+  userId                String
+  user                  User               @relation(fields: [userId], references: [id])
+  addressId             String?                                     // pickup address (defaults to the customer's)
+  address               Address?           @relation("PickupAddress", fields: [addressId], references: [id])
+  subscriptionId        String?                                     // the ended subscription this relates to (if any)
+  status                BottlePickupStatus @default(REQUESTED)
+  bottlesExpected       Int                                         // outstanding held at request time
+  bottlesCollected      Int                @default(0)
+  bottlesMissing        Int                @default(0)
+  bottlesBroken         Int                @default(0)              // future-ready (inspection failures)
+  depositPerBottlePaise Int                                         // snapshot of the per-bottle deposit rate
+  refundableDepositPaise Int                                        // expected refund (expected × rate, capped at held)
+  refundedPaise         Int                @default(0)              // actually credited
+  walletTxnRef          String?                                     // refund WalletTxn.reference (linkage + idempotency)
+  preferredDate         DateTime?
+  preferredSlot         String?
+  customerNote          String?
+  execRemark            String?
+  deliveryId            String?            @unique                  // the materialised kind=PICKUP Delivery
+  delivery              Delivery?          @relation(fields: [deliveryId], references: [id])
+  driverId              String?                                     // assigned executive
+  driver                Driver?            @relation(fields: [driverId], references: [id])
+  requestedAt           DateTime           @default(now())
+  scheduledAt           DateTime?
+  assignedAt            DateTime?
+  collectedAt           DateTime?
+  verifiedAt            DateTime?
+  refundedAt            DateTime?
+  closedAt              DateTime?
+  verifiedById          String?
+  closedById            String?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt @default(now())
+  @@index([userId, status])
+  @@index([status, requestedAt])
 }
 
 // ----------------------------------------------------------------
@@ -1714,6 +1785,7 @@ model Driver {                                    // = Delivery Executive (own /
   trips          TripHistory[]
   assignmentLogs AssignmentLog[]
   geoCorrections GeoCorrection[]                   // GPS pin corrections performed by this executive
+  bottlePickups  BottlePickupRequest[]             // bottle-return pickups assigned to this executive
 }
 
 model DeliveryIssue {

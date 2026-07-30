@@ -7,7 +7,7 @@ import { requirePermission } from "@/lib/auth/authorize";
 import { readUserId, readRole } from "@/lib/auth/identity";
 import { reqContext } from "@/lib/auth/request";
 import { audit } from "@/lib/auth/audit";
-import { bottleReport, bottleExecReport, reportCsv, reportXls, bottleReportFilename, type BottleReport } from "@/lib/ops/bottle-report";
+import { bottleReport, bottleExecReport, depositReport, pickupReport, reportCsv, reportXls, bottleReportFilename, type BottleReport } from "@/lib/ops/bottle-report";
 import { renderMilkReportPdf } from "@/lib/milk/report-pdf";
 import type { MilkReport } from "@/lib/milk/reports";
 
@@ -22,8 +22,12 @@ export async function GET(req: NextRequest) {
   const kind = (sp.get("kind") || "customers").toLowerCase();
   const format = (sp.get("format") || "pdf").toLowerCase();
   const scope = (sp.get("scope") || "outstanding").toLowerCase() === "all" ? "all" : "outstanding";
-  const report: BottleReport = kind === "executives" ? await bottleExecReport() : await bottleReport(scope);
-  const fkind = kind === "executives" ? "Executives" : scope === "all" ? "Customers_All" : "Customers";
+  const report: BottleReport =
+    kind === "executives" ? await bottleExecReport()
+    : kind === "deposits" ? await depositReport()
+    : kind === "pickups" ? await pickupReport()
+    : await bottleReport(scope);
+  const fkind = kind === "executives" ? "Executives" : kind === "deposits" ? "Deposits" : kind === "pickups" ? "Pickups" : scope === "all" ? "Customers_All" : "Customers";
   const log = (fmt: string) => audit({ userId: readUserId(req) ?? null, actorRole: readRole(req), action: "bottle.report.export", target: `${fkind} · ${fmt.toUpperCase()} · ${report.rowCount} row(s)`, ctx: reqContext(req) }).catch(() => {});
 
   try {
