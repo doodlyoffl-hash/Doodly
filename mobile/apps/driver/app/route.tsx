@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Linking, Pressable, View, RefreshControl } from "react-native";
 import { useRouter, Stack } from "expo-router";
 import { Screen, Card, Text, Badge, Button, useTheme, statusIntent, statusLabel } from "@doodly/ui";
-import { getRoute, ApiError, type MyRoute, type RouteStop } from "@doodly/core";
+import { getRoute, ApiError, routeNavLegs, isResolvedStop, type MyRoute, type RouteStop } from "@doodly/core";
 
 export default function RouteScreen() {
   const { colors, space } = useTheme();
@@ -36,13 +36,20 @@ export default function RouteScreen() {
   const { remaining, done } = useMemo(() => {
     const stops = data?.stops ?? [];
     return {
-      remaining: stops.filter((s) => s.status !== "delivered"),
-      done: stops.filter((s) => s.status === "delivered"),
+      remaining: stops.filter((s) => !isResolvedStop(s.status)),
+      done: stops.filter((s) => isResolvedStop(s.status)),
     };
   }, [data]);
 
   // Remaining first (in route order), completed collapsed at the bottom.
   const ordered = useMemo(() => [...remaining, ...done], [remaining, done]);
+
+  // Multi-stop turn-by-turn navigation across the remaining stops, warehouse-anchored.
+  const navigateRoute = useCallback(() => {
+    const origin = data?.route?.warehouse ?? (remaining[0]?.lat != null ? { lat: remaining[0].lat as number, lng: remaining[0].lng as number } : null);
+    const url = routeNavLegs(origin, remaining)[0];
+    if (url) Linking.openURL(url).catch(() => {});
+  }, [data, remaining]);
 
   return (
     <>
@@ -73,6 +80,9 @@ export default function RouteScreen() {
                   {data.route ? ` · ${data.route.name}` : ""}
                 </Text>
               ) : null}
+              {remaining.some((s) => s.lat != null && s.lng != null) ? (
+                <Button label="Navigate route" variant="primary" size="sm" onPress={navigateRoute} />
+              ) : null}
             </View>
           }
           renderItem={({ item }) => <StopCard stop={item} onPress={() => router.push(`/stop/${item.id}`)} />}
@@ -96,7 +106,7 @@ export default function RouteScreen() {
 
 function StopCard({ stop, onPress }: { stop: RouteStop; onPress: () => void }) {
   const { colors, space } = useTheme();
-  const isDone = stop.status === "delivered";
+  const isDone = isResolvedStop(stop.status);
 
   const navigate = () => {
     // Prefer exact coordinates; fall back to the text address so navigation
@@ -134,7 +144,10 @@ function StopCard({ stop, onPress }: { stop: RouteStop; onPress: () => void }) {
             <Text variant="small" tone="muted" numberOfLines={2}>{stop.address}</Text>
 
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm, marginTop: 2 }}>
-              {stop.itemLabel ? <Text variant="caption" tone="subtle">{stop.qty} × {stop.itemLabel}</Text> : null}
+              {stop.items && stop.items.length
+                ? stop.items.map((it, i) => <Text key={i} variant="caption" tone="subtle">{i > 0 ? "· " : ""}{it.qty} × {it.label}{it.product ? ` ${it.product}` : ""}</Text>)
+                : (stop.itemLabel ? <Text variant="caption" tone="subtle">{stop.qty} × {stop.itemLabel}</Text> : null)}
+              {stop.totalLitres ? <Text variant="caption" tone="subtle">· {stop.totalLitres} L</Text> : null}
               <Text variant="caption" tone="subtle">· {stop.bottlesExpected} bottle{stop.bottlesExpected === 1 ? "" : "s"}</Text>
               {stop.payment.startsWith("COD") ? <Text variant="caption" tone="warning">· {stop.payment}</Text> : null}
             </View>

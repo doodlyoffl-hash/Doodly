@@ -22,7 +22,7 @@ export { isOnline, onConnectivityChange, startConnectivityWatch } from "./net";
 export { AuthProvider, useAuth, WrongAppError, type AuthStatus } from "./AuthContext";
 export {
   getSummary as getDriverSummary, getRoute, getAvailability, setAvailability, updateStop, pingLocation,
-  previewGeoCorrection, submitGeoCorrection,
+  previewGeoCorrection, submitGeoCorrection, routeNavLegs, isResolvedStop,
   type DriverSummary, type RouteStop, type StopStatus, type MyRoute,
   type Availability, type DeliveryAction, type StopUpdate,
   type GeoCorrectionInput, type GeoCorrectionResult,

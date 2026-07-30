@@ -53,11 +53,16 @@ export interface RouteStop {
   plan: string;
   qty: number;
   itemLabel: string;
+  /** Every product on the stop, each with numeric ml + computed litres. */
+  items?: { label: string; product: string; ml: number | null; qty: number; litres: number | null }[];
+  totalLitres?: number;
   instructions: string;
   bottlesExpected: number;
   bottlesCollected: number;
+  /** Minutes after leaving the warehouse — for a per-stop arrival estimate. */
+  etaMinutes?: number | null;
   payment: string;
-  /** Server-normalised: assigned | onway | reached | delivered */
+  /** Server-normalised outcome (see StopStatus). */
   status: StopStatus;
   slot: string | null;
   deliveredAt: string | null;
@@ -72,11 +77,14 @@ export interface RouteStop {
   bottlesToCollect?: number;
 }
 
-export type StopStatus = "assigned" | "onway" | "reached" | "delivered";
+export type StopStatus = "assigned" | "onway" | "reached" | "delivered" | "partial" | "failed" | "skipped" | "unavailable" | "rescheduled" | "cancelled";
+// A stop the exec has finished with (any terminal outcome) — drops out of the active run.
+const RESOLVED_STATUSES: StopStatus[] = ["delivered", "partial", "failed", "skipped", "unavailable", "rescheduled", "cancelled"];
+export function isResolvedStop(status: StopStatus): boolean { return RESOLVED_STATUSES.includes(status); }
 
 export interface MyRoute {
   driver: { name: string; employeeId: string | null; vehicleNo: string | null; rating: number | null };
-  route: { name: string; code: string } | null;
+  route: { name: string; code: string; warehouse?: { name: string; lat: number; lng: number } } | null;
   date: string;
   /** True when the server fell back to the latest day WITH data because the
    *  requested date had none — show it, or the executive will think today's
@@ -116,16 +124,35 @@ export async function setAvailability(available: boolean): Promise<Availability>
  *  Server-side vocabulary (Delivery.status), not the display statuses. */
 export type DeliveryAction =
   | "ACCEPTED" | "OUT_FOR_DELIVERY" | "ON_THE_WAY" | "REACHED"
-  | "DELIVERED" | "FAILED" | "SKIPPED";
+  | "DELIVERED" | "PARTIALLY_DELIVERED" | "FAILED" | "SKIPPED"
+  | "CUSTOMER_UNAVAILABLE" | "RESCHEDULED" | "CANCELLED";
 
 export interface StopUpdate {
   status: DeliveryAction;
   /** Empties collected from the customer. */
   bottlesIn?: number;
-  /** Full bottles handed over. */
+  /** Full bottles handed over (fewer than planned → PARTIALLY_DELIVERED). */
   bottlesOut?: number;
   cashCollected?: number;
-  remark?: string;
+  customerRemark?: string;
+  /** The executive's own note on the outcome. */
+  execRemark?: string;
+}
+
+/** Multi-stop Google Maps deep-link legs (warehouse origin + ordered waypoints), chunked to
+ *  ≤10 stops per leg (Google's consumer waypoint cap). Mirrors the web assets/js/maps.js. */
+export function routeNavLegs(origin: { lat: number; lng: number } | null | undefined, stops: { lat: number | null; lng: number | null }[]): string[] {
+  const pts = stops.filter((s): s is { lat: number; lng: number } => typeof s.lat === "number" && typeof s.lng === "number");
+  if (!pts.length || !origin || typeof origin.lat !== "number") return [];
+  const MAX = 10, legs: string[] = [];
+  let from: { lat: number; lng: number } = { lat: origin.lat, lng: origin.lng };
+  for (let k = 0; k < pts.length; k += MAX) {
+    const chunk = pts.slice(k, k + MAX), dest = chunk[chunk.length - 1], wps = chunk.slice(0, -1);
+    if (!dest) continue;
+    legs.push(`https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lng}&destination=${dest.lat},${dest.lng}` + (wps.length ? `&waypoints=${wps.map((w) => `${w.lat},${w.lng}`).join("|")}` : "") + `&travelmode=driving&dir_action=navigate`);
+    from = dest;
+  }
+  return legs;
 }
 
 /**
