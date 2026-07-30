@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { ok, route, Errors } from "@/lib/http";
 import { requireUserId } from "@/lib/auth/authorize";
 import { heldByUsers } from "@/lib/bottles/balance";
+import { currentShift, lastClosedShift } from "@/lib/delivery/shift";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,7 +29,11 @@ export const GET = route("driver.summary", async (req: NextRequest) => {
   const held = await heldByUsers(pending.map((d) => d.subscription?.userId ?? d.order?.userId).filter(Boolean) as string[]);
   const bottlesToCollect = pending.reduce((s, d) => { const uid = d.subscription?.userId ?? d.order?.userId; return s + (uid ? (held.get(uid) ?? 0) : 0); }, 0);
 
+  const [shift, lastShift] = await Promise.all([currentShift(driver.id), lastClosedShift(driver.id)]);
+
   return ok({
+    shift,        // the open shift (drives a live duration timer) — null when off-shift
+    lastShift,    // the most recent closed shift + its totals
     summary: {
       name: driver.user.name,
       employeeId: driver.employeeId,

@@ -9,6 +9,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { ok, parseBody, route, Errors } from "@/lib/http";
 import { requireUserId } from "@/lib/auth/authorize";
+import { openShift, closeShift, currentShift } from "@/lib/delivery/shift";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +26,8 @@ export const GET = route("driver.availability.get", async (req: NextRequest) => 
   const userId = requireUserId(req);
   const d = await driverOf(userId);
   const availability = d.execStatus?.availability ?? "OFFLINE";
-  return ok({ availability, available: availability === "AVAILABLE" || availability === "RETURNED_TO_DAIRY", onTrip: (ON_TRIP as readonly string[]).includes(availability) });
+  const shift = await currentShift(d.id).catch(() => null);   // the open shift → drives the live duration timer
+  return ok({ availability, available: availability === "AVAILABLE" || availability === "RETURNED_TO_DAIRY", onTrip: (ON_TRIP as readonly string[]).includes(availability), shift });
 });
 
 const Body = z.object({ available: z.boolean() });
@@ -49,11 +51,15 @@ export const POST = route("driver.availability.set", async (req: NextRequest) =>
   await db.assignmentLog.create({
     data: { action: "STATUS_CHANGE", driverId: d.id, actorId: userId, actorRole: "delivery_executive", note: `shift ${available ? "started → AVAILABLE" : "ended → OFFLINE"}` },
   }).catch(() => {});
+  // Shift log: open a Shift on Start, close it (stamping worked-minutes + totals) on End.
+  let shift = null;
+  try { shift = available ? await openShift(d.id) : await closeShift(d.id); } catch (e) { console.error("shift.toggle", (e as Error)?.message); }
+
   // Automatic assignment trigger: an executive starting their shift → sweep today's
   // waiting deliveries onto the now-available executives (idempotent, MANUAL-aware).
   let assignment: unknown = undefined;
   if (available) {
     try { const { runScheduledAutoAssignment } = await import("@/lib/assignment/service"); assignment = await runScheduledAutoAssignment({ actorRole: "system" }); } catch (e) { console.error("assign.onShiftStart", (e as Error)?.message); }
   }
-  return ok({ availability: next, available, assignment });
+  return ok({ availability: next, available, shift, assignment });
 });

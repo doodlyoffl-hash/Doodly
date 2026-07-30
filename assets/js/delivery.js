@@ -99,6 +99,15 @@ window.DOODLY_DELIVERY = (function () {
     if (!signedIn() || !API()) { _avail = null; return Promise.resolve(false); }
     return API().get("/api/driver/availability").then((r) => { _avail = r || null; return true; }).catch(() => { _avail = null; return false; });
   }
+  // ---- shift duration (live) ----
+  function fmtDur(ms) { if (ms == null || ms < 0) return ""; const m = Math.floor(ms / 60000), h = Math.floor(m / 60); return h > 0 ? h + "h " + (m % 60) + "m" : m + "m"; }
+  function shiftClockText() { try { if (_avail && _avail.available && _avail.shift && _avail.shift.startedAt) return fmtDur(Date.now() - new Date(_avail.shift.startedAt).getTime()); } catch (e) {} return ""; }
+  let _shiftTimer = null;
+  function ensureShiftClock() {
+    if (_shiftTimer) { clearInterval(_shiftTimer); _shiftTimer = null; }
+    if (!(_avail && _avail.available && _avail.shift && _avail.shift.startedAt)) return;
+    _shiftTimer = setInterval(function () { const el = document.getElementById("dlShiftClock"); if (!el) { clearInterval(_shiftTimer); _shiftTimer = null; return; } el.textContent = shiftClockText(); }, 60000);
+  }
 
   /* ---------- live GPS reporting (customer + admin tracking maps) ---------- */
   let _geoTimer = null;
@@ -279,7 +288,7 @@ window.DOODLY_DELIVERY = (function () {
             ? `${_live.route ? esc(_live.route.name || _live.route.code || "Your route") + " · " : ""}${esc(_live.date || "")}${_live.isFallbackDate ? " (latest assigned day)" : ""} · ${s.total} stops`
             : (s.total ? `${s.total} stops today` : "No route assigned yet")}</div></div>
           <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">${_avail
-            ? `<button type="button" class="badge ${_avail.available ? "green" : "amber"}" id="dlAvail" style="border:none;cursor:pointer;font-family:inherit;font-weight:700" title="${_avail.available ? "You're on shift — tap to end" : "Tap to start your shift and begin receiving deliveries"}">${_avail.available ? "🟢 On shift · tap to end" : "▶ Start shift"}</button>`
+            ? `<button type="button" class="badge ${_avail.available ? "green" : "amber"}" id="dlAvail" style="border:none;cursor:pointer;font-family:inherit;font-weight:700" title="${_avail.available ? "You're on shift — tap to end" : "Tap to start your shift and begin receiving deliveries"}">${_avail.available ? `🟢 On shift${shiftClockText() ? ` · <span id="dlShiftClock">${shiftClockText()}</span>` : ""} · tap to end` : "▶ Start shift"}</button>`
             : ""}<span class="badge green">${_live ? "Live" : "On shift"}</span></span>
         </div>
         <div class="dl-kpis">
@@ -326,6 +335,7 @@ window.DOODLY_DELIVERY = (function () {
         }
       } catch (e) { /* map is non-critical — keep the portal interactive */ }
       wire();
+      ensureShiftClock();
     }
 
     function stopCard(s2) {
@@ -392,7 +402,12 @@ window.DOODLY_DELIVERY = (function () {
         const next = !_avail.available;
         av.disabled = true;
         API().post("/api/driver/availability", { available: next })
-          .then((r) => { _avail = Object.assign({}, _avail, r || {}, { available: next }); toast(next ? "Shift started — you're available" : "Shift ended"); render(); })
+          .then((r) => {
+            _avail = Object.assign({}, _avail, r || {}, { available: next });
+            if (next) toast("Shift started — you're available");
+            else { const sh = r && r.shift; toast(sh ? `Shift ended · ${fmtDur((sh.workedMinutes || 0) * 60000)} · ${sh.deliveriesCount} deliveries · ${sh.bottlesDelivered} delivered · ${sh.bottlesCollected} collected` : "Shift ended"); }
+            render();
+          })
           .catch((e) => { av.disabled = false; toast((e && e.message) || "Couldn't update availability"); });
       });
       host.querySelector("#dlStart").addEventListener("click", () => {
