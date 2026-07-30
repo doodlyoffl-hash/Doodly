@@ -120,7 +120,7 @@ window.DOODLY_CUSTOMER = (function () {
         '<span class="v"><span class="badge ' + (q.status === "REFUNDED" || q.status === "CLOSED" ? "green" : q.status === "CANCELLED" ? "grey" : "amber") + '">' + (PICKUP_STAGE[q.status] || q.status) + '</span>' +
         (q.refundedPaise > 0 ? ' · ' + rup(q.refundedPaise) + ' refunded' : "") + '</span></div>';
     }).join("") || '<div class="muted-sm">No pickup requests yet.</div>';
-    mount.innerHTML = '<div class="panel reveal" style="margin-top:14px"><div class="panel-head"><h3>Bottle deposit</h3>' +
+    mount.innerHTML = '<div class="panel" style="margin-top:14px"><div class="panel-head"><h3>Bottle deposit</h3>' +
       (r && r.canRequest ? '<button class="btn btn-primary sm" id="cuReqReturn">Request bottle return</button>' : "") + '</div><div class="panel-pad">' +
       '<div class="deflist">' +
         '<div class="row"><span class="k">Deposit paid</span><span class="v">' + rup(d.paidPaise) + '</span></div>' +
