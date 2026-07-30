@@ -56,7 +56,34 @@ window.DOODLY_DELIVERY = (function () {
   }
   function postStop(id, body) {
     if (!_live || !API()) return Promise.resolve(null);
-    return API().post("/api/delivery/stop/" + encodeURIComponent(id), body).catch((e) => { toast(e.message || "Couldn't sync — will keep your local note."); return null; });
+    return API().post("/api/delivery/stop/" + encodeURIComponent(id), body).catch((e) => {
+      // Offline → queue the action and replay when connectivity returns. The server is
+      // naturally idempotent (an already-DELIVERED stop is a no-op; setDeliveryOutcome
+      // short-circuits a terminal stop), so a replay can never double-apply.
+      if (e && e.code === "offline") { var q = stopQueueLoad(); q.push({ id: id, body: body }); stopQueueSave(q); toast("Saved offline — will sync when you're back online"); }
+      else toast((e && e.message) || "Couldn't sync — will keep your local note.");
+      return null;
+    });
+  }
+  /* ---------- offline queue for stop actions (completions / outcomes) ---------- */
+  function stopQueueLoad() { try { return JSON.parse(localStorage.getItem("doodly-stop-queue") || "[]"); } catch (e) { return []; } }
+  function stopQueueSave(q) { try { localStorage.setItem("doodly-stop-queue", JSON.stringify(q)); } catch (e) {} }
+  function drainStopQueue() {
+    if (!API() || !execUser()) return Promise.resolve(0);
+    var q = stopQueueLoad(); if (!q.length) return Promise.resolve(0);
+    var done = 0, rest = [];
+    return q.reduce(function (p, item) {
+      return p.then(function () {
+        return API().post("/api/delivery/stop/" + encodeURIComponent(item.id), item.body).then(function () { done++; })
+          .catch(function (e) { if (e && e.code === "offline") rest.push(item); /* else permanent → drop (idempotent, safe) */ });
+      });
+    }, Promise.resolve()).then(function () { stopQueueSave(rest); return done; });
+  }
+  var _stopOnlineWired = false;
+  function wireStopSync(onDrained) {
+    drainStopQueue().then(function (n) { if (n > 0 && typeof onDrained === "function") onDrained(n); });
+    if (_stopOnlineWired) return; _stopOnlineWired = true;
+    window.addEventListener("online", function () { drainStopQueue().then(function (n) { if (n > 0 && typeof onDrained === "function") onDrained(n); }); });
   }
 
   /* ---------- GPS pin correction + offline queue ----------
@@ -459,8 +486,11 @@ window.DOODLY_DELIVERY = (function () {
       host.querySelectorAll("[data-outcome]").forEach((b) => b.addEventListener("click", () => outcomeModal(b.dataset.outcome)));
       host.querySelectorAll("[data-nav]").forEach((b) => b.addEventListener("click", () => { const m = host.querySelector(`[data-modes="${b.dataset.nav}"]`); if (m) m.hidden = !m.hidden; }));
       host.querySelectorAll("[data-geo]").forEach((b) => b.addEventListener("click", () => verifyGeoModal(b.dataset.geo)));
-      // replay any offline GPS corrections now + whenever connectivity returns
-      if (_live) wireGeoSync((n) => { toast(n + " location update" + (n > 1 ? "s" : "") + " synced"); loadLive().then(() => mountPortalNow(host)); });
+      // replay any offline GPS corrections + queued stop actions now + when connectivity returns
+      if (_live) {
+        wireGeoSync((n) => { toast(n + " location update" + (n > 1 ? "s" : "") + " synced"); loadLive().then(() => mountPortalNow(host)); });
+        wireStopSync((n) => { toast(n + " delivery update" + (n > 1 ? "s" : "") + " synced"); loadLive().then(() => mountPortalNow(host)); });
+      }
     }
 
     function confirmDelivery(id) {
