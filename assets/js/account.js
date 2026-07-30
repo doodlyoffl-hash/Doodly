@@ -942,6 +942,9 @@ window.DOODLY_ACCOUNT = (function () {
         var cf = (document.getElementById("secConf") || {}).value || "";
         if (!cur) { showMsg(false, "Enter your current password."); return; }
         if (nw.length < 8) { showMsg(false, "New password must be at least 8 characters."); return; }
+        // mirror the server password policy (upper · lower · number · special) so a valid-length
+        // but policy-short password gets a clear message instead of a confusing 400 from the API.
+        if (!/[A-Z]/.test(nw) || !/[a-z]/.test(nw) || !/[0-9]/.test(nw) || !/[^A-Za-z0-9]/.test(nw)) { showMsg(false, "New password must include an uppercase letter, a lowercase letter, a number and a special character."); return; }
         if (nw !== cf) { showMsg(false, "New passwords don't match."); return; }
         btn.disabled = true; showMsg(true, "Updating…");
         API().post("/api/account/password", { currentPassword: cur, newPassword: nw })
