@@ -3094,6 +3094,9 @@
       if (!name) { err.textContent = "Name is required."; return; }
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { err.textContent = "Enter a valid email."; return; }
       if (!pw || pw.length < 8) { err.textContent = "Temporary password must be at least 8 characters."; return; }
+      // mirror the server password policy (8+ · upper · lower · number · special) so the admin
+      // gets a clear inline message instead of a confusing 400 from /api/admin/drivers.
+      if (!/[A-Z]/.test(pw) || !/[a-z]/.test(pw) || !/[0-9]/.test(pw) || !/[^A-Za-z0-9]/.test(pw)) { err.textContent = "Include an uppercase, a lowercase, a number and a special character (e.g. Doodly@2025)."; return; }
       var btn = qs("#dad-save"); btn.disabled = true; btn.textContent = "Adding…"; err.textContent = "";
       try {
         var body = { name: name, email: email, password: pw };
