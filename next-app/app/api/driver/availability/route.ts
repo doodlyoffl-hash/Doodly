@@ -40,7 +40,8 @@ const Body = z.object({ available: z.boolean(), lat: z.number().gte(-90).lte(90)
 
 export const POST = route("driver.availability.set", async (req: NextRequest) => {
   const userId = requireUserId(req);
-  const { available } = await parseBody(req, Body);
+  const { available, lat, lng } = await parseBody(req, Body);
+  const loc = lat != null && lng != null ? { lat, lng } : undefined;   // GPS distance tracking: stamp the shift start/end position
   const d = await driverOf(userId);
   const current = d.execStatus?.availability ?? "OFFLINE";
 
@@ -65,7 +66,7 @@ export const POST = route("driver.availability.set", async (req: NextRequest) =>
   }).catch(() => {});
   // Shift log: open a Shift on Start, close it (stamping worked-minutes + totals) on End.
   let shift = null;
-  try { shift = available ? await openShift(d.id) : await closeShift(d.id); } catch (e) { console.error("shift.toggle", (e as Error)?.message); }
+  try { shift = available ? await openShift(d.id, loc) : await closeShift(d.id, loc); } catch (e) { console.error("shift.toggle", (e as Error)?.message); }
   // Central audit trail (in addition to the AssignmentLog STATUS_CHANGE) so shift start/end
   // appears in the admin Audit Logs view alongside every other executive action.
   try { const { audit } = await import("@/lib/auth/audit"); const { reqContext } = await import("@/lib/auth/request"); await audit({ userId, actorRole: "delivery_executive", action: available ? "shift.started" : "shift.ended", target: shift?.id ?? d.id, ctx: reqContext(req) }); } catch { /* non-blocking */ }

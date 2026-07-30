@@ -161,3 +161,19 @@
 .dl-navcard-name { font-size:1.35rem; }
 
 @media (min-width:680px){ .dl-hero { align-items:center; } }
+
+/* Live GPS distance card (shift-scoped) */
+.dl-gpscard { padding:14px 16px; background:linear-gradient(180deg, rgba(31,174,102,.06), var(--surface)); border-color:rgba(31,174,102,.35); }
+.dl-gps-h { display:flex; align-items:center; gap:.5rem; font-family:"Fraunces",serif; font-weight:600; color:var(--forest); font-size:1.05rem; }
+.dl-gps-h svg { color:var(--leaf-600); }
+.dl-gps-rec { margin-left:auto; font-family:var(--font-body); font-size:.72rem; font-weight:800; letter-spacing:.02em; color:var(--leaf-600); display:inline-flex; align-items:center; gap:.3rem; }
+.dl-gps-rec::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--leaf-600); animation:dlGpsPulse 1.6s ease-in-out infinite; }
+@keyframes dlGpsPulse { 0%,100%{ opacity:1; transform:scale(1); } 50%{ opacity:.35; transform:scale(.7); } }
+@media (prefers-reduced-motion:reduce){ .dl-gps-rec::before { animation:none; } }
+.dl-gps-row { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:12px; }
+@media (min-width:560px){ .dl-gps-row { grid-template-columns:repeat(4,1fr); } }
+.dl-gps-cell { border:1px solid var(--line); border-radius:12px; background:var(--surface); padding:10px 12px; }
+.dl-gps-cell .v { font-family:"Fraunces",serif; font-weight:600; color:var(--forest); font-size:1.5rem; line-height:1; font-variant-numeric:tabular-nums; }
+.dl-gps-cell .v small { font-size:.72rem; color:var(--ink-3); font-family:var(--font-body); font-weight:600; }
+.dl-gps-cell .k { font-size:.72rem; color:var(--ink-3); font-weight:600; margin-top:6px; }
+.dl-gps-note { margin-top:10px; font-size:.74rem; color:var(--ink-3); line-height:1.4; }

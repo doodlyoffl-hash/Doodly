@@ -164,11 +164,84 @@ window.DOODLY_DELIVERY = (function () {
   }
   function startLocationPolling() {
     if (_geoTimer || !execUser() || !navigator.geolocation) return;
+    if (_gpsWatch != null) return;                                // continuous shift tracking already keeps the position fresh
     pingLocation();                                                // report once immediately
     _geoTimer = setInterval(pingLocation, 30000);                  // then every 30s while on route
     window.addEventListener("beforeunload", stopLocationPolling);
   }
   function stopLocationPolling() { if (_geoTimer) { clearInterval(_geoTimer); _geoTimer = null; } }
+
+  /* ---------- continuous GPS distance tracking (shift-scoped) ----------
+     On Start Shift we watchPosition (high-accuracy) and forward every sampled fix
+     to POST /api/delivery/track, where the SERVER computes fraud-filtered travelled
+     km (the client only samples — it can never inflate distance). Each reading is
+     buffered to a persisted offline queue (doodly-gps-queue) with a clientId, so a
+     reload or an offline replay never loses or double-counts a point. Stops + final-
+     flushes on End Shift. Cadence + client filters come from /availability.gpsConfig. */
+  let _gpsWatch = null, _gpsFlush = null, _gpsLastCap = null, _gpsBusy = false, _gpsOnlineWired = false;
+  let _gpsStats = null;      // { actualDistanceKm, gpsPointCount } from the latest /track response
+  let _gpsPlannedKm = 0;     // planned round-trip (route optimiser) — set by render(), used for live efficiency
+  function gpsCfg() {
+    const c = (_avail && _avail.gpsConfig) || {};
+    return { enabled: c.enabled !== false, sampleIntervalS: c.sampleIntervalS || 6, minMoveM: c.minMoveM || 8, maxAccuracyM: c.maxAccuracyM || 100 };
+  }
+  function gpsClientId() { try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {} return "gps-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8); }
+  function gpsQLoad() { try { return JSON.parse(localStorage.getItem("doodly-gps-queue") || "[]"); } catch (e) { return []; } }
+  function gpsQSave(q) { try { localStorage.setItem("doodly-gps-queue", JSON.stringify(q)); } catch (e) {} }
+  function gpsHavM(a, b) { const R = 6371000, t = Math.PI / 180, dLa = (b.lat - a.lat) * t, dLo = (b.lng - a.lng) * t, la1 = a.lat * t, la2 = b.lat * t; const h = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(la1) * Math.cos(la2) * Math.sin(dLo / 2) * Math.sin(dLo / 2); return 2 * R * Math.asin(Math.min(1, Math.sqrt(h))); }
+  function gpsOnFix(pos) {
+    const c = pos && pos.coords; if (!c || c.latitude == null) return;
+    const cfg = gpsCfg(), t = pos.timestamp || Date.now(), p = { lat: c.latitude, lng: c.longitude, t: t };
+    if (_gpsLastCap) {
+      const dt = t - _gpsLastCap.t;
+      if (dt < cfg.sampleIntervalS * 800) return;                             // too soon — spam guard (server also throttles by cadence)
+      if (gpsHavM(_gpsLastCap, p) < cfg.minMoveM && dt < 60000) return;       // parked jitter → at most one fix/min while stationary
+    }
+    _gpsLastCap = p;
+    const q = gpsQLoad();
+    q.push({ lat: c.latitude, lng: c.longitude, accuracyM: (c.accuracy != null ? c.accuracy : null), speed: (c.speed != null ? c.speed : null), capturedAt: new Date(t).toISOString(), clientId: gpsClientId() });
+    gpsQSave(q);
+    if (q.length >= 12) flushGps();                                           // send in small batches while moving
+  }
+  function flushGps() {
+    if (_gpsBusy || !API() || !execUser()) return Promise.resolve(0);
+    const q = gpsQLoad(); if (!q.length) return Promise.resolve(0);
+    _gpsBusy = true;
+    const batch = q.slice(0, 500);
+    return API().post("/api/delivery/track", { points: batch }).then((r) => {
+      gpsQSave(gpsQLoad().slice(batch.length));                               // drop only the batch we sent (queue may have grown)
+      if (r && r.actualDistanceKm != null) { _gpsStats = { actualDistanceKm: r.actualDistanceKm, gpsPointCount: r.gpsPointCount }; paintGps(); }
+      _gpsBusy = false;
+      return gpsQLoad().length ? flushGps() : batch.length;                   // keep draining a backlog
+    }).catch(() => { _gpsBusy = false; return 0; });                          // offline / error → keep the queue, retry on timer or `online`
+  }
+  function startGpsTracking() {
+    if (_gpsWatch != null) return;
+    if (!execUser() || !API() || !navigator.geolocation || !gpsCfg().enabled) return;
+    stopLocationPolling();                                                    // /track keeps Driver position fresh → no separate /location ping
+    _gpsLastCap = null;
+    try { _gpsWatch = navigator.geolocation.watchPosition(gpsOnFix, function () {}, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }); } catch (e) { _gpsWatch = null; return; }
+    if (!_gpsFlush) _gpsFlush = setInterval(flushGps, 30000);
+    if (!_gpsOnlineWired) { _gpsOnlineWired = true; window.addEventListener("online", flushGps); }
+    window.addEventListener("beforeunload", flushGps);
+    flushGps();                                                               // drain anything left from a previous session first
+  }
+  function stopGpsTracking() {
+    if (_gpsWatch != null && navigator.geolocation) { try { navigator.geolocation.clearWatch(_gpsWatch); } catch (e) {} }
+    _gpsWatch = null;
+    if (_gpsFlush) { clearInterval(_gpsFlush); _gpsFlush = null; }
+    return flushGps();                                                        // final drain so the End-Shift distance is complete
+  }
+  function gpsActualKm() { if (_gpsStats && _gpsStats.actualDistanceKm != null) return _gpsStats.actualDistanceKm; try { if (_avail && _avail.shift && _avail.shift.actualDistanceKm != null) return _avail.shift.actualDistanceKm; } catch (e) {} return 0; }
+  function gpsEffText() { const a = gpsActualKm(), p = _gpsPlannedKm; return (a > 0 && p > 0) ? Math.round((p / a) * 100) + "%" : "—"; }
+  function paintGps() { const a = document.getElementById("dlGpsActual"); if (a) a.textContent = gpsActualKm().toFixed(1); const e = document.getElementById("dlGpsEff"); if (e) e.textContent = gpsEffText(); }
+  // Best-effort current position for stamping the shift start/end — never hangs the toggle.
+  function withPos(cb) {
+    let done = false; const fin = (loc) => { if (done) return; done = true; cb(loc); };
+    if (!navigator.geolocation) return fin(null);
+    try { navigator.geolocation.getCurrentPosition((p) => fin({ lat: p.coords.latitude, lng: p.coords.longitude }), () => fin(null), { enableHighAccuracy: true, timeout: 6000, maximumAge: 10000 }); } catch (e) { fin(null); }
+    setTimeout(() => fin(null), 6500);
+  }
 
   /* ---------- today's route (demo data when not signed in) ---------- */
   function stops() {
@@ -322,6 +395,7 @@ window.DOODLY_DELIVERY = (function () {
 
     function render() {
       const s = summary();
+      _gpsPlannedKm = s.plannedKm;                    // feed the live route-efficiency readout
       host.innerHTML = `
         <div class="dl-hero">
           <div><div class="dl-greet">Good morning, ${esc(_live ? String((_live.driver || {}).name || "Executive").split(/\s+/)[0] : "Executive")} 👋</div>
@@ -342,6 +416,16 @@ window.DOODLY_DELIVERY = (function () {
           <div class="dl-kpi"><div class="n">${s.pending ? fmtClock(s.remainingMin) : "—"}</div><div class="l">Est. completion</div></div>
           <div class="dl-kpi"><div class="n">${s.bottles}</div><div class="l">Bottles to collect</div></div>
         </div>
+        ${(_avail && _avail.available) ? `<div class="dl-card dl-gpscard" id="dlGpsCard">
+          <div class="dl-gps-h">${svg("nav", 15)} Live GPS distance<span class="dl-gps-rec">● Recording</span></div>
+          <div class="dl-gps-row">
+            <div class="dl-gps-cell"><div class="v"><span id="dlGpsActual">${gpsActualKm().toFixed(1)}</span><small>km</small></div><div class="k">Actual travelled</div></div>
+            <div class="dl-gps-cell"><div class="v">${s.plannedKm.toFixed(1)}<small>km</small></div><div class="k">Planned route</div></div>
+            <div class="dl-gps-cell"><div class="v"><span id="dlGpsEff">${gpsEffText()}</span></div><div class="k">Route efficiency</div></div>
+            <div class="dl-gps-cell"><div class="v">${s.done}<small>/${s.total}</small></div><div class="k">Deliveries</div></div>
+          </div>
+          <div class="dl-gps-note">GPS is measured server-side while you're on shift — impossible jumps, duplicates and signal loss are filtered out automatically.</div>
+        </div>` : ""}
         ${navCard(s)}
         <div class="dl-card dl-routewrap">
           <div class="dl-card-h"><h3>${svg("pin", 18)} Today's route${_live && _live.route && _live.route.source ? ` <small class="muted-sm" style="font-weight:600">· ${_live.route.source === "ROAD" ? "road-optimised" : "distance-optimised"}</small>` : ""}</h3></div>
@@ -454,14 +538,22 @@ window.DOODLY_DELIVERY = (function () {
       if (av) av.addEventListener("click", () => {
         const next = !_avail.available;
         av.disabled = true;
-        API().post("/api/driver/availability", { available: next })
-          .then((r) => {
-            _avail = Object.assign({}, _avail, r || {}, { available: next });
-            if (next) toast("Shift started — you're available");
-            else { const sh = r && r.shift; toast(sh ? `Shift ended · ${fmtDur((sh.workedMinutes || 0) * 60000)} · ${sh.deliveriesCount} deliveries · ${sh.bottlesDelivered} delivered · ${sh.bottlesCollected} collected` : "Shift ended"); }
-            render();
-          })
-          .catch((e) => { av.disabled = false; toast((e && e.message) || "Couldn't update availability"); });
+        // Stamp the shift start/end GPS location (best-effort — the toggle never waits on GPS).
+        withPos((loc) => {
+          API().post("/api/driver/availability", Object.assign({ available: next }, loc || {}))
+            .then((r) => {
+              _avail = Object.assign({}, _avail, r || {}, { available: next });
+              if (next) { startGpsTracking(); toast("Shift started — GPS distance tracking on"); }
+              else {
+                stopGpsTracking();
+                const sh = r && r.shift;
+                const km = sh && sh.actualDistanceKm != null ? `${Number(sh.actualDistanceKm).toFixed(1)} km travelled · ` : "";
+                toast(sh ? `Shift ended · ${fmtDur((sh.workedMinutes || 0) * 60000)} · ${km}${sh.deliveriesCount} deliveries · ${sh.bottlesCollected} collected` : "Shift ended");
+              }
+              render();
+            })
+            .catch((e) => { av.disabled = false; toast((e && e.message) || "Couldn't update availability"); });
+        });
       });
       host.querySelector("#dlStart").addEventListener("click", () => {
         const opened = openRouteNav();   // launch multi-stop Google Maps navigation (inside the click gesture)
@@ -471,8 +563,10 @@ window.DOODLY_DELIVERY = (function () {
         render();
       });
       host.querySelectorAll("[data-navroute]").forEach((b) => b.addEventListener("click", () => openRouteNav()));
-      // resume live GPS reporting if the route is already in progress (e.g. after a page reload)
-      if (_live && all.some((s2) => { var ss = stStatus(st, s2.id); return ss === "onway" || ss === "reached"; })) startLocationPolling();
+      // On reload while a shift is open → resume continuous GPS distance tracking (drains any
+      // queued fixes too). Off shift but mid-route → fall back to the last-position ping.
+      if (_avail && _avail.available) startGpsTracking();
+      else if (_live && all.some((s2) => { var ss = stStatus(st, s2.id); return ss === "onway" || ss === "reached"; })) startLocationPolling();
       host.querySelector("#dlRefresh").addEventListener("click", () => { if (_live) { loadLive().then(() => { mountPortalNow(host); toast("Route refreshed"); }); } else { render(); toast("Route refreshed"); } });
       const goCur = host.querySelector("#dlGoCur");
       if (goCur) goCur.addEventListener("click", () => { const c = currentStop(); const el = c && host.querySelector(`#card-${c.id}`); if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); });
