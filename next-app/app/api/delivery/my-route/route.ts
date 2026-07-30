@@ -50,7 +50,7 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
   const include = {
     address: true,   // the delivery's own pinned address snapshot — the authoritative stop location
     user: { select: { id: true, name: true, phone: true } },   // direct customer (bottle-return PICKUP has no sub/order)
-    subscription: { include: { user: { select: { id: true, name: true, phone: true } }, address: true, items: { include: { variant: { select: { label: true, product: { select: { name: true } } } } } }, plan: { select: { name: true } } } },
+    subscription: { include: { user: { select: { id: true, name: true, phone: true } }, address: true, items: { include: { variant: { select: { label: true, ml: true, product: { select: { name: true } } } } } }, plan: { select: { name: true } } } },
     order: { include: { user: { select: { id: true, name: true, phone: true } }, address: true, payment: { select: { method: true, status: true } } } },
     route: { select: { id: true, name: true, code: true } },
   } as const;
@@ -97,6 +97,12 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
     // else the one-time order's address (one-time orders have no subscription).
     const addr = d.address ?? d.subscription?.address ?? d.order?.address ?? null;
     const item = d.subscription?.items?.[0];
+    // ALL products on this stop (not just the first), each with numeric ml + litres.
+    const items = (d.subscription?.items ?? []).map((it) => {
+      const ml = it.variant?.ml ?? null;
+      return { label: it.variant?.label ?? "", product: it.variant?.product?.name ?? "", ml, qty: it.qty, litres: ml != null ? Math.round((ml * it.qty) / 100) / 10 : null };
+    });
+    const totalLitres = Math.round(items.reduce((a, x) => a + (x.litres ?? 0), 0) * 10) / 10;
     const cod = d.order && d.order.status === "PENDING" && d.order.payment?.method === "CASH";
     return {
       id: d.id, seq: d.sequence ?? i + 1,
@@ -116,6 +122,8 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
       plan: isPickup ? "Bottle return pickup" : (d.subscription?.plan?.name ?? (d.order ? "One-time order" : "Delivery")),
       qty: item?.qty ?? 1,
       itemLabel: item ? `${item.variant.label} ${item.variant.product.name}` : "",
+      items,                 // every product on this stop: { label, product, ml, qty, litres }
+      totalLitres,           // Σ litres across all products
       instructions: isPickup ? (addr?.deliveryNote ?? "Collect the customer's empty glass bottles for their deposit refund.") : (addr?.deliveryNote ?? ""),
       // ---- bottle-return pickup (Step 4): collect empties, hand over nothing ----
       kind: d.kind,

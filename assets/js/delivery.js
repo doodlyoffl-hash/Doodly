@@ -108,6 +108,13 @@ window.DOODLY_DELIVERY = (function () {
   // ---- shift duration (live) ----
   function fmtDur(ms) { if (ms == null || ms < 0) return ""; const m = Math.floor(ms / 60000), h = Math.floor(m / 60); return h > 0 ? h + "h " + (m % 60) + "m" : m + "m"; }
   function shiftClockText() { try { if (_avail && _avail.available && _avail.shift && _avail.shift.startedAt) return fmtDur(Date.now() - new Date(_avail.shift.startedAt).getTime()); } catch (e) {} return ""; }
+  // Estimated arrival clock for a stop = route base (shift start if on shift, else now) + etaMinutes.
+  function stopEtaClock(s2) {
+    if (!s2 || s2.etaMinutes == null) return "";
+    let base = Date.now();
+    try { if (_avail && _avail.available && _avail.shift && _avail.shift.startedAt) base = new Date(_avail.shift.startedAt).getTime(); } catch (e) {}
+    try { return new Date(base + s2.etaMinutes * 60000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; }
+  }
   let _shiftTimer = null;
   function ensureShiftClock() {
     if (_shiftTimer) { clearInterval(_shiftTimer); _shiftTimer = null; }
@@ -369,7 +376,11 @@ window.DOODLY_DELIVERY = (function () {
         })()}
         ${s2.noCoords
           ? `<div class="dl-stop-leg" style="color:#a15b12">${svg("pin", 12)} Location not pinned — distance unavailable. Ask the customer to set their map pin.</div>`
-          : (legTxt ? `<div class="dl-stop-leg">${svg("nav", 12)} ${legTxt}${s2.cumulativeKm != null ? ` · ${Number(s2.cumulativeKm).toFixed(1)} km cumulative` : ""}</div>` : "")}
+          : (legTxt ? `<div class="dl-stop-leg">${svg("nav", 12)} ${legTxt}${s2.cumulativeKm != null ? ` · ${Number(s2.cumulativeKm).toFixed(1)} km cumulative` : ""}${stopEtaClock(s2) ? ` · ETA ~${stopEtaClock(s2)}` : ""}</div>` : "")}
+        ${(s2.items && s2.items.length) ? `<div class="dl-items" style="margin:5px 0;padding:7px 10px;border-radius:8px;background:rgba(15,61,46,.05);font-size:.85rem">
+          ${s2.items.map((it) => `<div style="display:flex;justify-content:space-between;gap:8px"><span>${svg("bottle", 12)} <b>${esc(it.label || (it.ml ? it.ml + "ml" : ""))}</b>${it.product ? " " + esc(it.product) : ""}</span><span>×${it.qty}${it.litres != null ? ` · ${it.litres} L` : ""}</span></div>`).join("")}
+          ${s2.totalLitres ? `<div style="text-align:right;font-weight:700;margin-top:3px;color:#0F3D2E">Total ${s2.totalLitres} L</div>` : ""}
+        </div>` : ""}
         ${s2.instructions ? `<div class="dl-instr">${svg("alert", 13)} ${esc(s2.instructions)}</div>` : ""}
         ${("verified" in s2) ? `<div class="dl-geo" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:5px;font-size:.85rem">
           <span>${svg("pin", 12)} Location: ${s2.verified ? '<b style="color:#1FAE66">Verified pin</b>' : (s2.hasPin ? '<b style="color:#a15b12">Unverified pin</b>' : '<b style="color:#b3261e">No pin set</b>')}</span>
