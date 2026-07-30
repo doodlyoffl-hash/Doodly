@@ -5426,7 +5426,10 @@
   // ---- System → User Management (admin/users → mirror + interceptor over DOODLY_RBAC.mountUsers; reuses /api/users) ----
   var _usEditingId = null;
   function usErr(err) { return err && err.code === "forbidden" ? "Not allowed for your role (403)." : err && err.code === "conflict" ? (err.message || "Already exists.") : (err && err.message) || "Couldn't save."; }
-  function usTempPw() { var s = "", c = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"; for (var i = 0; i < 10; i++) s += c[Math.floor(Math.random() * c.length)]; return "Dy" + s + "7"; }
+  // Must satisfy the server password policy (8+ chars · upper · lower · number · SPECIAL).
+  // "Dy" gives upper+lower, "7" a digit, and the special char is mandatory — without it
+  // POST /api/users fails Zod validation ("Password must include a special character").
+  function usTempPw() { var s = "", c = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789", sp = "!@#$%*?"; for (var i = 0; i < 8; i++) s += c[Math.floor(Math.random() * c.length)]; return "Dy" + s + sp[Math.floor(Math.random() * sp.length)] + "7"; }
   function usersMirror(rows) {
     var list = (rows || []).map(function (u) { return { id: u.id, name: u.name || u.email || "—", email: u.email || "", phone: u.phone || "", role: String(u.role || "customer").toLowerCase(), status: String(u.status || "ACTIVE").toLowerCase(), lastLogin: "—", deleted: !!u.deletedAt }; });
     try { if (window.DOODLY_RBAC && DOODLY_RBAC.saveUsers) DOODLY_RBAC.saveUsers(list); else localStorage.setItem("doodly-users", JSON.stringify(list)); } catch (e) {}
