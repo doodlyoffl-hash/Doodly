@@ -32,14 +32,16 @@ export function estimateDriverPay(input: { actualKm: number; deliveries: number 
   return { enabled: true, base: r2(base), distancePay: r2(distancePay), fuelReimbursement: r2(fuelReimbursement), deliveryPay: r2(deliveryPay), subtotal: r2(subtotal), total: r2(total) };
 }
 
-/** Human-readable "how it's computed" line, e.g. "₹6/km + ₹4/km fuel + ₹8/delivery + ₹150 base, min ₹250". */
+/** Human-readable "how it's computed" line, e.g. "₹6/km + ₹4/km fuel + ₹8/delivery + ₹150 base, min ₹250".
+    Zero-value components are omitted so the line reflects only the rates in effect. */
 export function payRateBasis(cfg: DriverPayConfig): string {
   if (!cfg.enabled) return "pay estimate off";
-  const parts: string[] = [`₹${cfg.perKmRate}/km`];
+  const parts: string[] = [];
+  if (cfg.perKmRate) parts.push(`₹${cfg.perKmRate}/km`);
   if (cfg.fuelPerKm) parts.push(`₹${cfg.fuelPerKm}/km fuel`);
   if (cfg.perDeliveryRate) parts.push(`₹${cfg.perDeliveryRate}/delivery`);
   if (cfg.baseShiftPay) parts.push(`₹${cfg.baseShiftPay} base`);
-  let s = parts.join(" + ");
+  let s = parts.join(" + ") || "₹0";
   if (cfg.minShiftPay) s += `, min ₹${cfg.minShiftPay}`;
   return s;
 }
