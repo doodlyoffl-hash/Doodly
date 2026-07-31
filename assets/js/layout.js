@@ -1931,6 +1931,8 @@
       wireRte("#del-rte-pdf", "pdf"); wireRte("#del-rte-xls", "xls"); wireRte("#del-rte-csv", "csv");
       var wireGps = function (id, fmt) { var b = rroot.querySelector(id); if (b && !b._gpsWired) { b._gpsWired = true; b.addEventListener("click", function () { exportGpsDistanceReport(_delDate || istTodayISO(), fmt); }); } };
       wireGps("#del-gps-pdf", "pdf"); wireGps("#del-gps-xls", "xls"); wireGps("#del-gps-csv", "csv");
+      var wireMpay = function (id, fmt) { var b = rroot.querySelector(id); if (b && !b._mpayWired) { b._mpayWired = true; b.addEventListener("click", function () { exportMonthlyPay(_delDate || istTodayISO(), fmt); }); } };
+      wireMpay("#del-mpay-pdf", "pdf"); wireMpay("#del-mpay-xls", "xls"); wireMpay("#del-mpay-csv", "csv");
     }
   }
   /* Packing Summary card — bottles to pack BY SIZE for the selected delivery date.
@@ -3048,6 +3050,7 @@
     manifest: { path: "/api/admin/deliveries/manifest/export", name: "DOODLY_Delivery_Manifest", label: "delivery manifest" },
     routeReport: { path: "/api/admin/deliveries/route-report/export", name: "DOODLY_Route_Report", label: "route report" },
     gpsDistance: { path: "/api/admin/deliveries/gps-distance/export", name: "DOODLY_GPS_Distance_Report", label: "GPS distance report" },
+    monthlyPay: { path: "/api/admin/deliveries/monthly-pay/export", name: "DOODLY_Monthly_Pay", label: "monthly pay summary", qp: "month" },
   };
   function exportOpsReport(kind, iso, format) {
     var cfg = OPS_REPORTS[kind]; if (!cfg) return;
@@ -3055,12 +3058,14 @@
     var h = {}; try { var t = localStorage.getItem("doodly-token"); if (t) h["Authorization"] = "Bearer " + t; } catch (e) {}
     try { if (window.DOODLY_RBAC) { h["X-Doodly-Actor"] = DOODLY_RBAC.activeRole(); var cu = DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser(); if (cu && cu.id) h["X-Doodly-Actor-Id"] = cu.id; } } catch (e) {}
     var ext = format === "xls" ? "xls" : format === "csv" ? "csv" : "pdf";
+    // month-scoped reports take ?month=YYYY-MM (derived from the selected day); the rest take ?date=YYYY-MM-DD.
+    var qp = cfg.qp || "date", val = qp === "month" ? String(iso).slice(0, 7) : iso;
     dacToast("Preparing the " + cfg.label + " (" + ext.toUpperCase() + ")…");
-    fetch(base + cfg.path + "?date=" + encodeURIComponent(iso) + "&format=" + ext, { headers: h, credentials: "include" })
+    fetch(base + cfg.path + "?" + qp + "=" + encodeURIComponent(val) + "&format=" + ext, { headers: h, credentials: "include" })
       .then(function (r) { if (!r.ok) throw new Error(r.status === 403 ? "Your role can't export this report (403)." : "Export failed (" + r.status + ")"); return r.blob(); })
       .then(function (blob) {
         var url = URL.createObjectURL(blob);
-        var a = document.createElement("a"); a.href = url; a.download = cfg.name + "_" + iso + "." + ext;
+        var a = document.createElement("a"); a.href = url; a.download = cfg.name + "_" + val + "." + ext;
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
         dacToast(cfg.label.charAt(0).toUpperCase() + cfg.label.slice(1) + " downloaded (" + ext.toUpperCase() + ").");
@@ -3072,11 +3077,13 @@
   function exportManifest(iso, format) { exportOpsReport("manifest", iso, format); }
   function exportRouteReport(iso, format) { exportOpsReport("routeReport", iso, format); }
   function exportGpsDistanceReport(iso, format) { exportOpsReport("gpsDistance", iso, format); }
+  function exportMonthlyPay(iso, format) { exportOpsReport("monthlyPay", iso, format); }
   window.DOODLY_ADMIN.exportPackingList = exportPackingList;
   window.DOODLY_ADMIN.exportPackingSheet = exportPackingSheet;
   window.DOODLY_ADMIN.exportManifest = exportManifest;
   window.DOODLY_ADMIN.exportRouteReport = exportRouteReport;
   window.DOODLY_ADMIN.exportGpsDistanceReport = exportGpsDistanceReport;
+  window.DOODLY_ADMIN.exportMonthlyPay = exportMonthlyPay;
 
   /* ---- "View route" modal: one executive's OPTIMISED round trip for a day ----
      Ordered stops with per-leg + cumulative distance/ETA + a warehouse-anchored map,
