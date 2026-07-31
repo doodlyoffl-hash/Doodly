@@ -8,6 +8,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth/authorize";
 import { db } from "@/lib/db";
 import { istDayWindow } from "@/lib/delivery/stats";
+import { getDriverPayConfig } from "@/lib/delivery/pay-config";
+import { estimateDriverPay, payRateBasis } from "@/lib/delivery/pay";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +23,7 @@ export async function GET(req: NextRequest) {
   catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
 
   const { start, end, iso } = istDayWindow(req.nextUrl.searchParams.get("date"));
+  const payCfg = await getDriverPayConfig();
 
   const shifts = await db.shift.findMany({
     where: { status: "OPEN" },
@@ -54,6 +57,7 @@ export async function GET(req: NextRequest) {
     const planned = s.plannedDistanceKm != null ? round1(s.plannedDistanceKm) : null;
     const actual = round2(s.actualDistanceKm ?? 0);
     const lastSeen = dv?.lastSeenAt ? new Date(dv.lastSeenAt).getTime() : null;
+    const pay = estimateDriverPay({ actualKm: actual, deliveries: p.done }, payCfg);
     return {
       driverId: s.driverId,
       name: dv?.user?.name ?? "—",
@@ -69,6 +73,7 @@ export async function GET(req: NextRequest) {
       plannedKm: planned,
       efficiencyPct: planned != null && actual > 0 ? Math.round((planned / actual) * 100) : null,
       deliveries: { total: p.total, done: p.done, pending: Math.max(0, p.total - p.done) },
+      payEstimate: pay.enabled ? pay.total : null,
     };
   });
 
@@ -78,7 +83,9 @@ export async function GET(req: NextRequest) {
     actualKm: round1(execs.reduce((a, e) => a + e.actualDistanceKm, 0)),
     deliveriesDone: execs.reduce((a, e) => a + e.deliveries.done, 0),
     deliveriesTotal: execs.reduce((a, e) => a + e.deliveries.total, 0),
+    payEstimate: payCfg.enabled ? round2(execs.reduce((a, e) => a + (e.payEstimate ?? 0), 0)) : null,
   };
 
-  return NextResponse.json({ date: iso, execs, totals }, { headers: { "Cache-Control": "no-store" } });
+  const pay = { enabled: payCfg.enabled, basis: payRateBasis(payCfg) };
+  return NextResponse.json({ date: iso, execs, totals, pay }, { headers: { "Cache-Control": "no-store" } });
 }

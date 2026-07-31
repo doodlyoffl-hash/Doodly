@@ -1977,16 +1977,28 @@
      GPS fix, the distance their device has actually recorded so far (fraud-filtered),
      how fresh the fix is, and route progress. Injected above the analytics panel and
      refreshed by the deliveries poll. Reuses Driver.lat/lng/lastSeenAt + open Shift. */
+  var _payEditorOpen = false;   // suppress the 20s poll re-render while rates are being edited
+  var PAY_FIELDS = [
+    { k: "perKmRate", l: "Per km (₹)" }, { k: "fuelPerKm", l: "Fuel /km (₹)" }, { k: "perDeliveryRate", l: "Per delivery (₹)" },
+    { k: "baseShiftPay", l: "Base /shift (₹)" }, { k: "minShiftPay", l: "Min /shift (₹)" },
+  ];
+  function money0(n) { return "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN"); }
   function renderLiveTracking(iso) {
     if (!window.DOODLY_API) return;
+    if (_payEditorOpen) return;   // don't clobber an open rate editor mid-edit
     var anchor = document.getElementById("delAnalytics");
     if (!anchor || !anchor.parentNode) return;
     var mount = document.getElementById("doodlyLiveTrack");
     if (!mount) { mount = document.createElement("div"); mount.id = "doodlyLiveTrack"; mount.className = "reveal"; anchor.parentNode.insertBefore(mount, anchor); }
     DOODLY_API.get("/api/admin/deliveries/live-tracking?date=" + encodeURIComponent(iso)).then(function (r) {
-      var execs = (r && r.execs) || [], t = (r && r.totals) || {};
+      var execs = (r && r.execs) || [], t = (r && r.totals) || {}, pay = (r && r.pay) || { enabled: false, basis: "" };
+      var payOn = !!pay.enabled;
+      var payTools = '<span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+        (payOn ? '<span class="muted-sm" style="font-weight:600" title="How the pay estimate is computed">Pay est. @ ' + esc(pay.basis) + '</span>' : '') +
+        '<button type="button" class="btn btn-ghost sm" id="payRatesBtn">⚙ Pay rates</button><span class="badge green">● Live</span></span>';
       if (!execs.length) {
-        mount.innerHTML = '<div class="panel mt-3"><div class="panel-head"><h3>Live executive tracking</h3></div><div class="panel-pad"><p class="muted-sm">No executive is on shift right now. Live GPS distance and position appear here the moment a shift starts.</p></div></div>';
+        mount.innerHTML = '<div class="panel mt-3"><div class="panel-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h3>Live executive tracking</h3>' + payTools + '</div><div id="payRatesBox"></div><div class="panel-pad"><p class="muted-sm">No executive is on shift right now. Live GPS distance and position appear here the moment a shift starts.</p></div></div>';
+        wirePayRates(iso);
         return;
       }
       var ageTxt = function (s) { return s == null ? "—" : s < 90 ? "just now" : s < 3600 ? Math.round(s / 60) + "m ago" : Math.round(s / 3600) + "h ago"; };
@@ -2000,13 +2012,58 @@
           '<td style="text-align:right">' + (e.plannedKm != null ? Number(e.plannedKm).toFixed(1) + " km" : "—") + '</td>' +
           '<td style="text-align:right">' + (e.efficiencyPct != null ? e.efficiencyPct + "%" : "—") + '</td>' +
           '<td style="text-align:right">' + e.deliveries.done + "/" + e.deliveries.total + '</td>' +
+          (payOn ? '<td style="text-align:right"><b>' + (e.payEstimate != null ? money0(e.payEstimate) : "—") + '</b></td>' : '') +
           '<td style="text-align:right">' + map + '</td></tr>';
       }).join("");
+      var payHead = payOn ? '<th style="text-align:right" title="Estimated pay from GPS distance — not a payout">Est. pay</th>' : '';
+      var payFoot = payOn ? '<td style="text-align:right"><b>' + (t.payEstimate != null ? money0(t.payEstimate) : "—") + '</b></td>' : '';
       mount.innerHTML = '<div class="panel mt-3"><div class="panel-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">' +
-        '<h3>Live executive tracking <span class="muted-sm" style="font-weight:600">· ' + t.onShift + ' on shift · ' + Number(t.actualKm || 0).toFixed(1) + ' km travelled today</span></h3>' +
-        '<span class="badge green">● Live</span></div>' +
-        '<div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Executive</th><th>Last GPS</th><th style="text-align:right">Distance so far</th><th style="text-align:right">Planned</th><th style="text-align:right">Efficiency</th><th style="text-align:right">Progress</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></div></div>';
+        '<h3>Live executive tracking <span class="muted-sm" style="font-weight:600">· ' + t.onShift + ' on shift · ' + Number(t.actualKm || 0).toFixed(1) + ' km travelled today' + (payOn && t.payEstimate != null ? ' · ~' + money0(t.payEstimate) + ' est. pay' : '') + '</span></h3>' +
+        payTools + '</div><div id="payRatesBox"></div>' +
+        '<div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Executive</th><th>Last GPS</th><th style="text-align:right">Distance so far</th><th style="text-align:right">Planned</th><th style="text-align:right">Efficiency</th><th style="text-align:right">Progress</th>' + payHead + '<th></th></tr></thead><tbody>' + rows +
+        '<tr style="font-weight:700;background:rgba(15,61,46,.04)"><td>TOTAL</td><td></td><td style="text-align:right">' + Number(t.actualKm || 0).toFixed(1) + ' km</td><td></td><td></td><td style="text-align:right">' + (t.deliveriesDone || 0) + '/' + (t.deliveriesTotal || 0) + '</td>' + payFoot + '<td></td></tr>' +
+        '</tbody></table></div>' + (payOn ? '<p class="muted-sm" style="margin-top:8px">Estimated driver pay from GPS distance — planning figure only, not a payout. Tune rates with “Pay rates”.</p>' : '') + '</div></div>';
+      wirePayRates(iso);
     }).catch(function () { /* keep the last good render on a transient error */ });
+  }
+
+  /* "Pay rates" inline editor — Operations/Admin tune the rates that turn GPS
+     distance into the pay estimate. deliverySettings-gated server-side (execs 403). */
+  function wirePayRates(iso) {
+    var btn = document.getElementById("payRatesBtn");
+    if (btn && !btn._wired) {
+      btn._wired = true;
+      btn.addEventListener("click", function () {
+        var box = document.getElementById("payRatesBox");
+        if (!box) return;
+        if (_payEditorOpen) { _payEditorOpen = false; box.innerHTML = ""; return; }   // toggle closed
+        _payEditorOpen = true;
+        box.innerHTML = '<div class="panel-pad muted-sm">Loading rates…</div>';
+        DOODLY_API.get("/api/admin/deliveries/pay-config").then(function (r) {
+          var c = (r && r.config) || {};
+          var inputs = PAY_FIELDS.map(function (f) {
+            return '<label style="display:flex;flex-direction:column;gap:3px;font-size:.78rem;font-weight:700;color:var(--ink-2,#37423d)">' + esc(f.l) +
+              '<input type="number" min="0" step="0.5" id="pr-' + f.k + '" value="' + (c[f.k] != null ? c[f.k] : 0) + '" style="width:120px;padding:6px 8px;border:1px solid var(--line,#dfe6e1);border-radius:8px"></label>';
+          }).join("");
+          box.innerHTML = '<div class="panel-pad" style="border-bottom:1px solid var(--line,#eef2ef);background:rgba(31,174,102,.05)">' +
+            '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">' +
+            '<label style="display:flex;align-items:center;gap:6px;font-size:.82rem;font-weight:700">' +
+            '<input type="checkbox" id="pr-enabled"' + (c.enabled ? ' checked' : '') + '> Estimate on</label>' + inputs +
+            '<button type="button" class="btn btn-primary sm" id="pr-save">Save rates</button>' +
+            '<button type="button" class="btn btn-ghost sm" id="pr-cancel">Cancel</button></div>' +
+            '<p class="muted-sm" style="margin-top:8px">Estimate = base + km×(per-km + fuel) + deliveries×per-delivery, floored at the shift minimum. A planning figure — it moves no money.</p></div>';
+          document.getElementById("pr-cancel").addEventListener("click", function () { _payEditorOpen = false; box.innerHTML = ""; renderLiveTracking(iso); });
+          document.getElementById("pr-save").addEventListener("click", function () {
+            var body = { enabled: document.getElementById("pr-enabled").checked };
+            PAY_FIELDS.forEach(function (f) { body[f.k] = Number(document.getElementById("pr-" + f.k).value) || 0; });
+            var sv = document.getElementById("pr-save"); sv.disabled = true; sv.textContent = "Saving…";
+            DOODLY_API.patch("/api/admin/deliveries/pay-config", body).then(function () {
+              _payEditorOpen = false; box.innerHTML = ""; dacToast("Pay rates saved."); renderLiveTracking(iso);
+            }).catch(function (e) { sv.disabled = false; sv.textContent = "Save rates"; dacToast((e && e.message) || (e && e.code === "forbidden" ? "Your role can't edit pay rates (403)." : "Couldn't save rates.")); });
+          });
+        }).catch(function (e) { _payEditorOpen = false; box.innerHTML = ""; dacToast(e && e.code === "forbidden" ? "Your role can't view pay rates (403)." : "Couldn't load pay rates."); });
+      });
+    }
   }
 
   // ---- date-based delivery operations ----

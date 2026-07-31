@@ -10,8 +10,11 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { istDayWindow } from "@/lib/delivery/stats";
+import { getDriverPayConfig } from "@/lib/delivery/pay-config";
+import { estimateDriverPay, payRateBasis } from "@/lib/delivery/pay";
 
 const n1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
+const money = (n: number) => "₹" + Math.round(n).toLocaleString("en-IN");
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -28,6 +31,7 @@ export interface GpsDistanceRow {
   avgSpeedKmh: number | null;  // actual km ÷ hours worked (whole-shift average)
   workingHours: number;
   gpsPoints: number;
+  payEstimate: number | null;  // ₹ estimated pay from GPS distance (null when the estimate is off)
 }
 
 export interface GpsDistanceReport {
@@ -40,13 +44,14 @@ export interface GpsDistanceReport {
   rows: string[][];
   totalRow?: string[];
   data: GpsDistanceRow[];
-  totals: { executives: number; actualKm: number; plannedKm: number; deliveries: number; hours: number };
+  totals: { executives: number; actualKm: number; plannedKm: number; deliveries: number; hours: number; payEstimate: number | null };
 }
 
 /** Build the per-executive GPS travel-distance report for one IST delivery day (default: today IST). */
 export async function gpsDistanceReport(dateIso?: string | null): Promise<GpsDistanceReport> {
   const { start, end, iso } = istDayWindow(dateIso);
   const now = new Date();
+  const payCfg = await getDriverPayConfig();
 
   // Every shift that STARTED within the day window (open shifts show distance so far).
   const shifts = await db.shift.findMany({
@@ -80,6 +85,7 @@ export async function gpsDistanceReport(dateIso?: string | null): Promise<GpsDis
     const actualKm = round2(a.actualKm);
     const plannedKm = a.hasPlanned ? round1(a.plannedKm) : null;
     const hours = a.workedMin / 60;
+    const pay = estimateDriverPay({ actualKm, deliveries: a.deliveries }, payCfg);
     return {
       executive: a.executive, employeeId: a.employeeId,
       status: a.open ? "Live" : "Closed", shifts: a.shifts,
@@ -91,15 +97,18 @@ export async function gpsDistanceReport(dateIso?: string | null): Promise<GpsDis
       avgSpeedKmh: hours > 0 ? round1(actualKm / hours) : null,
       workingHours: round1(hours),
       gpsPoints: a.gpsPoints,
+      payEstimate: pay.enabled ? pay.total : null,
     };
   }).sort((x, y) => x.executive.localeCompare(y.executive));
 
+  const payOn = payCfg.enabled;
   const totals = {
     executives: data.length,
     actualKm: round1(data.reduce((s, r) => s + r.actualKm, 0)),
     plannedKm: round1(data.reduce((s, r) => s + (r.plannedKm ?? 0), 0)),
     deliveries: data.reduce((s, r) => s + r.deliveries, 0),
     hours: round1(data.reduce((s, r) => s + r.workingHours, 0)),
+    payEstimate: payOn ? round2(data.reduce((s, r) => s + (r.payEstimate ?? 0), 0)) : null,
   };
   const totalDiff = round1(totals.actualKm - totals.plannedKm);
   const totalAvgPerDel = totals.deliveries > 0 ? round2(totals.actualKm / totals.deliveries) : null;
@@ -110,24 +119,27 @@ export async function gpsDistanceReport(dateIso?: string | null): Promise<GpsDis
     { label: "Actual km (GPS)", right: true }, { label: "Planned km", right: true }, { label: "Difference (km)", right: true },
     { label: "Deliveries", right: true }, { label: "Avg km / delivery", right: true }, { label: "Avg speed (km/h)", right: true },
     { label: "Hours worked", right: true }, { label: "GPS points", right: true },
+    { label: "Est. pay", right: true },
   ];
   const rows = data.map((r) => [
     r.executive, r.employeeId, r.status,
     n1(r.actualKm), r.plannedKm != null ? n1(r.plannedKm) : "—", r.differenceKm != null ? (r.differenceKm > 0 ? "+" : "") + n1(r.differenceKm) : "—",
     String(r.deliveries), r.avgKmPerDelivery != null ? n1(r.avgKmPerDelivery) : "—", r.avgSpeedKmh != null ? n1(r.avgSpeedKmh) : "—",
     n1(r.workingHours), String(r.gpsPoints),
+    r.payEstimate != null ? money(r.payEstimate) : "—",
   ]);
   const totalRow = [
     "TOTAL", "", `${totals.executives} exec(s)`,
     n1(totals.actualKm), n1(totals.plannedKm), (totalDiff > 0 ? "+" : "") + n1(totalDiff),
     String(totals.deliveries), totalAvgPerDel != null ? n1(totalAvgPerDel) : "—", totalAvgSpeed != null ? n1(totalAvgSpeed) : "—",
     n1(totals.hours), "",
+    totals.payEstimate != null ? money(totals.payEstimate) : "—",
   ];
 
   return {
     type: "gps", date: iso,
     title: "GPS Travel-Distance Report",
-    subtitle: `Delivery day ${iso} · ${totals.executives} executive(s) · ${n1(totals.actualKm)} km actual vs ${n1(totals.plannedKm)} km planned · ${totals.deliveries} deliveries · generated ${new Date().toLocaleString("en-IN")}`,
+    subtitle: `Delivery day ${iso} · ${totals.executives} executive(s) · ${n1(totals.actualKm)} km actual vs ${n1(totals.plannedKm)} km planned · ${totals.deliveries} deliveries${payOn ? ` · est. pay ${money(totals.payEstimate ?? 0)} (${payRateBasis(payCfg)})` : ""} · generated ${new Date().toLocaleString("en-IN")}`,
     rowCount: data.length,
     columns, rows, totalRow, data, totals,
   };
