@@ -15,6 +15,8 @@ import { db } from "@/lib/db";
 import { notify, notifyDelivered } from "@/lib/notifications/dispatch";
 import { earn } from "@/lib/loyalty/service";
 import { moveBottleStockLenient } from "@/lib/bottles/service";
+import { computeDeliveryRevenuePaise } from "@/lib/delivery/revenue";
+import { audit } from "@/lib/auth/audit";
 
 export interface CompleteDeliveryOpts {
   bottlesIn?: number;                 // empties collected (RETURNED)
@@ -32,8 +34,8 @@ export async function completeDelivery(deliveryId: string, opts: CompleteDeliver
     select: {
       id: true, status: true, bottleCount: true, addressId: true, subscriptionId: true, orderId: true,
       userId: true, kind: true,
-      subscription: { select: { userId: true, addressId: true, items: { select: { qty: true, variant: { select: { ml: true } } } } } },
-      order: { select: { userId: true } },
+      subscription: { select: { userId: true, addressId: true, plan: { select: { discountBps: true } }, items: { select: { qty: true, variant: { select: { ml: true, dailyPaise: true } } } } } },
+      order: { select: { userId: true, totalPaise: true, couponDiscountPaise: true, depositPaise: true } },
       pickupRequest: { select: { id: true } },
     },
   });
@@ -49,12 +51,19 @@ export async function completeDelivery(deliveryId: string, opts: CompleteDeliver
   // Pin the address actually delivered to (history snapshot) so a later address change can't rewrite it.
   const snapshotAddressId = del.addressId ?? del.subscription?.addressId ?? null;
 
+  // FREEZE the recognised retail revenue of THIS delivery (delivery-based P&L) at the
+  // current price, so a later catalogue price change never re-values a past day. Pure.
+  const revenuePaise = computeDeliveryRevenuePaise({
+    status: finalStatus, kind: del.kind, bottleCount: del.bottleCount, bottlesOut,
+    subscription: del.subscription, order: del.order,
+  });
+
   const delivery = await db.$transaction(async (tx) => {
     const d = await tx.delivery.update({
       where: { id: del.id },
       data: {
         status: finalStatus, deliveredAt: new Date(),
-        bottlesIn, bottlesOut,
+        bottlesIn, bottlesOut, revenuePaise,
         ...(opts.cashCollected !== undefined ? { cashCollected: opts.cashCollected } : {}),
         customerRemark: opts.customerRemark ?? null,
         ...(opts.execRemark !== undefined ? { execRemark: opts.execRemark } : {}),
@@ -69,6 +78,9 @@ export async function completeDelivery(deliveryId: string, opts: CompleteDeliver
     }
     return d;
   });
+
+  // Audit the revenue recognition (Step 10) — delivery / customer / bottles / revenue.
+  audit({ userId: null, actorRole: "system", action: "revenue.recognized", target: `${del.id} · cust ${custId ?? "—"} · ${finalStatus} · ${bottlesOut}/${del.bottleCount ?? 0} bottle(s) · ₹${(revenuePaise / 100).toFixed(2)}` }).catch(() => {});
 
   // ---- fleet inventory auto-movement (best-effort, never blocks) ----
   // Handover moves stock AVAILABLE→IN_CIRCULATION; collected empties move
