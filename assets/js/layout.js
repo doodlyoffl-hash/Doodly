@@ -1263,6 +1263,17 @@
       }).catch(function (er) { tb.innerHTML = '<tr><td colspan="9" class="muted-sm" style="text-align:center;padding:14px">' + e2(er && er.code === "forbidden" ? "Your role can't view B2B pricing (403)." : "Couldn't load prices.") + "</td></tr>"; });
     }
     function patchRow(id, body) { DOODLY_API.patch("/api/b2b/pricing/" + encodeURIComponent(id), body).then(function () { dacToast("Updated."); loadRows(); }).catch(function (er) { dacToast((er && er.message) || "Update failed."); }); }
+    function downloadReport(fmt) {
+      var from = (host.querySelector("#upRepFrom") || {}).value || "", to = (host.querySelector("#upRepTo") || {}).value || "";
+      var base = DOODLY_API.base(), ext = fmt === "xls" ? "xls" : fmt === "csv" ? "csv" : "pdf";
+      var h = {}; try { var t = localStorage.getItem("doodly-token"); if (t) h.Authorization = "Bearer " + t; } catch (e) {}
+      try { if (window.DOODLY_RBAC) { h["X-Doodly-Actor"] = DOODLY_RBAC.activeRole(); var cu = DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser(); if (cu && cu.id) h["X-Doodly-Actor-Id"] = cu.id; } } catch (e) {}
+      dacToast("Preparing the B2B sales report (" + ext.toUpperCase() + ")…");
+      fetch(base + "/api/b2b/reports/export?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to) + "&format=" + ext, { headers: h, credentials: "include" })
+        .then(function (r) { if (!r.ok) throw new Error(r.status === 403 ? "Your role can't export this (403)." : "Export failed (" + r.status + ")"); return r.blob(); })
+        .then(function (blob) { var url = URL.createObjectURL(blob); var a = document.createElement("a"); a.href = url; a.download = "DOODLY_B2B_Sales_" + from + "_to_" + to + "." + ext; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 60000); dacToast("B2B sales report downloaded (" + ext.toUpperCase() + ")."); })
+        .catch(function (er) { dacToast((er && er.message) || "Couldn't export the report."); });
+    }
     function save() {
       var slug = host.querySelector("#upProd").value, unit = host.querySelector("#upUnit").value;
       var price = Number(host.querySelector("#upPrice").value), base = Number(host.querySelector("#upBase").value);
@@ -1302,6 +1313,14 @@
             "</div>" +
             '<p class="muted-sm" style="margin-top:8px">Per-<b>unit</b> negotiated price stored in the database — used by B2B order creation, invoices and P&amp;L. Changing it never alters past orders/invoices (they keep their own snapshot).</p>' +
           "</div>" +
+          '<div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">' +
+            '<div style="font-weight:700;align-self:center">B2B Sales Report <span class="muted-sm" style="font-weight:600">· by unit · revenue · ASP · milk profit</span></div>' +
+            fld("From", '<input class="input" id="upRepFrom" type="date">') +
+            fld("To", '<input class="input" id="upRepTo" type="date">') +
+            '<button class="btn btn-ghost sm" id="upRepPdf">⬇ PDF</button>' +
+            '<button class="btn btn-ghost sm" id="upRepXls">Excel</button>' +
+            '<button class="btn btn-ghost sm" id="upRepCsv">CSV</button>' +
+          "</div>" +
         "</div></div>";
       var sel = host.querySelector("#upBiz");
       sel.innerHTML = state.businesses.map(function (b) { return '<option value="' + b.id + '">' + e2(b.name) + " (" + e2(b.code) + ")</option>"; }).join("") || '<option value="">No businesses</option>';
@@ -1312,6 +1331,14 @@
       var syncUnits = function () { host.querySelector("#upUnit").innerHTML = unitOptions(prodSel.value); };
       prodSel.addEventListener("change", syncUnits); syncUnits();
       host.querySelector("#upSave").addEventListener("click", save);
+      // sales-report export bar: default range = this month → today
+      try {
+        var td = new Date(), toS = td.toISOString().slice(0, 10), fromS = new Date(td.getFullYear(), td.getMonth(), 1).toISOString().slice(0, 10);
+        host.querySelector("#upRepFrom").value = fromS; host.querySelector("#upRepTo").value = toS;
+      } catch (e) {}
+      host.querySelector("#upRepPdf").addEventListener("click", function () { downloadReport("pdf"); });
+      host.querySelector("#upRepXls").addEventListener("click", function () { downloadReport("xls"); });
+      host.querySelector("#upRepCsv").addEventListener("click", function () { downloadReport("csv"); });
     }
     DOODLY_API.get("/api/b2b/businesses").then(function (r) {
       state.businesses = (r.businesses || r || []).filter(function (b) { return b && b.id; });
