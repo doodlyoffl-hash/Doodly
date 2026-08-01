@@ -27,14 +27,16 @@ function parseMl(label?: string | null): number | null {
   return null;
 }
 
-// "Milk went out" = every delivery except FAILED/SKIPPED (DeliveryStatus has no
-// CANCELLED — a cancelled subscription simply generates no delivery row).
-/** Litres sold to retail on an IST day — mirrors lib/delivery/stats.ts exactly
- *  (Variant.ml × per-delivery bottles; a 500 ml order is 0.5 L, never 1 L). */
+// "Milk went out" = only SUCCESSFULLY-completed deliveries (DELIVERED or
+// PARTIALLY_DELIVERED). A positive filter — CANCELLED / RESCHEDULED / SCHEDULED /
+// CUSTOMER_UNAVAILABLE etc. are NOT sold (the old `notIn:[FAILED,SKIPPED]` wrongly
+// counted them, over-drawing COGS). Matches the delivery-based revenue predicate.
+/** Litres sold to retail on an IST day — Variant.ml × per-delivery bottles
+ *  (a 500 ml order is 0.5 L, never 1 L). */
 export async function retailLitresForDay(start: Date, end: Date): Promise<number> {
   const [rows, variants] = await Promise.all([
     db.delivery.findMany({
-      where: { date: { gte: start, lt: end }, status: { notIn: ["FAILED", "SKIPPED"] } },
+      where: { date: { gte: start, lt: end }, status: { in: ["DELIVERED", "PARTIALLY_DELIVERED"] } },
       select: {
         bottleCount: true,
         subscription: { select: { items: { select: { qty: true, variant: { select: { ml: true } } } } } },

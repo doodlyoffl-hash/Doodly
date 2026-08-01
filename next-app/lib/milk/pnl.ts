@@ -1,7 +1,7 @@
 /* =============================================================
    DOODLY — Milk Profit & Loss.
    Combines the three real ledgers over a period:
-     Revenue = retail (Order.totalPaise − couponDiscountPaise, PAID) + B2B
+     Revenue = retail (completed DELIVERIES on the day, frozen per delivery) + B2B
      COGS    = FIFO milk consumed (TankerConsumption.costPaise)  ← follows sales
      Expenses= Expense.totalPaise (not rejected/cancelled)
      Gross   = Revenue − COGS       Net = Revenue − COGS − Expenses
@@ -11,17 +11,22 @@
    but sold over three days is expensed as it sells. The cash spent on tankers is
    reported separately as `procurementCashPaise`.
 
-   Revenue convention matches lib/revenue/service.ts: coupon is netted out (it
-   never reached us); wallet stays in (that cash arrived at recharge). All paise.
-
-   Accrual note: retail revenue is recognised at order (a prepaid subscription
-   lands upfront) while its COGS spreads across delivery days — so a single DAY's
-   gross can be lumpy around subscription starts. The MONTH smooths this; treat
-   monthly as the accounting figure and daily as the operational one.
+   Revenue recognition: retail revenue is DELIVERY-based — recognised only when
+   milk is delivered (lib/delivery/revenue.retailRevenueForDay: sum of each
+   completed delivery's frozen revenuePaise, DELIVERED + PARTIALLY_DELIVERED). A
+   prepaid subscription is recognised one delivery-day at a time, matching how COGS
+   already spreads across delivery days — no more order-time lumpiness. B2B is
+   already delivery-dated (BusinessOrder.deliveryDate). Coupon is netted out and
+   the refundable deposit is excluded; wallet stays in. All paise.
+   ⚠️ Revenue reads Delivery rows LIVE (needs no settlement); COGS/inventory still
+   draw only on the manual settle — so an unsettled delivered day shows revenue but
+   0 COGS until settled (the settlement-health banner surfaces this).
    ============================================================= */
 import "server-only";
 import { db } from "@/lib/db";
 import { istDayWindow } from "@/lib/delivery/stats";
+import { retailRevenueForDay } from "@/lib/delivery/revenue";
+import { retailLitresForDay } from "@/lib/milk/settle";
 
 const IST_MS = 5.5 * 60 * 60 * 1000;
 const pct = (num: number, den: number) => (den > 0 ? Math.round((num / den) * 1000) / 10 : 0);
@@ -40,7 +45,9 @@ export interface Pnl {
   grossMarginPct: number;
   netMarginPct: number;
   // operational context (not part of the P&L identity)
-  litresSold: number;           // milk consumed (retail + B2B)
+  litresSold: number;           // milk consumed (retail + B2B), from the settled COGS ledger
+  retailLitresDelivered: number; // retail litres that actually went out (delivered), independent of settlement
+  retailDeliveries: number;      // count of completed retail deliveries recognised
   procurementCashPaise: number; // cash spent buying tankers in the period
   litresProcured: number;
   kgProcured: number;
@@ -48,15 +55,16 @@ export interface Pnl {
 }
 
 export async function pnlForBounds(label: string, start: Date, end: Date): Promise<Pnl> {
-  const [retail, b2b, cogs, expenses, proc] = await Promise.all([
-    db.order.aggregate({ where: { status: "PAID", createdAt: { gte: start, lt: end } }, _sum: { totalPaise: true, couponDiscountPaise: true } }),
+  const [retailRev, retailLitres, b2b, cogs, expenses, proc] = await Promise.all([
+    retailRevenueForDay(start, end),                              // DELIVERY-based retail revenue (frozen per delivery)
+    retailLitresForDay(start, end),                              // retail litres actually delivered (same DELIVERED predicate)
     db.businessOrder.aggregate({ where: { status: { not: "CANCELLED" }, deliveryDate: { gte: start, lt: end } }, _sum: { totalPaise: true } }),
     db.tankerConsumption.aggregate({ where: { date: { gte: start, lt: end } }, _sum: { costPaise: true, litres: true } }),
     db.expense.aggregate({ where: { deletedAt: null, status: { notIn: ["REJECTED", "CANCELLED"] }, date: { gte: start, lt: end } }, _sum: { totalPaise: true } }),
     db.milkTanker.aggregate({ where: { deletedAt: null, procurementDate: { gte: start, lt: end } }, _sum: { totalCostPaise: true, litres: true, quantityKg: true } }),
   ]);
 
-  const retailRevenuePaise = Math.max(0, (retail._sum.totalPaise ?? 0) - (retail._sum.couponDiscountPaise ?? 0));
+  const retailRevenuePaise = Math.max(0, retailRev.revenuePaise);
   const b2bRevenuePaise = b2b._sum.totalPaise ?? 0;
   const revenuePaise = retailRevenuePaise + b2bRevenuePaise;
   const cogsPaise = cogs._sum.costPaise ?? 0;
@@ -75,6 +83,8 @@ export async function pnlForBounds(label: string, start: Date, end: Date): Promi
     grossMarginPct: pct(grossProfitPaise, revenuePaise),
     netMarginPct: pct(netProfitPaise, revenuePaise),
     litresSold: Math.round((cogs._sum.litres ?? 0) * 100) / 100,
+    retailLitresDelivered: Math.round(retailLitres * 100) / 100,
+    retailDeliveries: retailRev.deliveries,
     procurementCashPaise, litresProcured: Math.round(litresProcured * 100) / 100,
     kgProcured: Math.round((proc._sum.quantityKg ?? 0) * 100) / 100,
     avgCostPerLitrePaise: litresProcured > 0 ? Math.round(procurementCashPaise / litresProcured) : 0,

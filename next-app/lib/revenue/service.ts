@@ -9,6 +9,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { retailRevenueForDay, computeDeliveryRevenuePaise, DELIVERY_REVENUE_SELECT } from "@/lib/delivery/revenue";
 
 export interface RevRange { from?: string | Date; to?: string | Date }
 export interface RevFilters extends RevRange {
@@ -53,15 +54,11 @@ export async function revenueDashboard(rangeIn: RevRange = {}) {
 
   const PAID = { status: "PAID" as const };
   const [
-    revTotal, revToday, revWeek, revMonth, revYear, revRange, byType, grossAgg,
+    revTotal, byType, grossAgg,
     pending, refundedOrders, walletUsed, refundsAgg, activeSubs, b2bAgg, methodDist, trendRows, segNewRepeat,
   ] = await Promise.all([
+    // revTotal stays order-based: it drives cash-collected + AOV (avg ORDER value), not recognition
     db.order.aggregate({ where: PAID, _sum: { totalPaise: true, couponDiscountPaise: true }, _count: { _all: true } }),
-    db.order.aggregate({ where: { ...PAID, createdAt: { gte: todayStart } }, _sum: { totalPaise: true, couponDiscountPaise: true } }),
-    db.order.aggregate({ where: { ...PAID, createdAt: { gte: startOfDay(weekAgo) } }, _sum: { totalPaise: true, couponDiscountPaise: true } }),
-    db.order.aggregate({ where: { ...PAID, createdAt: { gte: monthStart } }, _sum: { totalPaise: true, couponDiscountPaise: true }, _count: { _all: true } }),
-    db.order.aggregate({ where: { ...PAID, createdAt: { gte: yearStart } }, _sum: { totalPaise: true, couponDiscountPaise: true } }),
-    db.order.aggregate({ where: { ...PAID, createdAt: { gte: from, lte: to } }, _sum: { totalPaise: true, couponDiscountPaise: true }, _count: { _all: true } }),
     db.order.groupBy({ by: ["type"], where: PAID, _sum: { totalPaise: true, couponDiscountPaise: true }, _count: { _all: true } }),
     db.order.aggregate({ where: PAID, _sum: { subtotalPaise: true, discountPaise: true, taxPaise: true, deliveryPaise: true } }),
     db.order.aggregate({ where: { status: "PENDING" }, _sum: { totalPaise: true, couponDiscountPaise: true }, _count: { _all: true } }),
@@ -73,8 +70,22 @@ export async function revenueDashboard(rangeIn: RevRange = {}) {
     // cancelled Rs.1,00,000 order sitting in "B2B billed" and "outstanding" forever.
     db.businessOrder.aggregate({ where: { status: { not: "CANCELLED" } }, _sum: { totalPaise: true, paidPaise: true }, _count: true }),
     db.paymentRecord.groupBy({ by: ["method"], _sum: { netPaise: true }, _count: { _all: true } }),
-    db.order.findMany({ where: { ...PAID, createdAt: { gte: from, lte: to } }, select: { createdAt: true, totalPaise: true } }),
+    // revenue trend is DELIVERY-based: recognised on the delivery date, frozen per delivery
+    db.delivery.findMany({ where: { status: { in: ["DELIVERED", "PARTIALLY_DELIVERED"] }, date: { gte: from, lte: to } }, select: { date: true, ...DELIVERY_REVENUE_SELECT }, take: 20000 }),
     db.order.groupBy({ by: ["userId"], where: PAID, _count: { _all: true } }),
+  ]);
+
+  // ---- DELIVERY-BASED retail revenue (the windowed "revenue" figures) ----
+  // Recognised only when milk is delivered (sum of frozen Delivery.revenuePaise). The
+  // cash/order metrics below (collected, AOV, MRR, byType, gross/discount/gst) stay
+  // order/payment-based — they describe collection + the order book, not recognition.
+  const [dToday, dWeek, dMonth, dYear, dRange, dTotal] = await Promise.all([
+    retailRevenueForDay(todayStart, now),
+    retailRevenueForDay(startOfDay(weekAgo), now),
+    retailRevenueForDay(monthStart, now),
+    retailRevenueForDay(yearStart, now),
+    retailRevenueForDay(from, to),
+    retailRevenueForDay(new Date(0), now),
   ]);
 
   const sumType = (t: string) => (byType as never as { type: string; _sum: { totalPaise: number | null } }[]).find((r) => r.type === t)?._sum.totalPaise ?? 0;
@@ -100,12 +111,13 @@ export async function revenueDashboard(rangeIn: RevRange = {}) {
   const oneTimers = (segNewRepeat as never as { _count: { _all: number } }[]).length - repeat;
 
   const kpis = {
-    todayRevenuePaise: net(revToday),
-    weekRevenuePaise: net(revWeek),
-    monthRevenuePaise: net(revMonth),
-    yearRevenuePaise: net(revYear),
-    totalRevenuePaise: totalRevenue,
-    rangeRevenuePaise: net(revRange),
+    // revenue recognised on DELIVERY (not order/prepay time)
+    todayRevenuePaise: dToday.revenuePaise,
+    weekRevenuePaise: dWeek.revenuePaise,
+    monthRevenuePaise: dMonth.revenuePaise,
+    yearRevenuePaise: dYear.revenuePaise,
+    totalRevenuePaise: dTotal.revenuePaise,
+    rangeRevenuePaise: dRange.revenuePaise,
     subscriptionRevenuePaise: subsRevenue,
     oneTimeRevenuePaise: sumType("ONE_TIME"),
     trialRevenuePaise: sumType("SAMPLE"),
@@ -129,7 +141,7 @@ export async function revenueDashboard(rangeIn: RevRange = {}) {
     activeSubscriptions: activeSubs,
   };
 
-  const trend = trendRows.map((o) => ({ at: o.createdAt, v: o.totalPaise }));
+  const trend = (trendRows as { date: Date; revenuePaise: number | null }[]).map((d) => ({ at: d.date, v: d.revenuePaise ?? computeDeliveryRevenuePaise(d as never) }));
   const charts = {
     granularity: daily ? "day" : "month",
     revenueTrend: daily ? bucketDaily(trend, from, to) : bucketMonthly(trend, 6, now),
