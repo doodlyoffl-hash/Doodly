@@ -964,6 +964,7 @@ model Delivery {
   etaMinutes     Int?                              // estimated arrival, minutes after leaving the warehouse
   routeSource    String?                           // "ROAD" (Directions) | "HAVERSINE" (fallback)
   actualLegKm    Float?                            // GPS-measured distance travelled since the previous stop (timeline)
+  revenuePaise   Int?                              // recognised retail revenue for THIS delivery, frozen at completion (delivery-based P&L)
   assignment     DeliveryAssignment?
   queueEntry     AssignmentQueue?
   geoCorrections GeoCorrection[]                   // GPS pin corrections made while this delivery was in hand
