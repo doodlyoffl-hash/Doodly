@@ -22,7 +22,7 @@ export const PAYMENT_TERM_LABEL: Record<PaymentTerm, string> = {
 
 /** Units offered per product slug (B2B supports product-specific units). */
 export const PRODUCT_UNITS: Record<string, string[]> = {
-  milk: ["Litres", "Bottles"],
+  milk: ["Litres", "Bottles", "KG"],   // milk is priceable per KG too (converted to litres via density for inventory/COGS)
   curd: ["KG", "Litres", "Tubs"],
   paneer: ["KG", "Packs"],
   kova: ["KG", "Packs"],

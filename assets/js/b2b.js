@@ -26,7 +26,7 @@ window.DOODLY_B2B = (function () {
   var NEXT = { "Pending": ["Confirmed", "Cancelled"], "Confirmed": ["Preparing", "Cancelled"], "Preparing": ["Out for Delivery", "Cancelled"], "Out for Delivery": ["Delivered", "Cancelled"], "Delivered": ["Completed"], "Completed": [], "Cancelled": [] };
   var PAY_STATUS_TONE = { "Paid": "green", "Partially Paid": "amber", "Pending": "grey", "Credit": "blue" };
   var PRODUCTS = [
-    { slug: "milk", name: "A2 Buffalo Milk", units: ["Litres", "Bottles"], price: 66 },
+    { slug: "milk", name: "A2 Buffalo Milk", units: ["Litres", "Bottles", "KG"], price: 66 },
     { slug: "curd", name: "Buffalo Pot Curd", units: ["KG", "Litres", "Tubs"], price: 120 },
     { slug: "paneer", name: "Malai Paneer", units: ["KG", "Packs"], price: 400 },
     { slug: "kova", name: "Palkova", units: ["KG", "Packs"], price: 360 },

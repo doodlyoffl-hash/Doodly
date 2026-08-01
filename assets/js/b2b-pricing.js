@@ -29,7 +29,7 @@ window.DOODLY_B2B_PRICING = (function () {
 
   /* ---------- products + retail (single source = DOODLY_B2B.products) ---------- */
   var FALLBACK_PRODUCTS = [
-    { slug: "milk", name: "A2 Buffalo Milk", units: ["Litres", "Bottles"], price: 66 },
+    { slug: "milk", name: "A2 Buffalo Milk", units: ["Litres", "Bottles", "KG"], price: 66 },
     { slug: "curd", name: "Buffalo Pot Curd", units: ["KG", "Litres", "Tubs"], price: 120 },
     { slug: "paneer", name: "Malai Paneer", units: ["KG", "Packs"], price: 400 },
     { slug: "kova", name: "Palkova", units: ["KG", "Packs"], price: 360 },
