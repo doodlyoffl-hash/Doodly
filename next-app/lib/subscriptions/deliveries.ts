@@ -91,9 +91,15 @@ export async function reconcileSchedule(subscriptionId: string): Promise<{ creat
   let created = 0, removed = 0;
 
   if (needed > 0) {
-    // append `needed` deliverable days AFTER the latest existing delivery day
+    // append `needed` deliverable days AFTER the latest existing delivery day — but never
+    // in the PAST. For a lapsed subscription (its latest day already gone) latest+1 would
+    // land make-ups on past dates, re-creating stale undelivered rows; clamp to today so a
+    // make-up is always deliverable. A normal same-day miss already anchors future, so this
+    // only affects lapsed subs.
     const latest = sub.deliveries.reduce((m, d) => Math.max(m, dayKey(d.date)), 0);
-    const anchor = latest ? addDays(new Date(latest), 1) : startOfDay(sub.startDate);
+    const base = latest ? addDays(new Date(latest), 1) : startOfDay(sub.startDate);
+    const today = startOfDay(new Date());
+    const anchor = base.getTime() >= today.getTime() ? base : today;
     const toCreate: Date[] = [];
     for (let i = 0; toCreate.length < needed && i < needed + 400; i++) {
       const day = addDays(anchor, i);

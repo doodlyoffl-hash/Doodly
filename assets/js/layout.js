@@ -1133,6 +1133,7 @@
   async function wireSubscriptionsBackend() {
     if (!window.DOODLY_API) return;
     var host = document.querySelector('.dt-host[data-dataset="adminOrders"]');
+    try { renderUndeliveredBoard(host); } catch (e) {}
     try {
       var data = await DOODLY_API.get("/api/admin/subscriptions?pageSize=200");
       var rows = (data.subscriptions || []).map(mapApiSub);
@@ -1148,6 +1149,52 @@
       var churn = st.total ? ((st.cancelled / st.total) * 100).toFixed(1) + "%" : "0%";
       bkKpis({ "active": String(st.active), "paused": String(st.paused), "new": String(st.newThisMonth), "churn": churn });
     } catch (e) {}
+  }
+
+  /* ---- Undelivered Paid Days board — subscriptions whose paid delivery days passed
+     without the milk being delivered. Per-row: Roll forward (reschedule + extend) /
+     Credit wallet (refund + close) / Dismiss. Injected above the subscriptions table. ---- */
+  function renderUndeliveredBoard(anchor) {
+    if (!window.DOODLY_API || !anchor || !anchor.parentNode) return;
+    var panel = document.getElementById("undeliveredBoard");
+    if (!panel) { panel = document.createElement("div"); panel.id = "undeliveredBoard"; anchor.parentNode.insertBefore(panel, anchor); }
+    var e2 = function (s) { return esc(String(s == null ? "" : s)); };
+    var rup = function (p) { return "₹" + Math.round((p || 0) / 100).toLocaleString("en-IN"); };
+    DOODLY_API.get("/api/admin/subscriptions/undelivered").then(function (r) {
+      var rows = r.subscriptions || [];
+      if (!rows.length) { panel.innerHTML = '<div class="panel" style="margin-bottom:16px"><div class="panel-pad muted-sm">✓ No undelivered paid days — every paid delivery is accounted for.</div></div>'; return; }
+      var body = rows.map(function (s) {
+        var rec = s.recommendation === "rollforward" ? '<span class="badge blue">Roll forward</span>' : '<span class="badge violet">Credit</span>';
+        return "<tr><td><b>" + e2(s.customerName) + '</b><div class="muted-sm">DOO-' + e2(s.code) + " · " + e2(s.status) + "</div></td>" +
+          "<td>" + e2(s.planName) + "</td>" +
+          '<td style="text-align:right">' + s.undeliveredDays + "</td>" +
+          '<td style="text-align:right">' + rup(s.valuePaise) + "</td>" +
+          '<td class="muted-sm">' + e2((s.staleDates || []).join(", ")) + "</td>" +
+          "<td>" + rec + '<div class="muted-sm">' + e2(s.reason) + "</div></td>" +
+          '<td style="text-align:right;white-space:nowrap">' +
+            '<button class="btn btn-ghost sm" data-act="rollforward" data-id="' + s.subscriptionId + '" data-name="' + e2(s.customerName) + '" data-days="' + s.undeliveredDays + '">Roll forward</button> ' +
+            '<button class="btn btn-ghost sm" data-act="credit" data-id="' + s.subscriptionId + '" data-name="' + e2(s.customerName) + '" data-val="' + s.valuePaise + '">Credit ' + rup(s.valuePaise) + "</button> " +
+            '<button class="btn btn-ghost sm" data-act="dismiss" data-id="' + s.subscriptionId + '">Dismiss</button>' +
+          "</td></tr>";
+      }).join("");
+      panel.innerHTML = '<div class="panel" style="margin-bottom:16px">' +
+        '<div class="panel-head"><h3>Undelivered Paid Days <span class="muted-sm" style="font-weight:600">· ' + rows.length + ' subscription(s) · paid but not delivered</span></h3></div>' +
+        '<div class="panel-pad"><p class="muted-sm" style="margin-top:0">Paid delivery days whose date passed without the milk being delivered. <b>Roll forward</b> reschedules the days &amp; extends the subscription; <b>Credit</b> refunds their value to the customer\'s wallet &amp; closes the subscription.</p>' +
+        '<div class="table-wrap"><table class="tbl"><thead><tr><th>Customer</th><th>Plan</th><th style="text-align:right">Days</th><th style="text-align:right">Value</th><th>Missed dates</th><th>Recommended</th><th></th></tr></thead><tbody>' + body + "</tbody></table></div></div></div>";
+      panel.querySelectorAll("[data-act]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          var act = b.dataset.act, subId = b.dataset.id;
+          var msg = act === "rollforward" ? "Roll forward " + b.dataset.days + " undelivered day(s) for " + b.dataset.name + "? The subscription is extended and the days are rescheduled."
+            : act === "credit" ? "Credit " + rup(b.dataset.val) + " to " + b.dataset.name + "'s wallet for the undelivered days and close the subscription?"
+            : "Dismiss " + b.dataset.name + "'s undelivered days (take no action)?";
+          if (!window.confirm(msg)) return;
+          b.disabled = true;
+          DOODLY_API.post("/api/admin/subscriptions/undelivered/" + encodeURIComponent(subId), { action: act })
+            .then(function () { dacToast(act === "credit" ? "Wallet credited." : act === "rollforward" ? "Days rolled forward." : "Dismissed."); wireSubscriptionsBackend(); })
+            .catch(function (er) { b.disabled = false; dacToast((er && er.message) || "Action failed."); });
+        });
+      });
+    }).catch(function (er) { if (er && er.code === "forbidden") { panel.innerHTML = ""; return; } panel.innerHTML = ""; });
   }
 
   // ---- B2B Orders (admin/b2b → mirror the DB into b2b.js's localStorage, then re-mount) ----
