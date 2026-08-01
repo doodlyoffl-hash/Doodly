@@ -34,6 +34,9 @@ export const GET = route("admin.orders.list", async (req: NextRequest) => {
       id: true, type: true, status: true, createdAt: true, totalPaise: true, discountPaise: true,
       user: { select: { id: true, name: true, email: true, phone: true } },
       delivery: { select: { status: true, date: true } },
+      // The subscription a SAMPLE/SUBSCRIPTION order created — its lifecycle status is the
+      // real fulfilment state (a finished trial is COMPLETED even though the order is PAID).
+      subscription: { select: { status: true } },
       invoice: { select: { number: true } },
     },
   });

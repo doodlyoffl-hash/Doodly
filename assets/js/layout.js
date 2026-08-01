@@ -1080,6 +1080,15 @@
   var ORD_FULFIL = { PAID: ["green", "Active"], PENDING: ["amber", "Processing"], FAILED: ["red", "On hold"], REFUNDED: ["grey", "Refunded"] };
   function titleize(s) { return String(s || "").replace(/_/g, " ").toLowerCase().replace(/^\w/, function (c) { return c.toUpperCase(); }); }
   function mapApiOrder(o) {
+    // Fulfilment status precedence: a SAMPLE/SUBSCRIPTION order's real state is its
+    // subscription's lifecycle (a finished trial is Completed, not "Active"/PAID) — its
+    // deliveries hang off the subscription, so the order has no direct delivery. A one-time
+    // order uses its single delivery's status. Otherwise fall back to the payment mapping.
+    var status = o.subscription && o.subscription.status
+      ? (SUB_STATUS[o.subscription.status] || ["grey", titleize(o.subscription.status)])
+      : (o.delivery && o.delivery.status
+          ? [o.delivery.status === "DELIVERED" ? "green" : o.delivery.status === "FAILED" ? "red" : "amber", titleize(o.delivery.status)]
+          : (ORD_FULFIL[o.status] || ["grey", titleize(o.status)]));
     return {
       _id: o.id,
       id: "DOO-" + String(o.id || "").slice(-6).toUpperCase(),
@@ -1087,7 +1096,7 @@
       item: titleize(o.type),
       amount: Math.round((o.totalPaise || 0) / 100),
       pay: ORD_PAY[o.status] || ["grey", titleize(o.status)],
-      status: (o.delivery && o.delivery.status ? ["amber", titleize(o.delivery.status)] : (ORD_FULFIL[o.status] || ["grey", titleize(o.status)])),
+      status: status,
     };
   }
   async function wireOrdersBackend() {
