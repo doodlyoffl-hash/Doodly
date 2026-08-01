@@ -1118,7 +1118,7 @@
   }
 
   // ---- Subscriptions (admin/subscriptions → adminOrders dataset + KPIs) ----
-  var SUB_STATUS = { ACTIVE: ["green", "Active"], PAUSED: ["amber", "Paused"], VACATION: ["amber", "Vacation"], CANCELLED: ["grey", "Cancelled"], COMPLETED: ["blue", "Completed"] };
+  var SUB_STATUS = { ACTIVE: ["green", "Active"], PAUSED: ["violet", "Paused"], VACATION: ["violet", "Vacation"], CANCELLED: ["grey", "Cancelled"], COMPLETED: ["blue", "Completed"] };
   function mapApiSub(s) {
     return {
       _id: s.id,

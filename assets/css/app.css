@@ -176,7 +176,8 @@
 .badge.red { color:#c33; background:#fbe9e9; }
 .badge.blue { color:#2563a8; background:#e6f0fb; }
 .badge.grey { color:var(--ink-3); background:var(--surface-2); }
-[data-theme="dark"] .badge.red { background:#3a1c1c; } [data-theme="dark"] .badge.blue { background:#15263a; }
+.badge.violet { color:#7c3aed; background:#f1ecfd; }   /* temporary-hold states (Paused / Vacation) — distinct from amber "attention" */
+[data-theme="dark"] .badge.red { background:#3a1c1c; } [data-theme="dark"] .badge.blue { background:#15263a; } [data-theme="dark"] .badge.violet { background:#2a1e42; color:#c4b5fd; }
 
 /* ---------- Tables ---------- */
 .table-wrap { overflow-x:auto; border-radius:var(--r-lg); border:1px solid var(--line); background:var(--surface); box-shadow:var(--shadow-sm); }
