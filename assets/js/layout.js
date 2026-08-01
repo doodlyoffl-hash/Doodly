@@ -6635,14 +6635,14 @@
     var line = function (l, v, strong) { return '<div style="display:flex;justify-content:space-between;padding:3px 0' + (strong ? ";border-top:1px solid rgba(0,0,0,.12);margin-top:4px;font-weight:700" : "") + '"><span' + (strong ? "" : ' class="muted-sm"') + ">" + l + "</span><span>" + v + "</span></div>"; };
     var profitColour = p.netProfitPaise >= 0 ? "var(--leaf-600,#1FAE66)" : "#c0392b";
     return '<div class="panel"><div class="panel-head"><h3>' + title + "</h3><span class='badge " + (p.netProfitPaise >= 0 ? "green" : "red") + "'>Net " + p.netMarginPct + "%</span></div><div class='panel-pad'>" +
-      line("Retail revenue", milkRs(p.retailRevenuePaise)) +
+      line("Retail revenue (delivered)", milkRs(p.retailRevenuePaise)) +
       line("B2B revenue", milkRs(p.b2bRevenuePaise)) +
       line("Revenue", milkRs(p.revenuePaise), true) +
       line("− COGS (milk sold, FIFO)", milkRs(p.cogsPaise)) +
       line("Gross profit", milkRs(p.grossProfitPaise) + " · " + p.grossMarginPct + "%", true) +
       line("− Expenses", milkRs(p.expensesPaise)) +
       '<div style="display:flex;justify-content:space-between;padding:6px 0;border-top:2px solid ' + profitColour + ';margin-top:6px;font-weight:800;font-size:16px;color:' + profitColour + '"><span>Net profit</span><span>' + milkRs(p.netProfitPaise) + "</span></div>" +
-      '<div class="muted-sm" style="margin-top:8px">Milk sold ' + p.litresSold + " L · procured " + p.litresProcured + " L (" + milkRs(p.procurementCashPaise) + " cash, " + milkRs(p.avgCostPerLitrePaise) + "/L avg)</div>" +
+      '<div class="muted-sm" style="margin-top:8px">Retail delivered ' + (p.retailLitresDelivered || 0) + " L (" + (p.retailDeliveries || 0) + " del" + ((p.retailLitresDelivered || 0) > 0 ? " · ASP " + milkRs(Math.round(p.retailRevenuePaise / p.retailLitresDelivered)) + "/L" : "") + ") · milk sold " + p.litresSold + " L · procured " + p.litresProcured + " L (" + milkRs(p.procurementCashPaise) + " cash, " + milkRs(p.avgCostPerLitrePaise) + "/L avg)</div>" +
       "</div></div>";
   }
 

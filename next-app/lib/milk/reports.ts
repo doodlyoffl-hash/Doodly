@@ -89,14 +89,17 @@ export async function buildMilkReport(type: MilkReportType, fromIso: string, toI
 
   // pnl — a statement rendered as a 2-column table
   const p = await rangePnl(fromIso, toIso);
+  const retailAspPaise = p.retailLitresDelivered > 0 ? Math.round(p.retailRevenuePaise / p.retailLitresDelivered) : 0;
   const rows: string[][] = [
-    ["Retail revenue", rup(p.retailRevenuePaise)],
+    ["Retail revenue (delivered)", rup(p.retailRevenuePaise)],
     ["B2B revenue", rup(p.b2bRevenuePaise)],
     ["Revenue", rup(p.revenuePaise)],
     ["Less: COGS (milk sold, FIFO)", rup(p.cogsPaise)],
     ["Gross profit", `${rup(p.grossProfitPaise)}  (${p.grossMarginPct}%)`],
     ["Less: Expenses", rup(p.expensesPaise)],
-    ["Milk sold", `${n2(p.litresSold)} L`],
+    ["Retail litres delivered", `${n2(p.retailLitresDelivered)} L (${p.retailDeliveries} delivery/ies)`],
+    ["Avg selling price (retail)", retailAspPaise > 0 ? `${rup(retailAspPaise)}/L` : "—"],
+    ["Milk sold (COGS basis)", `${n2(p.litresSold)} L`],
     ["Milk procured", `${n2(p.litresProcured)} L (${rup(p.procurementCashPaise)} cash)`],
     ["Avg procurement cost", `${rup(p.avgCostPerLitrePaise)}/L`],
   ];
