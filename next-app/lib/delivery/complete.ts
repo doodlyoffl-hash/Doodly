@@ -33,7 +33,7 @@ export async function completeDelivery(deliveryId: string, opts: CompleteDeliver
     where: { id: deliveryId },
     select: {
       id: true, status: true, bottleCount: true, addressId: true, subscriptionId: true, orderId: true,
-      userId: true, kind: true,
+      userId: true, kind: true, date: true,
       subscription: { select: { userId: true, addressId: true, plan: { select: { discountBps: true } }, items: { select: { qty: true, variant: { select: { ml: true, dailyPaise: true } } } } } },
       order: { select: { userId: true, totalPaise: true, couponDiscountPaise: true, depositPaise: true } },
       pickupRequest: { select: { id: true } },
@@ -149,6 +149,22 @@ export async function completeDelivery(deliveryId: string, opts: CompleteDeliver
   // the deposit to the wallet. Best-effort — never blocks the completion.
   if (del.kind === "PICKUP" && del.pickupRequest) {
     try { const { onPickupCollected } = await import("@/lib/bottles/pickup"); await onPickupCollected(del.pickupRequest.id, { bottlesCollected: bottlesIn }); } catch { /* non-blocking */ }
+  }
+
+  // ---- auto-settle COGS for this delivery's day (best-effort, never blocks) ----
+  // Retail revenue is recognised live from completed deliveries, but milk inventory + FIFO
+  // COGS only draw when a day is "settled". Without this a delivered day shows revenue with
+  // ₹0 COGS until an admin settles it by hand. settleDay is reverse+redo idempotent (keyed
+  // on the IST day), so re-settling on every completion just redraws that day's cumulative
+  // sold litres — keeping COGS in lockstep with deliveries as they finish. A pickup sells no
+  // milk, so it needn't trigger a redraw. Quiet: no per-completion audit spam (the manual
+  // "Settle" still audits; this delivery's revenue.recognized row above records the sale).
+  if (del.kind !== "PICKUP") {
+    try {
+      const { settleDay } = await import("@/lib/milk/settle");
+      const { istISO } = await import("@/lib/delivery/stats");
+      await settleDay(istISO(del.date), { actorRole: "system", actorId: "auto:delivery-complete", quiet: true });
+    } catch { /* non-blocking — the next completion or the manual "Settle" reconciles the day */ }
   }
 
   return { idempotent: false as const, delivery };

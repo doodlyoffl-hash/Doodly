@@ -18,9 +18,11 @@
    already spreads across delivery days — no more order-time lumpiness. B2B is
    already delivery-dated (BusinessOrder.deliveryDate). Coupon is netted out and
    the refundable deposit is excluded; wallet stays in. All paise.
-   ⚠️ Revenue reads Delivery rows LIVE (needs no settlement); COGS/inventory still
-   draw only on the manual settle — so an unsettled delivered day shows revenue but
-   0 COGS until settled (the settlement-health banner surfaces this).
+   Revenue reads Delivery rows LIVE (needs no settlement). COGS/inventory now draw
+   AUTOMATICALLY the moment a delivery completes (completeDelivery → settleDay, quiet +
+   idempotent), so a delivered day carries its FIFO COGS without a manual settle. The
+   manual "Settle" + settlement-health banner remain the safety net for older days and
+   for reconciling a day whose deliveries changed after completion.
    ============================================================= */
 import "server-only";
 import { db } from "@/lib/db";

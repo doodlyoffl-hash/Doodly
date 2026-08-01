@@ -99,8 +99,10 @@ export interface DaySettlement {
 }
 
 /** Settle one IST day: reverse any prior draws for the day, recompute sold
- *  litres, and consume them FIFO. Atomic. Returns the COGS + any shortfall. */
-export async function settleDay(dateIso: string, actor?: { actorId?: string; actorRole?: string }): Promise<DaySettlement> {
+ *  litres, and consume them FIFO. Atomic. Returns the COGS + any shortfall.
+ *  `quiet` suppresses the audit row — used by the per-delivery auto-settle
+ *  (which fires on every completion) so it doesn't flood the audit log. */
+export async function settleDay(dateIso: string, actor?: { actorId?: string; actorRole?: string; quiet?: boolean }): Promise<DaySettlement> {
   const { start, end, iso } = istDayWindow(dateIso);
   const [retailLitres, b2bLitres] = await Promise.all([retailLitresForDay(start, end), b2bLitresForDay(start, end)]);
   const refRetail = `settle:${iso}:RETAIL`;
@@ -108,6 +110,12 @@ export async function settleDay(dateIso: string, actor?: { actorId?: string; act
   const day = start;   // attribute consumption to IST-midnight of that day
 
   const result = await db.$transaction(async (tx) => {
+    // Serialize concurrent settles for the SAME day. Auto-settle-on-delivery
+    // fires on every completion, so two deliveries finishing at once would run
+    // two reverse+redo passes over the same lots in parallel — a race that could
+    // double-draw or lose an update. A per-day transaction-scoped advisory lock
+    // makes them queue; it releases automatically on commit/rollback.
+    await tx.$executeRawUnsafe("SELECT pg_advisory_xact_lock(hashtext($1)::bigint)", `milk-settle:${iso}`);
     await reverseByRef(tx, refRetail);
     await reverseByRef(tx, refB2b);
     const retail = await consumeLitres(tx, { date: day, channel: "RETAIL", litres: retailLitres, sourceRef: refRetail, note: `Retail sales ${iso}` });
@@ -129,7 +137,7 @@ export async function settleDay(dateIso: string, actor?: { actorId?: string; act
     cogsPaise: result.retail.costPaise + result.b2b.costPaise,
     shortfallLitres: result.retail.shortfallLitres + result.b2b.shortfallLitres,
   };
-  await audit({
+  if (!actor?.quiet) await audit({
     userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system",
     action: "milk.settle",
     target: `${iso} · retail ${retailLitres.toFixed(1)}L · b2b ${b2bLitres.toFixed(1)}L · COGS ₹${(settlement.cogsPaise / 100).toFixed(2)}${settlement.shortfallLitres > 0.001 ? ` · SHORT ${settlement.shortfallLitres.toFixed(1)}L` : ""}`,
