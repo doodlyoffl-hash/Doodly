@@ -138,6 +138,16 @@ export async function runAutoAssignment(args: SlotArgs) {
         return { ok: true, assigned: 0, queued: 0, executives: 0, message: "No deliveries to assign." };
       }
 
+      // No executive is available right now → alert admins and leave the deliveries
+      // SCHEDULED (do NOT queue). Queuing here would strand them: the pending queue only
+      // drains when an executive RETURNS TO DAIRY after a trip, so a fully-queued day leaves
+      // a morning executive with no starting trip → the queue never drains. Leaving them
+      // unassigned lets the next sweep / a shift-start assign them once someone is available.
+      if (!drivers.length) {
+        await notifyAdmins(tx, ADMIN_EVENT.NO_EXECUTIVES, `${deliveries.length} deliveries waiting — no executives available for ${slot}. Left scheduled for the next sweep.`);
+        return { ok: true, strategy, assigned: 0, assignedBottles: 0, queued: 0, queuedBottles: 0, executives: 0, message: `No executives available — ${deliveries.length} deliveries left scheduled.` };
+      }
+
       const dInputs = deliveries.map(toDeliveryInput);
       const meta = new Map(dInputs.map((d) => [d.id, d]));
       const eInputs = drivers.map(toExecutiveInput);
@@ -206,9 +216,9 @@ export async function runAutoAssignment(args: SlotArgs) {
         });
       }
 
-      // 5) Admin alerts.
-      if (!drivers.length) await notifyAdmins(tx, ADMIN_EVENT.NO_EXECUTIVES, `${deliveries.length} deliveries waiting — no executives available for ${slot}.`);
-      else if (plan.stats.queuedBottles >= QUEUE_ALERT_THRESHOLD) await notifyAdmins(tx, ADMIN_EVENT.QUEUE_GROWING, `${plan.stats.queuedBottles} bottles pending in the queue for ${slot}.`);
+      // 5) Admin alert — overflow past the working execs' capacity (the 0-exec case is
+      //    handled earlier, before any queuing).
+      if (plan.stats.queuedBottles >= QUEUE_ALERT_THRESHOLD) await notifyAdmins(tx, ADMIN_EVENT.QUEUE_GROWING, `${plan.stats.queuedBottles} bottles pending in the queue for ${slot}.`);
 
       return {
         ok: true,

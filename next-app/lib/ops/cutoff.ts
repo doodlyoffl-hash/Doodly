@@ -320,6 +320,21 @@ export async function runDailyCutoff(opts: { force?: boolean; date?: string; act
   }
 
   const prepared = await prepareDeliveries(start, end);
+
+  // Auto-assign the prepared day's (and today's) unassigned deliveries to available execs.
+  // The automated BACKSTOP to the exec-shift-start trigger, kept inside the Hobby 2-cron cap
+  // by riding the cut-off (which also fires lazily on admin-dashboard loads, when execs may be
+  // online). Best-effort + idempotent; a no-op when nobody is available (deliveries stay
+  // SCHEDULED for the next run — never silently queued into a dead end, see runAutoAssignment).
+  let assignment = { assigned: 0, queued: 0 };
+  try {
+    const { runScheduledAutoAssignment } = await import("@/lib/assignment/service");
+    for (const day of [...new Set([target, istTodayIso()])]) {
+      const r = await runScheduledAutoAssignment({ actorRole: opts.actor?.actorRole ?? "system", actorId: opts.actor?.actorId }, day);
+      assignment.assigned += r.assigned || 0; assignment.queued += r.queued || 0;
+    }
+  } catch (e) { log.error("ops.cutoff", "auto-assign failed", { err: (e as Error)?.message }); }
+
   const summary = await buildSummary(target);
   const missed = await missedOrderReport(target);
 
@@ -357,7 +372,7 @@ export async function runDailyCutoff(opts: { force?: boolean; date?: string; act
   await audit({
     userId: opts.actor?.actorId ?? null, actorRole: opts.actor?.actorRole ?? "system",
     action: "ops.cutoff.run",
-    target: `${target} · ${summary.totalOrders} orders · ${summary.totalBottles} bottles · ${summary.milkLitres}L · bridged ${prepared.bridged} · unassigned ${missed.confirmedNotAssigned} · emails ${notified.emails} · wa ${notified.whatsapp}`,
+    target: `${target} · ${summary.totalOrders} orders · ${summary.totalBottles} bottles · ${summary.milkLitres}L · bridged ${prepared.bridged} · auto-assigned ${assignment.assigned} · unassigned ${missed.confirmedNotAssigned} · emails ${notified.emails} · wa ${notified.whatsapp}`,
   });
 
   return { ok: true, date: target, prepared, summary, missed, notified, dayClose };
