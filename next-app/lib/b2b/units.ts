@@ -54,7 +54,25 @@ export function saleLitres(line: SaleLine, factor: number = DEFAULT_CONVERSION_F
   return 0;
 }
 
-/** Sum litres of raw milk drawn across many B2B lines. */
+/** Sum litres of raw milk drawn across many B2B milk lines. */
 export function totalSaleLitres(lines: SaleLine[], factor: number = DEFAULT_CONVERSION_FACTOR): number {
   return (lines || []).reduce((s, l) => s + saleLitres(l, factor), 0);
+}
+
+export interface DrawOpts {
+  conversionFactor: number;
+  /** litres of milk per KG of each solid slug (from getSolidsCogsConfig); null/absent → solids draw 0. */
+  solidYields?: Record<string, number> | null;
+}
+
+/** Litres of raw milk a B2B line draws — MILK (via saleLitres) OR a SOLID sold by
+ *  weight (KG × milk-equivalent yield). Non-milk non-KG units, or no yields, → 0.
+ *  This is the single COGS-draw rule used by settlement + the sales report. */
+export function milkDrawLitres(line: SaleLine, opts: DrawOpts): number {
+  if (isMilkSlug(line.productSlug)) return saleLitres(line, opts.conversionFactor);
+  const yields = opts.solidYields;
+  if (!yields || !isKgUnit(line.unit)) return 0;                 // solids: only weight sales cost (pack units need a weight, not modelled)
+  const y = Number(yields[String(line.productSlug || "").toLowerCase()]) || 0;
+  const qty = Number(line.quantity) || 0;
+  return y > 0 && qty > 0 ? qty * y : 0;                         // KG × (L milk per KG)
 }

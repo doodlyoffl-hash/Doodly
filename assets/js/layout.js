@@ -1346,6 +1346,35 @@
     }).catch(function () { host.innerHTML = '<div class="panel"><div class="panel-pad muted-sm">Couldn\'t load businesses for unit pricing.</div></div>'; });
   }
 
+  /* ---- Solids COGS yields editor — milk-equivalent litres per KG of each solid.
+     Opt-in: when enabled, a solid sold by KG draws KG×yield litres of milk → FIFO
+     COGS in the P&L. PATCH is Super-Admin only (it moves the P&L). ---- */
+  function renderSolidsYields(host) {
+    if (!window.DOODLY_API || !host) return;
+    var SOLIDS = [["paneer", "Paneer"], ["ghee", "Ghee"], ["kova", "Kova"], ["curd", "Curd"]];
+    var e2 = function (s) { return esc(String(s == null ? "" : s)); };
+    var fld = function (l, i) { return '<label style="display:flex;flex-direction:column;gap:3px;font-size:.74rem;font-weight:700;color:var(--ink-2,#37423d)">' + e2(l) + i + "</label>"; };
+    DOODLY_API.get("/api/b2b/solids-config").then(function (r) {
+      var c = (r && r.config) || { enabled: false, yields: {} }, y = c.yields || {};
+      host.innerHTML =
+        '<div class="panel" style="margin-bottom:16px">' +
+        '<div class="panel-head"><h3>Solids COGS — milk-equivalent yields <span class="muted-sm" style="font-weight:600">· litres of milk per KG</span></h3></div>' +
+        '<div class="panel-pad"><div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">' +
+          '<label style="display:flex;align-items:center;gap:6px;font-size:.82rem;font-weight:700"><input type="checkbox" id="scEnabled"' + (c.enabled ? " checked" : "") + "> Cost solids from milk</label>" +
+          SOLIDS.map(function (s) { return fld(s[1] + " (L/kg)", '<input class="input" id="sc-' + s[0] + '" type="number" min="0" step="0.1" value="' + (y[s[0]] != null ? y[s[0]] : 0) + '" style="width:100px">'); }).join("") +
+          '<button class="btn btn-primary" id="scSave">Save yields</button>' +
+        "</div>" +
+        '<p class="muted-sm" style="margin-top:8px">When enabled, a solid sold by <b>KG</b> draws KG × yield litres of milk → FIFO COGS in the P&amp;L. Off by default so no estimated yield changes the P&amp;L until you set real figures. Pack/Tin/Tub units aren\'t costed yet (need a pack weight).</p>' +
+        "</div></div>";
+      document.getElementById("scSave").addEventListener("click", function () {
+        var body = { enabled: document.getElementById("scEnabled").checked, yields: {} };
+        SOLIDS.forEach(function (s) { body.yields[s[0]] = Number(document.getElementById("sc-" + s[0]).value) || 0; });
+        var btn = document.getElementById("scSave"); btn.disabled = true;
+        DOODLY_API.patch("/api/b2b/solids-config", body).then(function () { btn.disabled = false; dacToast("Solids yields saved."); }).catch(function (er) { btn.disabled = false; dacToast((er && er.code === "forbidden") ? "Super-Admin only." : ((er && er.message) || "Save failed.")); });
+      });
+    }).catch(function () { /* non-B2B role or error → panel omitted */ });
+  }
+
   async function wireB2BPricingBackend() {
     if (!window.DOODLY_API) return;
     var host = document.querySelector("#b2bPricingMount");
@@ -1354,6 +1383,11 @@
       var up = document.createElement("div"); up.id = "b2bUnitPricing";
       host.parentNode.insertBefore(up, host);
       try { renderB2BUnitPricing(up); } catch (e) {}
+    }
+    if (host && host.parentNode && !document.getElementById("b2bSolidsCogs")) {
+      var sc = document.createElement("div"); sc.id = "b2bSolidsCogs";
+      host.parentNode.insertBefore(sc, host);
+      try { renderSolidsYields(sc); } catch (e) {}
     }
     try {
       await b2bMirror();   // so the business dropdown uses real DB ids

@@ -12,7 +12,8 @@ import "server-only";
 import { db } from "@/lib/db";
 import { istDayWindow } from "@/lib/delivery/stats";
 import { getMilkConfig } from "@/lib/milk/config";
-import { saleLitres, isMilkSlug, isKgUnit, isLitreUnit } from "@/lib/b2b/units";
+import { milkDrawLitres, isMilkSlug, isKgUnit, isLitreUnit } from "@/lib/b2b/units";
+import { getSolidsCogsConfig } from "@/lib/b2b/solids-config";
 
 const rup = (p: number) => "₹" + Math.round((p || 0) / 100).toLocaleString("en-IN");
 const n2 = (x: number) => (Math.round((x || 0) * 100) / 100).toLocaleString("en-IN");
@@ -43,7 +44,7 @@ export interface B2BSalesReport {
 export async function b2bSalesReport(fromIso: string, toIso: string): Promise<B2BSalesReport> {
   const start = istDayWindow(fromIso).start;
   const end = istDayWindow(toIso).end;
-  const [orders, consumption, cfg] = await Promise.all([
+  const [orders, consumption, cfg, solids] = await Promise.all([
     db.businessOrder.findMany({
       where: { deliveryDate: { gte: start, lt: end }, status: { not: "CANCELLED" } },
       select: { items: { select: { productSlug: true, productName: true, quantity: true, unit: true, lineTotalPaise: true } } },
@@ -51,10 +52,12 @@ export async function b2bSalesReport(fromIso: string, toIso: string): Promise<B2
     }),
     db.tankerConsumption.aggregate({ where: { date: { gte: start, lt: end } }, _sum: { costPaise: true, litres: true } }),
     getMilkConfig(),
+    getSolidsCogsConfig(),
   ]);
   const totalCogsPaise = consumption._sum.costPaise ?? 0;
   const totalLitres = consumption._sum.litres ?? 0;
   const costPerLitrePaise = totalLitres > 0 ? totalCogsPaise / totalLitres : 0;   // blended period allocation basis
+  const solidYields = solids.enabled ? solids.yields : null;
 
   type G = { productSlug: string; productName: string; unit: string; quantity: number; revenuePaise: number; litresEquiv: number };
   const groups = new Map<string, G>();
@@ -64,12 +67,14 @@ export async function b2bSalesReport(fromIso: string, toIso: string): Promise<B2
     if (!g) { g = { productSlug: it.productSlug, productName: it.productName, unit: it.unit, quantity: 0, revenuePaise: 0, litresEquiv: 0 }; groups.set(key, g); }
     g.quantity += it.quantity;
     g.revenuePaise += it.lineTotalPaise;
-    g.litresEquiv += saleLitres({ productSlug: it.productSlug, unit: it.unit, quantity: it.quantity }, cfg.conversionFactor);
+    g.litresEquiv += milkDrawLitres({ productSlug: it.productSlug, unit: it.unit, quantity: it.quantity }, { conversionFactor: cfg.conversionFactor, solidYields });
   }
 
   const data: B2BSalesRow[] = [...groups.values()].map((g) => {
     const milk = isMilkSlug(g.productSlug);
-    const cogsPaise = milk ? Math.round(g.litresEquiv * costPerLitrePaise) : null;
+    // costed = milk (always) OR a solid that drew milk-equivalent litres (yields enabled)
+    const costed = milk || g.litresEquiv > 0;
+    const cogsPaise = costed ? Math.round(g.litresEquiv * costPerLitrePaise) : null;
     return {
       productSlug: g.productSlug, productName: g.productName, unit: g.unit, isMilk: milk,
       quantity: Math.round(g.quantity * 100) / 100, revenuePaise: g.revenuePaise,

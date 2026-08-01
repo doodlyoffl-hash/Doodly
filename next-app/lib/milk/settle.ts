@@ -16,7 +16,8 @@ import { istDayWindow } from "@/lib/delivery/stats";
 import { audit } from "@/lib/auth/audit";
 import { consumeLitres, reverseByRef, type ConsumeResult } from "@/lib/milk/fifo";
 import { getMilkConfig } from "@/lib/milk/config";
-import { isMilkSlug, saleLitres } from "@/lib/b2b/units";
+import { isMilkSlug, milkDrawLitres } from "@/lib/b2b/units";
+import { getSolidsCogsConfig } from "@/lib/b2b/solids-config";
 
 const normLabel = (s?: string | null) => (s ?? "").toLowerCase().replace(/\s+/g, "");
 function parseMl(label?: string | null): number | null {
@@ -58,29 +59,31 @@ export async function retailLitresForDay(start: Date, end: Date): Promise<number
   return totalMl / 1000;
 }
 
-/** Litres of raw milk sold to B2B on an IST day — milk lines only, unit-aware via
- *  lib/b2b/units.saleLitres: Litres 1:1, Bottles × size, **KG → qty / density**
- *  (a KG-priced milk sale now draws the right litres of inventory + FIFO COGS).
- *  Non-milk (solids) draw no raw milk yet — counted + logged as a known gap, not
- *  silently dropped. */
+/** Litres of raw milk sold to B2B on an IST day — unit-aware via lib/b2b/units:
+ *  MILK (Litres 1:1, Bottles × size, KG → qty/density) always draws; SOLIDS draw
+ *  their milk-equivalent (KG × per-slug yield) ONLY when the solids-COGS config is
+ *  enabled with real yields, else they stay revenue-only (counted + logged). */
 export async function b2bLitresForDay(start: Date, end: Date): Promise<number> {
-  const [orders, cfg] = await Promise.all([
+  const [orders, cfg, solids] = await Promise.all([
     db.businessOrder.findMany({
       where: { deliveryDate: { gte: start, lt: end }, status: { not: "CANCELLED" } },
       select: { items: { select: { productSlug: true, quantity: true, unit: true } } },
       take: 5000,
     }),
     getMilkConfig(),
+    getSolidsCogsConfig(),
   ]);
+  const solidYields = solids.enabled ? solids.yields : null;
   let litres = 0;
-  let untrackedLines = 0;   // non-milk B2B lines: revenue booked, no COGS (milk-only costing for now)
+  let untrackedLines = 0;   // solid lines still not costed (config off, or a non-weight unit)
   for (const o of orders) {
     for (const it of o.items) {
-      if (isMilkSlug(it.productSlug)) litres += saleLitres({ productSlug: it.productSlug, unit: it.unit, quantity: it.quantity }, cfg.conversionFactor);
-      else untrackedLines++;
+      const draw = milkDrawLitres({ productSlug: it.productSlug, unit: it.unit, quantity: it.quantity }, { conversionFactor: cfg.conversionFactor, solidYields });
+      litres += draw;
+      if (!isMilkSlug(it.productSlug) && draw === 0) untrackedLines++;
     }
   }
-  if (untrackedLines > 0) console.info(`[b2b-cogs] ${untrackedLines} non-milk B2B line(s) booked revenue but no COGS (milk-only costing — solids gap).`);
+  if (untrackedLines > 0) console.info(`[b2b-cogs] ${untrackedLines} solid B2B line(s) booked revenue but no COGS (${solids.enabled ? "non-weight unit — needs a pack weight" : "solids costing disabled"}).`);
   return litres;
 }
 
