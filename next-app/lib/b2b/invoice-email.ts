@@ -35,7 +35,7 @@ export function toPdfData(d: Detail): InvoicePdfData {
     notes: d.notes, terms: d.terms, gstPaise: d.gstPaise,
     order: { code: o.code, deliveryDate: o.deliveryDate, deliveryTime: o.deliveryTime ?? null, subtotalPaise: o.subtotalPaise, discountPaise: o.discountPaise, taxPaise: o.taxPaise, totalPaise: o.totalPaise, paidPaise: o.paidPaise, paymentTerm: o.paymentTerm },
     business: { code: d.business.code, name: d.business.name, gst: d.business.gst, pan: d.business.pan, contactPerson: d.business.contactPerson, mobile: d.business.mobile, email: d.business.email, line1: d.business.line1, city: d.business.city, state: d.business.state, pincode: d.business.pincode, billingAddress: d.business.billingAddress },
-    items: d.items.map((i) => ({ productName: i.productName, quantity: i.quantity, unit: i.unit, unitPricePaise: i.unitPricePaise, lineTotalPaise: i.lineTotalPaise })),
+    items: d.items.map((i) => ({ productName: i.productName, quantity: i.quantity, unit: i.unit, unitPricePaise: i.unitPricePaise, lineTotalPaise: i.lineTotalPaise, slabMinQty: i.slabMinQty ?? null })),
   };
 }
 
@@ -50,7 +50,7 @@ export async function renderInvoicePdfById(id: string): Promise<{ bytes: Uint8Ar
 // ---- build the rich email data from the invoice detail ----
 function buildEmailData(d: Detail, links: { view: string; download: string }): T.BusinessInvoiceEmailData {
   const o = d.order, b = d.business;
-  const items = d.items.map((i) => ({ name: i.productName, qty: `${i.quantity} ${i.unit} × ${inr(i.unitPricePaise)}`, amount: inr(i.lineTotalPaise) }));
+  const items = d.items.map((i) => ({ name: i.productName + (i.slabMinQty && i.slabMinQty > 1 ? ` (${i.slabMinQty}+ slab)` : ""), qty: `${i.quantity} ${i.unit} × ${inr(i.unitPricePaise)}`, amount: inr(i.lineTotalPaise) }));
   const balance = o.totalPaise - o.paidPaise;
   const totals: { label: string; value: string; strong?: boolean }[] = [
     { label: "Subtotal", value: inr(o.subtotalPaise) },

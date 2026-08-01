@@ -203,6 +203,98 @@ export async function restorePricing(id: string, actor: Actor) {
   }, TX);
 }
 
+// ---------- quantity-slab ladders (multi-tier per business + product + unit) ----------
+/* A slab ladder is just several BusinessPricing rows sharing (business, product,
+   unit, variant) with different minQty floors. resolveUnitPricePaise already bills
+   the highest floor ≤ order qty. setSlabLadder writes the WHOLE ladder atomically —
+   create/update the tiers given, soft-delete tiers dropped — so the editor can save
+   a ladder in one shot and it stays consistent with the order-pricing resolver. */
+const SlabTier = z.object({
+  minQty: z.coerce.number().int().min(1, "Min qty must be at least 1"),
+  b2bPricePaise: z.coerce.number().int().positive("Tier price must be greater than zero"),
+});
+const SlabLadderSchema = z.object({
+  businessId: z.string().min(1, "Select a business"),
+  productSlug: z.string().min(1, "Select a product"),
+  productName: z.string().min(1),
+  variantLabel: z.string().trim().max(40).optional().or(z.literal("")),
+  unit: z.string().min(1, "Select a unit"),
+  basePricePaise: z.coerce.number().int().positive("Base price must be greater than zero"),
+  gstBps: z.coerce.number().int().min(0, "GST cannot be negative").max(10000, "GST cannot exceed 100%").default(0),
+  effectiveFrom: z.string().optional(),
+  effectiveUntil: z.string().nullable().optional(),
+  tiers: z.array(SlabTier).min(1, "Add at least one tier"),
+}).refine((d) => d.tiers.every((t) => t.b2bPricePaise <= d.basePricePaise), { message: "A tier's B2B price cannot exceed the base price (discount would be negative).", path: ["tiers"] });
+
+/** The active tier ladder for one (business, product, unit[, variant]), qty-ascending. */
+export async function getSlabLadder(businessId: string, productSlug: string, unit: string, variantLabel?: string | null) {
+  const rows = await db.businessPricing.findMany({
+    where: { businessId, productSlug, unit, variantLabel: clean(variantLabel) ?? null, deletedAt: null },
+    orderBy: { minQty: "asc" },
+    include: { business: { select: { code: true, name: true, active: true } } },
+  });
+  return rows.map(shape);
+}
+
+/** Replace the whole slab ladder for one (business, product, unit[, variant]) in one
+ *  atomic pass: upsert each incoming tier (by minQty), soft-delete tiers dropped from
+ *  the set. Base price / GST / effective window are shared across the ladder. */
+export async function setSlabLadder(raw: unknown, actor: Actor) {
+  const data = SlabLadderSchema.parse(raw);
+  const tiers = [...data.tiers].sort((a, b) => a.minQty - b.minQty);
+  for (let i = 1; i < tiers.length; i++) if (tiers[i].minQty === tiers[i - 1].minQty) throw new Error(`Two tiers share min qty ${tiers[i].minQty}. Each tier needs a distinct min quantity.`);
+  if (tiers[0].minQty !== 1) throw new Error("The first slab tier must start at min qty 1 so every order quantity is priced.");
+  const variant = clean(data.variantLabel) ?? null;
+  const from = data.effectiveFrom ? new Date(data.effectiveFrom) : new Date();
+  const until = data.effectiveUntil ? new Date(data.effectiveUntil) : null;
+
+  await withRetry(() =>
+    db.$transaction(async (tx) => {
+      const biz = await tx.business.findUnique({ where: { id: data.businessId }, select: { active: true, deletedAt: true } });
+      if (!biz || biz.deletedAt) throw new Error("Business not found");
+      if (!biz.active) throw new Error("Cannot set pricing for an inactive business");
+
+      const existing = await tx.businessPricing.findMany({
+        where: { businessId: data.businessId, productSlug: data.productSlug, unit: data.unit, variantLabel: variant },
+        select: { id: true, minQty: true, b2bPricePaise: true, gstBps: true, deletedAt: true },
+      });
+      // Prefer a live row over a soft-deleted one when both share a minQty.
+      const byMin = new Map<number, (typeof existing)[number]>();
+      for (const r of existing) { const p = byMin.get(r.minQty); if (!p || (p.deletedAt && !r.deletedAt)) byMin.set(r.minQty, r); }
+      const keep = new Set(tiers.map((t) => t.minQty));
+
+      for (const t of tiers) {
+        const cur = byMin.get(t.minQty);
+        if (cur) {
+          await tx.businessPricing.update({
+            where: { id: cur.id },
+            data: { productName: data.productName, basePricePaise: data.basePricePaise, b2bPricePaise: t.b2bPricePaise, gstBps: data.gstBps, effectiveFrom: from, effectiveUntil: until, active: true, deletedAt: null, updatedById: actor.actorId },
+          });
+          if (cur.b2bPricePaise !== t.b2bPricePaise || cur.gstBps !== data.gstBps || cur.deletedAt) {
+            await tx.businessPricingHistory.create({ data: { pricingId: cur.id, action: cur.deletedAt ? "restored" : "updated", oldB2bPaise: cur.b2bPricePaise, newB2bPaise: t.b2bPricePaise, oldGstBps: cur.gstBps, newGstBps: data.gstBps, reason: "Slab ladder", byId: actor.actorId, byRole: actor.actorRole } });
+          }
+        } else {
+          const code = formatPricingCode(await nextSeq(tx, "b2bpricing"));
+          const created = await tx.businessPricing.create({
+            data: { code, businessId: data.businessId, productSlug: data.productSlug, productName: data.productName, variantLabel: variant, unit: data.unit, basePricePaise: data.basePricePaise, b2bPricePaise: t.b2bPricePaise, gstBps: data.gstBps, minQty: t.minQty, effectiveFrom: from, effectiveUntil: until, createdById: actor.actorId, updatedById: actor.actorId },
+          });
+          await tx.businessPricingHistory.create({ data: { pricingId: created.id, action: "created", oldB2bPaise: null, newB2bPaise: t.b2bPricePaise, oldGstBps: null, newGstBps: data.gstBps, byId: actor.actorId, byRole: actor.actorRole } });
+        }
+      }
+      // Tiers dropped from the ladder → soft-delete (keeps history + is restore-able).
+      for (const r of existing) {
+        if (!keep.has(r.minQty) && !r.deletedAt) {
+          await tx.businessPricing.update({ where: { id: r.id }, data: { deletedAt: new Date(), active: false } });
+          await tx.businessPricingHistory.create({ data: { pricingId: r.id, action: "deleted", oldB2bPaise: r.b2bPricePaise, newB2bPaise: r.b2bPricePaise, oldGstBps: r.gstBps, newGstBps: r.gstBps, reason: "Removed from slab ladder", byId: actor.actorId, byRole: actor.actorRole } });
+        }
+      }
+    }, TX),
+  );
+
+  await audit({ userId: actor.actorId ?? null, actorRole: actor.actorRole ?? "system", action: "b2b.pricing.slab.set", target: `${data.productName} · ${data.unit} · ${tiers.length} tier(s): ${tiers.map((t) => `${t.minQty}+→₹${(t.b2bPricePaise / 100).toFixed(2)}`).join(", ")}` }).catch(() => {});
+  return getSlabLadder(data.businessId, data.productSlug, data.unit, variant);
+}
+
 // ---------- lookups + reports ----------
 
 /* ---------- retail (base) prices — DB-backed via AppSetting ----------

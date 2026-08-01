@@ -102,6 +102,34 @@ window.DOODLY_B2B = (function () {
   }
 
   var PR = function () { return window.DOODLY_B2B_PRICING; };
+  /* DB (BusinessPricing) unit-aware slab overlay — the price an order ACTUALLY bills.
+     Cached per business; resolves the highest tier whose min qty ≤ order qty (mirrors
+     the server's resolveUnitPricePaise). Falls back to the legacy per-slug engine when
+     the API is unavailable or no DB rule exists for that product+unit, so behaviour is
+     unchanged offline. */
+  var DBP = { cache: {}, loading: {} };
+  function dbPriceInfo(bizId, slug, unit, qty) {
+    var m = DBP.cache[bizId]; if (!m) return null;
+    var tiers = m[slug + "||" + unit]; if (!tiers || !tiers.length) return null;
+    var q = Math.max(1, Math.floor(Number(qty) || 1)), pick = null;
+    for (var i = 0; i < tiers.length; i++) if (tiers[i].minQty <= q && (!pick || tiers[i].minQty > pick.minQty)) pick = tiers[i];
+    if (!pick) return null;   // qty below the lowest floor → defer to legacy/caller
+    return { price: pick.pricePaise / 100, source: pick.minQty > 1 ? "slab" : "business", slabMinQty: pick.minQty > 1 ? pick.minQty : null, db: true };
+  }
+  function priceInfoFor(bizId, slug, unit, qty) {
+    var d = dbPriceInfo(bizId, slug, unit, qty); if (d) return d;
+    var pr = PR(); return pr ? pr.priceInfo(bizId, slug, qty) : null;
+  }
+  function loadDbPricing(bizId, onDone) {
+    if (!bizId || !window.DOODLY_API || DBP.cache[bizId] || DBP.loading[bizId]) return;
+    DBP.loading[bizId] = true;
+    window.DOODLY_API.get("/api/b2b/pricing?businessId=" + encodeURIComponent(bizId) + "&active=1&limit=200").then(function (r) {
+      var map = {};
+      (r.pricing || []).forEach(function (p) { if (p.deleted) return; var k = p.productSlug + "||" + p.unit; (map[k] = map[k] || []).push({ minQty: p.minQty, pricePaise: p.b2bPricePaise }); });
+      Object.keys(map).forEach(function (k) { map[k].sort(function (a, b) { return a.minQty - b.minQty; }); });
+      DBP.cache[bizId] = map; DBP.loading[bizId] = false; if (onDone) onDone();
+    }).catch(function () { DBP.loading[bizId] = false; });
+  }
   function gstPct(slug) { try { return window.DOODLY_GST ? (Number(window.DOODLY_GST.resolve(slug).percent) || 0) : 0; } catch (e) { return 0; } }
   function createOrder(d) {
     var b = businesses().find(function (x) { return x.id === d.businessId; }); if (!b) return null;
@@ -264,7 +292,7 @@ window.DOODLY_B2B = (function () {
       var canOv = pr ? pr.canOverride() : true;
       var rows = st.items.map(function (it, i) {
         var prod = products().find(function (p) { return p.slug === it.slug; }) || products()[0];
-        var info = pr ? pr.priceInfo(biz.id, it.slug, it.qty) : null;
+        var info = priceInfoFor(biz.id, it.slug, it.unit, it.qty);
         if (it.basePrice == null) it.basePrice = info ? info.price : prod.price;
         var overr = Number(it.price) !== Number(it.basePrice);
         var pct = it.gstPercent != null ? it.gstPercent : gstPct(it.slug);
@@ -272,7 +300,7 @@ window.DOODLY_B2B = (function () {
           '<label>Qty<input class="input it-qty" data-i="' + i + '" type="number" value="' + it.qty + '" style="width:80px"></label>' +
           '<label>Unit<select class="input it-unit" data-i="' + i + '" style="width:96px">' + prod.units.map(function (u) { return '<option ' + (u === it.unit ? "selected" : "") + '>' + u + '</option>'; }).join("") + '</select></label>' +
           '<label>Unit price ₹<input class="input it-price" data-i="' + i + '" type="number" value="' + it.price + '" style="width:96px" ' + (canOv ? "" : "disabled title=\"No permission to override\"") + '></label>' +
-          '<span class="b2-basep" title="Business price">Biz ₹' + esc(it.basePrice) + (info && info.source === "slab" ? ' <span class="badge blue">slab</span>' : "") + (info && info.source === "retail" ? ' <span class="badge grey">retail</span>' : "") + ' · GST ' + pct + '%</span>' +
+          '<span class="b2-basep" title="Business price">Biz ₹' + esc(it.basePrice) + (info && info.source === "slab" ? ' <span class="badge blue">slab ' + (info.slabMinQty ? info.slabMinQty + "+" : "") + '</span>' : "") + (info && info.source === "retail" ? ' <span class="badge grey">retail</span>' : "") + ' · GST ' + pct + '%</span>' +
           '<span class="b2-lt">' + inr(lineTotal(it)) + '</span><button class="link it-del" data-i="' + i + '">Remove</button>' +
           (overr ? '<label class="b2-reason">Override reason *<input class="input it-reason" data-i="' + i + '" value="' + esc(it.overrideReason || "") + '" placeholder="e.g. negotiated for 250 L"></label>' : "") + '</div>';
       }).join("");
@@ -377,8 +405,11 @@ window.DOODLY_B2B = (function () {
       var find = host.querySelector("#c-find"); if (find) { var run = function () { st.createMatches = lookup((host.querySelector("#c-q") || {}).value); render(); }; find.addEventListener("click", run); var cq = host.querySelector("#c-q"); if (cq) cq.addEventListener("keydown", function (e) { if (e.key === "Enter") run(); }); }
       host.querySelectorAll(".b2-match").forEach(function (b) { b.addEventListener("click", function () { resetOrder(); st.bizFor = b.dataset.id; st.createMatches = []; render(); }); });
       var change = host.querySelector("#c-change"); if (change) change.addEventListener("click", function () { resetOrder(); render(); });
-      function newItem(slug) { var p = products().find(function (x) { return x.slug === slug; }) || products()[0]; var info = (pr && biz) ? pr.priceInfo(biz.id, p.slug, 1) : null; var base = info ? info.price : p.price; return { slug: p.slug, name: p.name, qty: 1, unit: p.units[0], price: base, basePrice: base, overridden: false, overrideReason: "", gstPercent: gstPct(p.slug) }; }
-      function basepHtml(it, info) { return 'Biz ₹' + esc(it.basePrice) + (info && info.source === "slab" ? ' <span class="badge blue">slab</span>' : "") + (info && info.source === "retail" ? ' <span class="badge grey">retail</span>' : "") + ' · GST ' + (it.gstPercent != null ? it.gstPercent : gstPct(it.slug)) + '%'; }
+      function newItem(slug) { var p = products().find(function (x) { return x.slug === slug; }) || products()[0]; var info = biz ? priceInfoFor(biz.id, p.slug, p.units[0], 1) : null; var base = info ? info.price : p.price; return { slug: p.slug, name: p.name, qty: 1, unit: p.units[0], price: base, basePrice: base, overridden: false, overrideReason: "", gstPercent: gstPct(p.slug) }; }
+      function basepHtml(it, info) { return 'Biz ₹' + esc(it.basePrice) + (info && info.source === "slab" ? ' <span class="badge blue">slab ' + (info.slabMinQty ? info.slabMinQty + "+" : "") + '</span>' : "") + (info && info.source === "retail" ? ' <span class="badge grey">retail</span>' : "") + ' · GST ' + (it.gstPercent != null ? it.gstPercent : gstPct(it.slug)) + '%'; }
+      // Pull this business's DB slab ladders once, then re-price non-overridden lines so the
+      // preview matches what the order will actually bill (server is authoritative at create).
+      if (biz) loadDbPricing(biz.id, function () { st.items.forEach(function (it) { var info = priceInfoFor(biz.id, it.slug, it.unit, it.qty); if (info) { it.basePrice = info.price; if (!it.overridden) it.price = info.price; } }); render(); });
       function recalc() {
         Array.prototype.forEach.call(host.querySelectorAll(".b2-lt"), function (el, i) { if (st.items[i]) el.textContent = inr(lineTotal(st.items[i])); });
         var subtotal = st.items.reduce(function (s, it) { return s + lineTotal(it); }, 0);
@@ -390,17 +421,17 @@ window.DOODLY_B2B = (function () {
         if (box) box.innerHTML = '<div class="exp-trow"><span>Subtotal</span><b>' + inr(subtotal) + '</b></div><div class="exp-trow"><span>Discount (' + (Number(st.discPct) || 0) + '%)</span><b>– ' + inr(disc) + '</b></div>' + (addl ? '<div class="exp-trow"><span>Additional charges</span><b>' + inr(addl) + '</b></div>' : "") + '<div class="exp-trow"><span>GST</span><b>' + inr(gst) + '</b></div><div class="exp-trow grand"><span>Grand total</span><b>' + inr(grand) + '</b></div>' + (biz && biz.creditLimit && grand > biz.creditLimit ? '<div class="b2-creditwarn">⚠ Exceeds credit limit of ' + inr(biz.creditLimit) + '</div>' : "");
       }
       var add = host.querySelector("#c-add"); if (add) add.addEventListener("click", function () { st.items.push(newItem(products()[0].slug)); render(); });
-      host.querySelectorAll(".it-prod").forEach(function (s) { s.addEventListener("change", function () { var i = +s.dataset.i, q = st.items[i].qty; st.items[i] = newItem(s.value); st.items[i].qty = q; if (pr && biz) { var info = pr.priceInfo(biz.id, s.value, q); st.items[i].basePrice = info.price; st.items[i].price = info.price; } render(); }); });
+      host.querySelectorAll(".it-prod").forEach(function (s) { s.addEventListener("change", function () { var i = +s.dataset.i, q = st.items[i].qty; st.items[i] = newItem(s.value); st.items[i].qty = q; if (biz) { var info = priceInfoFor(biz.id, s.value, st.items[i].unit, q); if (info) { st.items[i].basePrice = info.price; st.items[i].price = info.price; } } render(); }); });
       host.querySelectorAll(".it-qty").forEach(function (el) {
         el.addEventListener("input", function () {
           var i = +el.dataset.i, it = st.items[i]; it.qty = Number(el.value) || 0;
-          var info = (pr && biz) ? pr.priceInfo(biz.id, it.slug, it.qty) : null;
+          var info = biz ? priceInfoFor(biz.id, it.slug, it.unit, it.qty) : null;
           if (info) { it.basePrice = info.price; if (!it.overridden) { it.price = info.price; var pin = host.querySelector('.it-price[data-i="' + i + '"]'); if (pin) pin.value = it.price; } var bp = el.closest(".b2-item").querySelector(".b2-basep"); if (bp) bp.innerHTML = basepHtml(it, info); }
           recalc();
         });
         el.addEventListener("change", function () { render(); });
       });
-      host.querySelectorAll(".it-unit").forEach(function (el) { el.addEventListener("change", function () { st.items[+el.dataset.i].unit = el.value; }); });
+      host.querySelectorAll(".it-unit").forEach(function (el) { el.addEventListener("change", function () { var i = +el.dataset.i, it = st.items[i]; it.unit = el.value; var info = biz ? priceInfoFor(biz.id, it.slug, it.unit, it.qty) : null; if (info) { it.basePrice = info.price; if (!it.overridden) { it.price = info.price; var pin = host.querySelector('.it-price[data-i="' + i + '"]'); if (pin) pin.value = it.price; } var bp = el.closest(".b2-item").querySelector(".b2-basep"); if (bp) bp.innerHTML = basepHtml(it, info); } recalc(); }); });
       host.querySelectorAll(".it-price").forEach(function (el) {
         el.addEventListener("input", function () { var i = +el.dataset.i, it = st.items[i]; it.price = Number(el.value) || 0; it.overridden = Number(it.price) !== Number(it.basePrice); recalc(); });
         el.addEventListener("change", function () { render(); });

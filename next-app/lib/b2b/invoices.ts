@@ -120,7 +120,7 @@ export async function getInvoiceDetail(id: string) {
     paymentStatus: paymentStatusOf(o.totalPaise, o.paidPaise, inv.dueDate, inv.status),
     order: { code: o.code, deliveryDate: o.deliveryDate.toISOString(), deliveryTime: o.deliveryTime, subtotalPaise: o.subtotalPaise, discountPaise: o.discountPaise, taxPaise: o.taxPaise, totalPaise: o.totalPaise, paidPaise: o.paidPaise, paymentTerm: o.paymentTerm },
     business: { code: o.business.code, name: o.business.name, gst: o.business.gst, pan: o.business.pan, contactPerson: o.business.contactPerson, mobile: o.business.mobile, email: o.business.email, line1: o.business.line1, city: o.business.city, state: o.business.state, pincode: o.business.pincode, billingAddress: o.business.billingAddress },
-    items: o.items.map((i) => ({ id: i.id, productName: i.productName, quantity: i.quantity, unit: i.unit, unitPricePaise: i.unitPricePaise, lineTotalPaise: i.lineTotalPaise })),
+    items: o.items.map((i) => ({ id: i.id, productName: i.productName, quantity: i.quantity, unit: i.unit, unitPricePaise: i.unitPricePaise, lineTotalPaise: i.lineTotalPaise, slabMinQty: i.slabMinQty ?? null })),
     payments: o.payments.map((p) => ({ id: p.id, amountPaise: p.amountPaise, method: p.method, reference: p.reference, createdAt: p.createdAt.toISOString() })),
     events: inv.events.map((e) => ({ id: e.id, type: e.type, note: e.note, byRole: e.byRole, createdAt: e.createdAt.toISOString() })),
     email: { status: inv.emailStatus, to: inv.emailTo, sentAt: inv.emailSentAt?.toISOString() ?? null, messageId: inv.emailMessageId, retryCount: inv.emailRetryCount, error: inv.emailError },

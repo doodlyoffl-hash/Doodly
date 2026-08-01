@@ -1252,14 +1252,32 @@
       DOODLY_API.get("/api/b2b/pricing?businessId=" + encodeURIComponent(state.bizId) + "&limit=200").then(function (r) {
         state.rows = (r.pricing || []).filter(function (p) { return !p.deleted; });
         if (!state.rows.length) { tb.innerHTML = '<tr><td colspan="9" class="muted-sm" style="text-align:center;padding:14px">No unit prices yet for this business — add one below.</td></tr>'; return; }
-        tb.innerHTML = state.rows.map(function (p) {
-          var eff = (p.effectiveFrom ? String(p.effectiveFrom).slice(0, 10) : "—") + (p.effectiveUntil ? " → " + String(p.effectiveUntil).slice(0, 10) : "");
-          var status = p.active ? '<span class="badge green">Active</span>' : '<span class="badge grey">Inactive</span>';
-          var toggle = p.active ? '<button class="btn btn-ghost sm" data-dis="' + p.id + '">Deactivate</button>' : '<button class="btn btn-ghost sm" data-en="' + p.id + '">Activate</button>';
-          return "<tr><td>" + e2(p.productName) + "</td><td><b>" + e2(p.unit) + "</b></td><td style=\"text-align:right\">₹" + rupees(p.b2bPricePaise) + "</td><td style=\"text-align:right\">₹" + rupees(p.basePricePaise) + "</td><td style=\"text-align:right\">" + (p.gstBps / 100) + "</td><td style=\"text-align:right\">" + p.minQty + "</td><td>" + e2(eff) + "</td><td>" + status + "</td><td style=\"text-align:right\">" + toggle + "</td></tr>";
-        }).join("");
+        // Group by product+unit and render each group as a slab ladder (qty-ascending),
+        // showing each tier's computed range (floor → next floor−1; top tier = "N+").
+        var groups = {};
+        state.rows.forEach(function (p) { var k = p.productSlug + "|" + p.unit; if (!groups[k]) groups[k] = { slug: p.productSlug, name: p.productName, unit: p.unit, tiers: [] }; groups[k].tiers.push(p); });
+        var html = "";
+        Object.keys(groups).forEach(function (k) {
+          var g = groups[k]; g.tiers.sort(function (a, b) { return a.minQty - b.minQty; });
+          var slab = g.tiers.length > 1;
+          g.tiers.forEach(function (p, idx) {
+            var next = g.tiers[idx + 1];
+            var range = slab ? (next ? (p.minQty + "–" + (next.minQty - 1)) : (p.minQty + "+")) : (p.minQty > 1 ? p.minQty + "+" : "All");
+            var eff = (p.effectiveFrom ? String(p.effectiveFrom).slice(0, 10) : "—") + (p.effectiveUntil ? " → " + String(p.effectiveUntil).slice(0, 10) : "");
+            var status = p.active ? '<span class="badge green">Active</span>' : '<span class="badge grey">Inactive</span>';
+            var toggle = p.active ? '<button class="btn btn-ghost sm" data-dis="' + p.id + '">Deactivate</button>' : '<button class="btn btn-ghost sm" data-en="' + p.id + '">Activate</button>';
+            var edit = idx === 0 ? '<button class="btn btn-ghost sm" data-edit="' + e2(g.slug) + "|" + e2(g.unit) + '">' + (slab ? "Edit ladder" : "Edit as slab") + "</button> " : "";
+            var remove = '<button class="btn btn-ghost sm" data-del="' + p.id + '">Remove</button>';
+            var prodCell = idx === 0 ? e2(g.name) + (slab ? ' <span class="badge blue">slab ×' + g.tiers.length + "</span>" : "") : "";
+            var unitCell = idx === 0 ? "<b>" + e2(g.unit) + "</b>" : "";
+            html += "<tr><td>" + prodCell + "</td><td>" + unitCell + "</td><td style=\"text-align:right\">₹" + rupees(p.b2bPricePaise) + "</td><td style=\"text-align:right\">₹" + rupees(p.basePricePaise) + "</td><td style=\"text-align:right\">" + (p.gstBps / 100) + "</td><td style=\"text-align:right\">" + e2(range) + "</td><td>" + e2(eff) + "</td><td>" + status + "</td><td style=\"text-align:right;white-space:nowrap\">" + edit + toggle + " " + remove + "</td></tr>";
+          });
+        });
+        tb.innerHTML = html;
         tb.querySelectorAll("[data-dis]").forEach(function (b) { b.addEventListener("click", function () { patchRow(b.dataset.dis, { action: "disable" }); }); });
         tb.querySelectorAll("[data-en]").forEach(function (b) { b.addEventListener("click", function () { patchRow(b.dataset.en, { action: "enable" }); }); });
+        tb.querySelectorAll("[data-del]").forEach(function (b) { b.addEventListener("click", function () { if (window.confirm("Remove this tier? It stops applying to new orders — past orders keep their price.")) patchRow(b.dataset.del, { action: "delete" }); }); });
+        tb.querySelectorAll("[data-edit]").forEach(function (b) { b.addEventListener("click", function () { var parts = b.dataset.edit.split("|"); editLadder(parts[0], parts[1]); }); });
       }).catch(function (er) { tb.innerHTML = '<tr><td colspan="9" class="muted-sm" style="text-align:center;padding:14px">' + e2(er && er.code === "forbidden" ? "Your role can't view B2B pricing (403)." : "Couldn't load prices.") + "</td></tr>"; });
     }
     function patchRow(id, body) { DOODLY_API.patch("/api/b2b/pricing/" + encodeURIComponent(id), body).then(function () { dacToast("Updated."); loadRows(); }).catch(function (er) { dacToast((er && er.message) || "Update failed."); }); }
@@ -1290,6 +1308,59 @@
       if (existing) DOODLY_API.patch("/api/b2b/pricing/" + encodeURIComponent(existing.id), { action: "update", patch: { b2bPricePaise: b2bPricePaise, basePricePaise: basePricePaise, gstBps: gstBps, effectiveFrom: from || undefined, effectiveUntil: until || null } }).then(function () { done("Price updated."); }).catch(fail);
       else DOODLY_API.post("/api/b2b/pricing", { businessId: state.bizId, productSlug: slug, productName: productName(slug), unit: unit, basePricePaise: basePricePaise, b2bPricePaise: b2bPricePaise, gstBps: gstBps, minQty: minQty, effectiveFrom: from || undefined, effectiveUntil: until || null }).then(function () { done("Price saved."); }).catch(fail);
     }
+    // ---- slab-ladder entry (multi-tier per product+unit) ----
+    function collectTiers() {
+      var out = [];
+      host.querySelectorAll("#upTierRows .up-tier").forEach(function (r) {
+        var mn = Math.max(1, Math.round(Number(r.querySelector(".upt-min").value) || 0));
+        var pr = Number(r.querySelector(".upt-price").value);
+        if (pr > 0) out.push({ minQty: mn, b2bPricePaise: Math.round(pr * 100) });
+      });
+      return out;
+    }
+    function addTier(min, price) {
+      var wrap = host.querySelector("#upTierRows"); if (!wrap) return;
+      var row = document.createElement("div"); row.className = "up-tier"; row.style.cssText = "display:flex;gap:6px;align-items:center;margin-bottom:6px";
+      row.innerHTML = '<input class="input upt-min" type="number" min="1" step="1" placeholder="Min qty" value="' + (min == null || min === "" ? "" : min) + '" style="width:90px"><span class="muted-sm">→ ₹</span><input class="input upt-price" type="number" min="0" step="0.01" placeholder="Price" value="' + (price == null || price === "" ? "" : price) + '" style="width:120px"><button class="btn btn-ghost sm upt-del" type="button">×</button>';
+      row.querySelector(".upt-del").addEventListener("click", function () { row.remove(); });
+      wrap.appendChild(row);
+    }
+    function toggleSlabMode(on) {
+      var single = host.querySelector("#upSingleFields"), tiers = host.querySelector("#upTiers"), btn = host.querySelector("#upSave");
+      if (single) single.style.display = on ? "none" : "flex";
+      if (tiers) tiers.style.display = on ? "block" : "none";
+      if (btn) btn.textContent = on ? "Save slab ladder" : "Save price";
+      if (on && !host.querySelectorAll("#upTierRows .up-tier").length) { addTier(1, ""); addTier("", ""); }
+    }
+    function editLadder(slug, unit) {
+      var g = state.rows.filter(function (p) { return p.productSlug === slug && p.unit === unit; }).sort(function (a, b) { return a.minQty - b.minQty; });
+      if (!g.length) return;
+      host.querySelector("#upProd").value = slug;
+      host.querySelector("#upUnit").innerHTML = unitOptions(slug); host.querySelector("#upUnit").value = unit;
+      host.querySelector("#upBase").value = (g[0].basePricePaise / 100);
+      host.querySelector("#upGst").value = (g[0].gstBps / 100);
+      host.querySelector("#upFrom").value = g[0].effectiveFrom ? String(g[0].effectiveFrom).slice(0, 10) : "";
+      host.querySelector("#upUntil").value = g[0].effectiveUntil ? String(g[0].effectiveUntil).slice(0, 10) : "";
+      host.querySelector("#upSlabMode").checked = true; toggleSlabMode(true);
+      host.querySelector("#upTierRows").innerHTML = "";
+      g.forEach(function (p) { addTier(p.minQty, p.b2bPricePaise / 100); });
+      try { host.querySelector("#upTiers").scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
+    }
+    function saveLadder() {
+      var slug = host.querySelector("#upProd").value, unit = host.querySelector("#upUnit").value;
+      var tiers = collectTiers();
+      if (!tiers.length) { dacToast("Add at least one tier with a price."); return; }
+      if (!tiers.some(function (t) { return t.minQty === 1; })) { dacToast("The first tier must start at min qty 1 so every quantity is priced."); return; }
+      var base = Number(host.querySelector("#upBase").value);
+      var maxTier = tiers.reduce(function (m, t) { return Math.max(m, t.b2bPricePaise); }, 0);
+      var basePaise = base > 0 ? Math.round(base * 100) : maxTier;
+      if (basePaise < maxTier) { dacToast("Base price must be ≥ every tier price."); return; }
+      var gst = Number(host.querySelector("#upGst").value) || 0, from = host.querySelector("#upFrom").value, until = host.querySelector("#upUntil").value;
+      var btn = host.querySelector("#upSave"); btn.disabled = true;
+      DOODLY_API.post("/api/b2b/pricing/slabs", { businessId: state.bizId, productSlug: slug, productName: productName(slug), unit: unit, basePricePaise: basePaise, gstBps: Math.round(gst * 100), effectiveFrom: from || undefined, effectiveUntil: until || null, tiers: tiers })
+        .then(function () { btn.disabled = false; dacToast("Slab ladder saved."); loadRows(); })
+        .catch(function (er) { btn.disabled = false; dacToast((er && er.message) || "Save failed."); });
+    }
     function shell() {
       host.innerHTML =
         '<div class="panel" style="margin-bottom:16px">' +
@@ -1297,21 +1368,31 @@
           '<h3>Unit Pricing — KG / Litre <span class="muted-sm" style="font-weight:600">· the price B2B orders actually bill</span></h3>' +
           '<select class="input" id="upBiz" style="max-width:280px"></select></div>' +
         '<div class="panel-pad">' +
-          '<div class="table-wrap"><table class="tbl"><thead><tr><th>Product</th><th>Unit</th><th style="text-align:right">B2B price</th><th style="text-align:right">Base</th><th style="text-align:right">GST%</th><th style="text-align:right">Min qty</th><th>Effective</th><th>Status</th><th></th></tr></thead><tbody id="upRows"></tbody></table></div>' +
+          '<div class="table-wrap"><table class="tbl"><thead><tr><th>Product</th><th>Unit</th><th style="text-align:right">B2B price</th><th style="text-align:right">Base</th><th style="text-align:right">GST%</th><th style="text-align:right">Qty (slab)</th><th>Effective</th><th>Status</th><th></th></tr></thead><tbody id="upRows"></tbody></table></div>' +
           '<div style="margin-top:12px;padding:12px;border:1px solid var(--line,#eef2ef);border-radius:10px;background:rgba(31,174,102,.04)">' +
-            '<div style="font-weight:700;margin-bottom:8px">Add / update a unit price</div>' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">' +
+              '<div style="font-weight:700">Add / update a unit price</div>' +
+              '<label style="display:flex;align-items:center;gap:6px;font-size:.8rem;font-weight:700"><input type="checkbox" id="upSlabMode"> Slab pricing (quantity tiers)</label>' +
+            "</div>" +
             '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">' +
               fld("Product", '<select class="input" id="upProd">' + PRODUCTS.map(function (p) { return '<option value="' + p.slug + '">' + e2(p.name) + "</option>"; }).join("") + "</select>") +
               fld("Unit", '<select class="input" id="upUnit"></select>') +
-              fld("B2B price (₹)", '<input class="input" id="upPrice" type="number" min="0" step="0.01" style="width:120px">') +
+              '<span id="upSingleFields" style="display:flex;gap:10px;align-items:flex-end">' +
+                fld("B2B price (₹)", '<input class="input" id="upPrice" type="number" min="0" step="0.01" style="width:120px">') +
+                fld("Min qty", '<input class="input" id="upMin" type="number" min="1" step="1" value="1" style="width:80px">') +
+              "</span>" +
               fld("Base (₹, optional)", '<input class="input" id="upBase" type="number" min="0" step="0.01" style="width:120px">') +
               fld("GST %", '<input class="input" id="upGst" type="number" min="0" max="100" step="0.1" value="0" style="width:80px">') +
-              fld("Min qty", '<input class="input" id="upMin" type="number" min="1" step="1" value="1" style="width:80px">') +
               fld("Effective from", '<input class="input" id="upFrom" type="date">') +
               fld("Until (optional)", '<input class="input" id="upUntil" type="date">') +
               '<button class="btn btn-primary" id="upSave">Save price</button>' +
             "</div>" +
-            '<p class="muted-sm" style="margin-top:8px">Per-<b>unit</b> negotiated price stored in the database — used by B2B order creation, invoices and P&amp;L. Changing it never alters past orders/invoices (they keep their own snapshot).</p>' +
+            '<div id="upTiers" style="display:none;margin-top:10px">' +
+              '<div style="font-size:.74rem;font-weight:700;color:var(--ink-2,#37423d);margin-bottom:6px">Quantity tiers <span class="muted-sm" style="font-weight:600">· first tier must start at min qty 1 · e.g. 1 → ₹72, 51 → ₹70, 100 → ₹68</span></div>' +
+              '<div id="upTierRows"></div>' +
+              '<button class="btn btn-ghost sm" id="upAddTier" type="button" style="margin-top:6px">+ Add tier</button>' +
+            "</div>" +
+            '<p class="muted-sm" style="margin-top:8px">Per-<b>unit</b> negotiated price stored in the database — used by B2B order creation, invoices and P&amp;L. Slab tiers bill the highest tier whose min qty ≤ the order quantity. Changing prices never alters past orders/invoices (they keep their own snapshot).</p>' +
           "</div>" +
           '<div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">' +
             '<div style="font-weight:700;align-self:center">B2B Sales Report <span class="muted-sm" style="font-weight:600">· by unit · revenue · ASP · milk profit</span></div>' +
@@ -1330,7 +1411,9 @@
       var prodSel = host.querySelector("#upProd");
       var syncUnits = function () { host.querySelector("#upUnit").innerHTML = unitOptions(prodSel.value); };
       prodSel.addEventListener("change", syncUnits); syncUnits();
-      host.querySelector("#upSave").addEventListener("click", save);
+      host.querySelector("#upSave").addEventListener("click", function () { if (host.querySelector("#upSlabMode").checked) saveLadder(); else save(); });
+      host.querySelector("#upSlabMode").addEventListener("change", function () { toggleSlabMode(this.checked); });
+      host.querySelector("#upAddTier").addEventListener("click", function () { addTier("", ""); });
       // sales-report export bar: default range = this month → today
       try {
         var td = new Date(), toS = td.toISOString().slice(0, 10), fromS = new Date(td.getFullYear(), td.getMonth(), 1).toISOString().slice(0, 10);

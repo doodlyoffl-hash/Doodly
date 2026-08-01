@@ -2704,6 +2704,8 @@ model BusinessOrderItem {
   unit           String                                // "Litres" | "KG" | "Bottles"
   unitPricePaise Int
   lineTotalPaise Int
+  slabMinQty     Int?                                  // quantity-slab floor that priced this line (null = catalogue default / no slab)
+  pricingCode    String?                               // B2BP-… code of the BusinessPricing row used (audit trail; null = default)
 }
 
 model BusinessPayment {

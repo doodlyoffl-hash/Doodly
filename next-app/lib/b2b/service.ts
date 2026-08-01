@@ -160,11 +160,12 @@ export async function getBusinessProfile(id: string) {
    Order of authority: the business's negotiated BusinessPricing row for that exact unit
    (highest applicable quantity slab) → the catalogue default, but ONLY for the primary unit
    → otherwise refuse, rather than silently reuse a price meant for a different unit. */
+interface ResolvedPrice { pricePaise: number; slabMinQty: number | null; pricingCode: string | null }
 async function resolveUnitPricePaise(
   tx: Prisma.TransactionClient,
   businessId: string,
   item: { productSlug: string; productName: string; unit: string; quantity: number },
-): Promise<number> {
+): Promise<ResolvedPrice> {
   const now = new Date();
   const negotiated = await tx.businessPricing.findFirst({
     where: {
@@ -175,12 +176,14 @@ async function resolveUnitPricePaise(
       OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: now } }],
     },
     orderBy: { minQty: "desc" },   // the most specific slab wins
-    select: { b2bPricePaise: true },
+    select: { b2bPricePaise: true, minQty: true, code: true },
   });
-  if (negotiated) return negotiated.b2bPricePaise;
+  // Record the slab tier ONLY when it's a real quantity slab (minQty > 1); a lone
+  // minQty=1 rule is "the price", not a tier, so it shows no slab note on invoices.
+  if (negotiated) return { pricePaise: negotiated.b2bPricePaise, slabMinQty: negotiated.minQty > 1 ? negotiated.minQty : null, pricingCode: negotiated.code };
 
   const cat = b2bProductBySlug(item.productSlug);
-  if (cat && item.unit === cat.primaryUnit && cat.defaultPricePaise > 0) return cat.defaultPricePaise;
+  if (cat && item.unit === cat.primaryUnit && cat.defaultPricePaise > 0) return { pricePaise: cat.defaultPricePaise, slabMinQty: null, pricingCode: null };
 
   throw new Error(
     `No B2B price is set for ${item.productName} in ${item.unit}. Add a price for that unit in B2B Pricing (the catalogue default only covers ${cat?.primaryUnit ?? "the primary unit"}).`,
@@ -195,8 +198,9 @@ export async function createOrder(raw: unknown, actor: Actor) {
       if (!biz || biz.deletedAt || !biz.active) throw new Error("Business not found or inactive");
 
       // Server-authoritative pricing — never trust the client's unitPricePaise.
+      // Each line also captures the slab tier (minQty + B2BP code) that priced it.
       const priced = await Promise.all(
-        data.items.map(async (i) => ({ ...i, unitPricePaise: await resolveUnitPricePaise(tx, data.businessId, i) })),
+        data.items.map(async (i) => { const r = await resolveUnitPricePaise(tx, data.businessId, i); return { ...i, unitPricePaise: r.pricePaise, slabMinQty: r.slabMinQty, pricingCode: r.pricingCode }; }),
       );
 
       const discountBps = data.discountBps ?? biz.discountBps;
@@ -210,7 +214,7 @@ export async function createOrder(raw: unknown, actor: Actor) {
           code, businessId: data.businessId, deliveryDate: new Date(data.deliveryDate), deliveryTime: data.deliveryTime,
           deliveryNotes: clean(data.deliveryNotes), ...totals, paymentTerm: biz.paymentTerm,
           paymentStatus: derivePaymentStatus(totals.totalPaise, 0, biz.paymentTerm), remarks: clean(data.remarks), createdById: actor.actorId,
-          items: { create: priced.map((i) => ({ productSlug: i.productSlug, productName: i.productName, quantity: i.quantity, unit: i.unit, unitPricePaise: i.unitPricePaise, lineTotalPaise: lineTotalPaise(i.unitPricePaise, i.quantity) })) },
+          items: { create: priced.map((i) => ({ productSlug: i.productSlug, productName: i.productName, quantity: i.quantity, unit: i.unit, unitPricePaise: i.unitPricePaise, lineTotalPaise: lineTotalPaise(i.unitPricePaise, i.quantity), slabMinQty: i.slabMinQty, pricingCode: i.pricingCode })) },
         },
         include: { items: true, business: { select: { code: true, name: true } } },
       });

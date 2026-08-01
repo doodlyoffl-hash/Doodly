@@ -32,7 +32,7 @@ export interface InvoicePdfData {
     contactPerson: string; mobile: string; email?: string | null;
     line1: string; city: string; state: string; pincode: string; billingAddress?: string | null;
   };
-  items: { productName: string; quantity: number; unit: string; unitPricePaise: number; lineTotalPaise: number }[];
+  items: { productName: string; quantity: number; unit: string; unitPricePaise: number; lineTotalPaise: number; slabMinQty?: number | null }[];
 }
 
 // ---- brand palette (matches the email design system) ----
@@ -155,7 +155,7 @@ export async function renderInvoicePdf(d: InvoicePdfData): Promise<Uint8Array> {
   rightText(page, "AMOUNT", cols.amt, y, 8.5, bold, WHITE);
   y -= 24;
   for (const it of d.items) {
-    text(page, truncate(it.productName, font, 9.5, tableW * 0.5), cols.name, y, 9.5, font, INK);
+    text(page, truncate(it.productName + (it.slabMinQty && it.slabMinQty > 1 ? ` (${it.slabMinQty}+ slab)` : ""), font, 9.5, tableW * 0.5), cols.name, y, 9.5, font, INK);
     rightText(page, `${it.quantity} ${it.unit}`, cols.qty + 24, y, 9.5, font, MUTE);
     rightText(page, rs(it.unitPricePaise), cols.price + 42, y, 9.5, font, MUTE);
     rightText(page, rs(it.lineTotalPaise), cols.amt, y, 9.5, bold, INK);
