@@ -15,8 +15,9 @@ import { db } from "@/lib/db";
 import { istDayWindow } from "@/lib/delivery/stats";
 import { audit } from "@/lib/auth/audit";
 import { consumeLitres, reverseByRef, type ConsumeResult } from "@/lib/milk/fifo";
+import { getMilkConfig } from "@/lib/milk/config";
+import { isMilkSlug, saleLitres } from "@/lib/b2b/units";
 
-const ASSUMED_BOTTLE_ML = 1000;                 // B2B "Bottles" with no size → 1 L each
 const normLabel = (s?: string | null) => (s ?? "").toLowerCase().replace(/\s+/g, "");
 function parseMl(label?: string | null): number | null {
   const s = normLabel(label);
@@ -57,24 +58,29 @@ export async function retailLitresForDay(start: Date, end: Date): Promise<number
   return totalMl / 1000;
 }
 
-/** Litres sold to B2B on an IST day — milk lines only (productSlug "milk"),
- *  Litres 1:1, Bottles × assumed size. KG never applies to milk (solids only). */
+/** Litres of raw milk sold to B2B on an IST day — milk lines only, unit-aware via
+ *  lib/b2b/units.saleLitres: Litres 1:1, Bottles × size, **KG → qty / density**
+ *  (a KG-priced milk sale now draws the right litres of inventory + FIFO COGS).
+ *  Non-milk (solids) draw no raw milk yet — counted + logged as a known gap, not
+ *  silently dropped. */
 export async function b2bLitresForDay(start: Date, end: Date): Promise<number> {
-  const orders = await db.businessOrder.findMany({
-    where: { deliveryDate: { gte: start, lt: end }, status: { not: "CANCELLED" } },
-    select: { items: { select: { productSlug: true, quantity: true, unit: true } } },
-    take: 5000,
-  });
+  const [orders, cfg] = await Promise.all([
+    db.businessOrder.findMany({
+      where: { deliveryDate: { gte: start, lt: end }, status: { not: "CANCELLED" } },
+      select: { items: { select: { productSlug: true, quantity: true, unit: true } } },
+      take: 5000,
+    }),
+    getMilkConfig(),
+  ]);
   let litres = 0;
+  let untrackedLines = 0;   // non-milk B2B lines: revenue booked, no COGS (milk-only costing for now)
   for (const o of orders) {
     for (const it of o.items) {
-      if (it.productSlug !== "milk") continue;              // only milk draws raw milk
-      const u = String(it.unit || "").toLowerCase();
-      if (u.startsWith("litre") || u.startsWith("liter") || u === "l") litres += it.quantity;
-      else if (u.startsWith("bottle")) litres += (it.quantity * ASSUMED_BOTTLE_ML) / 1000;
-      // any other unit on a milk line (shouldn't happen) is ignored, not guessed
+      if (isMilkSlug(it.productSlug)) litres += saleLitres({ productSlug: it.productSlug, unit: it.unit, quantity: it.quantity }, cfg.conversionFactor);
+      else untrackedLines++;
     }
   }
+  if (untrackedLines > 0) console.info(`[b2b-cogs] ${untrackedLines} non-milk B2B line(s) booked revenue but no COGS (milk-only costing — solids gap).`);
   return litres;
 }
 
