@@ -118,9 +118,11 @@ export async function createPricing(raw: unknown, actor: Actor) {
       const biz = await tx.business.findUnique({ where: { id: data.businessId }, select: { id: true, active: true, deletedAt: true } });
       if (!biz || biz.deletedAt) throw new Error("Business not found");
       if (!biz.active) throw new Error("Cannot add pricing for an inactive business");
-      // duplicate prevention: one active rule per business + product + variant + qty slab
-      const dup = await tx.businessPricing.findFirst({ where: { businessId: data.businessId, productSlug: data.productSlug, variantLabel: clean(data.variantLabel) ?? null, minQty: data.minQty, deletedAt: null }, select: { code: true } });
-      if (dup) throw new Error(`A pricing rule already exists for this business/product/quantity (${dup.code}). Edit it instead.`);
+      // duplicate prevention: one active rule per business + product + UNIT + variant + qty slab.
+      // Unit is part of the key so a KG rule and a Litre rule for the same product coexist
+      // (a customer priced ₹72/KG vs ₹78/Litre needs two independent rules).
+      const dup = await tx.businessPricing.findFirst({ where: { businessId: data.businessId, productSlug: data.productSlug, unit: data.unit, variantLabel: clean(data.variantLabel) ?? null, minQty: data.minQty, deletedAt: null }, select: { code: true } });
+      if (dup) throw new Error(`A pricing rule already exists for this business/product/unit/quantity (${dup.code}). Edit it instead.`);
 
       const code = formatPricingCode(await nextSeq(tx, "b2bpricing"));
       const created = await tx.businessPricing.create({

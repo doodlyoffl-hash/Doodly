@@ -1222,9 +1222,112 @@
       bkBanner(host, "● Live — B2B statement from the DOODLY database (" + n.biz + " business(es), " + n.ords + " order(s)).", "ok");
     } catch (e) { b2bErr(host, e); }
   }
+  /* ---- Unit Pricing (KG / Litre) — DB-backed editor, the AUTHORITATIVE per-unit
+     B2B price that order creation / invoices / P&L use. Writes BusinessPricing rows
+     directly via /api/b2b/pricing (unit-aware), not the legacy slug-keyed blob. A KG
+     rule and a Litre rule can coexist for the same product (₹72/KG vs ₹78/Litre). ---- */
+  function b2bUnitProducts() {
+    return [
+      { slug: "milk", name: "A2 Buffalo Milk", units: ["Litres", "Bottles", "KG"] },
+      { slug: "curd", name: "Buffalo Pot Curd", units: ["KG", "Litres", "Tubs"] },
+      { slug: "paneer", name: "Malai Paneer", units: ["KG", "Packs"] },
+      { slug: "kova", name: "Palkova", units: ["KG", "Packs"] },
+      { slug: "ghee", name: "Buffalo Ghee", units: ["KG", "Litres", "Tins"] },
+    ];
+  }
+  function renderB2BUnitPricing(host) {
+    if (!window.DOODLY_API || !host) return;
+    var PRODUCTS = b2bUnitProducts();
+    var state = { businesses: [], bizId: "", rows: [] };
+    var e2 = function (s) { return esc(String(s == null ? "" : s)); };
+    var rupees = function (paise) { return (Math.round(paise) / 100).toLocaleString("en-IN"); };
+    var productName = function (slug) { var p = PRODUCTS.find(function (x) { return x.slug === slug; }); return p ? p.name : slug; };
+    var unitOptions = function (slug) { var p = PRODUCTS.find(function (x) { return x.slug === slug; }); return (p ? p.units : ["Litres", "KG"]).map(function (u) { return '<option value="' + u + '">' + u + "</option>"; }).join(""); };
+    var fld = function (label, inner) { return '<label style="display:flex;flex-direction:column;gap:3px;font-size:.74rem;font-weight:700;color:var(--ink-2,#37423d)">' + e2(label) + inner + "</label>"; };
+
+    function loadRows() {
+      var tb = host.querySelector("#upRows"); if (!tb) return;
+      if (!state.bizId) { tb.innerHTML = '<tr><td colspan="9" class="muted-sm" style="text-align:center;padding:14px">Select a business.</td></tr>'; return; }
+      tb.innerHTML = '<tr><td colspan="9" class="muted-sm" style="text-align:center;padding:14px">Loading…</td></tr>';
+      DOODLY_API.get("/api/b2b/pricing?businessId=" + encodeURIComponent(state.bizId) + "&limit=200").then(function (r) {
+        state.rows = (r.pricing || []).filter(function (p) { return !p.deleted; });
+        if (!state.rows.length) { tb.innerHTML = '<tr><td colspan="9" class="muted-sm" style="text-align:center;padding:14px">No unit prices yet for this business — add one below.</td></tr>'; return; }
+        tb.innerHTML = state.rows.map(function (p) {
+          var eff = (p.effectiveFrom ? String(p.effectiveFrom).slice(0, 10) : "—") + (p.effectiveUntil ? " → " + String(p.effectiveUntil).slice(0, 10) : "");
+          var status = p.active ? '<span class="badge green">Active</span>' : '<span class="badge grey">Inactive</span>';
+          var toggle = p.active ? '<button class="btn btn-ghost sm" data-dis="' + p.id + '">Deactivate</button>' : '<button class="btn btn-ghost sm" data-en="' + p.id + '">Activate</button>';
+          return "<tr><td>" + e2(p.productName) + "</td><td><b>" + e2(p.unit) + "</b></td><td style=\"text-align:right\">₹" + rupees(p.b2bPricePaise) + "</td><td style=\"text-align:right\">₹" + rupees(p.basePricePaise) + "</td><td style=\"text-align:right\">" + (p.gstBps / 100) + "</td><td style=\"text-align:right\">" + p.minQty + "</td><td>" + e2(eff) + "</td><td>" + status + "</td><td style=\"text-align:right\">" + toggle + "</td></tr>";
+        }).join("");
+        tb.querySelectorAll("[data-dis]").forEach(function (b) { b.addEventListener("click", function () { patchRow(b.dataset.dis, { action: "disable" }); }); });
+        tb.querySelectorAll("[data-en]").forEach(function (b) { b.addEventListener("click", function () { patchRow(b.dataset.en, { action: "enable" }); }); });
+      }).catch(function (er) { tb.innerHTML = '<tr><td colspan="9" class="muted-sm" style="text-align:center;padding:14px">' + e2(er && er.code === "forbidden" ? "Your role can't view B2B pricing (403)." : "Couldn't load prices.") + "</td></tr>"; });
+    }
+    function patchRow(id, body) { DOODLY_API.patch("/api/b2b/pricing/" + encodeURIComponent(id), body).then(function () { dacToast("Updated."); loadRows(); }).catch(function (er) { dacToast((er && er.message) || "Update failed."); }); }
+    function save() {
+      var slug = host.querySelector("#upProd").value, unit = host.querySelector("#upUnit").value;
+      var price = Number(host.querySelector("#upPrice").value), base = Number(host.querySelector("#upBase").value);
+      var gst = Number(host.querySelector("#upGst").value) || 0, minQty = Math.max(1, Math.round(Number(host.querySelector("#upMin").value) || 1));
+      var from = host.querySelector("#upFrom").value, until = host.querySelector("#upUntil").value;
+      if (!(price > 0)) { dacToast("Enter a B2B price."); return; }
+      if (!(base > 0)) base = price;                          // default base = B2B (0% discount)
+      if (base < price) { dacToast("Base price must be ≥ the B2B price."); return; }
+      var b2bPricePaise = Math.round(price * 100), basePricePaise = Math.round(base * 100), gstBps = Math.round(gst * 100);
+      var existing = state.rows.find(function (p) { return p.productSlug === slug && p.unit === unit && p.minQty === minQty; });
+      var btn = host.querySelector("#upSave"); btn.disabled = true;
+      var done = function (m) { btn.disabled = false; dacToast(m); loadRows(); };
+      var fail = function (er) { btn.disabled = false; dacToast((er && er.message) || "Save failed."); };
+      if (existing) DOODLY_API.patch("/api/b2b/pricing/" + encodeURIComponent(existing.id), { action: "update", patch: { b2bPricePaise: b2bPricePaise, basePricePaise: basePricePaise, gstBps: gstBps, effectiveFrom: from || undefined, effectiveUntil: until || null } }).then(function () { done("Price updated."); }).catch(fail);
+      else DOODLY_API.post("/api/b2b/pricing", { businessId: state.bizId, productSlug: slug, productName: productName(slug), unit: unit, basePricePaise: basePricePaise, b2bPricePaise: b2bPricePaise, gstBps: gstBps, minQty: minQty, effectiveFrom: from || undefined, effectiveUntil: until || null }).then(function () { done("Price saved."); }).catch(fail);
+    }
+    function shell() {
+      host.innerHTML =
+        '<div class="panel" style="margin-bottom:16px">' +
+        '<div class="panel-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">' +
+          '<h3>Unit Pricing — KG / Litre <span class="muted-sm" style="font-weight:600">· the price B2B orders actually bill</span></h3>' +
+          '<select class="input" id="upBiz" style="max-width:280px"></select></div>' +
+        '<div class="panel-pad">' +
+          '<div class="table-wrap"><table class="tbl"><thead><tr><th>Product</th><th>Unit</th><th style="text-align:right">B2B price</th><th style="text-align:right">Base</th><th style="text-align:right">GST%</th><th style="text-align:right">Min qty</th><th>Effective</th><th>Status</th><th></th></tr></thead><tbody id="upRows"></tbody></table></div>' +
+          '<div style="margin-top:12px;padding:12px;border:1px solid var(--line,#eef2ef);border-radius:10px;background:rgba(31,174,102,.04)">' +
+            '<div style="font-weight:700;margin-bottom:8px">Add / update a unit price</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">' +
+              fld("Product", '<select class="input" id="upProd">' + PRODUCTS.map(function (p) { return '<option value="' + p.slug + '">' + e2(p.name) + "</option>"; }).join("") + "</select>") +
+              fld("Unit", '<select class="input" id="upUnit"></select>') +
+              fld("B2B price (₹)", '<input class="input" id="upPrice" type="number" min="0" step="0.01" style="width:120px">') +
+              fld("Base (₹, optional)", '<input class="input" id="upBase" type="number" min="0" step="0.01" style="width:120px">') +
+              fld("GST %", '<input class="input" id="upGst" type="number" min="0" max="100" step="0.1" value="0" style="width:80px">') +
+              fld("Min qty", '<input class="input" id="upMin" type="number" min="1" step="1" value="1" style="width:80px">') +
+              fld("Effective from", '<input class="input" id="upFrom" type="date">') +
+              fld("Until (optional)", '<input class="input" id="upUntil" type="date">') +
+              '<button class="btn btn-primary" id="upSave">Save price</button>' +
+            "</div>" +
+            '<p class="muted-sm" style="margin-top:8px">Per-<b>unit</b> negotiated price stored in the database — used by B2B order creation, invoices and P&amp;L. Changing it never alters past orders/invoices (they keep their own snapshot).</p>' +
+          "</div>" +
+        "</div></div>";
+      var sel = host.querySelector("#upBiz");
+      sel.innerHTML = state.businesses.map(function (b) { return '<option value="' + b.id + '">' + e2(b.name) + " (" + e2(b.code) + ")</option>"; }).join("") || '<option value="">No businesses</option>';
+      if (!state.bizId && state.businesses[0]) state.bizId = state.businesses[0].id;
+      sel.value = state.bizId;
+      sel.addEventListener("change", function () { state.bizId = sel.value; loadRows(); });
+      var prodSel = host.querySelector("#upProd");
+      var syncUnits = function () { host.querySelector("#upUnit").innerHTML = unitOptions(prodSel.value); };
+      prodSel.addEventListener("change", syncUnits); syncUnits();
+      host.querySelector("#upSave").addEventListener("click", save);
+    }
+    DOODLY_API.get("/api/b2b/businesses").then(function (r) {
+      state.businesses = (r.businesses || r || []).filter(function (b) { return b && b.id; });
+      shell(); loadRows();
+    }).catch(function () { host.innerHTML = '<div class="panel"><div class="panel-pad muted-sm">Couldn\'t load businesses for unit pricing.</div></div>'; });
+  }
+
   async function wireB2BPricingBackend() {
     if (!window.DOODLY_API) return;
     var host = document.querySelector("#b2bPricingMount");
+    // DB-backed per-unit pricing editor (authoritative for orders) injected above the legacy blob panel.
+    if (host && host.parentNode && !document.getElementById("b2bUnitPricing")) {
+      var up = document.createElement("div"); up.id = "b2bUnitPricing";
+      host.parentNode.insertBefore(up, host);
+      try { renderB2BUnitPricing(up); } catch (e) {}
+    }
     try {
       await b2bMirror();   // so the business dropdown uses real DB ids
       var pr = await DOODLY_API.get("/api/b2b/pricing?limit=500");
