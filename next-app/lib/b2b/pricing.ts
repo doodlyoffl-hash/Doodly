@@ -113,7 +113,7 @@ export async function getPricing(id: string) {
 
 export async function createPricing(raw: unknown, actor: Actor) {
   const data = PricingSchema.parse(raw);
-  return withRetry(() =>
+  const created = await withRetry(() =>
     db.$transaction(async (tx) => {
       const biz = await tx.business.findUnique({ where: { id: data.businessId }, select: { id: true, active: true, deletedAt: true } });
       if (!biz || biz.deletedAt) throw new Error("Business not found");
@@ -137,14 +137,18 @@ export async function createPricing(raw: unknown, actor: Actor) {
       return created;
     }, TX),
   );
+  // central audit trail — captures the pricing UNIT + price (Step 12)
+  await audit({ userId: actor.actorId ?? null, actorRole: actor.actorRole ?? "system", action: "b2b.pricing.created", target: `${created.code} · ${data.productName} · ${data.unit} · ₹${(data.b2bPricePaise / 100).toFixed(2)}/${data.unit} · eff ${(data.effectiveFrom || new Date().toISOString()).slice(0, 10)}` }).catch(() => {});
+  return created;
 }
 
 const UpdateSchema = PricingBase.partial().extend({ reason: z.string().trim().max(200).optional() });
 export async function updatePricing(id: string, raw: unknown, actor: Actor) {
   const data = UpdateSchema.parse(raw);
-  return withRetry(() =>
+  let auditInfo: { code: string; product: string; unit: string; oldB2b: number; newB2b: number } | null = null;
+  const updated = await withRetry(() =>
     db.$transaction(async (tx) => {
-      const cur = await tx.businessPricing.findUnique({ where: { id }, select: { b2bPricePaise: true, basePricePaise: true, gstBps: true } });
+      const cur = await tx.businessPricing.findUnique({ where: { id }, select: { b2bPricePaise: true, basePricePaise: true, gstBps: true, unit: true, code: true, productName: true } });
       if (!cur) throw new Error("Pricing not found");
       const newBase = data.basePricePaise ?? cur.basePricePaise;
       const newB2b = data.b2bPricePaise ?? cur.b2bPricePaise;
@@ -167,9 +171,12 @@ export async function updatePricing(id: string, raw: unknown, actor: Actor) {
       if (newB2b !== cur.b2bPricePaise || newGst !== cur.gstBps) {
         await tx.businessPricingHistory.create({ data: { pricingId: id, action: "updated", oldB2bPaise: cur.b2bPricePaise, newB2bPaise: newB2b, oldGstBps: cur.gstBps, newGstBps: newGst, reason: clean(data.reason), byId: actor.actorId, byRole: actor.actorRole } });
       }
+      auditInfo = { code: cur.code, product: cur.productName, unit: data.unit ?? cur.unit, oldB2b: cur.b2bPricePaise, newB2b };
       return updated;
     }, TX),
   );
+  if (auditInfo) { const a = auditInfo as { code: string; product: string; unit: string; oldB2b: number; newB2b: number }; await audit({ userId: actor.actorId ?? null, actorRole: actor.actorRole ?? "system", action: "b2b.pricing.updated", target: `${a.code} · ${a.product} · ${a.unit} · ₹${(a.oldB2b / 100).toFixed(2)}→₹${(a.newB2b / 100).toFixed(2)}` }).catch(() => {}); }
+  return updated;
 }
 
 export async function setPricingActive(id: string, active: boolean) {
