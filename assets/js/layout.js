@@ -6969,6 +6969,7 @@
       '<div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:end">' +
         '<label class="dac-f"><span>Day</span><input class="input" id="pc-day" type="date" value="' + day + '" style="max-width:150px"></label>' +
         '<label class="dac-f"><span>Month</span><input class="input" id="pc-month" type="month" value="' + month + '" style="max-width:150px"></label>' +
+        '<button class="btn btn-ghost sm" id="pc-resettle" title="Recompute the selected day\'s milk COGS from its delivered orders (reverses stale draws)">↻ Re-settle this day</button>' +
       "</div>" +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px" id="pc-cards">' +
         pnlCard("Daily P&L — " + esc(milkDate(p.daily.from)), p.daily) +
@@ -7019,6 +7020,18 @@
     }
     host.querySelector("#pc-day").addEventListener("change", reload);
     host.querySelector("#pc-month").addEventListener("change", reload);
+    // Manual re-settle of the selected day — recompute its milk COGS from DELIVERED orders,
+    // reversing any stale draw (e.g. a still-pending order that pulled inventory under the old
+    // rules). Safe + idempotent (reverse+redo); revenue is untouched. Finance/Super-Admin only.
+    var rsBtn = host.querySelector("#pc-resettle");
+    if (rsBtn) rsBtn.addEventListener("click", function () {
+      var d = host.querySelector("#pc-day").value || day;
+      if (!window.confirm("Re-settle " + d + " ?\n\nThis recomputes that day's milk COGS from its DELIVERED orders — reversing any stale draw (e.g. a pending order that pulled inventory under the old rules) and redrawing the current truth.\n\nSafe and idempotent. Revenue is not affected.")) return;
+      rsBtn.disabled = true; dacToast("Re-settling " + d + "…");
+      DOODLY_API.post("/api/admin/milk/settle", { date: d })
+        .then(function (x) { var r = x || {}; dacToast("Settled " + d + " — milk sold " + (Math.round((r.totalLitres || 0) * 10) / 10) + " L · COGS " + milkRs(r.cogsPaise || 0) + ((r.shortfallLitres || 0) > 0.01 ? " · short " + r.shortfallLitres.toFixed(1) + " L" : "") + "."); wireProfitCenterBackend(); })
+        .catch(function (e) { rsBtn.disabled = false; dacToast(e.code === "forbidden" ? "Only Finance / Super Admin can settle a day (403)." : (e.message || "Couldn't re-settle.")); });
+    });
     var err = host.querySelector("#pc-err");
     host.querySelector("#pc-save").addEventListener("click", function () {
       DOODLY_API.patch("/api/admin/milk/config", {
