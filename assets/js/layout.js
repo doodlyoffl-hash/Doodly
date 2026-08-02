@@ -6967,8 +6967,8 @@
         '<button class="btn btn-ghost sm" id="pc-exp">+ Record expense</button>' +
       "</div>" +
       '<div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:end">' +
-        '<label class="dac-f"><span>Day</span><input class="input" id="pc-day" type="date" value="' + day + '" style="max-width:150px"></label>' +
-        '<label class="dac-f"><span>Month</span><input class="input" id="pc-month" type="month" value="' + month + '" style="max-width:150px"></label>' +
+        '<label class="dac-f"><span>Day (IST)</span><input class="input" id="pc-day" type="date" value="' + day + '" style="max-width:150px"></label>' +
+        '<label class="dac-f"><span>Month (IST)</span><input class="input" id="pc-month" type="month" value="' + month + '" style="max-width:150px"></label>' +
         '<button class="btn btn-ghost sm" id="pc-resettle" title="Recompute the selected day\'s milk COGS from its delivered orders (reverses stale draws)">↻ Re-settle this day</button>' +
       "</div>" +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px" id="pc-cards">' +
@@ -7098,11 +7098,12 @@
       }).join("");
       var tBody = tankers.map(function (t) { return '<div style="padding:4px 0;border-top:1px solid rgba(0,0,0,.06)">' + tankerLine(t) + "</div>"; }).join("");
       return tabBar() +
-        '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:10px">' +
-          '<label class="dac-f" style="max-width:160px"><span>From</span><input class="input" id="pc-dd-from" type="date" value="' + esc(st.from) + '"></label>' +
-          '<label class="dac-f" style="max-width:160px"><span>To</span><input class="input" id="pc-dd-to" type="date" value="' + esc(st.to) + '"></label>' +
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:6px">' +
+          '<label class="dac-f" style="max-width:160px"><span>From (IST)</span><input class="input" id="pc-dd-from" type="date" value="' + esc(st.from) + '"></label>' +
+          '<label class="dac-f" style="max-width:160px"><span>To (IST)</span><input class="input" id="pc-dd-to" type="date" value="' + esc(st.to) + '"></label>' +
           '<button class="btn btn-ghost sm" id="pc-dd-today">Today</button>' +
         "</div>" +
+        '<div class="muted-sm" style="margin-bottom:10px">🕒 Dates are <b>IST</b> — each day runs IST midnight→midnight. Delivered orders appear on their <b>actual delivery day</b> (not the scheduled date).</div>' +
         '<div class="muted-sm" style="margin-bottom:6px"><b>' + (d.deliveredCount || 0) + "</b> delivered · <b>" + (d.scheduledCount || 0) + "</b> scheduled · delivered B2B revenue " + milkRs(d.deliveredRevenuePaise) + "</div>" +
         '<div class="table-wrap"><table class="tbl"><thead><tr><th>Status</th><th>Order</th><th>Business</th><th>Items</th><th style="text-align:right">Revenue (net)</th></tr></thead><tbody>' +
         (oBody || '<tr><td colspan="5" class="muted-sm" style="text-align:center;padding:12px">No B2B orders in this range.</td></tr>') + "</tbody></table></div>" +
