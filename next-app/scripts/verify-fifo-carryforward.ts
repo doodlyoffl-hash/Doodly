@@ -20,6 +20,7 @@ import { istDayWindow, istISO } from "../lib/delivery/stats";
 import { settleDay, listPendingAllocations } from "../lib/milk/settle";
 import { createTanker } from "../lib/milk/tanker";
 import { tankerReconciliation } from "../lib/milk/reconcile";
+import { getTankerReport } from "../lib/milk/tanker-report";
 
 const db = new PrismaClient();
 const R: { name: string; pass: boolean; detail?: string }[] = [];
@@ -94,6 +95,11 @@ async function run() {
   ok("S2: T1 auto-closes at drain (100 consumed, 0 left)", t1AfterB.status === "CLOSED" && near(t1AfterB.remainingLitres, 0) && near(t1AfterB.consumedLitres, 100), `${t1AfterB.status} rem=${t1AfterB.remainingLitres} used=${t1AfterB.consumedLitres}`);
   ok("S2: MilkPendingAllocation(DAY_B) = 50 L PENDING (all B2B)", !!pendB && pendB.status === "PENDING" && near(pendB.totalLitres, 50) && near(pendB.b2bLitres, 50), pendB ? `${pendB.status} total=${pendB.totalLitres} b2b=${pendB.b2bLitres}` : "MISSING");
   ok("S2: listPendingAllocations surfaces exactly this day", (await listPendingAllocations()).filter((p) => near(p.totalLitres, 50)).length >= 1);
+  // T1's tanker REPORT (the exact code the admin UI renders) shows the carry-forward-OUT while the
+  // day is still pending. T1 is CLOSED, so this reads/freezes the frozen snapshot — cfOut must be
+  // computed LIVE, not frozen at 0.
+  const repBefore = (await getTankerReport(t1))!;
+  ok("S2: T1 report shows carry-forward-OUT 50 L (oversold, pending)", repBefore.frozen && near(repBefore.recon.usage.carryForwardOutLitres, 50), `frozen=${repBefore.frozen} cfOut=${repBefore.recon.usage.carryForwardOutLitres}`);
 
   // ---- S3: auto-absorb on next tanker ----
   const created = await createTanker({ procurementDate: T2_PROC, tankerNo: `CFT2-${stamp}`, supplier: "CF SUPPLIER 2", quantityKg: 206, fatPct: 6 }, { actorRole: "system" });
@@ -106,6 +112,11 @@ async function run() {
   ok("S3: T2 absorbed 50 L (remaining = litres − 50)", near(t2AfterAbsorb.consumedLitres, 50) && near(t2AfterAbsorb.remainingLitres, t2Litres - 50), `used=${t2AfterAbsorb.consumedLitres} rem=${t2AfterAbsorb.remainingLitres} of ${t2Litres}`);
   ok("S3: T1 unchanged — still 100 consumed / 0 left / CLOSED (no double-draw)", near(t1AfterAbsorb.consumedLitres, 100) && near(t1AfterAbsorb.remainingLitres, 0) && t1AfterAbsorb.status === "CLOSED", `used=${t1AfterAbsorb.consumedLitres} rem=${t1AfterAbsorb.remainingLitres} ${t1AfterAbsorb.status}`);
   ok("S3: no PENDING allocations remain", (await listPendingAllocations()).length === 0, String((await listPendingAllocations()).length));
+  // THE KEY ASSERTION: re-reading T1's ALREADY-FROZEN report after the next tanker absorbed the
+  // pending must now show carry-forward-OUT = 0 — proving it's a live value that clears on absorb,
+  // never a stale frozen 50.
+  const repAfter = (await getTankerReport(t1))!;
+  ok("S3: T1 carry-forward-OUT CLEARS to 0 after next tanker absorbs (frozen report, live value)", repAfter.frozen && near(repAfter.recon.usage.carryForwardOutLitres, 0), `frozen=${repAfter.frozen} cfOut=${repAfter.recon.usage.carryForwardOutLitres}`);
 
   // ---- S4: carry-forward surfaced on the next tanker's reconciliation ----
   const rc2 = (await tankerReconciliation(t2))!;
