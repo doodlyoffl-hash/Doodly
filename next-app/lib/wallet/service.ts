@@ -273,18 +273,21 @@ export async function creditTrialCashback(args: { userId: string; subscriptionId
 // ---------- Customer wallet ----------
 
 export async function getWallet(args: { userId: string; limit?: number }) {
-  const [user, transactions, byKind] = await Promise.all([
+  const [user, transactions, byKind, pendingRefund] = await Promise.all([
     db.user.findUnique({ where: { id: args.userId }, select: { walletPaise: true } }),
     db.walletTxn.findMany({
       where: { userId: args.userId }, orderBy: { createdAt: "desc" }, take: args.limit ?? 100,
-      select: { id: true, type: true, kind: true, amountPaise: true, balanceAfterPaise: true, reference: true, description: true, createdAt: true },
+      select: { id: true, type: true, kind: true, amountPaise: true, balanceAfterPaise: true, reference: true, description: true, reason: true, orderId: true, subscriptionId: true, createdAt: true },
     }),
     db.walletTxn.groupBy({ by: ["kind", "type"], where: { userId: args.userId }, _sum: { amountPaise: true } }),
+    // bottle-deposit refunds OWED to this customer (collected, not yet credited)
+    db.bottlePickupRequest.aggregate({ where: { userId: args.userId, status: { in: ["COLLECTED", "VERIFIED"] }, refundedPaise: 0 }, _sum: { refundableDepositPaise: true } }),
   ]);
   const sum = (kind: string, type: "CREDIT" | "DEBIT") =>
     byKind.filter((g) => g.kind === kind && g.type === type).reduce((s, g) => s + (g._sum.amountPaise ?? 0), 0);
   return {
     balancePaise: user?.walletPaise ?? 0,
+    pendingRefundPaise: pendingRefund._sum.refundableDepositPaise ?? 0,
     transactions,
     summary: {
       cashbackEarnedPaise: sum("cashback", "CREDIT"),

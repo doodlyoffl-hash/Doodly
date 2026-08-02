@@ -49,7 +49,7 @@ window.DOODLY_WALLET = (function () {
     try {
       var r = await window.DOODLY_API.get("/api/wallet");
       var u = rbacUser() || {};
-      _mine = { id: ME, name: u.name || "You", mobile: u.phone || "", balance: Math.round((r && r.balancePaise || 0) / 100), trialCredited: false, trialPurchased: false,
+      _mine = { id: ME, name: u.name || "You", mobile: u.phone || "", balance: Math.round((r && r.balancePaise || 0) / 100), pendingRefundPaise: (r && r.pendingRefundPaise) || 0, trialCredited: false, trialPurchased: false,
         txns: ((r && r.transactions) || []).map(function (t) { return { id: t.id, ref: t.reference, date: t.createdAt, kind: t.type === "CREDIT" ? "credit" : "debit", type: String(t.kind || "").toLowerCase(), amount: Math.round((t.amountPaise || 0) / 100), desc: t.description || "", balanceAfter: Math.round((t.balanceAfterPaise || 0) / 100), by: "" }; }) };
     } catch (e) { _mine = emptyMine(); }             // failed → empty, NEVER demo
     try { refreshPanel(); } catch (e) {}
@@ -195,7 +195,7 @@ window.DOODLY_WALLET = (function () {
     });
     var c = config();
     s.pendingCashback = (promoActive() && (w.trialPurchased || localStorage.getItem("doodly-trial-purchased") === "1") && !w.trialCredited) ? (c.amount || 0) : 0;
-    s.pendingRefund = 0;
+    s.pendingRefund = (w.pendingRefundPaise || 0) / 100;   // real bottle-deposit refunds owed (collected, not yet credited)
     s.totalSavings = s.cashback + s.referral + s.promo + s.refund;
     s.frozen = !!w.frozen;
     return s;
@@ -501,6 +501,7 @@ window.DOODLY_WALLET = (function () {
       if (!d || d.balancePaise == null) return false;
       var w = meWallet();
       w.balance = Math.round(d.balancePaise) / 100;
+      w.pendingRefundPaise = d.pendingRefundPaise || 0;
       w.txns = (d.transactions || []).map(function (t) {
         return {
           id: t.id, ref: t.reference || t.id, date: t.createdAt,
