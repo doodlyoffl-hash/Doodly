@@ -11,6 +11,7 @@ import { db } from "@/lib/db";
 import { sendInvoiceEmail } from "@/lib/auth/email";
 import { assertDeliverableAddress } from "@/lib/addresses/deliverable";
 import { depositForCheckout } from "@/lib/bottles/ownership";
+import { postWalletTxn } from "@/lib/wallet/service";
 import type { OrderFulfilment, OrderListItem, OrderDetail } from "./types";
 
 const TX = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30_000 } as const;
@@ -215,12 +216,11 @@ export async function cancelCustomerOrder(userId: string, id: string) {
     // walletAppliedPaise stays in: that was a real debit from their wallet.
     const refundPaise = Math.max(0, order.totalPaise - (order.couponDiscountPaise ?? 0));
     if (order.status === "PAID" && refundPaise > 0) {
-      const user = await tx.user.findUnique({ where: { id: userId }, select: { walletPaise: true } });
-      const balanceAfterPaise = (user?.walletPaise ?? 0) + refundPaise;
-      await tx.user.update({ where: { id: userId }, data: { walletPaise: balanceAfterPaise } });
-      await tx.walletTxn.create({
-        data: { userId, orderId: id, type: "CREDIT", kind: "refund", amountPaise: refundPaise, balanceAfterPaise,
-          reference: `WTX-RF${id.slice(-7).toUpperCase()}`, description: `Refund for order ${num(id)}`, reason: "refund" },
+      // Single ledger writer + ATOMIC increment (was a race-prone read-modify-write).
+      // Deterministic reference makes a double-cancel a no-op via the unique constraint.
+      await postWalletTxn(tx, {
+        userId, type: "CREDIT", kind: "refund", amountPaise: refundPaise, reason: "refund",
+        description: `Refund for order ${num(id)}`, orderId: id, reference: `WTX-RF${id.slice(-7).toUpperCase()}`,
       });
       await tx.order.update({ where: { id }, data: { status: "REFUNDED" } });
       await logEvent(tx, id, "REFUND", "Refunded to wallet", `${rupees(refundPaise)} credited to your wallet`);

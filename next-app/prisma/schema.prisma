@@ -177,6 +177,7 @@ model User {
   bottleRecoveries BottleRecovery[]
   recurringMethods RecurringPaymentMethod[]
   walletTxns    WalletTxn[]
+  walletAdjustments WalletAdjustmentRequest[]
   loyaltyLedger LoyaltyLedger[]                    // DOODLY Pure Rewards: per-lot points ledger
   reviews       Review[]
   notifications Notification[]
@@ -1131,19 +1132,52 @@ model WalletTxn {
   userId            String
   user              User     @relation(fields: [userId], references: [id])
   type              TxnType                              // CREDIT | DEBIT
-  kind              String   @default("adjustment")      // cashback | referral | promo | usage | topup | refund | adjustment | reversal
+  kind              String   @default("adjustment")      // cashback | referral | promo | usage | topup | refund | adjustment | reversal | loyalty
   amountPaise       Int                                  // always positive; `type` gives direction
   balanceAfterPaise Int      @default(0)                 // wallet balance immediately after this txn
   reference         String   @unique                     // human ref, e.g. "WTX-7K3M2A"
   description       String?
   reason            String                               // legacy short tag ("referral","refund","topup","order")
+  status            String   @default("POSTED")          // POSTED (all ledger rows are final); reserved for lifecycle
   subscriptionId    String?
   orderId           String?
   reversedTxnId     String?  @unique                     // if this row reverses another txn, points to it
   createdById       String?                              // admin user id for manual credit/debit (null = system)
+  approvedById      String?                              // approver for a maker-checker manual adjustment
+  ip                String?                              // request IP at the time of the action (traceability)
+  userAgent         String?                              // request device/user-agent (traceability)
   createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now()) @updatedAt
   @@index([userId, createdAt])
   @@index([kind, createdAt])
+}
+
+// Maker-checker queue for MANUAL admin wallet credit/debit. An admin submits a
+// request (no balance change); a Super-Admin approves it → the real WalletTxn is
+// posted (approvedById set) and walletTxnId links back. Auto-credits (trial,
+// referral, bottle refund, loyalty, system refunds) never enter this queue.
+model WalletAdjustmentRequest {
+  id            String   @id @default(cuid())
+  code          String   @unique                          // "WADJ-000001"
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  type          TxnType                                   // CREDIT | DEBIT
+  amountPaise   Int
+  reason        String
+  status        String   @default("PENDING")              // PENDING | APPROVED | REJECTED
+  requestedById String?                                   // maker (admin) — null = system
+  requestedByRole String?
+  decidedById   String?                                   // checker (super-admin)
+  decidedByRole String?
+  decidedAt     DateTime?
+  note          String?                                   // approver / rejection note
+  walletTxnId   String?                                   // the posted ledger row (once approved)
+  ip            String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
 }
 
 // Idempotency ledger for the Trial Pack cashback — userId UNIQUE guarantees a

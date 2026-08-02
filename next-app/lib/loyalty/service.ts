@@ -20,6 +20,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { generateReference } from "@/lib/wallet/engine";
+import { postWalletTxn } from "@/lib/wallet/service";
 import { getLoyaltyConfig, tierFor, nextTierFor, type LoyaltyConfig } from "./config";
 import { notify } from "@/lib/notifications/dispatch";
 import { log } from "@/lib/logger";
@@ -305,35 +306,22 @@ export async function redeemPoints(p: { userId: string; points: number; idemKey?
           createdById: p.createdById,
         },
       });
+      // Loyalty-point side only; the wallet credit goes through the single ledger writer.
       const updated = await tx.user.update({
         where: { id: p.userId },
         data: {
           loyaltyPoints: { decrement: points },
           loyaltyLifetimeRedeemed: { increment: points },
-          walletPaise: { increment: creditedPaise },
         },
-        select: { loyaltyPoints: true, walletPaise: true },
+        select: { loyaltyPoints: true },
       });
-      // wallet ledger entry (mirrors postTxn shape; unique reference retry)
-      let walletTxnId: string | undefined;
-      for (let i = 0; i < 5; i++) {
-        try {
-          const wt = await tx.walletTxn.create({
-            data: {
-              userId: p.userId, type: "CREDIT", kind: "loyalty", amountPaise: creditedPaise,
-              balanceAfterPaise: updated.walletPaise, reference: generateReference(),
-              description: `Loyalty redemption — ${points} points`, reason: "loyalty_redemption", createdById: p.createdById,
-            },
-          });
-          walletTxnId = wt.id; break;
-        } catch (e) {
-          if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && String(e.meta?.target).includes("reference")) continue;
-          throw e;
-        }
-      }
-      await tx.loyaltyLedger.update({ where: { id: redeemRow.id }, data: { balanceAfter: updated.loyaltyPoints, walletTxnId } });
+      const { txn: wt, balancePaise } = await postWalletTxn(tx, {
+        userId: p.userId, type: "CREDIT", kind: "loyalty", amountPaise: creditedPaise,
+        description: `Loyalty redemption — ${points} points`, reason: "loyalty_redemption", createdById: p.createdById,
+      });
+      await tx.loyaltyLedger.update({ where: { id: redeemRow.id }, data: { balanceAfter: updated.loyaltyPoints, walletTxnId: wt.id } });
 
-      return { ok: true as const, points, creditedPaise, pointsBalance: updated.loyaltyPoints, walletBalancePaise: updated.walletPaise };
+      return { ok: true as const, points, creditedPaise, pointsBalance: updated.loyaltyPoints, walletBalancePaise: balancePaise };
     }, TX));
   } catch (e) {
     log.error("loyalty.redeem", (e as Error)?.message ?? "failed", { userId: p.userId });

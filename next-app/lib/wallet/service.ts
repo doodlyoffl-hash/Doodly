@@ -55,12 +55,13 @@ export async function getCashbackRules(client: Tx | typeof db = db): Promise<Cas
 async function postTxn(tx: Tx, p: {
   userId: string; type: "CREDIT" | "DEBIT"; kind: string; amountPaise: number;
   reason: string; description?: string; subscriptionId?: string; orderId?: string;
-  createdById?: string; reversedTxnId?: string;
+  createdById?: string; approvedById?: string; ip?: string; userAgent?: string; reversedTxnId?: string;
   /** Caller-supplied idempotency key. When set, it becomes the WalletTxn.reference and a
       collision (P2002) is NOT retried — it propagates so the caller can treat it as a
       duplicate. When omitted, a unique reference is generated + retried on collision. */
   reference?: string;
 }) {
+  if (!Number.isInteger(p.amountPaise) || p.amountPaise <= 0) throw new Error("Wallet amount must be a positive integer (paise).");
   const user = await tx.user.update({
     where: { id: p.userId },
     data: { walletPaise: p.type === "CREDIT" ? { increment: p.amountPaise } : { decrement: p.amountPaise } },
@@ -72,8 +73,9 @@ async function postTxn(tx: Tx, p: {
       const txn = await tx.walletTxn.create({
         data: {
           userId: p.userId, type: p.type, kind: p.kind, amountPaise: p.amountPaise, balanceAfterPaise,
-          reference: p.reference ?? generateReference(), description: p.description, reason: p.reason,
-          subscriptionId: p.subscriptionId, orderId: p.orderId, createdById: p.createdById, reversedTxnId: p.reversedTxnId,
+          reference: p.reference ?? generateReference(), description: p.description, reason: p.reason, status: "POSTED",
+          subscriptionId: p.subscriptionId, orderId: p.orderId, createdById: p.createdById, approvedById: p.approvedById,
+          ip: p.ip, userAgent: p.userAgent, reversedTxnId: p.reversedTxnId,
         },
       });
       return { txn, balancePaise: balanceAfterPaise };
@@ -86,6 +88,14 @@ async function postTxn(tx: Tx, p: {
     }
   }
   throw new Error("Could not allocate a unique wallet reference.");
+}
+
+/** THE single ledger entry-point for callers that already hold a transaction (subscription
+ *  billing, order-cancel refund, loyalty redemption). Never mutate User.walletPaise or create
+ *  a WalletTxn directly — always go through here so balanceAfter, references, and (W1) the
+ *  audit trail stay consistent. Wrap in your own db.$transaction. */
+export async function postWalletTxn(tx: Tx, p: Parameters<typeof postTxn>[1]) {
+  return postTxn(tx, p);
 }
 
 async function notifyUser(tx: Tx, userId: string, title: string, body: string) {

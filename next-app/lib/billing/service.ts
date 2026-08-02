@@ -12,8 +12,7 @@ import "server-only";
 import { Prisma, type PaymentMethod } from "@prisma/client";
 import { db } from "@/lib/db";
 import { Errors } from "@/lib/http";
-import { generateReference } from "@/lib/wallet/engine";
-import { adminCredit } from "@/lib/wallet/service";
+import { adminCredit, postWalletTxn } from "@/lib/wallet/service";
 import type {
   BillingListResponse, BillingListItem, BillingStats, BillingDetail, BillingPreview,
   BillingReports, BillingConfigShape,
@@ -77,24 +76,16 @@ function compute(perDeliveryPaise: number, planDays: number, planDiscountBps: nu
   return { billingAmountPaise, discountPaise, gstPaise, walletUsedPaise, totalPaise };
 }
 
-/** Post a wallet DEBIT atomically inside an existing tx; returns new balance. */
+/** Post a wallet DEBIT for subscription billing via the single wallet ledger writer.
+ *  Guards against overdrawing (postTxn would otherwise drive walletPaise negative). */
 async function debitWallet(tx: Tx, p: { userId: string; amountPaise: number; subscriptionId: string; description: string }) {
-  const user = await tx.user.update({ where: { id: p.userId }, data: { walletPaise: { decrement: p.amountPaise } }, select: { walletPaise: true } });
-  for (let i = 0; i < 5; i++) {
-    try {
-      await tx.walletTxn.create({
-        data: {
-          userId: p.userId, type: "DEBIT", kind: "usage", amountPaise: p.amountPaise, balanceAfterPaise: user.walletPaise,
-          reference: generateReference(), description: p.description, reason: "subscription_billing", subscriptionId: p.subscriptionId,
-        },
-      });
-      return user.walletPaise;
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && String(e.meta?.target).includes("reference")) continue;
-      throw e;
-    }
-  }
-  throw new Error("Could not allocate a unique wallet reference.");
+  const u = await tx.user.findUnique({ where: { id: p.userId }, select: { walletPaise: true } });
+  if ((u?.walletPaise ?? 0) < p.amountPaise) throw new Error("Insufficient wallet balance for subscription billing.");
+  const { balancePaise } = await postWalletTxn(tx, {
+    userId: p.userId, type: "DEBIT", kind: "usage", amountPaise: p.amountPaise,
+    reason: "subscription_billing", description: p.description, subscriptionId: p.subscriptionId,
+  });
+  return balancePaise;
 }
 
 async function logEvent(client: Tx | typeof db, billingId: string, type: string, summary: string, detail: unknown, actor: Actor) {
