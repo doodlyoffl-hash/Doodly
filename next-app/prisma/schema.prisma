@@ -2699,6 +2699,13 @@ model BusinessOrder {
   paymentTerm   PaymentTerm
   paymentStatus B2BPaymentStatus @default(PENDING)
   remarks       String?
+  // Delivery-based revenue recognition (mirrors retail Delivery.revenuePaise). Frozen NET
+  // (ex-GST) revenue stamped the moment the order is marked DELIVERED, attributed to
+  // deliveredAt's IST day. NULL = not yet recognised → books ZERO P&L revenue (revenue is
+  // recognised only after successful delivery). Immutable once stamped; post-delivery
+  // corrections go to BusinessRevenueAdjustment, never an edit of this row.
+  revenuePaise  Int?
+  deliveredAt   DateTime?
   createdById   String?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
@@ -2706,10 +2713,33 @@ model BusinessOrder {
   payments      BusinessPayment[]
   invoice       BusinessInvoice?
   events        BusinessOrderEvent[]
+  adjustments   BusinessRevenueAdjustment[]
   @@index([businessId, createdAt])
   @@index([status, deliveryDate])
   @@index([deliveryDate])
+  @@index([deliveredAt])
   @@index([paymentStatus])
+}
+
+// Immutable post-delivery revenue correction for an ALREADY-RECOGNISED B2B order
+// (cancellation / refund). The frozen BusinessOrder.revenuePaise is never edited; the
+// Profit-Centre P&L subtracts these adjustments within their effectiveOn window, so
+// historical financial records stay intact and only the correction moves the numbers.
+model BusinessRevenueAdjustment {
+  id              String        @id @default(cuid())
+  businessOrderId String
+  order           BusinessOrder @relation(fields: [businessOrderId], references: [id], onDelete: Cascade)
+  businessId      String
+  type            String                                 // CANCELLATION | REFUND
+  amountPaise     Int                                    // positive magnitude of revenue reversed (P&L subtracts it)
+  litresReversed  Int?                                   // milk litres unwound for COGS re-settle (informational)
+  reason          String?
+  effectiveOn     DateTime      @default(now())          // the day the reversal hits the P&L
+  createdById     String?
+  createdByRole   String?
+  createdAt       DateTime      @default(now())
+  @@index([businessId, effectiveOn])
+  @@index([effectiveOn])
 }
 
 // Order Status History / audit timeline — one row per lifecycle event

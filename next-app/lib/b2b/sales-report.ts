@@ -1,12 +1,15 @@
 /* =============================================================
    DOODLY — B2B Sales Report + unit analytics (by product × unit).
-   B2B sales over an IST range grouped by (product, unit) — quantity, revenue,
-   average selling price (ASP = revenue / qty), and for MILK the litres-equivalent
-   drawn + allocated COGS + profit. COGS is allocated at the period's *blended*
-   cost-per-litre (Σ TankerConsumption.costPaise ÷ Σ litres) applied to each milk
-   group's litres-equiv — the same FIFO cost the P&L uses, split by volume. Non-milk
-   (solids) COGS is not tracked yet (milk-only), shown as "—". Normalised
-   {columns,rows,totalRow} → the shared renderMilkReportPdf / CSV / XLS pipeline.
+   B2B DELIVERED sales over an IST range grouped by (product, unit) — quantity,
+   revenue, average selling price (ASP = revenue / qty), and for MILK the litres-
+   equivalent drawn + allocated COGS + profit. Orders are the SAME delivered set the
+   P&L recognises (revenuePaise frozen, keyed on deliveredAt), so the report and the
+   Profit Centre never disagree. COGS is the AUTHORITATIVE FIFO ledger total for the
+   B2B channel (Σ TankerConsumption.costPaise where channel = B2B) — NOT a blended
+   retail+B2B rate — distributed across milk lines pro-rata to their litres-equiv, so
+   the report's total COGS equals the P&L's. Non-milk (solids) COGS is not tracked yet
+   (milk-only), shown as "—". Normalised {columns,rows,totalRow} → the shared
+   renderMilkReportPdf / CSV / XLS pipeline.
    ============================================================= */
 import "server-only";
 import { db } from "@/lib/db";
@@ -45,18 +48,22 @@ export async function b2bSalesReport(fromIso: string, toIso: string): Promise<B2
   const start = istDayWindow(fromIso).start;
   const end = istDayWindow(toIso).end;
   const [orders, consumption, cfg, solids] = await Promise.all([
+    // DELIVERED orders (revenuePaise frozen, keyed on deliveredAt) — the same set the Profit-
+    // Centre P&L + FIFO ledger recognise, so this report always reconciles. A pending/scheduled
+    // order books no sales here; a later cancellation reverses revenue via an adjustment, not here.
     db.businessOrder.findMany({
-      where: { deliveryDate: { gte: start, lt: end }, status: { not: "CANCELLED" } },
+      where: { revenuePaise: { not: null }, deliveredAt: { gte: start, lt: end } },
       select: { items: { select: { productSlug: true, productName: true, quantity: true, unit: true, lineTotalPaise: true } } },
       take: 20000,
     }),
-    db.tankerConsumption.aggregate({ where: { date: { gte: start, lt: end } }, _sum: { costPaise: true, litres: true } }),
+    // AUTHORITATIVE COGS: the B2B-channel FIFO ledger for the window (not a blended rate).
+    db.tankerConsumption.aggregate({ where: { channel: "B2B", date: { gte: start, lt: end } }, _sum: { costPaise: true, litres: true } }),
     getMilkConfig(),
     getSolidsCogsConfig(),
   ]);
-  const totalCogsPaise = consumption._sum.costPaise ?? 0;
+  const totalCogsPaise = consumption._sum.costPaise ?? 0;   // B2B FIFO cost of milk sold — the single source of truth
   const totalLitres = consumption._sum.litres ?? 0;
-  const costPerLitrePaise = totalLitres > 0 ? totalCogsPaise / totalLitres : 0;   // blended period allocation basis
+  const costPerLitrePaise = totalLitres > 0 ? totalCogsPaise / totalLitres : 0;   // ledger B2B cost / ledger B2B litres → per-line pro-rata
   const solidYields = solids.enabled ? solids.yields : null;
 
   type G = { productSlug: string; productName: string; unit: string; quantity: number; revenuePaise: number; litresEquiv: number };
@@ -87,7 +94,9 @@ export async function b2bSalesReport(fromIso: string, toIso: string): Promise<B2
   // ---- analytics ----
   const sum = (f: (r: B2BSalesRow) => number) => data.reduce((s, r) => s + f(r), 0);
   const revenuePaise = sum((r) => r.revenuePaise);
-  const cogsPaise = sum((r) => r.cogsPaise ?? 0);
+  // Headline COGS is the ledger total itself (not the sum of pro-rated per-line figures) so the
+  // report reconciles EXACTLY with the Profit-Centre P&L's B2B COGS — one source of truth.
+  const cogsPaise = totalCogsPaise;
   const milkRevenuePaise = sum((r) => (r.isMilk ? r.revenuePaise : 0));
   const solidsRevenuePaise = revenuePaise - milkRevenuePaise;
   // by unit (across products)

@@ -67,8 +67,13 @@ export async function retailLitresForDay(start: Date, end: Date): Promise<number
  *  enabled with real yields, else they stay revenue-only (counted + logged). */
 export async function b2bLitresForDay(start: Date, end: Date): Promise<number> {
   const [orders, cfg, solids] = await Promise.all([
+    // Only orders actually DELIVERED (revenuePaise frozen), attributed to deliveredAt's day —
+    // so B2B COGS draws on the same day as its recognised revenue, never at order/schedule time.
+    // A later cancellation does NOT unwind this: the milk physically went out, so its COGS is a
+    // real cost that STAYS on the delivered day (historical integrity); the cancellation reverses
+    // REVENUE only, via a BusinessRevenueAdjustment booked on the cancellation day.
     db.businessOrder.findMany({
-      where: { deliveryDate: { gte: start, lt: end }, status: { not: "CANCELLED" } },
+      where: { revenuePaise: { not: null }, deliveredAt: { gte: start, lt: end } },
       select: { items: { select: { productSlug: true, quantity: true, unit: true } } },
       take: 5000,
     }),

@@ -55,14 +55,22 @@ export interface SettlementHealth {
  *  These days show revenue with no COGS until settled — the thing to catch. */
 export async function settlementHealth(lookback = 30): Promise<SettlementHealth> {
   const since = new Date(Date.now() - lookback * 864e5);
-  // delivery days with milk actually going out
-  const dels = await db.delivery.groupBy({ by: ["date"], where: { date: { gte: since }, status: { notIn: ["FAILED", "SKIPPED"] } }, _count: { _all: true } });
-  // days that already have consumption recorded
-  const settled = await db.tankerConsumption.groupBy({ by: ["date"], where: { date: { gte: since } } });
+  const [dels, b2bDelivered, settled] = await Promise.all([
+    // retail delivery days with milk actually going out
+    db.delivery.groupBy({ by: ["date"], where: { date: { gte: since }, status: { notIn: ["FAILED", "SKIPPED"] } }, _count: { _all: true } }),
+    // B2B recognised (delivered, not cancelled) orders — bucketed by deliveredAt's IST day, so a
+    // B2B-only sales day is flagged for settlement too (previously the net saw only retail).
+    db.businessOrder.findMany({ where: { deliveredAt: { gte: since }, revenuePaise: { not: null }, status: { not: "CANCELLED" } }, select: { deliveredAt: true }, take: 10000 }),
+    // days that already have consumption recorded
+    db.tankerConsumption.groupBy({ by: ["date"], where: { date: { gte: since } } }),
+  ]);
   const settledDays = new Set(settled.map((s) => istISO(s.date)));
-  const unsettled = dels
-    .map((d) => ({ date: istISO(d.date), deliveries: d._count._all }))
-    .filter((d) => !settledDays.has(d.date))
+  const salesByDay = new Map<string, number>();
+  for (const d of dels) { const k = istISO(d.date); salesByDay.set(k, (salesByDay.get(k) ?? 0) + d._count._all); }
+  for (const o of b2bDelivered) { if (!o.deliveredAt) continue; const k = istISO(o.deliveredAt); salesByDay.set(k, (salesByDay.get(k) ?? 0) + 1); }
+  const unsettled = [...salesByDay.entries()]
+    .filter(([date]) => !settledDays.has(date))
+    .map(([date, deliveries]) => ({ date, deliveries }))
     .sort((a, b) => (a.date < b.date ? 1 : -1));
-  return { healthy: unsettled.length === 0, unsettled, checkedDays: dels.length };
+  return { healthy: unsettled.length === 0, unsettled, checkedDays: salesByDay.size };
 }

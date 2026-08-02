@@ -6884,11 +6884,17 @@
     try { if (window.DOODLY_RBAC) { h["X-Doodly-Actor"] = DOODLY_RBAC.activeRole(); var cu = DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser(); if (cu && cu.id) h["X-Doodly-Actor-Id"] = cu.id; } } catch (e) {}
     var ext = format === "xls" ? "xls" : format === "csv" ? "csv" : "pdf";
     dacToast("Preparing the " + type + " report (" + ext.toUpperCase() + ")…");
-    fetch(base + "/api/admin/milk/reports/export?type=" + encodeURIComponent(type) + "&from=" + from + "&to=" + to + "&format=" + ext, { headers: h, credentials: "include" })
+    // The B2B Sales report lives on its own endpoint (the shared FIFO-aligned b2bSalesReport);
+    // every other type is a milk report. One panel, one accounting engine behind both.
+    var isB2b = type === "b2bSales";
+    var url = isB2b
+      ? base + "/api/b2b/reports/export?from=" + from + "&to=" + to + "&format=" + ext
+      : base + "/api/admin/milk/reports/export?type=" + encodeURIComponent(type) + "&from=" + from + "&to=" + to + "&format=" + ext;
+    fetch(url, { headers: h, credentials: "include" })
       .then(function (r) { if (!r.ok) throw new Error(r.status === 403 ? "Your role can't export this (403)." : "Export failed (" + r.status + ")"); return r.blob(); })
       .then(function (blob) {
         var url = URL.createObjectURL(blob), a = document.createElement("a");
-        a.href = url; a.download = "DOODLY_Milk_" + type + "_" + from + "_" + to + "." + ext;
+        a.href = url; a.download = (isB2b ? "DOODLY_B2B_Sales_" : "DOODLY_Milk_" + type + "_") + from + "_" + to + "." + ext;
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
         dacToast("Report downloaded (" + ext.toUpperCase() + ").");
@@ -6900,15 +6906,30 @@
   function pnlCard(title, p) {
     var line = function (l, v, strong) { return '<div style="display:flex;justify-content:space-between;padding:3px 0' + (strong ? ";border-top:1px solid rgba(0,0,0,.12);margin-top:4px;font-weight:700" : "") + '"><span' + (strong ? "" : ' class="muted-sm"') + ">" + l + "</span><span>" + v + "</span></div>"; };
     var profitColour = p.netProfitPaise >= 0 ? "var(--leaf-600,#1FAE66)" : "#c0392b";
+    var seg = function (l, v) { return '<div style="display:flex;justify-content:space-between;gap:8px;padding:1px 0"><span class="muted-sm">' + l + '</span><span style="font-weight:600">' + v + "</span></div>"; };
+    var retailAsp = (p.retailLitresDelivered || 0) > 0 ? milkRs(Math.round(p.retailRevenuePaise / p.retailLitresDelivered)) + "/L" : "—";
+    // Revenue-source breakdown (Step 5) — Retail vs B2B side by side + a combined total, so a
+    // manager sees exactly where revenue + milk came from and that retail + B2B == total.
+    var breakdown =
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;margin-top:10px;padding-top:8px;border-top:1px dashed rgba(0,0,0,.14)">' +
+        '<div><div style="font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--leaf-700,#178a52);margin-bottom:2px">Retail</div>' +
+          seg("Revenue", milkRs(p.retailRevenuePaise)) + seg("Milk delivered", (p.retailLitresDelivered || 0) + " L") +
+          seg("Deliveries", (p.retailDeliveries || 0)) + seg("Customers", (p.retailCustomersServed || 0)) + seg("ASP", retailAsp) + "</div>" +
+        '<div><div style="font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#8a5cf6;margin-bottom:2px">B2B</div>' +
+          seg("Revenue (net GST)", milkRs(p.b2bRevenuePaise)) + seg("Milk delivered", (p.b2bLitresDelivered || 0) + " L") +
+          seg("Deliveries", (p.b2bDeliveries || 0)) + seg("Businesses", (p.b2bBusinessesServed || 0)) + "</div>" +
+      "</div>" +
+      '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:8px;padding-top:6px;border-top:1px solid rgba(0,0,0,.12);font-weight:700"><span>Total milk delivered</span><span>' + (p.totalMilkLitresDelivered || 0) + " L</span></div>" +
+      '<div class="muted-sm" style="margin-top:6px">Milk sold (COGS basis) ' + p.litresSold + " L · procured " + p.litresProcured + " L (" + milkRs(p.procurementCashPaise) + " cash, " + milkRs(p.avgCostPerLitrePaise) + "/L avg)</div>";
     return '<div class="panel"><div class="panel-head"><h3>' + title + "</h3><span class='badge " + (p.netProfitPaise >= 0 ? "green" : "red") + "'>Net " + p.netMarginPct + "%</span></div><div class='panel-pad'>" +
       line("Retail revenue (delivered)", milkRs(p.retailRevenuePaise)) +
-      line("B2B revenue", milkRs(p.b2bRevenuePaise)) +
+      line("B2B revenue (delivered, net GST)", milkRs(p.b2bRevenuePaise)) +
       line("Revenue", milkRs(p.revenuePaise), true) +
       line("− COGS (milk sold, FIFO)", milkRs(p.cogsPaise)) +
       line("Gross profit", milkRs(p.grossProfitPaise) + " · " + p.grossMarginPct + "%", true) +
       line("− Expenses", milkRs(p.expensesPaise)) +
       '<div style="display:flex;justify-content:space-between;padding:6px 0;border-top:2px solid ' + profitColour + ';margin-top:6px;font-weight:800;font-size:16px;color:' + profitColour + '"><span>Net profit</span><span>' + milkRs(p.netProfitPaise) + "</span></div>" +
-      '<div class="muted-sm" style="margin-top:8px">Retail delivered ' + (p.retailLitresDelivered || 0) + " L (" + (p.retailDeliveries || 0) + " del" + ((p.retailLitresDelivered || 0) > 0 ? " · ASP " + milkRs(Math.round(p.retailRevenuePaise / p.retailLitresDelivered)) + "/L" : "") + ") · milk sold " + p.litresSold + " L · procured " + p.litresProcured + " L (" + milkRs(p.procurementCashPaise) + " cash, " + milkRs(p.avgCostPerLitrePaise) + "/L avg)</div>" +
+      breakdown +
       "</div></div>";
   }
 
@@ -6965,7 +6986,7 @@
       '<div class="panel" style="margin-top:14px"><div class="panel-head"><h3>📄 Reports</h3></div><div class="panel-pad">' +
         '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">' +
           '<label class="dac-f"><span>Report</span><select class="input" id="pc-rtype" style="max-width:230px">' +
-            '<option value="pnl">Profit & Loss statement</option><option value="procurement">Procurement (tankers)</option><option value="consumption">Sales & consumption</option><option value="tanker">Tanker cost & consumption</option><option value="inventory">Inventory on hand</option>' +
+            '<option value="pnl">Profit & Loss statement</option><option value="b2bSales">B2B Sales (by unit)</option><option value="consumption">Sales & consumption (retail vs B2B)</option><option value="procurement">Procurement (tankers)</option><option value="tanker">Tanker cost & consumption</option><option value="inventory">Inventory on hand</option>' +
           "</select></label>" +
           '<label class="dac-f"><span>From</span><input class="input" id="pc-rfrom" type="date" value="' + month + '-01" style="max-width:150px"></label>' +
           '<label class="dac-f"><span>To</span><input class="input" id="pc-rto" type="date" value="' + day + '" style="max-width:150px"></label>' +

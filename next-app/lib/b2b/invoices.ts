@@ -114,10 +114,21 @@ export async function getInvoiceDetail(id: string) {
   });
   if (!inv) return null;
   const o = inv.order;
+  const istDay = (d: Date) => new Date(d.getTime() + 5.5 * 3600e3).toISOString().slice(0, 10);
   return {
     id: inv.id, number: inv.number, status: inv.status, dueDate: inv.dueDate?.toISOString() ?? null, voidedAt: inv.voidedAt?.toISOString() ?? null,
     notes: inv.notes, terms: inv.terms, issuedAt: inv.issuedAt.toISOString(), gstPaise: inv.gstPaise,
     paymentStatus: paymentStatusOf(o.totalPaise, o.paidPaise, inv.dueDate, inv.status),
+    // Complete traceability (Step 7): Order ID + Invoice ID + Revenue Reference (the frozen
+    // net-of-GST revenue recognised on delivery) + Profit-Centre Reference (the settle day the
+    // COGS drew against). Derived from the order — the invoice never re-computes revenue.
+    recognition: {
+      orderId: o.id, invoiceId: inv.id, orderCode: o.code, invoiceNumber: inv.number,
+      revenuePaise: o.revenuePaise ?? null,
+      deliveredAt: o.deliveredAt?.toISOString() ?? null,
+      revenueRef: o.revenuePaise != null ? `REV/${o.code}` : null,
+      profitCentreRef: o.deliveredAt ? `PC/B2B/${istDay(o.deliveredAt)}` : null,
+    },
     order: { code: o.code, deliveryDate: o.deliveryDate.toISOString(), deliveryTime: o.deliveryTime, subtotalPaise: o.subtotalPaise, discountPaise: o.discountPaise, taxPaise: o.taxPaise, totalPaise: o.totalPaise, paidPaise: o.paidPaise, paymentTerm: o.paymentTerm },
     business: { code: o.business.code, name: o.business.name, gst: o.business.gst, pan: o.business.pan, contactPerson: o.business.contactPerson, mobile: o.business.mobile, email: o.business.email, line1: o.business.line1, city: o.business.city, state: o.business.state, pincode: o.business.pincode, billingAddress: o.business.billingAddress },
     items: o.items.map((i) => ({ id: i.id, productName: i.productName, quantity: i.quantity, unit: i.unit, unitPricePaise: i.unitPricePaise, lineTotalPaise: i.lineTotalPaise, slabMinQty: i.slabMinQty ?? null })),

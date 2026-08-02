@@ -7,12 +7,14 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { audit } from "@/lib/auth/audit";
 import { b2bProductBySlug } from "./catalog";
 import { BusinessSchema, OrderSchema } from "./validation";
 import {
   formatBusinessCode, formatOrderCode, formatInvoiceNumber, computeOrderTotals, lineTotalPaise,
   derivePaymentStatus, canTransitionStatus, B2B_STATUS_LABEL, type B2BOrderStatus,
 } from "./engine";
+import { freezeB2BRecognition, onB2BDelivered, recordRevenueAdjustment } from "./recognition";
 
 interface Actor { actorId?: string; actorRole?: string }
 
@@ -294,26 +296,51 @@ export async function addOrderNote(args: { id: string; note: string } & Actor) {
 }
 
 export async function updateOrderStatus(args: { id: string; status: B2BOrderStatus } & Actor) {
-  return db.$transaction(async (tx) => {
-    const cur = await tx.businessOrder.findUnique({ where: { id: args.id }, select: { status: true } });
+  type Post = { orderCode: string; businessId: string; revenuePaise: number; deliveredAt: Date; items: { productName: string; quantity: number; unit: string }[]; invoiceNumber: string | null };
+  const { updated, post } = await db.$transaction(async (tx) => {
+    const cur = await tx.businessOrder.findUnique({
+      where: { id: args.id },
+      select: { status: true, code: true, businessId: true, totalPaise: true, taxPaise: true, revenuePaise: true, items: { select: { productName: true, quantity: true, unit: true } }, invoice: { select: { number: true } } },
+    });
     if (!cur) throw new Error("Order not found");
     if (cur.status !== args.status && !canTransitionStatus(cur.status as B2BOrderStatus, args.status)) {
       throw new Error(`Cannot move from ${B2B_STATUS_LABEL[cur.status as B2BOrderStatus]} to ${B2B_STATUS_LABEL[args.status]}`);
     }
-    const updated = await tx.businessOrder.update({ where: { id: args.id }, data: { status: args.status } });
+    const row = await tx.businessOrder.update({ where: { id: args.id }, data: { status: args.status } });
     await logEvent(tx, args.id, "STATUS", { fromStatus: cur.status as B2BOrderStatus, toStatus: args.status, byId: args.actorId });
-    return updated;
+    // Delivery-based revenue recognition: freeze net-of-GST revenue + deliveredAt the moment
+    // the order becomes DELIVERED (idempotent). Nothing books Profit-Centre revenue before this.
+    let post: Post | null = null;
+    if (args.status === "DELIVERED") {
+      const rec = await freezeB2BRecognition(tx, { id: args.id, businessId: cur.businessId, totalPaise: cur.totalPaise, taxPaise: cur.taxPaise, revenuePaise: cur.revenuePaise, items: cur.items });
+      if (rec.recognised) post = { orderCode: cur.code, businessId: cur.businessId, revenuePaise: rec.revenuePaise, deliveredAt: rec.deliveredAt, items: cur.items, invoiceNumber: cur.invoice?.number ?? null };
+    }
+    return { updated: row, post };
   }, TX);
+  // After commit: draw the delivered day's B2B milk COGS (FIFO settle) + audit the recognition.
+  if (post) await onB2BDelivered({ orderId: args.id, ...post, actorId: args.actorId, actorRole: args.actorRole });
+  return updated;
 }
 
 export async function cancelOrder(args: { id: string } & Actor) {
-  return db.$transaction(async (tx) => {
-    const cur = await tx.businessOrder.findUnique({ where: { id: args.id }, select: { status: true } });
+  const { updated, adjusted } = await db.$transaction(async (tx) => {
+    const cur = await tx.businessOrder.findUnique({ where: { id: args.id }, select: { status: true, businessId: true, revenuePaise: true, deliveredAt: true } });
     if (!cur) throw new Error("Order not found");
-    const updated = await tx.businessOrder.update({ where: { id: args.id }, data: { status: "CANCELLED" } });
+    const row = await tx.businessOrder.update({ where: { id: args.id }, data: { status: "CANCELLED" } });
     await logEvent(tx, args.id, "STATUS", { fromStatus: cur.status as B2BOrderStatus, toStatus: "CANCELLED", byId: args.actorId, note: "Cancelled" });
-    return updated;
+    // If this order was already RECOGNISED (delivered), never edit the frozen revenue and never
+    // rewrite the delivered day's COGS (the milk went out — that cost is real and stays, per
+    // Step 11 historical integrity). Record an immutable revenue reversal, booked on the
+    // cancellation day, which the P&L subtracts — a today-dated write-down, history intact.
+    let adjusted: { revenuePaise: number } | null = null;
+    if (cur.revenuePaise != null && cur.revenuePaise > 0) {
+      await recordRevenueAdjustment(tx, { order: { id: args.id, businessId: cur.businessId, revenuePaise: cur.revenuePaise, deliveredAt: cur.deliveredAt }, type: "CANCELLATION", amountPaise: cur.revenuePaise, reason: "Order cancelled after delivery", actorId: args.actorId, actorRole: args.actorRole });
+      adjusted = { revenuePaise: cur.revenuePaise };
+    }
+    return { updated: row, adjusted };
   }, TX);
+  if (adjusted) await audit({ userId: null, actorRole: args.actorRole ?? "system", action: "b2b.revenue.adjustment", target: `order ${args.id} · CANCELLATION · reversed ₹${(adjusted.revenuePaise / 100).toFixed(2)} (revenue only; delivered COGS stands)${args.actorId ? ` · by ${args.actorId}` : ""}` }).catch(() => {});
+  return updated;
 }
 
 /** Duplicate an order as a fresh PENDING order (delivery date = tomorrow). */
