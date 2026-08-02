@@ -142,6 +142,22 @@ export interface TankerRecon {
   reconciled: boolean;
 }
 
+/** Carry-forward OUT (litres): the excess this tanker couldn't cover that is STILL waiting —
+ *  it is the newest lot that drew on a currently-PENDING day, so that day's overflow will land
+ *  on the next tanker to arrive. Computed LIVE (not frozen): once the next tanker absorbs the
+ *  pending, the row clears and this returns 0 — even for a closed tanker's frozen report. */
+export async function carryForwardOutForTanker(tankerId: string): Promise<number> {
+  const pend = await db.milkPendingAllocation.findMany({ where: { status: "PENDING" }, select: { date: true, totalLitres: true } });
+  let cfOut = 0;
+  for (const pa of pend) {
+    const dd = await db.tankerConsumption.findMany({ where: { date: pa.date, channel: { in: ["RETAIL", "B2B"] } }, select: { tankerId: true, tanker: { select: { procurementDate: true } } } });
+    if (!dd.length) continue;
+    const newest = dd.reduce((a, b) => (b.tanker.procurementDate.getTime() > a.tanker.procurementDate.getTime() ? b : a));
+    if (newest.tankerId === tankerId) cfOut += pa.totalLitres;
+  }
+  return r2(cfOut);
+}
+
 /** Full reconciliation for one tanker — the exact customers/businesses/orders that consumed
  *  its milk, litres, revenue, cost, plus the milk-usage + financial summaries. */
 export async function tankerReconciliation(tankerId: string): Promise<TankerRecon | null> {
@@ -213,17 +229,7 @@ export async function tankerReconciliation(tankerId: string): Promise<TankerReco
   // prior pending allocation) — its consumption dated earlier than its own procurement day.
   const procIso = istISO(t.procurementDate);
   const carryForwardInLitres = r2([...retailLines, ...b2bLines].filter((l) => l.date < procIso).reduce((s, l) => s + l.litres, 0));
-  // excess this tanker couldn't cover, still waiting: it is the newest lot that drew on a
-  // currently-PENDING day (the day's overflow will land on the next tanker to arrive).
-  let cfOut = 0;
-  const pend = await db.milkPendingAllocation.findMany({ where: { status: "PENDING" }, select: { date: true, totalLitres: true } });
-  for (const pa of pend) {
-    const dd = await db.tankerConsumption.findMany({ where: { date: pa.date, channel: { in: ["RETAIL", "B2B"] } }, select: { tankerId: true, tanker: { select: { procurementDate: true } } } });
-    if (!dd.length) continue;
-    const newest = dd.reduce((a, b) => (b.tanker.procurementDate.getTime() > a.tanker.procurementDate.getTime() ? b : a));
-    if (newest.tankerId === tankerId) cfOut += pa.totalLitres;
-  }
-  const carryForwardOutLitres = r2(cfOut);
+  const carryForwardOutLitres = await carryForwardOutForTanker(tankerId);
 
   return {
     tanker: { id: t.id, code: t.code, tankerNo: t.tankerNo, supplier: t.supplier, procurementDate: istISO(t.procurementDate), quantityKg: t.quantityKg, fatPct: t.fatPct, litres: t.litres, consumedLitres: r2(t.consumedLitres), remainingLitres: r2(t.remainingLitres), costPerLitrePaise: t.costPerLitrePaise, milkCostPaise: t.milkCostPaise, fatCostPaise: t.fatCostPaise, transportPaise: t.transportPaise, totalCostPaise: t.totalCostPaise, status: t.status, closedAt: t.closedAt ? t.closedAt.toISOString() : null },

@@ -7,7 +7,7 @@
    ============================================================= */
 import "server-only";
 import { db } from "@/lib/db";
-import { tankerReconciliation, type TankerRecon, type ReconLine } from "./reconcile";
+import { tankerReconciliation, carryForwardOutForTanker, type TankerRecon, type ReconLine } from "./reconcile";
 import type { MilkReport } from "./reports";
 
 const nL = (n: number) => (Math.round((n || 0) * 100) / 100).toLocaleString("en-IN") + " L";
@@ -25,11 +25,14 @@ async function fromFrozen(row: NonNullable<FrozenRow>): Promise<TankerRecon | nu
   const retailLines = lines.retail ?? [], b2bLines = lines.b2b ?? [];
   const procIso = istISO(t.procurementDate);
   const cfIn = Math.round([...retailLines, ...b2bLines].filter((l) => l.date < procIso).reduce((s, l) => s + l.litres, 0) * 100) / 100;
+  // carry-forward OUT is a LIVE "still-pending" value — compute it dynamically even for a frozen
+  // report (it drops to 0 once the next tanker absorbs the pending), never freeze it at close.
+  const cfOut = await carryForwardOutForTanker(row.tankerId);
   return {
     tanker: { id: t.id, code: t.code, tankerNo: t.tankerNo, supplier: t.supplier, procurementDate: istISO(t.procurementDate), quantityKg: t.quantityKg, fatPct: t.fatPct, litres: t.litres, consumedLitres: Math.round(t.consumedLitres * 100) / 100, remainingLitres: Math.round(t.remainingLitres * 100) / 100, costPerLitrePaise: t.costPerLitrePaise, milkCostPaise: t.milkCostPaise, fatCostPaise: t.fatCostPaise, transportPaise: t.transportPaise, totalCostPaise: t.totalCostPaise, status: t.status, closedAt: t.closedAt ? t.closedAt.toISOString() : row.closedAt.toISOString() },
     retail: { customers: row.retailCustomers, deliveries: row.retailDeliveries, litres: row.retailLitres, revenuePaise: row.retailRevenuePaise, lines: retailLines },
     b2b: { businesses: row.b2bBusinesses, deliveries: row.b2bDeliveries, litres: row.b2bLitres, revenuePaise: row.b2bRevenuePaise, lines: b2bLines },
-    usage: { openingLitres: row.openingLitres, retailLitres: row.retailLitres, b2bLitres: row.b2bLitres, wastageLitres: row.wastageLitres, carryForwardInLitres: cfIn, carryForwardOutLitres: 0, availableAfterCarryForward: Math.round((t.litres - cfIn) * 100) / 100, carryForwardLitres: row.carryForwardLitres, closingLitres: row.closingLitres },
+    usage: { openingLitres: row.openingLitres, retailLitres: row.retailLitres, b2bLitres: row.b2bLitres, wastageLitres: row.wastageLitres, carryForwardInLitres: cfIn, carryForwardOutLitres: cfOut, availableAfterCarryForward: Math.round((t.litres - cfIn) * 100) / 100, carryForwardLitres: row.carryForwardLitres, closingLitres: row.closingLitres },
     financial: { retailRevenuePaise: row.retailRevenuePaise, b2bRevenuePaise: row.b2bRevenuePaise, totalRevenuePaise: row.totalRevenuePaise, procurementCostPaise: row.procurementCostPaise, transportPaise: row.transportPaise, totalCostPaise: row.totalCostPaise, cogsPaise: row.cogsPaise, grossProfitPaise: row.grossProfitPaise, netProfitPaise: row.netProfitPaise },
     reconciled: true,
   };
