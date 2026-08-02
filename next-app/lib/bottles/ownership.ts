@@ -11,7 +11,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { customerHeld } from "@/lib/bottles/balance";
-import { depositHeldPaise } from "@/lib/bottles/deposit";
+import { depositHeldPaise, heldDepositWhere } from "@/lib/bottles/deposit";
 import { getBottleDepositConfig, effectiveDepositPerBottle } from "@/lib/bottles/deposit-config";
 
 export type OwnershipStatus = "NEW" | "OWNS" | "RETURNED_ALL";
@@ -35,7 +35,7 @@ export async function bottleOwnership(userId: string): Promise<BottleOwnership> 
     depositHeldPaise(userId),
     getBottleDepositConfig(),
     db.bottleLedger.groupBy({ by: ["event"], where: { userId }, _sum: { qty: true } }),
-    db.order.aggregate({ where: { userId, status: "PAID" }, _sum: { depositPaise: true } }),
+    db.order.aggregate({ where: heldDepositWhere(userId), _sum: { depositPaise: true } }),   // prepaid + delivered-COD
   ]);
   const sum = (e: string) => grouped.find((g) => g.event === e)?._sum.qty ?? 0;
   const issued = sum("ISSUED"), returned = sum("RETURNED");

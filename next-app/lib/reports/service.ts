@@ -9,6 +9,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { slaPromiseMin, deliveredOnTime } from "@/lib/delivery/late";
+import { rangePnl } from "@/lib/milk/pnl";
 
 export interface ReportRange { from?: string | Date; to?: string | Date }
 
@@ -125,21 +126,32 @@ export async function reportsOverview(rangeIn: ReportRange = {}) {
   const churnRate = totalSubs ? Math.round((cancelledSubs / totalSubs) * 1000) / 10 : 0;
   const retentionRate = Math.round((100 - churnRate) * 10) / 10;
   const wKind = (kind: string, type: "CREDIT" | "DEBIT") => (walletByKind as never as { kind: string; type: string; _sum: { amountPaise: number | null } }[]).filter((g) => g.kind === kind && g.type === type).reduce((s, g) => s + (g._sum.amountPaise ?? 0), 0);
-  const procurementCost = procAll._sum.amountPaise ?? 0;
-  const expensesPaise = expensesAgg._sum.totalPaise ?? 0;
-  // COGS = FIFO cost of milk sold (the tanker engine) once it's in use; else the
-  // legacy procurement-cash proxy. This keeps the Reports P&L consistent with the
-  // Milk Profit Center rather than double-counting two procurement models.
-  const tankerCogs = tankerCogsAll._sum.costPaise ?? 0;
-  const cogs = tankerCogs > 0 ? tankerCogs : procurementCost;
-  const grossProfit = totalRevenue - cogs;
-  const netProfit = totalRevenue - cogs - expensesPaise;
+  const procurementCost = procAll._sum.amountPaise ?? 0;   // farmer milk-collection payouts (NOT the tanker-purchase cash that feeds COGS)
+  // AUTHORITATIVE P&L for the selected range — the SAME delivery-based engine the Milk Profit
+  // Centre uses: recognised retail revenue (frozen per completed delivery) + recognised B2B
+  // (net-of-GST, delivered), range-scoped FIFO COGS, range-scoped expenses. Reports no longer
+  // runs its own divergent P&L (which was order-gross, booked at order-time, all-time COGS, and
+  // omitted B2B entirely) — so the Reports page and the Profit Centre now agree by construction.
+  const pnl = await rangePnl(dayKey(from), dayKey(to));
+  const expensesPaise = pnl.expensesPaise;
+  const cogs = pnl.cogsPaise;
+  const grossProfit = pnl.grossProfitPaise;
+  const netProfit = pnl.netProfitPaise;
+  const recognisedRevenuePaise = pnl.revenuePaise;   // retail (delivered) + B2B (delivered, net GST)
 
   const kpis = {
-    totalRevenuePaise: totalRevenue,
+    // NB total/today/month are BILLED intake (Σ Order.totalPaise for PAID orders, incl. the
+    // refundable deposit, booked at order time) — a valid "money collected" metric, but NOT the
+    // recognised revenue that drives profit. The recognised figures (delivery-based, deposit
+    // stripped, B2B included) live alongside and match the Profit Centre.
+    totalRevenuePaise: totalRevenue,                       // all-time billed intake
     todayRevenuePaise: revToday._sum.totalPaise ?? 0,
     monthRevenuePaise: revMonth._sum.totalPaise ?? 0,
-    rangeRevenuePaise: revRange._sum.totalPaise ?? 0,
+    rangeBilledPaise: revRange._sum.totalPaise ?? 0,       // range billed intake (order-gross)
+    rangeRevenuePaise: recognisedRevenuePaise,             // range RECOGNISED revenue (matches Profit Centre)
+    recognisedRevenuePaise,
+    retailRevenuePaise: pnl.retailRevenuePaise,
+    b2bRevenuePaise: pnl.b2bRevenuePaise,
     totalOrders: Object.values(orderStatus).reduce((s, n) => s + (n as number), 0),
     completedOrders: orderStatus["PAID"] ?? 0,
     rangeOrders: revRange._count._all || 0,
@@ -161,10 +173,11 @@ export async function reportsOverview(rangeIn: ReportRange = {}) {
     referralGrowthCount: referralAgg._count,
     referralGrowthPaise: referralAgg._sum.amountPaise ?? 0,
     trialConversions: trialAgg._count,
-    procurementCostPaise: procurementCost,
-    cogsPaise: cogs,                                    // FIFO milk-sold cost (tanker engine) or legacy proxy
+    procurementCostPaise: procurementCost,             // farmer milk-collection payouts (operational)
+    procurementCashPaise: pnl.procurementCashPaise,    // tanker-purchase cash in range (the P&L basis)
+    cogsPaise: cogs,                                    // range-scoped FIFO cost of milk SOLD (== Profit Centre)
     procurementLitres: procAll._sum.litres ?? 0,
-    expensesPaise,
+    expensesPaise,                                      // range-scoped (== Profit Centre)
     gstCollectedPaise: gstPaid._sum.taxPaise ?? 0,
     grossProfitPaise: grossProfit,
     netProfitPaise: netProfit,
@@ -239,7 +252,12 @@ export async function reportsOverview(rangeIn: ReportRange = {}) {
     },
     subscriptions: { byStatus: subStatus, active: activeSubs, cancelled: cancelledSubs, completed: completedSubs, renewalRate, churnRate, growth: charts.subscriptionGrowth },
     financial: {
-      revenuePaise: totalRevenue, expensesPaise, procurementCostPaise: procurementCost, grossProfitPaise: grossProfit, netProfitPaise: netProfit,
+      // Recognised, range-scoped P&L (identical basis to the Milk Profit Centre). `billedRevenuePaise`
+      // is the order-gross intake kept for reference — the two are DIFFERENT metrics, not a discrepancy.
+      revenuePaise: recognisedRevenuePaise, retailRevenuePaise: pnl.retailRevenuePaise, b2bRevenuePaise: pnl.b2bRevenuePaise,
+      billedRevenuePaise: revRange._sum.totalPaise ?? 0,
+      cogsPaise: cogs, expensesPaise, procurementCostPaise: procurementCost, procurementCashPaise: pnl.procurementCashPaise,
+      grossProfitPaise: grossProfit, netProfitPaise: netProfit,
       gstCollectedPaise: gstPaid._sum.taxPaise ?? 0, refunds: { count: refundsAgg._count, amountPaise: refundsAgg._sum.amountPaise ?? 0 },
       wallet: { creditedPaise: (walletByKind as never as { type: string; _sum: { amountPaise: number | null } }[]).filter((g) => g.type === "CREDIT").reduce((s, g) => s + (g._sum.amountPaise ?? 0), 0), usedPaise: walletUsed._sum.amountPaise ?? 0, cashbackPaise: wKind("cashback", "CREDIT"), referralPaise: wKind("referral", "CREDIT"), refundPaise: wKind("refund", "CREDIT") },
       expensesByCategory: expenseByCat as never,

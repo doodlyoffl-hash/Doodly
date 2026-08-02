@@ -6,6 +6,7 @@
    over-refund regardless of the per-bottle rate.
    ============================================================= */
 import "server-only";
+import { Prisma, DeliveryStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getBottleDepositConfig, effectiveDepositPerBottle } from "@/lib/bottles/deposit-config";
 
@@ -14,10 +15,29 @@ export async function depositPerBottlePaise(): Promise<number> {
   return effectiveDepositPerBottle(await getBottleDepositConfig());
 }
 
-/** Deposit money still held for a customer = Σ PAID Order.depositPaise − Σ DEPOSIT_REFUNDED. */
+/** Prisma `where` matching orders whose bottle deposit is genuinely HELD by the business:
+ *  either PREPAID (Order PAID) OR a confirmed CASH-on-delivery order that has actually been
+ *  DELIVERED. A COD deposit is collected in cash AT THE DOOR, so it only becomes "held" once a
+ *  stop under that order (one-time delivery, or the subscription's first delivery) is delivered.
+ *  Before this, COD deposits were invisible (status filtered to PAID only) → COD customers could
+ *  never be refunded their deposit and the liability was undercounted. The single source of truth
+ *  for every deposit-held sum. */
+export function heldDepositWhere(userId?: string): Prisma.OrderWhereInput {
+  const delivered: Prisma.DeliveryWhereInput = { status: { in: [DeliveryStatus.DELIVERED, DeliveryStatus.PARTIALLY_DELIVERED] } };
+  return {
+    ...(userId ? { userId } : {}),
+    depositPaise: { gt: 0 },
+    OR: [
+      { status: "PAID" },
+      { payment: { method: "CASH" }, OR: [{ delivery: { is: delivered } }, { subscription: { deliveries: { some: delivered } } }] },
+    ],
+  };
+}
+
+/** Deposit money still held for a customer = Σ held-deposit Order.depositPaise − Σ DEPOSIT_REFUNDED. */
 export async function depositHeldPaise(userId: string): Promise<number> {
   const [charged, refunded] = await Promise.all([
-    db.order.aggregate({ where: { userId, status: "PAID" }, _sum: { depositPaise: true } }),
+    db.order.aggregate({ where: heldDepositWhere(userId), _sum: { depositPaise: true } }),
     db.bottleLedger.aggregate({ where: { userId, event: "DEPOSIT_REFUNDED" }, _sum: { amountPaise: true } }),
   ]);
   return Math.max(0, (charged._sum.depositPaise ?? 0) - (refunded._sum.amountPaise ?? 0));

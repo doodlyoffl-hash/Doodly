@@ -56,10 +56,17 @@ export async function enableAutopay(args: { userId: string; subscriptionId: stri
 
 /** Mark the mandate ACTIVE once Razorpay authenticates/activates it (webhook). */
 export async function activateMandate(gatewaySubId: string, nextRenewalAt?: Date) {
-  const ap = await db.autopaySubscription.findFirst({ where: { gatewaySubId }, include: { subscription: { select: { userId: true, plan: { select: { name: true } } } } } });
+  const ap = await db.autopaySubscription.findFirst({ where: { gatewaySubId }, include: { subscription: { select: { userId: true, plan: { select: { name: true, days: true } } } } } });
   if (!ap) return;
   await db.autopaySubscription.update({ where: { id: ap.id }, data: { status: "ACTIVE", attempts: 0, ...(nextRenewalAt ? { nextRenewalAt } : {}) } });
   await db.subscription.update({ where: { id: ap.subscriptionId }, data: { autoRenew: true, status: "ACTIVE" } }).catch(() => {});
+  // Materialise CYCLE 1's deliveries now (an AutoPay checkout leaves the order PENDING, so the
+  // order→delivery bridge never fired). ABSOLUTE target = plan.days is idempotent + self-correcting,
+  // so this is safe even though subscription.charged also materialises via paid_count — whichever
+  // fires first wins and the other is a no-op (target never double-counts cycle 1).
+  if (ap.subscription?.plan?.days) {
+    try { const { renewSubscriptionCycle } = await import("@/lib/subscriptions/deliveries"); await renewSubscriptionCycle(ap.subscriptionId, ap.subscription.plan.days, { absoluteTarget: ap.subscription.plan.days, source: "AutoPay activated" }, { actorRole: "system" }); } catch (e) { log.error("autopay.activate.generate", (e as Error)?.message); }
+  }
   const uid = ap.subscription?.userId;
   if (uid) {
     const first = (await firstName(uid));

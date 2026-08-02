@@ -168,13 +168,22 @@ export async function skipOrCancelDates(subscriptionId: string, dates: (Date | s
 /** Admin marks a delivery MISSED (our fault) with a reason → FAILED + reason, detach,
     reconcile (append a make-up, extend endDate). Returns the customer id for notifying. */
 export async function adjustMissedDelivery(deliveryId: string, reason: string, note: string | null | undefined, actor?: Actor): Promise<{ subscriptionId: string; userId: string | null; created: number; oldEndDate: Date | null; endDate: Date | null } | null> {
-  const del = await db.delivery.findUnique({ where: { id: deliveryId }, select: { id: true, status: true, driverId: true, date: true, subscriptionId: true, subscription: { select: { endDate: true, userId: true } } } });
+  const del = await db.delivery.findUnique({ where: { id: deliveryId }, select: { id: true, status: true, driverId: true, date: true, subscriptionId: true, subscription: { select: { status: true, endDate: true, userId: true } } } });
   if (!del || !del.subscriptionId) return null;
   const oldEndDate = del.subscription?.endDate ?? null;
+  const wasDelivered = del.status === "DELIVERED" || del.status === "PARTIALLY_DELIVERED";
   const missedDriverId = del.driverId;   // capture before detach
   if (del.status !== "FAILED") {
     await detachAssignment(del.id, del.driverId, actor?.actorRole);
     await db.delivery.update({ where: { id: del.id }, data: { status: "FAILED", adjustReason: reason, adjustNote: note ?? null } });
+  }
+  // Reversing a DELIVERED stop must UNWIND its physical + financial side-effects (bottle ledger,
+  // fleet stock, frozen revenue) and RE-SETTLE COGS — else the day keeps its drawn COGS while
+  // revenue drops (via the status filter), silently overstating profit forever. Re-activate a
+  // subscription this delivery had auto-COMPLETED so reconcile can materialise the make-up day.
+  if (wasDelivered) {
+    if (del.subscription?.status === "COMPLETED") await db.subscription.update({ where: { id: del.subscriptionId }, data: { status: "ACTIVE" } }).catch(() => {});
+    try { const { reverseDeliveryCompletion } = await import("@/lib/delivery/complete"); await reverseDeliveryCompletion(del.id); } catch { /* non-blocking */ }
   }
   const rec = await reconcileSchedule(del.subscriptionId);
   await reoptimizeAffected([{ driverId: missedDriverId, date: del.date }]);
@@ -214,6 +223,37 @@ export async function extendSubscription(subscriptionId: string, days: number, r
   const rec = await reconcileSchedule(subscriptionId);
   await logEvent(subscriptionId, "EXTENDED", `Subscription extended by ${n} day(s)${reason ? ` — ${reason}` : ""}`, { days: n, reason: reason ?? null, oldEndDate, newEndDate: rec.endDate }, actor);
   try { const uid = (await db.subscription.findUnique({ where: { id: subscriptionId }, select: { userId: true } }))?.userId; if (uid) { const { notifySubscriptionExtended } = await import("@/lib/notifications/dispatch"); await notifySubscriptionExtended(uid, { newEndDate: rec.endDate, reason }); } } catch { /* non-blocking */ }
+  return { created: rec.created, oldEndDate, endDate: rec.endDate };
+}
+
+/** Renew a subscription for another paid cycle (AutoPay charge / admin billing renew): raise
+    the paid `target` and reconcile — this materialises the new cycle's deliverable days AND
+    extends endDate. Reactivates a COMPLETED subscription (a fixed-term that later turned on
+    AutoPay), since reconcileSchedule only runs for ACTIVE subs. No customer notify here; the
+    renewal handler owns the "renewed" message. Logs a RENEWED event.
+
+    Two modes, both idempotent + self-correcting (target never shrinks):
+      • ABSOLUTE (meta.absoluteTarget, e.g. Razorpay `paid_count × plan.days`) — safe to call from
+        BOTH subscription.activated and subscription.charged, and on webhook replays: the target
+        lands at max(current, absoluteTarget), so cycle 1 never double-materialises regardless of
+        which event fires first or how many times it retries.
+      • RELATIVE (planDays) — +planDays from the current target, for the admin billing renew (one
+        call = one new cycle; low replay risk). */
+export async function renewSubscriptionCycle(subscriptionId: string, planDays: number, meta?: { cycleRef?: string | null; source?: string; absoluteTarget?: number }, actor?: Actor): Promise<{ created: number; oldEndDate: Date | null; endDate: Date | null } | null> {
+  const n = Math.floor(planDays);
+  if ((!n || n < 1) && meta?.absoluteTarget == null) return null;
+  const sub = await db.subscription.findUnique({ where: { id: subscriptionId }, select: { status: true, endDate: true, targetDeliveries: true, plan: { select: { days: true } } } });
+  if (!sub || sub.status === "CANCELLED") return null;                       // never resurrect a cancelled sub
+  const oldEndDate = sub.endDate;
+  if (sub.status !== "ACTIVE") await db.subscription.update({ where: { id: subscriptionId }, data: { status: "ACTIVE" } }).catch(() => {});
+  const base = sub.targetDeliveries ?? sub.plan.days ?? 0;
+  // NB CAP (200) ceilings the cumulative target — a plan renewed past ~200 delivered days needs a
+  // manual Extend / CAP raise (flagged as a follow-up); covers >6 months of a daily 30-day plan.
+  const nextTarget = meta?.absoluteTarget != null ? Math.max(base, Math.floor(meta.absoluteTarget)) : base + n;
+  if (nextTarget <= base && meta?.absoluteTarget != null) return { created: 0, oldEndDate, endDate: sub.endDate };  // absolute no-op (replay / already at target)
+  await db.subscription.update({ where: { id: subscriptionId }, data: { targetDeliveries: Math.min(CAP, nextTarget) } });
+  const rec = await reconcileSchedule(subscriptionId);
+  await logEvent(subscriptionId, "RENEWED", `Renewed → target ${Math.min(CAP, nextTarget)} delivery day(s)${meta?.source ? ` (${meta.source})` : ""}`, { planDays: n, cycleRef: meta?.cycleRef ?? null, absoluteTarget: meta?.absoluteTarget ?? null, oldEndDate, newEndDate: rec.endDate }, actor);
   return { created: rec.created, oldEndDate, endDate: rec.endDate };
 }
 

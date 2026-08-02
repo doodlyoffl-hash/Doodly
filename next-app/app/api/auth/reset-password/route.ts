@@ -43,6 +43,8 @@ export const POST = route("auth.reset", async (req: NextRequest) => {
   ]);
 
   await audit({ userId: record.userId, actorRole: "customer", action: "auth.reset_password", target: record.userId, ctx });
+  // Security alert (email + in-app) — a stolen reset link must never be a SILENT takeover.
+  try { const { notifyPasswordChanged } = await import("@/lib/notifications/dispatch"); await notifyPasswordChanged(record.userId, { via: "reset", ip: ctx.ip }); } catch { /* non-blocking */ }
 
   return ok({ message: "Your password has been reset. You can now sign in." });
 });

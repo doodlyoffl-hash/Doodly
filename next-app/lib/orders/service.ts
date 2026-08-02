@@ -214,7 +214,12 @@ export async function cancelCustomerOrder(userId: string, id: string) {
     // discount is stored separately and was never paid, so refunding totalPaise handed the
     // customer their discount back as spendable cash (buy with a coupon → cancel → keep it).
     // walletAppliedPaise stays in: that was a real debit from their wallet.
-    const refundPaise = Math.max(0, order.totalPaise - (order.couponDiscountPaise ?? 0));
+    const grossRefund = Math.max(0, order.totalPaise - (order.couponDiscountPaise ?? 0));
+    // Net out anything ALREADY refunded via the payment-refund workflow. A PARTIAL refund leaves
+    // Order.status = PAID, so without this a subsequent self-cancel would re-refund the portion
+    // that was already returned (double refund). Full prior refund → status REFUNDED → skipped.
+    const alreadyRefunded = (await tx.paymentRecord.aggregate({ where: { orderId: id }, _sum: { refundedPaise: true } }))._sum.refundedPaise ?? 0;
+    const refundPaise = Math.max(0, grossRefund - alreadyRefunded);
     if (order.status === "PAID" && refundPaise > 0) {
       // Single ledger writer + ATOMIC increment (was a race-prone read-modify-write).
       // Deterministic reference makes a double-cancel a no-op via the unique constraint.

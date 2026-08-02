@@ -432,7 +432,7 @@ export async function updateSubscription(id: string, args: UpdateArgs, actor: Ac
 // ---------------------------------------------------------------- lifecycle
 
 export async function pauseSubscription(id: string, opts: { until?: string; reason?: string }, actor: Actor) {
-  const cur = await db.subscription.findUnique({ where: { id }, select: { status: true } });
+  const cur = await db.subscription.findUnique({ where: { id }, select: { status: true, userId: true, plan: { select: { name: true } } } });
   if (!cur) throw Errors.notFound("Subscription not found.");
   if (cur.status === "CANCELLED" || cur.status === "COMPLETED") throw Errors.conflict("Cannot pause a closed subscription.");
   const pausedUntil = opts.until ? new Date(opts.until) : null;
@@ -442,11 +442,19 @@ export async function pauseSubscription(id: string, opts: { until?: string; reas
   });
   // Clear upcoming deliveries in the vacation window (or all if open-ended).
   try { const { removeScheduledDeliveries } = await import("./deliveries"); await removeScheduledDeliveries(id, { from: new Date(), to: pausedUntil ?? undefined }); } catch { /* non-blocking */ }
+  // Tell the customer their deliveries are paused (else they just stop with no explanation).
+  try {
+    if (cur.userId) {
+      const { notify } = await import("@/lib/notifications/dispatch");
+      const until = pausedUntil ? pausedUntil.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : null;
+      await notify(cur.userId, { title: "Your subscription is paused ⏸️", body: `Your ${cur.plan?.name || "DOODLY"} deliveries are paused${until ? ` until ${until}` : ""}. Resume anytime from My Subscription — you won't lose a paid day.`, email: true });
+    }
+  } catch { /* non-blocking */ }
   return { id, status: "PAUSED" };
 }
 
 export async function resumeSubscription(id: string, actor: Actor) {
-  const cur = await db.subscription.findUnique({ where: { id }, select: { status: true, startDate: true, endDate: true, skipDates: true } });
+  const cur = await db.subscription.findUnique({ where: { id }, select: { status: true, userId: true, startDate: true, endDate: true, skipDates: true, plan: { select: { name: true } } } });
   if (!cur) throw Errors.notFound("Subscription not found.");
   const next = nextDeliverableFrom({ status: "ACTIVE", startDate: cur.startDate, pausedFrom: null, pausedUntil: null, skipDates: cur.skipDates }, earliestByCutoff(new Date()));
   await db.$transaction(async (tx) => {
@@ -455,6 +463,14 @@ export async function resumeSubscription(id: string, actor: Actor) {
   });
   // Refill the upcoming schedule that was cleared on pause.
   try { const { generateAllForSubscription } = await import("./deliveries"); const planDays = cur.endDate ? Math.max(1, Math.round((cur.endDate.getTime() - cur.startDate.getTime()) / 86_400_000)) : 1; await generateAllForSubscription(id, planDays); } catch { /* non-blocking */ }
+  // Confirm the customer is back on, with their next delivery date.
+  try {
+    if (cur.userId) {
+      const { notify } = await import("@/lib/notifications/dispatch");
+      const nd = next ? next.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : null;
+      await notify(cur.userId, { title: "Your subscription is back on ▶️", body: `Your ${cur.plan?.name || "DOODLY"} deliveries have resumed${nd ? ` — next delivery ${nd}` : ""}. Welcome back!`, email: true });
+    }
+  } catch { /* non-blocking */ }
   return { id, status: "ACTIVE" };
 }
 

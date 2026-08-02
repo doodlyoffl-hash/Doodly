@@ -511,9 +511,10 @@ export async function refundBottleDeposit(args: { userId: string; amountPaise: n
   let result;
   try {
     result = await withRetry(() => db.$transaction(async (tx) => {
-      // deposit still held = deposits collected on PAID orders − already refunded
+      // deposit still held = deposits collected (prepaid OR delivered-COD) − already refunded
+      const { heldDepositWhere } = await import("@/lib/bottles/deposit");
       const [charged, refunded] = await Promise.all([
-        tx.order.aggregate({ where: { userId: args.userId, status: "PAID" }, _sum: { depositPaise: true } }),
+        tx.order.aggregate({ where: heldDepositWhere(args.userId), _sum: { depositPaise: true } }),
         tx.bottleLedger.aggregate({ where: { userId: args.userId, event: "DEPOSIT_REFUNDED" }, _sum: { amountPaise: true } }),
       ]);
       const held = (charged._sum.depositPaise ?? 0) - (refunded._sum.amountPaise ?? 0);

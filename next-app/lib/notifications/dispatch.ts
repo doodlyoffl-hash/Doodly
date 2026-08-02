@@ -319,6 +319,20 @@ export async function notifyDelivered(userId: string, d: { bottles?: number } = 
   });
 }
 
+/** Security alert: the account password was just changed / reset. Email + in-app always fire
+    (security-critical, like an invoice) so a victim of a stolen reset link is never left blind.
+    Best-effort; never throws into the auth route. */
+export async function notifyPasswordChanged(userId: string, meta: { via?: "change" | "reset" | "admin"; ip?: string | null } = {}) {
+  const via = meta.via === "reset" ? "reset using a reset link" : meta.via === "admin" ? "reset by our support team" : "changed";
+  const title = "Your DOODLY password was changed 🔒";
+  const body = `Your account password was just ${via}${meta.ip ? ` (from ${meta.ip})` : ""}. If this was you, you're all set. If it wasn't, reset your password immediately and contact support.`;
+  return notify(userId, {
+    title, body,
+    email: true, emailSubject: "Security alert: your DOODLY password was changed",
+    emailHtml: T.notificationHtml(title, body, { label: "Secure my account", href: "/account/profile.html" }, "🔒"),
+  });
+}
+
 const fmtDate = (d?: Date | string | null) => { try { return d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""; } catch { return ""; } };
 
 /** We missed a delivery → apology + it's been added back, subscription extended. */

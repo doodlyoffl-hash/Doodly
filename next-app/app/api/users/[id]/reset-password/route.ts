@@ -43,5 +43,7 @@ export const POST = route("users.reset_password", async (req: NextRequest, { par
     select: { id: true },
   });
   await audit({ actorRole: actor, action: "auth.password_reset", target: params.id, ctx: reqContext(req) });
+  // Security alert — only when an actual new password was set (the force-only flow sets nothing).
+  if (body.password) { try { const { notifyPasswordChanged } = await import("@/lib/notifications/dispatch"); await notifyPasswordChanged(params.id, { via: "admin", ip: reqContext(req).ip }); } catch { /* non-blocking */ } }
   return ok({ reset: true, forced: true });
 });

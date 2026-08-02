@@ -57,6 +57,8 @@ export async function createPickupRequest(input: {
     select: { id: true, bottlesExpected: true, refundableDepositPaise: true, status: true },
   });
   await audit({ userId: input.userId, actorRole: "customer", action: "pickup.request.created", target: `${req.id} · ${held} bottle(s) · refundable ₹${Math.round(refundable / 100)}`, ctx: input.ctx }).catch(() => {});
+  // Confirm the request (customer had no acknowledgement until the final refund).
+  try { const { notify } = await import("@/lib/notifications/dispatch"); await notify(input.userId, { title: "Bottle pickup requested 📦", body: `We've received your request to collect ${held} bottle${held > 1 ? "s" : ""}. Once collected + verified, ₹${Math.round(refundable / 100)} deposit is refunded to your DOODLY wallet. We'll confirm the pickup date shortly.`, email: true }); } catch { /* non-blocking */ }
   return req;
 }
 
@@ -89,6 +91,8 @@ export async function schedulePickup(id: string, input: { date?: string | Date |
     select: { id: true, status: true, deliveryId: true, driverId: true },
   });
   await audit({ userId: act(input.actor).actorId ?? null, actorRole: input.actor?.role ?? "operations", action: driverId ? "pickup.assigned" : "pickup.scheduled", target: `${id} · delivery ${deliveryId}${driverId ? ` · driver ${driverId}` : ""}`, ctx: input.actor?.ctx }).catch(() => {});
+  // Tell the customer when to have their empties ready.
+  try { const { notify } = await import("@/lib/notifications/dispatch"); const whenStr = when.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }); await notify(req.userId, { title: "Bottle pickup scheduled 🗓️", body: `Your bottle pickup is scheduled for ${whenStr}${slot ? ` (${slot})` : ""}. Please keep your ${req.bottlesExpected} empty bottle${req.bottlesExpected > 1 ? "s" : ""} ready for collection.`, email: true }); } catch { /* non-blocking */ }
   return updated;
 }
 

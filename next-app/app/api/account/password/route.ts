@@ -42,6 +42,8 @@ export const POST = route("account.password.change", async (req: NextRequest) =>
   });
 
   await audit({ userId, actorRole: "customer", action: "account.password.change", target: userId, ctx });
+  // Security alert (email + in-app) so an unauthorised change never goes unnoticed.
+  try { const { notifyPasswordChanged } = await import("@/lib/notifications/dispatch"); await notifyPasswordChanged(userId, { via: "change", ip: ctx.ip }); } catch { /* non-blocking */ }
   // tokenVersion bumped → all sessions (incl. this one) are revoked; the client re-authenticates.
   return ok({ message: "Your password has been updated. Please sign in again.", reauth: true });
 });

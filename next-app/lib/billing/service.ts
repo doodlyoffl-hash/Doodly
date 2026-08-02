@@ -432,6 +432,13 @@ export async function renewBilling(billingId: string, actor: Actor) {
     await logEvent(tx, billingId, "RENEWED", `Renewed → new cycle billing ${next.code}`, { nextBillingId: next.id, nextCode: next.code }, actor);
     await logEvent(tx, next.id, "RENEWED", `Created via renewal of a previous cycle`, null, actor);
   });
+  // Materialise the renewed cycle's Delivery rows + extend the schedule (reconcile is
+  // authoritative over endDate/nextDeliveryAt). Without this the billing renews but no stops
+  // are ever created — the "next delivery" date points at a day with no delivery.
+  if (sub?.plan?.days) {
+    try { const { renewSubscriptionCycle } = await import("@/lib/subscriptions/deliveries"); await renewSubscriptionCycle(b.subscriptionId, sub.plan.days, { source: `billing renew ${next.code}` }, { actorId: actor.actorId, actorRole: actor.actorRole }); }
+    catch (e) { console.error("billing.renew.generate", (e as Error)?.message); }
+  }
   if (sub?.autoRenew && next.paymentStatus !== "PAID") await processAutopay(next.id, actor, false);
   return { id: next.id, code: next.code };
 }

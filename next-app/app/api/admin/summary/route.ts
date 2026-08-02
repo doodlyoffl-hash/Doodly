@@ -6,6 +6,7 @@ import type { DeliveryStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { ok, route } from "@/lib/http";
 import { requirePermission } from "@/lib/auth/authorize";
+import { dailyPnl, monthlyPnl } from "@/lib/milk/pnl";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,11 @@ export const GET = route("admin.summary", async (req: NextRequest) => {
   const startMonth = new Date(); startMonth.setDate(1); startMonth.setHours(0, 0, 0, 0);
   const weekAgo = new Date(Date.now() - 7 * 864e5);
 
-  const [revToday, revMonth, activeSubs, customers, newCustomers, pendingDeliveries, ordersToday, products, bottleGroups] = await Promise.all([
+  // Revenue = the SAME recognised, delivery-based P&L the Milk Profit Centre uses (so the
+  // dashboard headline and the Profit Centre never disagree), with billed intake kept alongside.
+  const [pnlToday, pnlMonth, revToday, revMonth, activeSubs, customers, newCustomers, pendingDeliveries, ordersToday, products, bottleGroups] = await Promise.all([
+    dailyPnl(),
+    monthlyPnl(),
     db.order.aggregate({ where: { status: "PAID", createdAt: { gte: startToday } }, _sum: { totalPaise: true } }),
     db.order.aggregate({ where: { status: "PAID", createdAt: { gte: startMonth } }, _sum: { totalPaise: true } }),
     db.subscription.count({ where: { status: "ACTIVE" } }),
@@ -36,8 +41,11 @@ export const GET = route("admin.summary", async (req: NextRequest) => {
 
   return ok({
     summary: {
-      revenueTodayPaise: revToday._sum.totalPaise ?? 0,
-      revenueMonthPaise: revMonth._sum.totalPaise ?? 0,
+      revenueTodayPaise: pnlToday.revenuePaise,           // recognised (delivery-based) — matches Profit Centre
+      revenueMonthPaise: pnlMonth.revenuePaise,
+      billedTodayPaise: revToday._sum.totalPaise ?? 0,    // billed intake (order-gross), for reference
+      billedMonthPaise: revMonth._sum.totalPaise ?? 0,
+      profitMonthPaise: pnlMonth.netProfitPaise,          // net profit (revenue − COGS − expenses)
       activeSubscriptions: activeSubs,
       customers,
       newCustomers,

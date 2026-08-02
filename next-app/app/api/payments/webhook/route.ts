@@ -107,8 +107,9 @@ export async function POST(req: NextRequest) {
         break;
       }
       case "subscription.charged": {
-        // Auto-pay renewal succeeded → extend the subscription + log RenewalHistory.
+        // Auto-pay renewal succeeded → generate the new cycle's deliveries + extend + log.
         const sub = event.payload.subscription.entity;
+        const payId: string | null = event.payload.payment?.entity?.id ?? null;
         await db.autopaySubscription.updateMany({
           where: { gatewaySubId: sub.id },
           data: { status: "ACTIVE", attempts: 0, nextRenewalAt: new Date(sub.current_end * 1000) },
@@ -118,9 +119,17 @@ export async function POST(req: NextRequest) {
         try {
           const ap = await db.autopaySubscription.findFirst({ where: { gatewaySubId: sub.id }, select: { subscriptionId: true } });
           if (ap?.subscriptionId) {
-            const s = await db.subscription.findUnique({ where: { id: ap.subscriptionId }, select: { userId: true, plan: { select: { name: true } } } });
+            const s = await db.subscription.findUnique({ where: { id: ap.subscriptionId }, select: { userId: true, plan: { select: { name: true, days: true } } } });
             if (s) {
               await earn.renewal(s.userId, ap.subscriptionId, Math.floor(Number(sub.current_end) || 0));
+              // Renewal → materialise the paid-for cycle's Delivery rows. ABSOLUTE target
+              // (paid_count × plan.days) is idempotent + self-correcting: safe on webhook replays
+              // and whether cycle 1 arrives as `activated` or `charged`. Without this the customer
+              // is charged every cycle but no Delivery rows are ever created (receives nothing).
+              const paidCount = Number(sub.paid_count) || 0;
+              if (paidCount > 0 && s.plan?.days) {
+                try { const { renewSubscriptionCycle } = await import("@/lib/subscriptions/deliveries"); await renewSubscriptionCycle(ap.subscriptionId, s.plan.days, { absoluteTarget: paidCount * s.plan.days, cycleRef: payId, source: `AutoPay cycle ${paidCount}` }, { actorRole: "system" }); } catch (e) { console.error("renewal.generate", (e as Error)?.message); }
+              } else if (s.plan?.days) { console.error("renewal.generate", `subscription.charged for ${ap.subscriptionId} carried no paid_count — deliveries NOT generated`); }
               const { firstNameOf } = await import("@/lib/notifications/dispatch");
               const nextDate = new Date(Number(sub.current_end) * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
               await notify(s.userId, {
@@ -133,9 +142,11 @@ export async function POST(req: NextRequest) {
           }
           // AutoPay audit trail — record this renewal charge (amount from the invoice/plan)
           const { recordRenewal } = await import("@/lib/autopay/service");
-          await recordRenewal(sub.id, Math.round(Number(event.payload.payment?.entity?.amount ?? 0)) || 0, true, event.payload.payment?.entity?.id);
+          await recordRenewal(sub.id, Math.round(Number(event.payload.payment?.entity?.amount ?? 0)) || 0, true, payId ?? undefined);
         } catch { /* non-blocking */ }
-        await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: sub.id, processed: true }).catch(() => {});
+        // Replay-guard parity: the top-level dedup keys on payment.entity.id, so record with the
+        // SAME ref (was sub.id → the two never matched → renewals weren't actually deduped).
+        await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: payId ?? sub.id, processed: true }).catch(() => {});
         break;
       }
       case "subscription.authenticated":

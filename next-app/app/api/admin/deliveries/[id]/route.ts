@@ -25,7 +25,16 @@ export const PATCH = route("admin.deliveries.update", async (req: NextRequest, {
   const actor = requirePermission(req, "deliveries", "edit");
   const body = await parseBody(req, patchSchema);
 
-  if (!(await db.delivery.findUnique({ where: { id: params.id }, select: { id: true } }))) throw Errors.notFound("Delivery not found.");
+  const cur = await db.delivery.findUnique({ where: { id: params.id }, select: { id: true, status: true } });
+  if (!cur) throw Errors.notFound("Delivery not found.");
+
+  // A raw status write must NOT bypass the completion / reversal wiring: marking DELIVERED has
+  // to run the exec-completion pipeline (revenue freeze, bottle ledger + fleet, COGS settle), and
+  // reversing a completed stop has to run the unwind (Adjust). Block both here.
+  if (body.status !== undefined) {
+    if (body.status === "DELIVERED") throw Errors.badRequest("Mark a delivery DELIVERED via the executive app — it recognises revenue, moves bottles + stock and settles COGS. A raw status write would skip all of that.");
+    if (cur.status === "DELIVERED" || cur.status === "PARTIALLY_DELIVERED") throw Errors.badRequest("This stop is already completed — reverse it via Adjust (which unwinds the bottles, fleet stock and COGS), not a raw status change.");
+  }
 
   if (body.driverId !== undefined) {
     requirePermission(req, "deliveries", "assign"); // assigning is a FULL-level special

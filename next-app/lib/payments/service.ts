@@ -297,9 +297,19 @@ export async function processRefund(id: string, p: { amountPaise: number; reason
     if (rec.orderId && fully) await tx.order.update({ where: { id: rec.orderId }, data: { status: "REFUNDED" } }).catch(() => {});
     if (rec.billingId && fully) await tx.subscriptionBilling.update({ where: { id: rec.billingId }, data: { paymentStatus: "REFUNDED" } }).catch(() => {});
     await logPaymentEvent(tx, id, "REFUND", `${fully ? "Full" : "Partial"} refund ₹${Math.round(p.amountPaise / 100)}${p.toWallet ? " to wallet" : ""}${p.reason ? ` — ${p.reason}` : ""}`, { amountPaise: p.amountPaise, toWallet: !!p.toWallet, reference }, actor);
-    await tx.notification.create({ data: { userId: rec.userId, channel: "PUSH", title: "Refund processed", body: `A refund of ₹${Math.round(p.amountPaise / 100)} has been processed${p.toWallet ? " to your DOODLY wallet" : ""}.`, sentAt: new Date() } });
     return { reference };
   });
+
+  // Notify the customer through the proper channel (email + in-app, opt-in aware) — was a raw
+  // PUSH-only Notification row that skipped the email path + consent gate.
+  try {
+    const { notify } = await import("@/lib/notifications/dispatch");
+    await notify(rec.userId, {
+      title: "Refund processed 💸",
+      body: `A refund of ₹${Math.round(p.amountPaise / 100)} has been processed${p.toWallet ? " to your DOODLY wallet" : ""}${p.reason ? ` — ${p.reason}` : ""}.`,
+      email: true,
+    });
+  } catch { /* non-blocking */ }
 
   let walletBalance: number | null = null;
   if (p.toWallet) {

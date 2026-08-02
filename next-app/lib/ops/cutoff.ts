@@ -293,6 +293,34 @@ async function prepareDeliveries(start: Date, end: Date): Promise<{ bridged: num
   return { bridged, subCreated };
 }
 
+/** Release coupon + wallet holds on GATEWAY checkouts abandoned in PENDING — the customer
+    closed the Razorpay popup without a failure event, so `payment.failed` never fired and the
+    hold (their own wallet debit / coupon redemption) was never reversed. releaseCheckoutHolds
+    reverses those idempotently and fails the dead order, so it is not re-swept. Conservative
+    window (the Razorpay checkout session is long dead by then) avoids racing a late capture;
+    excludes CASH/COD (legitimately PENDING until delivery) and AutoPay (null payment). */
+const STALE_HOLD_MINUTES = 180;
+export async function sweepStaleCheckoutHolds(olderThanMinutes = STALE_HOLD_MINUTES): Promise<{ swept: number }> {
+  const before = new Date(Date.now() - olderThanMinutes * 60_000);
+  const stale = await db.order.findMany({
+    where: {
+      status: "PENDING", cancelledAt: null, createdAt: { lt: before },
+      payment: { method: { notIn: ["CASH", "WALLET"] } },   // gateway checkout only (excludes COD + AutoPay's null payment)
+    },
+    select: { id: true, subscription: { select: { id: true } } },
+    take: 500,
+  });
+  if (!stale.length) return { swept: 0 };
+  const { releaseCheckoutHolds } = await import("@/lib/checkout/service");
+  let swept = 0;
+  for (const o of stale) {
+    try { await releaseCheckoutHolds(o.id, "Abandoned checkout — holds auto-released", o.subscription?.id ?? undefined); swept++; }
+    catch (e) { log.error("ops.cutoff", "hold sweep failed", { orderId: o.id, err: (e as Error)?.message }); }
+  }
+  if (swept) await audit({ actorRole: "system", action: "checkout.holds.swept", target: `${swept} abandoned gateway order(s) released (>${olderThanMinutes}m PENDING)` }).catch(() => {});
+  return { swept };
+}
+
 // ---------- the cut-off run ----------
 export interface CutoffResult {
   ok: boolean;
@@ -320,6 +348,9 @@ export async function runDailyCutoff(opts: { force?: boolean; date?: string; act
   }
 
   const prepared = await prepareDeliveries(start, end);
+
+  // Un-strand any customer wallet/coupon locked against an abandoned gateway checkout.
+  try { await sweepStaleCheckoutHolds(); } catch (e) { log.error("ops.cutoff", "hold sweep failed", { err: (e as Error)?.message }); }
 
   // Auto-assign the prepared day's (and today's) unassigned deliveries to available execs.
   // The automated BACKSTOP to the exec-shift-start trigger, kept inside the Hobby 2-cron cap

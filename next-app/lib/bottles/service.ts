@@ -12,6 +12,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { Errors } from "@/lib/http";
+import { heldDepositWhere } from "@/lib/bottles/deposit";
 
 export interface Actor { actorId?: string; actorRole?: string; ip?: string }
 
@@ -62,7 +63,7 @@ export async function bottleFleetOverview() {
     db.bottleStock.findMany(),
     db.bottleLedger.groupBy({ by: ["event"], _sum: { qty: true } }),
     db.bottleLedger.groupBy({ by: ["event"], _sum: { amountPaise: true } }),
-    db.order.aggregate({ where: { status: "PAID" }, _sum: { depositPaise: true } }),
+    db.order.aggregate({ where: heldDepositWhere(), _sum: { depositPaise: true } }),   // prepaid + delivered-COD
   ]);
 
   const caps = new Map<number, Record<BottleStage, number>>();
