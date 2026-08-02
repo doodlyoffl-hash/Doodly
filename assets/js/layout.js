@@ -6992,7 +6992,9 @@
           '<label class="dac-f"><span>To</span><input class="input" id="pc-rto" type="date" value="' + day + '" style="max-width:150px"></label>' +
           '<div style="display:flex;gap:6px"><button class="btn btn-primary sm" id="pc-rpdf">PDF</button><button class="btn btn-ghost sm" id="pc-rxls">Excel</button><button class="btn btn-ghost sm" id="pc-rcsv">CSV</button></div>' +
         "</div><p class='muted-sm' style='margin-top:6px'>Inventory is a live snapshot; the date range applies to the other reports.</p>" +
-      "</div></div>";
+      "</div></div>" +
+      // Orders & Tankers drill-down — the B2B orders + tanker draws BEHIND the P&L numbers
+      '<div class="panel" style="margin-top:14px" id="pc-drill"><div class="panel-head"><h3>📦 Orders &amp; Tankers <span class="muted-sm" style="font-weight:600">· the B2B orders + tanker draws behind the P&amp;L</span></h3></div><div class="panel-pad" id="pc-drill-body"><p class="muted-sm">Loading…</p></div></div>';
     var sa = host.querySelector("#pc-settle-all");
     if (sa) sa.addEventListener("click", function () {
       var dates = (health.unsettled || []).map(function (u) { return u.date; });
@@ -7027,6 +7029,94 @@
       }).then(function (x) { if (x && x.config) _milkCfg = x.config; dacToast("Rates saved. New tankers use these; existing tankers keep their snapshot."); })
         .catch(function (e) { err.textContent = e.code === "forbidden" ? "Only a Super Admin can change the rates." : (e.message || "Couldn't save."); });
     });
+    renderPCDrill(host, day);
+  }
+
+  // Orders & Tankers drill-down for the Profit Center: two lenses (both requested).
+  //  • By day  — the B2B orders delivered/scheduled on a chosen day + the tanker lots that
+  //              supplied THAT day's milk (retail vs B2B). Ties a day's orders to its tankers.
+  //  • By tanker — every tanker with its retail/B2B draw + remaining; expand → per-day history.
+  // NB milk draws FIFO per DAY (not per order), so the order↔tanker link is the shared day.
+  function renderPCDrill(host, initialDay) {
+    var panel = host.querySelector("#pc-drill-body"); if (!panel) return;
+    var st = { tab: "day", day: initialDay, tankers: null, openTanker: null, tankerDraws: {} };
+    var tankerLine = function (r) {
+      var b2b = r.b2bLitres > 0 || r.b2bCostPaise > 0;
+      return '<b>' + esc(r.code) + '</b> <span class="muted-sm">' + esc(r.supplier || "") + " · " + esc(r.procurementDate) + "</span> · " +
+        milkRs(r.costPerLitrePaise) + "/L · retail " + (Math.round((r.retailLitres || 0) * 100) / 100) + " L (" + milkRs(r.retailCostPaise) + ")" +
+        (b2b ? " · <span style='color:#8a5cf6'>B2B " + (Math.round((r.b2bLitres || 0) * 100) / 100) + " L (" + milkRs(r.b2bCostPaise) + ")</span>" : "");
+    };
+    function tabBar() {
+      return '<div style="display:flex;gap:6px;margin-bottom:10px">' +
+        '<button class="btn ' + (st.tab === "day" ? "btn-primary" : "btn-ghost") + ' sm" data-dtab="day">By day</button>' +
+        '<button class="btn ' + (st.tab === "tanker" ? "btn-primary" : "btn-ghost") + ' sm" data-dtab="tanker">By tanker</button></div>';
+    }
+    function dayView(d) {
+      var orders = d.orders || [], tankers = d.tankers || [];
+      var oBody = orders.map(function (o) {
+        var badge = o.delivered ? '<span class="badge green">Delivered</span>' : '<span class="badge amber">' + esc((o.status || "").replace(/_/g, " ")) + "</span>";
+        return "<tr><td>" + badge + "</td><td class='muted-sm'>" + esc(o.code) + "</td><td>" + esc(o.business) + "</td><td class='muted-sm'>" + esc(o.items || "—") + '</td><td style="text-align:right">' + milkRs(o.revenuePaise) + (o.delivered ? "" : " <span class='muted-sm'>(booked)</span>") + "</td></tr>";
+      }).join("");
+      var tBody = tankers.map(function (t) { return '<div style="padding:4px 0;border-top:1px solid rgba(0,0,0,.06)">' + tankerLine(t) + "</div>"; }).join("");
+      return tabBar() +
+        '<label class="dac-f" style="max-width:170px;margin-bottom:10px"><span>Day</span><input class="input" id="pc-dd-day" type="date" value="' + esc(st.day) + '"></label>' +
+        '<div class="muted-sm" style="margin-bottom:6px"><b>' + (d.deliveredCount || 0) + "</b> delivered · <b>" + (d.scheduledCount || 0) + "</b> scheduled · delivered B2B revenue " + milkRs(d.deliveredRevenuePaise) + "</div>" +
+        '<div class="table-wrap"><table class="tbl"><thead><tr><th></th><th>Order</th><th>Business</th><th>Items</th><th style="text-align:right">Revenue (net)</th></tr></thead><tbody>' +
+        (oBody || '<tr><td colspan="5" class="muted-sm" style="text-align:center;padding:12px">No B2B orders on this day.</td></tr>') + "</tbody></table></div>" +
+        '<div style="margin-top:12px"><div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--leaf-700,#178a52);margin-bottom:2px">Tankers that supplied this day\'s milk</div>' +
+        (tBody || '<div class="muted-sm" style="padding:6px 0">No milk drawn (day not settled, or no sales).</div>') + "</div>";
+    }
+    function tankerView() {
+      var rows = (st.tankers || []).map(function (t) {
+        var open = st.openTanker === t.id, draws = st.tankerDraws[t.id];
+        var head = '<tr data-tk="' + t.id + '" style="cursor:pointer"><td>' + esc(t.code) + '</td><td class="muted-sm">' + esc(t.supplier || "") + "</td><td>" + esc(t.procurementDate) + "</td>" +
+          '<td style="text-align:right">' + (Math.round(t.litres * 10) / 10) + " L</td><td style=\"text-align:right\">" + (Math.round(t.remainingLitres * 10) / 10) + " L</td>" +
+          '<td style="text-align:right">' + (Math.round((t.retailLitres || 0) * 10) / 10) + " L · " + milkRs(t.retailCostPaise) + "</td>" +
+          '<td style="text-align:right;color:#8a5cf6">' + (Math.round((t.b2bLitres || 0) * 10) / 10) + " L · " + milkRs(t.b2bCostPaise) + "</td><td>" + (open ? "▾" : "▸") + "</td></tr>";
+        var detail = "";
+        if (open) {
+          var d = draws ? (draws.length ? draws.map(function (x) { return "<tr><td class='muted-sm'>" + esc(x.date) + "</td><td style='text-align:right'>" + (Math.round(x.retailLitres * 100) / 100) + " L · " + milkRs(x.retailCostPaise) + "</td><td style='text-align:right;color:#8a5cf6'>" + (Math.round(x.b2bLitres * 100) / 100) + " L · " + milkRs(x.b2bCostPaise) + "</td></tr>"; }).join("") : '<tr><td colspan="3" class="muted-sm">No draws yet.</td></tr>') : '<tr><td colspan="3" class="muted-sm">Loading…</td></tr>';
+          detail = '<tr><td colspan="8" style="padding:0"><div style="padding:6px 10px;background:rgba(0,0,0,.02)"><table class="tbl" style="margin:0"><thead><tr><th>Day</th><th style="text-align:right">Retail drawn</th><th style="text-align:right">B2B drawn</th></tr></thead><tbody>' + d + "</tbody></table></div></td></tr>";
+        }
+        return head + detail;
+      }).join("");
+      return tabBar() +
+        '<div class="table-wrap"><table class="tbl"><thead><tr><th>Tanker</th><th>Supplier</th><th>Procured</th><th style="text-align:right">Litres</th><th style="text-align:right">Remaining</th><th style="text-align:right">Retail drawn</th><th style="text-align:right">B2B drawn</th><th></th></tr></thead><tbody>' +
+        (rows || '<tr><td colspan="8" class="muted-sm" style="text-align:center;padding:12px">No tankers yet.</td></tr>') + "</tbody></table></div><p class=\"muted-sm\" style=\"margin-top:6px\">Click a tanker to see its per-day retail/B2B draws.</p>";
+    }
+    function wireTabs() {
+      panel.querySelectorAll("[data-dtab]").forEach(function (b) { b.addEventListener("click", function () { st.tab = b.dataset.dtab; render(); }); });
+    }
+    function render() {
+      if (st.tab === "day") {
+        panel.innerHTML = tabBar() + '<p class="muted-sm">Loading orders…</p>';
+        wireTabs();
+        DOODLY_API.get("/api/admin/milk/drilldown?view=day&date=" + encodeURIComponent(st.day)).then(function (d) {
+          panel.innerHTML = dayView(d); wireTabs();
+          var di = panel.querySelector("#pc-dd-day"); if (di) di.addEventListener("change", function () { st.day = di.value || st.day; render(); });
+        }).catch(function (e) { panel.innerHTML = tabBar() + '<p class="dac-err">' + esc(e.message || "Couldn't load.") + "</p>"; wireTabs(); });
+      } else {
+        panel.innerHTML = tabBar() + '<p class="muted-sm">Loading tankers…</p>';
+        wireTabs();
+        var go = function () { panel.innerHTML = tankerView(); wireTabs(); wireTankerRows(); };
+        if (st.tankers) { go(); return; }
+        DOODLY_API.get("/api/admin/milk/drilldown?view=tankers").then(function (r) { st.tankers = r.tankers || []; go(); })
+          .catch(function (e) { panel.innerHTML = tabBar() + '<p class="dac-err">' + esc(e.message || "Couldn't load.") + "</p>"; wireTabs(); });
+      }
+    }
+    function wireTankerRows() {
+      panel.querySelectorAll("[data-tk]").forEach(function (row) {
+        row.addEventListener("click", function () {
+          var id = row.dataset.tk;
+          if (st.openTanker === id) { st.openTanker = null; render(); return; }
+          st.openTanker = id;
+          if (st.tankerDraws[id]) { render(); return; }
+          render();
+          DOODLY_API.get("/api/admin/milk/drilldown?view=tanker&tankerId=" + encodeURIComponent(id)).then(function (r) { st.tankerDraws[id] = r.draws || []; if (st.openTanker === id) render(); }).catch(function () {});
+        });
+      });
+    }
+    render();
   }
 
   // Book a B2B order (ANY product + unit) from the Profit Center — reuses the existing
