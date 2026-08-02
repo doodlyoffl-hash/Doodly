@@ -137,7 +137,7 @@ export interface TankerRecon {
   tanker: { id: string; code: string; tankerNo: string; supplier: string; procurementDate: string; quantityKg: number; fatPct: number; litres: number; consumedLitres: number; remainingLitres: number; costPerLitrePaise: number; milkCostPaise: number; fatCostPaise: number; transportPaise: number; totalCostPaise: number; status: string; closedAt: string | null };
   retail: { customers: number; deliveries: number; litres: number; revenuePaise: number; lines: ReconLine[] };
   b2b: { businesses: number; deliveries: number; litres: number; revenuePaise: number; lines: ReconLine[] };
-  usage: { openingLitres: number; retailLitres: number; b2bLitres: number; wastageLitres: number; carryForwardLitres: number; closingLitres: number };
+  usage: { openingLitres: number; retailLitres: number; b2bLitres: number; wastageLitres: number; carryForwardInLitres: number; carryForwardOutLitres: number; availableAfterCarryForward: number; carryForwardLitres: number; closingLitres: number };
   financial: { retailRevenuePaise: number; b2bRevenuePaise: number; totalRevenuePaise: number; procurementCostPaise: number; transportPaise: number; totalCostPaise: number; cogsPaise: number; grossProfitPaise: number; netProfitPaise: number };
   reconciled: boolean;
 }
@@ -209,11 +209,27 @@ export async function tankerReconciliation(tankerId: string): Promise<TankerReco
   const ledgerB2b = active.filter((d) => d.channel === "B2B").reduce((s, d) => s + (d._sum.litres ?? 0), 0);
   const reconciled = Math.abs(retailLitres - ledgerRetail) < 0.5 && Math.abs(b2bLitres - ledgerB2b) < 0.5;
 
+  // FIFO carry-forward: litres this tanker supplied for days BEFORE it arrived (= absorbed a
+  // prior pending allocation) — its consumption dated earlier than its own procurement day.
+  const procIso = istISO(t.procurementDate);
+  const carryForwardInLitres = r2([...retailLines, ...b2bLines].filter((l) => l.date < procIso).reduce((s, l) => s + l.litres, 0));
+  // excess this tanker couldn't cover, still waiting: it is the newest lot that drew on a
+  // currently-PENDING day (the day's overflow will land on the next tanker to arrive).
+  let cfOut = 0;
+  const pend = await db.milkPendingAllocation.findMany({ where: { status: "PENDING" }, select: { date: true, totalLitres: true } });
+  for (const pa of pend) {
+    const dd = await db.tankerConsumption.findMany({ where: { date: pa.date, channel: { in: ["RETAIL", "B2B"] } }, select: { tankerId: true, tanker: { select: { procurementDate: true } } } });
+    if (!dd.length) continue;
+    const newest = dd.reduce((a, b) => (b.tanker.procurementDate.getTime() > a.tanker.procurementDate.getTime() ? b : a));
+    if (newest.tankerId === tankerId) cfOut += pa.totalLitres;
+  }
+  const carryForwardOutLitres = r2(cfOut);
+
   return {
     tanker: { id: t.id, code: t.code, tankerNo: t.tankerNo, supplier: t.supplier, procurementDate: istISO(t.procurementDate), quantityKg: t.quantityKg, fatPct: t.fatPct, litres: t.litres, consumedLitres: r2(t.consumedLitres), remainingLitres: r2(t.remainingLitres), costPerLitrePaise: t.costPerLitrePaise, milkCostPaise: t.milkCostPaise, fatCostPaise: t.fatCostPaise, transportPaise: t.transportPaise, totalCostPaise: t.totalCostPaise, status: t.status, closedAt: t.closedAt ? t.closedAt.toISOString() : null },
     retail: { customers: new Set(retailLines.map((l) => l.refId).filter(Boolean)).size, deliveries: retailLines.length, litres: retailLitres, revenuePaise: retailRev, lines: retailLines },
     b2b: { businesses: new Set(b2bLines.map((l) => l.refId).filter(Boolean)).size, deliveries: b2bLines.length, litres: b2bLitres, revenuePaise: b2bRev, lines: b2bLines },
-    usage: { openingLitres: r2(t.litres), retailLitres, b2bLitres, wastageLitres: r2(wastageLitres), carryForwardLitres: t.status === "OPEN" ? r2(t.remainingLitres) : 0, closingLitres: r2(t.remainingLitres) },
+    usage: { openingLitres: r2(t.litres), retailLitres, b2bLitres, wastageLitres: r2(wastageLitres), carryForwardInLitres, carryForwardOutLitres, availableAfterCarryForward: r2(t.litres - carryForwardInLitres), carryForwardLitres: t.status === "OPEN" ? r2(t.remainingLitres) : 0, closingLitres: r2(t.remainingLitres) },
     financial: { retailRevenuePaise: retailRev, b2bRevenuePaise: b2bRev, totalRevenuePaise: totalRev, procurementCostPaise, transportPaise: t.transportPaise, totalCostPaise: t.totalCostPaise, cogsPaise, grossProfitPaise: totalRev - cogsPaise, netProfitPaise: totalRev - cogsPaise },
     reconciled,
   };

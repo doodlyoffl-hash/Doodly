@@ -72,6 +72,22 @@ export async function createTanker(input: TankerInput, actor?: { actorId?: strin
     action: "milk.tanker.create",
     target: `${created.code} · ${created.tankerNo} · ${cost.quantityKg}kg @ ${input.fatPct}% · ${cost.litres}L · ₹${(cost.totalCostPaise / 100).toFixed(2)}`,
   }).catch(() => {});
+
+  // FIFO carry-forward: this fresh tanker automatically absorbs any PENDING allocation (days
+  // whose sales exceeded stock, waiting for the next tanker). Re-settling each pending day
+  // redraws FIFO — drained older lots restore + re-drain, and THIS lot takes the overflow;
+  // settleDay then clears the pending row. Best-effort — never blocks the create.
+  try {
+    const { settleDay, listPendingAllocations } = await import("@/lib/milk/settle");
+    const { istISO } = await import("@/lib/delivery/stats");
+    const pending = await listPendingAllocations();
+    for (const p of pending) {
+      const dayIso = istISO(p.date);
+      const res = await settleDay(dayIso, { actorId: actor?.actorId, actorRole: actor?.actorRole ?? "system", quiet: true, clearedByTankerId: created.id });
+      const absorbed = Math.max(0, p.totalLitres - res.shortfallLitres);
+      if (absorbed > EPS) await audit({ userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system", action: "milk.carryforward.applied", target: `${created.code} absorbed ${Math.round(absorbed * 100) / 100}L pending from ${dayIso}${res.shortfallLitres > EPS ? ` · ${Math.round(res.shortfallLitres * 100) / 100}L still pending` : " · cleared"}` }).catch(() => {});
+    }
+  } catch { /* carry-forward absorb is best-effort — never blocks tanker creation */ }
   return created;
 }
 

@@ -26,10 +26,12 @@ export interface MilkCards {
   inventoryValuePaise: number;
   netMarginPct: number;
   expensePct: number;   // month expenses as % of month revenue
+  pendingAllocationLitres: number;   // FIFO carry-forward: excess sales waiting for the next tanker
+  pendingAllocationDays: number;
 }
 
 export async function milkCards(): Promise<MilkCards> {
-  const [day, month, inv] = await Promise.all([dailyPnl(), monthlyPnl(), getInventory()]);
+  const [day, month, inv, pending] = await Promise.all([dailyPnl(), monthlyPnl(), getInventory(), db.milkPendingAllocation.findMany({ where: { status: "PENDING" }, select: { totalLitres: true } })]);
   return {
     todayRevenuePaise: day.revenuePaise,
     todayNetProfitPaise: day.netProfitPaise,
@@ -42,6 +44,8 @@ export async function milkCards(): Promise<MilkCards> {
     inventoryValuePaise: inv.remainingValuePaise,
     netMarginPct: month.netMarginPct,
     expensePct: month.revenuePaise > 0 ? Math.round((month.expensesPaise / month.revenuePaise) * 1000) / 10 : 0,
+    pendingAllocationLitres: Math.round(pending.reduce((s, p) => s + p.totalLitres, 0) * 100) / 100,
+    pendingAllocationDays: pending.length,
   };
 }
 

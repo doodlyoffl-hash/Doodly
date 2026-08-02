@@ -1849,6 +1849,27 @@ model TankerClosingReport {
   @@index([closedAt])
 }
 
+// FIFO carry-forward "Pending Allocation" — when a day's sales EXCEED all open tanker
+// stock, the un-covered litres are recorded here (one row per oversold IST day) and wait
+// for the next tanker. Creating a tanker re-settles the pending days so the new lot absorbs
+// the overflow (settleDay reverse+redo), then the row is CLEARED. status: PENDING | CLEARED.
+model MilkPendingAllocation {
+  id               String    @id @default(cuid())
+  date             DateTime  @unique                 // IST-day midnight the excess belongs to
+  retailLitres     Float     @default(0)             // uncovered retail litres
+  b2bLitres        Float     @default(0)             // uncovered B2B litres
+  totalLitres      Float                             // the excess (retail + b2b)
+  soldRetailLitres Float     @default(0)             // total retail sold that day (context)
+  soldB2bLitres    Float     @default(0)
+  status           String    @default("PENDING")     // PENDING | CLEARED
+  reason           String?
+  clearedAt        DateTime?
+  clearedByTankerId String?                          // the tanker whose arrival absorbed it
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now()) @updatedAt
+  @@index([status, date])
+}
+
 // ----------------------------------------------------------------
 // DELIVERY LOGISTICS
 // ----------------------------------------------------------------

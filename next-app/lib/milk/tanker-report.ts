@@ -23,11 +23,13 @@ async function fromFrozen(row: NonNullable<FrozenRow>): Promise<TankerRecon | nu
   const IST = 5.5 * 3600e3, istISO = (d: Date) => new Date(d.getTime() + IST).toISOString().slice(0, 10);
   const lines = (row.linesJson as { retail?: ReconLine[]; b2b?: ReconLine[] }) ?? {};
   const retailLines = lines.retail ?? [], b2bLines = lines.b2b ?? [];
+  const procIso = istISO(t.procurementDate);
+  const cfIn = Math.round([...retailLines, ...b2bLines].filter((l) => l.date < procIso).reduce((s, l) => s + l.litres, 0) * 100) / 100;
   return {
     tanker: { id: t.id, code: t.code, tankerNo: t.tankerNo, supplier: t.supplier, procurementDate: istISO(t.procurementDate), quantityKg: t.quantityKg, fatPct: t.fatPct, litres: t.litres, consumedLitres: Math.round(t.consumedLitres * 100) / 100, remainingLitres: Math.round(t.remainingLitres * 100) / 100, costPerLitrePaise: t.costPerLitrePaise, milkCostPaise: t.milkCostPaise, fatCostPaise: t.fatCostPaise, transportPaise: t.transportPaise, totalCostPaise: t.totalCostPaise, status: t.status, closedAt: t.closedAt ? t.closedAt.toISOString() : row.closedAt.toISOString() },
     retail: { customers: row.retailCustomers, deliveries: row.retailDeliveries, litres: row.retailLitres, revenuePaise: row.retailRevenuePaise, lines: retailLines },
     b2b: { businesses: row.b2bBusinesses, deliveries: row.b2bDeliveries, litres: row.b2bLitres, revenuePaise: row.b2bRevenuePaise, lines: b2bLines },
-    usage: { openingLitres: row.openingLitres, retailLitres: row.retailLitres, b2bLitres: row.b2bLitres, wastageLitres: row.wastageLitres, carryForwardLitres: row.carryForwardLitres, closingLitres: row.closingLitres },
+    usage: { openingLitres: row.openingLitres, retailLitres: row.retailLitres, b2bLitres: row.b2bLitres, wastageLitres: row.wastageLitres, carryForwardInLitres: cfIn, carryForwardOutLitres: 0, availableAfterCarryForward: Math.round((t.litres - cfIn) * 100) / 100, carryForwardLitres: row.carryForwardLitres, closingLitres: row.closingLitres },
     financial: { retailRevenuePaise: row.retailRevenuePaise, b2bRevenuePaise: row.b2bRevenuePaise, totalRevenuePaise: row.totalRevenuePaise, procurementCostPaise: row.procurementCostPaise, transportPaise: row.transportPaise, totalCostPaise: row.totalCostPaise, cogsPaise: row.cogsPaise, grossProfitPaise: row.grossProfitPaise, netProfitPaise: row.netProfitPaise },
     reconciled: true,
   };
@@ -69,7 +71,7 @@ export function buildTankerReportTable(recon: TankerRecon): MilkReport {
   const rows = [...recon.retail.lines, ...recon.b2b.lines].map(line);
   const subtitle =
     `${t.tankerNo} · ${t.supplier} · procured ${t.procurementDate} · ${t.quantityKg} kg @ ${t.fatPct}% → ${nL(t.litres)} @ ${rupp(t.costPerLitrePaise)}/L (procurement ${rupp(f.procurementCostPaise)} + transport ${rupp(f.transportPaise)} = ${rupp(f.totalCostPaise)}) · ` +
-    `USAGE opening ${nL(u.openingLitres)} − retail ${nL(u.retailLitres)} − B2B ${nL(u.b2bLitres)}${u.wastageLitres ? " − wastage " + nL(u.wastageLitres) : ""} = closing ${nL(u.closingLitres)} · ` +
+    `USAGE opening ${nL(u.openingLitres)}${u.carryForwardInLitres ? " + carry-fwd in " + nL(u.carryForwardInLitres) : ""} − retail ${nL(u.retailLitres)} − B2B ${nL(u.b2bLitres)}${u.wastageLitres ? " − wastage " + nL(u.wastageLitres) : ""} = closing ${nL(u.closingLitres)} · ` +
     `RETAIL ${recon.retail.customers} cust / ${recon.retail.deliveries} del ${rup(f.retailRevenuePaise)} · B2B ${recon.b2b.businesses} biz / ${recon.b2b.deliveries} del ${rup(f.b2bRevenuePaise)} · ` +
     `REVENUE ${rup(f.totalRevenuePaise)} − COGS ${rup(f.cogsPaise)} = GROSS ${rup(f.grossProfitPaise)}${recon.reconciled ? " · reconciled ✓" : " · ⚠ not reconciled"} · ${t.status}`;
   return {

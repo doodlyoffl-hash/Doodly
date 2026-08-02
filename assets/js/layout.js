@@ -6718,7 +6718,8 @@
     try {
       var r = await DOODLY_API.get("/api/admin/milk/tankers");
       var inv = await DOODLY_API.get("/api/admin/milk/inventory");
-      renderMilkTankers(host, r, inv);
+      var pending = null; try { pending = await DOODLY_API.get("/api/admin/milk/pending"); } catch (pe) { pending = null; }
+      renderMilkTankers(host, r, inv, pending);
     } catch (e) {
       host.innerHTML = e.code === "forbidden" ? '<div class="panel panel-pad muted-sm">Your role can\'t view procurement. Ask a Super Admin for the <b>Procurement → view</b> permission.</div>'
         : '<div class="panel panel-pad muted-sm">Couldn\'t load tankers — ' + esc(e.message || e.code || "error") + "</div>";
@@ -6727,8 +6728,16 @@
   window.DOODLY_ADMIN.wireMilkTankersBackend = wireMilkTankersBackend;
 
   var _mkFilter = { q: "", status: "" };
-  function renderMilkTankers(host, r, inv) {
+  function renderMilkTankers(host, r, inv, pending) {
     var s = r.stats || {}, tankers = r.tankers || [], lots = (inv && inv.openLots) || [];
+    var pendRows = (pending && pending.pending) || [], pendTotal = (pending && pending.totalLitres) || 0;
+    var pendPanel = pendRows.length
+      ? '<div class="panel" style="margin-bottom:14px;border:1px solid rgba(230,150,20,.45);background:rgba(230,150,20,.06)"><div class="panel-head"><h3>⏳ Pending allocation — ' + pendRows.length + ' day' + (pendRows.length > 1 ? "s" : "") + ' awaiting the next tanker (' + (Math.round(pendTotal * 100) / 100) + ' L)</h3></div>' +
+          '<div class="panel-pad"><p class="muted-sm" style="margin:0 0 8px">These days sold more milk than the open tanker held. The excess is booked as pending COGS and will be <b>auto-absorbed by the next tanker</b> you add (FIFO carry-forward) — no manual re-settle needed.</p>' +
+          '<table class="tbl"><thead><tr><th>Sales day (IST)</th><th style="text-align:right">Retail short</th><th style="text-align:right">B2B short</th><th style="text-align:right">Total pending</th><th>Reason</th></tr></thead><tbody>' +
+          pendRows.map(function (p) { return "<tr><td><b>" + esc(milkDate(p.date)) + "</b></td><td style='text-align:right'>" + (Math.round(p.retailLitres * 100) / 100) + " L</td><td style='text-align:right'>" + (Math.round(p.b2bLitres * 100) / 100) + " L</td><td style='text-align:right'><b>" + (Math.round(p.totalLitres * 100) / 100) + " L</b></td><td class='muted-sm'>" + esc(p.reason || "Sales exceeded open tanker stock") + "</td></tr>"; }).join("") +
+          "</tbody></table></div></div>"
+      : "";
     var badge = function (st) { return '<span class="badge ' + (st === "OPEN" ? "green" : "grey") + '">' + esc(st) + "</span>"; };
     var isSuper = false; try { isSuper = window.DOODLY_RBAC && DOODLY_RBAC.activeRole() === "super_admin"; } catch (e) {}
     var tankerRow = function (t) {
@@ -6751,6 +6760,7 @@
         milkStat(milkRs(s.inventoryValuePaise), "Stock value") +
         milkStat((s.openTankers || 0) + " / " + (s.closedTankers || 0), "Open / Closed") +
       "</div>" +
+      pendPanel +
       // carry-forward / FIFO inventory
       '<div class="panel" style="margin-bottom:14px"><div class="panel-head"><h3>🥛 Inventory & carry-forward (FIFO — oldest first)</h3>' +
         '<div style="display:flex;gap:6px;align-items:center"><input class="input" id="mk-settle-date" type="date" value="' + istTodayStr() + '" style="max-width:150px"><button class="btn btn-ghost sm" id="mk-settle">Settle a day\'s sales</button></div></div>' +
@@ -6789,7 +6799,7 @@
       DOODLY_API.post("/api/admin/milk/settle", { date: date })
         .then(function (x) {
           var msg = date + ": " + (Math.round(x.totalLitres * 10) / 10) + " L drawn · COGS " + milkRs(x.cogsPaise);
-          if (x.shortfallLitres > 0.01) msg += " · ⚠ SHORT " + (Math.round(x.shortfallLitres * 10) / 10) + " L (oversold vs stock)";
+          if (x.shortfallLitres > 0.01) msg += " · ⏳ " + (Math.round(x.shortfallLitres * 10) / 10) + " L pending — will auto-absorb on the next tanker";
           dacToast(msg); wireMilkTankersBackend();
         })
         .catch(function (e) { sb.disabled = false; dacToast(e.code === "forbidden" ? "Your role can't settle (needs Procurement → edit)." : (e.message || "Settle failed.")); });
@@ -6952,14 +6962,18 @@
             '<div class="panel" style="margin:0"><div class="panel-pad"><div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--leaf-700,#178a52);margin-bottom:3px">Procurement</div>' +
               seg("Tanker", esc(t.tankerNo)) + seg("Supplier", esc(t.supplier)) + seg("Procured", esc(t.procurementDate)) + seg("Quantity", t.quantityKg + " kg @ " + t.fatPct + "%") + seg("Litres", nL(t.litres)) + seg("Cost / L", milkRs(t.costPerLitrePaise)) + seg("Procurement + transport", milkRs(f.procurementCostPaise) + " + " + milkRs(f.transportPaise)) + seg("Total cost", milkRs(t.totalCostPaise), true) + "</div></div>" +
             '<div class="panel" style="margin:0"><div class="panel-pad"><div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--leaf-700,#178a52);margin-bottom:3px">Milk Usage</div>' +
-              seg("Opening", nL(u.openingLitres)) + seg("− Retail", nL(u.retailLitres)) + seg("− B2B", nL(u.b2bLitres)) + (u.wastageLitres ? seg("− Wastage", nL(u.wastageLitres)) : "") + seg("Carry-forward", nL(u.carryForwardLitres)) + seg("= Closing balance", nL(u.closingLitres), true) + "</div></div>" +
+              seg("Opening", nL(u.openingLitres)) + seg("− Retail", nL(u.retailLitres)) + seg("− B2B", nL(u.b2bLitres)) + (u.wastageLitres ? seg("− Wastage", nL(u.wastageLitres)) : "") + seg("= Closing balance", nL(u.closingLitres), true) +
+              ((u.carryForwardInLitres > 0.01 || u.carryForwardOutLitres > 0.01) ? '<div style="border-top:1px dashed rgba(0,0,0,.12);margin-top:6px;padding-top:4px">' +
+                (u.carryForwardInLitres > 0.01 ? seg("↩ Carry-forward received (earlier oversold days)", nL(u.carryForwardInLitres)) : "") +
+                (u.carryForwardOutLitres > 0.01 ? seg("⏳ Carried forward to next tanker (pending)", nL(u.carryForwardOutLitres)) : "") + "</div>" : "") +
+              "</div></div>" +
           "</div>" +
           '<div class="panel" style="margin-top:12px"><div class="panel-pad"><div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:#8a5cf6;margin-bottom:3px">Financial Summary</div>' +
             '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 16px">' +
               seg("Retail revenue", milkRs(f.retailRevenuePaise)) + seg("B2B revenue", milkRs(f.b2bRevenuePaise)) + seg("Total revenue", milkRs(f.totalRevenuePaise), true) + seg("− COGS (milk sold)", milkRs(f.cogsPaise)) +
             "</div>" +
             '<div style="display:flex;justify-content:space-between;padding:6px 0;border-top:2px solid ' + (f.grossProfitPaise >= 0 ? "var(--leaf-600,#1FAE66)" : "#c0392b") + ';margin-top:6px;font-weight:800;font-size:15px;color:' + (f.grossProfitPaise >= 0 ? "var(--leaf-600,#1FAE66)" : "#c0392b") + '"><span>Gross profit</span><span>' + milkRs(f.grossProfitPaise) + "</span></div></div></div>" +
-          '<div class="muted-sm" style="margin-top:10px">🚚 Timeline: received ' + esc(t.procurementDate) + " → " + R.retail.deliveries + " retail + " + R.b2b.deliveries + " B2B deliveries" + (u.carryForwardLitres > 0.01 ? " → carry-forward " + nL(u.carryForwardLitres) : "") + " → " + (t.status === "CLOSED" ? "closed " + (t.closedAt ? esc(t.closedAt.slice(0, 10)) : "") : "open") + "</div>" +
+          '<div class="muted-sm" style="margin-top:10px">🚚 Timeline: received ' + esc(t.procurementDate) + " → " + R.retail.deliveries + " retail + " + R.b2b.deliveries + " B2B deliveries" + (u.carryForwardInLitres > 0.01 ? " · ↩ absorbed " + nL(u.carryForwardInLitres) + " from earlier oversold days" : "") + (u.carryForwardOutLitres > 0.01 ? " · ⏳ " + nL(u.carryForwardOutLitres) + " carried to next tanker" : "") + (u.carryForwardLitres > 0.01 ? " → carry-forward " + nL(u.carryForwardLitres) : "") + " → " + (t.status === "CLOSED" ? "closed " + (t.closedAt ? esc(t.closedAt.slice(0, 10)) : "") : "open") + "</div>" +
           '<input class="input" id="tr-q" placeholder="Search customer / business / order / invoice / product / exec" value="' + esc(q) + '" style="margin-top:12px">' +
           '<div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--leaf-700,#178a52);margin:12px 0 4px">Retail Sales — ' + R.retail.customers + " customers · " + R.retail.deliveries + " deliveries · " + nL(R.retail.litres) + " · " + milkRs(R.retail.revenuePaise) + "</div>" +
           '<div class="table-wrap" style="max-height:200px;overflow:auto"><table class="tbl"><thead><tr><th>Date</th><th>Customer</th><th>Product</th><th style="text-align:right">Litres</th><th style="text-align:right">Revenue</th><th>Exec</th></tr></thead><tbody id="tr-retail">' + retailBody() + "</tbody></table></div>" +

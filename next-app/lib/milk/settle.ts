@@ -19,6 +19,8 @@ import { getMilkConfig } from "@/lib/milk/config";
 import { isMilkSlug, milkDrawLitres } from "@/lib/b2b/units";
 import { getSolidsCogsConfig } from "@/lib/b2b/solids-config";
 
+const EPS = 1e-6;
+const r2 = (n: number) => Math.round((n || 0) * 100) / 100;
 const normLabel = (s?: string | null) => (s ?? "").toLowerCase().replace(/\s+/g, "");
 function parseMl(label?: string | null): number | null {
   const s = normLabel(label);
@@ -107,7 +109,7 @@ export interface DaySettlement {
  *  litres, and consume them FIFO. Atomic. Returns the COGS + any shortfall.
  *  `quiet` suppresses the audit row — used by the per-delivery auto-settle
  *  (which fires on every completion) so it doesn't flood the audit log. */
-export async function settleDay(dateIso: string, actor?: { actorId?: string; actorRole?: string; quiet?: boolean }): Promise<DaySettlement> {
+export async function settleDay(dateIso: string, actor?: { actorId?: string; actorRole?: string; quiet?: boolean; clearedByTankerId?: string }): Promise<DaySettlement> {
   const { start, end, iso } = istDayWindow(dateIso);
   const [retailLitres, b2bLitres] = await Promise.all([retailLitresForDay(start, end), b2bLitresForDay(start, end)]);
   const refRetail = `settle:${iso}:RETAIL`;
@@ -147,5 +149,31 @@ export async function settleDay(dateIso: string, actor?: { actorId?: string; act
     action: "milk.settle",
     target: `${iso} · retail ${retailLitres.toFixed(1)}L · b2b ${b2bLitres.toFixed(1)}L · COGS ₹${(settlement.cogsPaise / 100).toFixed(2)}${settlement.shortfallLitres > 0.001 ? ` · SHORT ${settlement.shortfallLitres.toFixed(1)}L` : ""}`,
   }).catch(() => {});
+
+  // FIFO carry-forward: persist / clear this day's Pending Allocation (excess sales over open
+  // stock). Best-effort + separate from the settle tx — the ledger already committed. A later
+  // tanker's arrival re-settles the day (createTanker); once stock covers it, the row clears.
+  try {
+    const shortRetail = result.retail.shortfallLitres, shortB2b = result.b2b.shortfallLitres, short = shortRetail + shortB2b;
+    if (short > EPS) {
+      await db.milkPendingAllocation.upsert({
+        where: { date: day },
+        create: { date: day, retailLitres: r2(shortRetail), b2bLitres: r2(shortB2b), totalLitres: r2(short), soldRetailLitres: r2(retailLitres), soldB2bLitres: r2(b2bLitres), status: "PENDING", reason: "Sales exceeded open tanker stock" },
+        update: { retailLitres: r2(shortRetail), b2bLitres: r2(shortB2b), totalLitres: r2(short), soldRetailLitres: r2(retailLitres), soldB2bLitres: r2(b2bLitres), status: "PENDING", clearedAt: null, clearedByTankerId: null },
+      });
+      if (!actor?.quiet) await audit({ userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system", action: "milk.pending.created", target: `${iso} · pending ${r2(short)}L (retail ${r2(shortRetail)} + b2b ${r2(shortB2b)}) — waiting for next tanker` }).catch(() => {});
+    } else {
+      const existing = await db.milkPendingAllocation.findUnique({ where: { date: day }, select: { status: true } });
+      if (existing && existing.status === "PENDING") {
+        await db.milkPendingAllocation.update({ where: { date: day }, data: { status: "CLEARED", clearedAt: new Date(), clearedByTankerId: actor?.clearedByTankerId ?? null } });
+        await audit({ userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system", action: "milk.pending.cleared", target: `${iso} · pending fully absorbed${actor?.clearedByTankerId ? ` by tanker ${actor.clearedByTankerId.slice(-6)}` : ""}` }).catch(() => {});
+      }
+    }
+  } catch { /* pending-allocation sync is best-effort */ }
   return settlement;
+}
+
+/** Days whose sales exceeded open stock and are waiting for the next tanker (oldest first). */
+export async function listPendingAllocations() {
+  return db.milkPendingAllocation.findMany({ where: { status: "PENDING" }, orderBy: { date: "asc" } });
 }
