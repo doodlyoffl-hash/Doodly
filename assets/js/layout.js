@@ -7069,7 +7069,7 @@
 
   function renderPCDrill(host, initialDay) {
     var panel = host.querySelector("#pc-drill-body"); if (!panel) return;
-    var st = { tab: "day", from: initialDay, to: initialDay, tankers: null, openTanker: null, tankerDraws: {} };
+    var st = { tab: "day", from: initialDay, to: initialDay, basis: "scheduled", tankers: null, openTanker: null, tankerDraws: {} };
     var tankerLine = function (r) {
       var b2b = r.b2bLitres > 0 || r.b2bCostPaise > 0;
       return '<b>' + esc(r.code) + '</b> <span class="muted-sm">' + esc(r.supplier || "") + " · " + esc(r.procurementDate) + "</span> · " +
@@ -7097,13 +7097,17 @@
         return "<tr><td>" + statusCell(o) + "</td><td class='muted-sm'>" + esc(o.code) + (range ? " · " + esc(o.when) : "") + "</td><td>" + esc(o.business) + "</td><td class='muted-sm'>" + esc(o.items || "—") + '</td><td style="text-align:right">' + milkRs(o.revenuePaise) + (o.delivered ? "" : " <span class='muted-sm'>(booked)</span>") + "</td></tr>";
       }).join("");
       var tBody = tankers.map(function (t) { return '<div style="padding:4px 0;border-top:1px solid rgba(0,0,0,.06)">' + tankerLine(t) + "</div>"; }).join("");
+      var sched = st.basis !== "delivered";
       return tabBar() +
         '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:6px">' +
           '<label class="dac-f" style="max-width:160px"><span>From (IST)</span><input class="input" id="pc-dd-from" type="date" value="' + esc(st.from) + '"></label>' +
           '<label class="dac-f" style="max-width:160px"><span>To (IST)</span><input class="input" id="pc-dd-to" type="date" value="' + esc(st.to) + '"></label>' +
           '<button class="btn btn-ghost sm" id="pc-dd-today">Today</button>' +
+          '<div style="display:flex;gap:4px;margin-left:auto"><span class="muted-sm" style="align-self:center">Date by:</span>' +
+            '<button class="btn ' + (sched ? "btn-primary" : "btn-ghost") + ' sm" data-basis="scheduled">Scheduled</button>' +
+            '<button class="btn ' + (!sched ? "btn-primary" : "btn-ghost") + ' sm" data-basis="delivered">Delivered</button></div>' +
         "</div>" +
-        '<div class="muted-sm" style="margin-bottom:10px">🕒 Dates are <b>IST</b> — each day runs IST midnight→midnight. Delivered orders appear on their <b>actual delivery day</b> (not the scheduled date).</div>' +
+        '<div class="muted-sm" style="margin-bottom:10px">🕒 Dates are <b>IST</b> (each day = IST midnight→midnight). Showing orders by their <b>' + (sched ? "scheduled delivery date" : "actual delivery day") + "</b>.</div>" +
         '<div class="muted-sm" style="margin-bottom:6px"><b>' + (d.deliveredCount || 0) + "</b> delivered · <b>" + (d.scheduledCount || 0) + "</b> scheduled · delivered B2B revenue " + milkRs(d.deliveredRevenuePaise) + "</div>" +
         '<div class="table-wrap"><table class="tbl"><thead><tr><th>Status</th><th>Order</th><th>Business</th><th>Items</th><th style="text-align:right">Revenue (net)</th></tr></thead><tbody>' +
         (oBody || '<tr><td colspan="5" class="muted-sm" style="text-align:center;padding:12px">No B2B orders in this range.</td></tr>') + "</tbody></table></div>" +
@@ -7115,6 +7119,7 @@
       if (f) f.addEventListener("change", function () { st.from = f.value || st.from; if (st.to < st.from) st.to = st.from; render(); });
       if (t) t.addEventListener("change", function () { st.to = t.value || st.to; if (st.from > st.to) st.from = st.to; render(); });
       if (td) td.addEventListener("click", function () { st.from = istTodayStr(); st.to = istTodayStr(); render(); });
+      panel.querySelectorAll("[data-basis]").forEach(function (btn) { btn.addEventListener("click", function () { if (st.basis !== btn.dataset.basis) { st.basis = btn.dataset.basis; render(); } }); });
       panel.querySelectorAll(".pc-ostat").forEach(function (sel) {
         sel.addEventListener("change", function () {
           var id = sel.dataset.oid, cur = sel.dataset.cur, to = sel.value;
@@ -7154,7 +7159,7 @@
       if (st.tab === "day") {
         panel.innerHTML = tabBar() + '<p class="muted-sm">Loading orders…</p>';
         wireTabs();
-        DOODLY_API.get("/api/admin/milk/drilldown?view=day&from=" + encodeURIComponent(st.from) + "&to=" + encodeURIComponent(st.to)).then(function (d) {
+        DOODLY_API.get("/api/admin/milk/drilldown?view=day&from=" + encodeURIComponent(st.from) + "&to=" + encodeURIComponent(st.to) + "&basis=" + st.basis).then(function (d) {
           panel.innerHTML = dayView(d); wireTabs(); wireDayControls();
         }).catch(function (e) { panel.innerHTML = tabBar() + '<p class="dac-err">' + esc(e.message || "Couldn't load.") + "</p>"; wireTabs(); });
       } else {

@@ -18,30 +18,63 @@ const istISO = (d: Date) => new Date(d.getTime() + IST).toISOString().slice(0, 1
 const net = (o: { totalPaise: number; taxPaise: number }) => Math.max(0, o.totalPaise - o.taxPaise);
 const itemsOf = (items: { productName: string; quantity: number; unit: string }[]) => items.map((i) => `${i.quantity} ${i.unit} ${i.productName}`).join(", ");
 
+export type DrilldownBasis = "scheduled" | "delivered";
+
 /** For an IST day (or a from→to range): the B2B orders relevant to it + the tanker lots
- *  that fed that period. Pass a single date for one day, or from+to to browse history. */
-export async function dayDrilldown(fromIso?: string | null, toIso?: string | null) {
+ *  that fed that period. Pass a single date for one day, or from+to to browse history.
+ *  `basis` picks how orders are dated:
+ *   • "scheduled" (default) — by the order's planned deliveryDate ("what's on the books")
+ *   • "delivered"           — delivered orders by their actual deliveredAt + still-pending
+ *                             orders by deliveryDate ("what was actually delivered"). */
+export async function dayDrilldown(fromIso?: string | null, toIso?: string | null, basis: DrilldownBasis = "scheduled") {
   const a = istDayWindow(fromIso);
   const b = toIso ? istDayWindow(toIso) : a;
   // tolerate a reversed range
   let start = a.start, end = b.end, from = a.iso, to = b.iso;
   if (from > to) { start = b.start; end = a.end; from = b.iso; to = a.iso; }
-  const [delivered, scheduled, draws] = await Promise.all([
-    // recognised (delivered) that day — frozen net revenue drives the P&L
-    db.businessOrder.findMany({
-      where: { revenuePaise: { not: null }, deliveredAt: { gte: start, lt: end } },
-      select: { id: true, code: true, status: true, revenuePaise: true, totalPaise: true, taxPaise: true, deliveredAt: true, business: { select: { code: true, name: true } }, items: { select: { productName: true, quantity: true, unit: true } } },
-      orderBy: { deliveredAt: "desc" }, take: 500,
-    }),
-    // scheduled for that day but not yet delivered (books nothing until delivered) — context
-    db.businessOrder.findMany({
-      where: { revenuePaise: null, status: { not: "CANCELLED" }, deliveryDate: { gte: start, lt: end } },
-      select: { id: true, code: true, status: true, totalPaise: true, taxPaise: true, deliveryDate: true, business: { select: { code: true, name: true } }, items: { select: { productName: true, quantity: true, unit: true } } },
-      orderBy: { createdAt: "desc" }, take: 500,
-    }),
-    db.tankerConsumption.groupBy({ by: ["tankerId", "channel"], where: { date: { gte: start, lt: end } }, _sum: { litres: true, costPaise: true } }),
-  ]);
 
+  let orders: { id: string; code: string; status: string; delivered: boolean; when: string; business: string; businessCode: string; items: string; revenuePaise: number }[];
+  let deliveredCount: number, scheduledCount: number, deliveredRevenuePaise: number;
+
+  if (basis === "scheduled") {
+    // ALL non-cancelled orders whose PLANNED deliveryDate falls in the window, whatever their
+    // current status. Frozen revenue if already delivered, else the net booked value.
+    const rows = await db.businessOrder.findMany({
+      where: { status: { not: "CANCELLED" }, deliveryDate: { gte: start, lt: end } },
+      select: { id: true, code: true, status: true, revenuePaise: true, totalPaise: true, taxPaise: true, deliveryDate: true, business: { select: { code: true, name: true } }, items: { select: { productName: true, quantity: true, unit: true } } },
+      orderBy: { deliveryDate: "asc" }, take: 1000,
+    });
+    orders = rows.map((o) => ({ id: o.id, code: o.code, status: o.status, delivered: o.revenuePaise != null, when: istISO(o.deliveryDate), business: o.business?.name ?? "—", businessCode: o.business?.code ?? "", items: itemsOf(o.items), revenuePaise: o.revenuePaise != null ? o.revenuePaise : net(o) }));
+    deliveredCount = orders.filter((o) => o.delivered).length;
+    scheduledCount = orders.length - deliveredCount;
+    deliveredRevenuePaise = rows.reduce((s, o) => s + (o.revenuePaise ?? 0), 0);
+  } else {
+    const [delivered, scheduled] = await Promise.all([
+      // recognised (delivered) that day — frozen net revenue drives the P&L
+      db.businessOrder.findMany({
+        where: { revenuePaise: { not: null }, deliveredAt: { gte: start, lt: end } },
+        select: { id: true, code: true, status: true, revenuePaise: true, totalPaise: true, taxPaise: true, deliveredAt: true, business: { select: { code: true, name: true } }, items: { select: { productName: true, quantity: true, unit: true } } },
+        orderBy: { deliveredAt: "desc" }, take: 500,
+      }),
+      // scheduled for that day but not yet delivered (books nothing until delivered) — context
+      db.businessOrder.findMany({
+        where: { revenuePaise: null, status: { not: "CANCELLED" }, deliveryDate: { gte: start, lt: end } },
+        select: { id: true, code: true, status: true, totalPaise: true, taxPaise: true, deliveryDate: true, business: { select: { code: true, name: true } }, items: { select: { productName: true, quantity: true, unit: true } } },
+        orderBy: { createdAt: "desc" }, take: 500,
+      }),
+    ]);
+    orders = [
+      ...delivered.map((o) => ({ id: o.id, code: o.code, status: o.status, delivered: true, when: istISO(o.deliveredAt as Date), business: o.business?.name ?? "—", businessCode: o.business?.code ?? "", items: itemsOf(o.items), revenuePaise: o.revenuePaise ?? 0 })),
+      ...scheduled.map((o) => ({ id: o.id, code: o.code, status: o.status, delivered: false, when: istISO(o.deliveryDate), business: o.business?.name ?? "—", businessCode: o.business?.code ?? "", items: itemsOf(o.items), revenuePaise: net(o) })),
+    ];
+    deliveredCount = delivered.length;
+    scheduledCount = scheduled.length;
+    deliveredRevenuePaise = delivered.reduce((s, o) => s + (o.revenuePaise ?? 0), 0);
+  }
+
+  // tanker draws for the calendar days (FIFO ledger, keyed on the settle/delivery day) — same
+  // for either basis: it is the milk physically drawn on these dates.
+  const draws = await db.tankerConsumption.groupBy({ by: ["tankerId", "channel"], where: { date: { gte: start, lt: end } }, _sum: { litres: true, costPaise: true } });
   const tankerIds = [...new Set(draws.map((d) => d.tankerId))];
   const tankers = tankerIds.length ? await db.milkTanker.findMany({ where: { id: { in: tankerIds } }, select: { id: true, code: true, supplier: true, procurementDate: true, costPerLitrePaise: true } }) : [];
   const tById = new Map(tankers.map((t) => [t.id, t]));
@@ -54,16 +87,11 @@ export async function dayDrilldown(fromIso?: string | null, toIso?: string | nul
     tMap.set(d.tankerId, r);
   }
 
-  const orders = [
-    ...delivered.map((o) => ({ id: o.id, code: o.code, status: o.status, delivered: true, when: istISO(o.deliveredAt as Date), business: o.business?.name ?? "—", businessCode: o.business?.code ?? "", items: itemsOf(o.items), revenuePaise: o.revenuePaise ?? 0 })),
-    ...scheduled.map((o) => ({ id: o.id, code: o.code, status: o.status, delivered: false, when: istISO(o.deliveryDate), business: o.business?.name ?? "—", businessCode: o.business?.code ?? "", items: itemsOf(o.items), revenuePaise: net(o) })),
-  ];
-  const deliveredRevenuePaise = delivered.reduce((s, o) => s + (o.revenuePaise ?? 0), 0);
   return {
-    from, to, single: from === to,
+    from, to, single: from === to, basis,
     orders,
-    deliveredCount: delivered.length,
-    scheduledCount: scheduled.length,
+    deliveredCount,
+    scheduledCount,
     deliveredRevenuePaise,
     tankers: [...tMap.values()].sort((x, y) => (x.procurementDate < y.procurementDate ? -1 : 1)),
   };

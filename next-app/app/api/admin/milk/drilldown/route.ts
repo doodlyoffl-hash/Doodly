@@ -22,5 +22,6 @@ export const GET = route("admin.milk.drilldown", async (req: NextRequest) => {
   }
   const from = sp.get("from") ?? sp.get("date") ?? undefined;
   const to = sp.get("to") ?? sp.get("date") ?? from;
-  return ok(await dayDrilldown(from, to));
+  const basis = sp.get("basis") === "delivered" ? "delivered" : "scheduled";
+  return ok(await dayDrilldown(from, to, basis));
 });
