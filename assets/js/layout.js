@@ -7050,9 +7050,26 @@
   //              supplied THAT day's milk (retail vs B2B). Ties a day's orders to its tankers.
   //  • By tanker — every tanker with its retail/B2B draw + remaining; expand → per-day history.
   // NB milk draws FIFO per DAY (not per order), so the order↔tanker link is the shared day.
+  var B2B_STATUS_CHAIN = ["PENDING", "CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY", "DELIVERED", "COMPLETED"];
+  var B2B_STATUS_LABEL = { PENDING: "Pending", CONFIRMED: "Confirmed", PREPARING: "Preparing", OUT_FOR_DELIVERY: "Out for delivery", DELIVERED: "Delivered", COMPLETED: "Completed", CANCELLED: "Cancelled" };
+  // Advance a B2B order from `from` to `to`, stepping through the workflow (each transition is
+  // validated server-side). Cancel routes to the cancel action (works from any state). `to`
+  // = DELIVERED is where revenue is recognised + COGS drawn. Calls done() when finished.
+  function advanceB2BOrder(id, from, to, done, onErr) {
+    var url = "/api/b2b/orders/" + id;
+    if (to === "CANCELLED") { DOODLY_API.patch(url, { action: "cancel" }).then(function () { done(); }).catch(function (e) { onErr(e, "CANCELLED"); }); return; }
+    var fi = B2B_STATUS_CHAIN.indexOf(from), ti = B2B_STATUS_CHAIN.indexOf(to);
+    if (ti <= fi) { done(); return; }
+    var steps = B2B_STATUS_CHAIN.slice(fi + 1, ti + 1);
+    (function nx(i) {
+      if (i >= steps.length) { done(); return; }
+      DOODLY_API.patch(url, { action: "status", status: steps[i] }).then(function () { nx(i + 1); }).catch(function (e) { onErr(e, steps[i]); });
+    })(0);
+  }
+
   function renderPCDrill(host, initialDay) {
     var panel = host.querySelector("#pc-drill-body"); if (!panel) return;
-    var st = { tab: "day", day: initialDay, tankers: null, openTanker: null, tankerDraws: {} };
+    var st = { tab: "day", from: initialDay, to: initialDay, tankers: null, openTanker: null, tankerDraws: {} };
     var tankerLine = function (r) {
       var b2b = r.b2bLitres > 0 || r.b2bCostPaise > 0;
       return '<b>' + esc(r.code) + '</b> <span class="muted-sm">' + esc(r.supplier || "") + " · " + esc(r.procurementDate) + "</span> · " +
@@ -7064,20 +7081,52 @@
         '<button class="btn ' + (st.tab === "day" ? "btn-primary" : "btn-ghost") + ' sm" data-dtab="day">By day</button>' +
         '<button class="btn ' + (st.tab === "tanker" ? "btn-primary" : "btn-ghost") + ' sm" data-dtab="tanker">By tanker</button></div>';
     }
+    // Editable order status — a dropdown of the forward workflow + Cancel. Terminal states
+    // (Completed/Cancelled) show a static badge. Selecting Delivered recognises revenue + COGS.
+    function statusCell(o) {
+      if (o.status === "CANCELLED") return '<span class="badge grey">Cancelled</span>';
+      if (o.status === "COMPLETED") return '<span class="badge green">Completed</span>';
+      var fi = B2B_STATUS_CHAIN.indexOf(o.status);
+      var opts = B2B_STATUS_CHAIN.slice(fi).map(function (s) { return '<option value="' + s + '"' + (s === o.status ? " selected" : "") + ">" + B2B_STATUS_LABEL[s] + "</option>"; }).join("");
+      opts += '<option value="CANCELLED">Cancel order</option>';
+      return '<select class="input pc-ostat" data-oid="' + o.id + '" data-cur="' + o.status + '" style="max-width:165px;padding:3px 6px;font-size:.82rem">' + opts + "</select>";
+    }
     function dayView(d) {
-      var orders = d.orders || [], tankers = d.tankers || [];
+      var orders = d.orders || [], tankers = d.tankers || [], range = d.from !== d.to;
       var oBody = orders.map(function (o) {
-        var badge = o.delivered ? '<span class="badge green">Delivered</span>' : '<span class="badge amber">' + esc((o.status || "").replace(/_/g, " ")) + "</span>";
-        return "<tr><td>" + badge + "</td><td class='muted-sm'>" + esc(o.code) + "</td><td>" + esc(o.business) + "</td><td class='muted-sm'>" + esc(o.items || "—") + '</td><td style="text-align:right">' + milkRs(o.revenuePaise) + (o.delivered ? "" : " <span class='muted-sm'>(booked)</span>") + "</td></tr>";
+        return "<tr><td>" + statusCell(o) + "</td><td class='muted-sm'>" + esc(o.code) + (range ? " · " + esc(o.when) : "") + "</td><td>" + esc(o.business) + "</td><td class='muted-sm'>" + esc(o.items || "—") + '</td><td style="text-align:right">' + milkRs(o.revenuePaise) + (o.delivered ? "" : " <span class='muted-sm'>(booked)</span>") + "</td></tr>";
       }).join("");
       var tBody = tankers.map(function (t) { return '<div style="padding:4px 0;border-top:1px solid rgba(0,0,0,.06)">' + tankerLine(t) + "</div>"; }).join("");
       return tabBar() +
-        '<label class="dac-f" style="max-width:170px;margin-bottom:10px"><span>Day</span><input class="input" id="pc-dd-day" type="date" value="' + esc(st.day) + '"></label>' +
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:10px">' +
+          '<label class="dac-f" style="max-width:160px"><span>From</span><input class="input" id="pc-dd-from" type="date" value="' + esc(st.from) + '"></label>' +
+          '<label class="dac-f" style="max-width:160px"><span>To</span><input class="input" id="pc-dd-to" type="date" value="' + esc(st.to) + '"></label>' +
+          '<button class="btn btn-ghost sm" id="pc-dd-today">Today</button>' +
+        "</div>" +
         '<div class="muted-sm" style="margin-bottom:6px"><b>' + (d.deliveredCount || 0) + "</b> delivered · <b>" + (d.scheduledCount || 0) + "</b> scheduled · delivered B2B revenue " + milkRs(d.deliveredRevenuePaise) + "</div>" +
-        '<div class="table-wrap"><table class="tbl"><thead><tr><th></th><th>Order</th><th>Business</th><th>Items</th><th style="text-align:right">Revenue (net)</th></tr></thead><tbody>' +
-        (oBody || '<tr><td colspan="5" class="muted-sm" style="text-align:center;padding:12px">No B2B orders on this day.</td></tr>') + "</tbody></table></div>" +
-        '<div style="margin-top:12px"><div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--leaf-700,#178a52);margin-bottom:2px">Tankers that supplied this day\'s milk</div>' +
-        (tBody || '<div class="muted-sm" style="padding:6px 0">No milk drawn (day not settled, or no sales).</div>') + "</div>";
+        '<div class="table-wrap"><table class="tbl"><thead><tr><th>Status</th><th>Order</th><th>Business</th><th>Items</th><th style="text-align:right">Revenue (net)</th></tr></thead><tbody>' +
+        (oBody || '<tr><td colspan="5" class="muted-sm" style="text-align:center;padding:12px">No B2B orders in this range.</td></tr>') + "</tbody></table></div>" +
+        '<div style="margin-top:12px"><div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--leaf-700,#178a52);margin-bottom:2px">Tankers that supplied ' + (range ? "this period" : "this day") + "'s milk</div>" +
+        (tBody || '<div class="muted-sm" style="padding:6px 0">No milk drawn (not settled, or no sales).</div>') + "</div>";
+    }
+    function wireDayControls() {
+      var f = panel.querySelector("#pc-dd-from"), t = panel.querySelector("#pc-dd-to"), td = panel.querySelector("#pc-dd-today");
+      if (f) f.addEventListener("change", function () { st.from = f.value || st.from; if (st.to < st.from) st.to = st.from; render(); });
+      if (t) t.addEventListener("change", function () { st.to = t.value || st.to; if (st.from > st.to) st.from = st.to; render(); });
+      if (td) td.addEventListener("click", function () { st.from = istTodayStr(); st.to = istTodayStr(); render(); });
+      panel.querySelectorAll(".pc-ostat").forEach(function (sel) {
+        sel.addEventListener("change", function () {
+          var id = sel.dataset.oid, cur = sel.dataset.cur, to = sel.value;
+          if (to === cur) return;
+          if ((to === "DELIVERED" || to === "CANCELLED") && !window.confirm(to === "DELIVERED"
+            ? "Mark this order Delivered?\n\nThis recognises its revenue (net of GST) and draws its milk COGS into the P&L, dated today."
+            : "Cancel this order?\n\nIf it was already delivered, an immutable revenue-reversal adjustment is recorded and the delivered-day COGS stays intact.")) { sel.value = cur; return; }
+          sel.disabled = true; dacToast("Updating → " + (B2B_STATUS_LABEL[to] || to) + "…");
+          advanceB2BOrder(id, cur, to,
+            function () { dacToast("Order updated → " + (B2B_STATUS_LABEL[to] || to) + "."); if (to === "DELIVERED" || to === "CANCELLED" || to === "COMPLETED") wireProfitCenterBackend(); else render(); },
+            function (e, at) { sel.disabled = false; sel.value = cur; dacToast(e && e.code === "forbidden" ? "Your role can't change B2B orders." : ((e && e.message) || ("Couldn't move to " + (B2B_STATUS_LABEL[at] || at) + "."))); });
+        });
+      });
     }
     function tankerView() {
       var rows = (st.tankers || []).map(function (t) {
@@ -7104,9 +7153,8 @@
       if (st.tab === "day") {
         panel.innerHTML = tabBar() + '<p class="muted-sm">Loading orders…</p>';
         wireTabs();
-        DOODLY_API.get("/api/admin/milk/drilldown?view=day&date=" + encodeURIComponent(st.day)).then(function (d) {
-          panel.innerHTML = dayView(d); wireTabs();
-          var di = panel.querySelector("#pc-dd-day"); if (di) di.addEventListener("change", function () { st.day = di.value || st.day; render(); });
+        DOODLY_API.get("/api/admin/milk/drilldown?view=day&from=" + encodeURIComponent(st.from) + "&to=" + encodeURIComponent(st.to)).then(function (d) {
+          panel.innerHTML = dayView(d); wireTabs(); wireDayControls();
         }).catch(function (e) { panel.innerHTML = tabBar() + '<p class="dac-err">' + esc(e.message || "Couldn't load.") + "</p>"; wireTabs(); });
       } else {
         panel.innerHTML = tabBar() + '<p class="muted-sm">Loading tankers…</p>';

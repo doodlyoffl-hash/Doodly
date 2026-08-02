@@ -20,5 +20,7 @@ export const GET = route("admin.milk.drilldown", async (req: NextRequest) => {
     if (!id) throw Errors.badRequest("tankerId required");
     return ok({ draws: await tankerDraws(id) });
   }
-  return ok(await dayDrilldown(sp.get("date") ?? undefined));
+  const from = sp.get("from") ?? sp.get("date") ?? undefined;
+  const to = sp.get("to") ?? sp.get("date") ?? from;
+  return ok(await dayDrilldown(from, to));
 });

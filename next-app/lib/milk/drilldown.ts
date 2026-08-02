@@ -18,9 +18,14 @@ const istISO = (d: Date) => new Date(d.getTime() + IST).toISOString().slice(0, 1
 const net = (o: { totalPaise: number; taxPaise: number }) => Math.max(0, o.totalPaise - o.taxPaise);
 const itemsOf = (items: { productName: string; quantity: number; unit: string }[]) => items.map((i) => `${i.quantity} ${i.unit} ${i.productName}`).join(", ");
 
-/** For one IST day: the B2B orders relevant to it + the tanker lots that fed that day. */
-export async function dayDrilldown(dateIso?: string | null) {
-  const { start, end, iso } = istDayWindow(dateIso);
+/** For an IST day (or a from→to range): the B2B orders relevant to it + the tanker lots
+ *  that fed that period. Pass a single date for one day, or from+to to browse history. */
+export async function dayDrilldown(fromIso?: string | null, toIso?: string | null) {
+  const a = istDayWindow(fromIso);
+  const b = toIso ? istDayWindow(toIso) : a;
+  // tolerate a reversed range
+  let start = a.start, end = b.end, from = a.iso, to = b.iso;
+  if (from > to) { start = b.start; end = a.end; from = b.iso; to = a.iso; }
   const [delivered, scheduled, draws] = await Promise.all([
     // recognised (delivered) that day — frozen net revenue drives the P&L
     db.businessOrder.findMany({
@@ -55,12 +60,12 @@ export async function dayDrilldown(dateIso?: string | null) {
   ];
   const deliveredRevenuePaise = delivered.reduce((s, o) => s + (o.revenuePaise ?? 0), 0);
   return {
-    date: iso,
+    from, to, single: from === to,
     orders,
     deliveredCount: delivered.length,
     scheduledCount: scheduled.length,
     deliveredRevenuePaise,
-    tankers: [...tMap.values()].sort((a, b) => (a.procurementDate < b.procurementDate ? -1 : 1)),
+    tankers: [...tMap.values()].sort((x, y) => (x.procurementDate < y.procurementDate ? -1 : 1)),
   };
 }
 
