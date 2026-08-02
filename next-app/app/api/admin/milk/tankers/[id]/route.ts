@@ -4,11 +4,11 @@
    DELETE — soft-delete (procurement:edit) — only while undrawn. */
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { ok, parseBody, route, Errors } from "@/lib/http";
+import { ok, route, Errors } from "@/lib/http";
 import { requirePermission } from "@/lib/auth/authorize";
 import { readUserId, readRole } from "@/lib/auth/identity";
 import { db } from "@/lib/db";
-import { updateTanker, deleteTanker } from "@/lib/milk/tanker";
+import { updateTanker, deleteTanker, closeTanker } from "@/lib/milk/tanker";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,10 +34,22 @@ const patchSchema = z.object({
   remarks: z.string().max(500).optional().nullable(),
 });
 
+const closeSchema = z.object({ action: z.literal("close"), reason: z.string().max(300).optional().nullable(), force: z.boolean().optional() });
+
 export const PATCH = route("admin.milk.tanker.update", async (req: NextRequest, ctx: { params: { id: string } }) => {
   const role = requirePermission(req, "procurement", "edit");
-  const body = await parseBody(req, patchSchema);
-  const tanker = await updateTanker(ctx.params.id, body, { actorId: readUserId(req) ?? undefined, actorRole: role });
+  const raw = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  // action:"close" — close the tanker + freeze its report (force-close needs Super-Admin)
+  if (raw.action === "close") {
+    const c = closeSchema.safeParse(raw);
+    if (!c.success) throw Errors.badRequest("Invalid close request.");
+    if (c.data.force && role !== "super_admin") throw Errors.forbidden("Only a Super-Admin can force-close a tanker that still has milk.");
+    const result = await closeTanker({ id: ctx.params.id, reason: c.data.reason ?? null, force: c.data.force }, { actorId: readUserId(req) ?? undefined, actorRole: role });
+    return ok(result);
+  }
+  const p = patchSchema.safeParse(raw);
+  if (!p.success) throw Errors.badRequest("Invalid tanker edit.", p.error.flatten());
+  const tanker = await updateTanker(ctx.params.id, p.data, { actorId: readUserId(req) ?? undefined, actorRole: role });
   return ok({ tanker });
 });
 

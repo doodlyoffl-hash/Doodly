@@ -1808,6 +1808,47 @@ model TankerConsumption {
   @@index([channel, date])
 }
 
+// Immutable Tanker Closing Report — a FROZEN snapshot of one tanker's full
+// reconciliation (procurement → per-customer/business consumption → usage → profit),
+// generated when the tanker closes. Historical data must never change: once written
+// this row is read-only. Open tankers are reconciled LIVE (lib/milk/reconcile.ts);
+// only on close is the result frozen here (summary scalars + linesJson line detail).
+model TankerClosingReport {
+  id                   String   @id @default(cuid())
+  tankerId             String   @unique
+  closedAt             DateTime
+  closedById           String?
+  closedByRole         String?
+  closeReason          String?
+  forced               Boolean  @default(false)   // Super-Admin force-close with leftover (→ wastage)
+  // frozen milk-usage (litres)
+  openingLitres        Float
+  retailLitres         Float
+  b2bLitres            Float
+  wastageLitres        Float    @default(0)
+  carryForwardLitres   Float    @default(0)
+  closingLitres        Float    @default(0)
+  // frozen financials (paise)
+  retailRevenuePaise   Int
+  b2bRevenuePaise      Int
+  totalRevenuePaise    Int
+  procurementCostPaise Int
+  transportPaise       Int
+  totalCostPaise       Int
+  cogsPaise            Int
+  grossProfitPaise     Int
+  netProfitPaise       Int
+  // frozen counts
+  retailCustomers      Int
+  retailDeliveries     Int
+  b2bBusinesses        Int
+  b2bDeliveries        Int
+  // frozen per-line detail (retail[] + b2b[] ReconLine)
+  linesJson            Json
+  generatedAt          DateTime @default(now())
+  @@index([closedAt])
+}
+
 // ----------------------------------------------------------------
 // DELIVERY LOGISTICS
 // ----------------------------------------------------------------

@@ -14,6 +14,8 @@ import { audit } from "@/lib/auth/audit";
 import { istDayWindow } from "@/lib/delivery/stats";
 import { computeTankerCost } from "@/lib/milk/cost";
 import { getMilkConfig } from "@/lib/milk/config";
+import { tankerReconciliation } from "@/lib/milk/reconcile";
+import { freezeTankerReport, getTankerReport } from "@/lib/milk/tanker-report";
 
 const EPS = 1e-6;
 
@@ -112,6 +114,41 @@ export async function deleteTanker(id: string, actor?: { actorId?: string; actor
   await db.milkTanker.update({ where: { id }, data: { deletedAt: new Date(), status: "CLOSED", closedAt: new Date() } });
   await audit({ userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system", action: "milk.tanker.delete", target: t.code }).catch(() => {});
   return { ok: true };
+}
+
+/**
+ * Close a tanker. A tanker can only close once its milk is fully SOLD (≈0 remaining —
+ * carry-forward to the next tanker is automatic via FIFO). A Super-Admin may FORCE-close a
+ * tanker that still has milk: the leftover is written off as WASTAGE (an ADJUSTMENT draw).
+ * On close, freeze the immutable Tanker Closing Report + audit. (force gate enforced at the API.)
+ */
+export async function closeTanker(args: { id: string; reason?: string | null; force?: boolean }, actor?: { actorId?: string; actorRole?: string }) {
+  const t = await db.milkTanker.findUnique({ where: { id: args.id } });
+  if (!t || t.deletedAt) throw Errors.notFound("Tanker not found.");
+  if (t.status === "CLOSED") { await getTankerReport(args.id).catch(() => {}); return { ok: true as const, alreadyClosed: true, wastageLitres: 0 }; }
+
+  const leftover = t.remainingLitres;
+  if (leftover > EPS && !args.force) {
+    throw Errors.badRequest(`Tanker still has ${Math.round(leftover * 100) / 100} L unsold — it carries forward automatically as it sells, or a Super-Admin can force-close it (the remainder is written off as wastage).`);
+  }
+
+  let wastage = 0;
+  await db.$transaction(async (tx) => {
+    if (leftover > EPS && args.force) {
+      wastage = leftover;
+      await tx.tankerConsumption.create({ data: { tankerId: t.id, date: new Date(), channel: "ADJUSTMENT", litres: leftover, costPaise: Math.round(leftover * t.costPerLitrePaise), sourceRef: `close-wastage:${t.id}`, note: `Wastage on manual close${args.reason ? " — " + args.reason : ""}` } });
+      await tx.milkTanker.update({ where: { id: t.id }, data: { consumedLitres: { increment: leftover }, remainingLitres: 0, status: "CLOSED", closedAt: new Date() } });
+    } else {
+      await tx.milkTanker.update({ where: { id: t.id }, data: { status: "CLOSED", closedAt: new Date() } });
+    }
+  });
+
+  // Freeze the immutable closing report from the fresh reconciliation (best-effort — never blocks the close).
+  try { const recon = await tankerReconciliation(t.id); if (recon) await freezeTankerReport(t.id, recon, { closedById: actor?.actorId ?? null, closedByRole: actor?.actorRole ?? null, closeReason: args.reason ?? null, forced: wastage > EPS }); } catch { /* report can be frozen lazily on first view */ }
+
+  await audit({ userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system", action: "milk.tanker.close", target: `${t.code}${wastage > EPS ? ` · wastage ${Math.round(wastage * 100) / 100}L (forced)` : ""}${args.reason ? ` · ${args.reason}` : ""}` }).catch(() => {});
+  if (wastage > EPS) await audit({ userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system", action: "milk.tanker.adjustment", target: `${t.code} · wastage ${Math.round(wastage * 100) / 100}L · ₹${(Math.round(wastage * t.costPerLitrePaise) / 100).toFixed(2)}` }).catch(() => {});
+  return { ok: true as const, alreadyClosed: false, wastageLitres: Math.round(wastage * 100) / 100 };
 }
 
 export async function listTankers(q: { from?: string; to?: string; status?: string; search?: string } = {}) {

@@ -6726,9 +6726,22 @@
   }
   window.DOODLY_ADMIN.wireMilkTankersBackend = wireMilkTankersBackend;
 
+  var _mkFilter = { q: "", status: "" };
   function renderMilkTankers(host, r, inv) {
     var s = r.stats || {}, tankers = r.tankers || [], lots = (inv && inv.openLots) || [];
     var badge = function (st) { return '<span class="badge ' + (st === "OPEN" ? "green" : "grey") + '">' + esc(st) + "</span>"; };
+    var isSuper = false; try { isSuper = window.DOODLY_RBAC && DOODLY_RBAC.activeRole() === "super_admin"; } catch (e) {}
+    var tankerRow = function (t) {
+      return "<tr><td>" + esc(t.code) + "</td><td>" + esc(milkDate(t.procurementDate.slice(0, 10))) + "</td><td>" + esc(t.tankerNo) + "</td><td>" + esc(t.supplier) + "</td><td>" + t.quantityKg + "</td><td>" + t.fatPct + "%</td><td>" + t.litres + "</td><td>" + milkRs(t.totalCostPaise) + "</td><td>" + milkRs(t.costPerLitrePaise) + "</td><td>" + (Math.round(t.remainingLitres * 100) / 100) + " L</td><td>" + badge(t.status) + "</td><td style='white-space:nowrap'><button class='btn btn-ghost sm js-mk-report' data-id='" + t.id + "' data-code='" + esc(t.code) + "'>📄 Report</button> <button class='btn btn-ghost sm js-mk-manage' data-id='" + t.id + "'>Manage</button></td></tr>";
+    };
+    var filtered = function () {
+      var q = _mkFilter.q.toLowerCase();
+      return tankers.filter(function (t) {
+        if (_mkFilter.status && t.status !== _mkFilter.status) return false;
+        if (!q) return true;
+        return ((t.code || "") + " " + (t.tankerNo || "") + " " + (t.supplier || "")).toLowerCase().indexOf(q) >= 0;
+      });
+    };
     host.innerHTML =
       '<div class="dl-an-kpis" style="margin-bottom:14px">' +
         milkStat(s.todayTankers || 0, "Tankers today") +
@@ -6747,18 +6760,28 @@
             "</tbody></table>"
           : '<p class="muted-sm">No open tankers — all milk is consumed. Add today\'s tanker below.</p>') +
         "</div></div>" +
-      // tanker list + add
-      '<div class="panel"><div class="panel-head"><h3>Tanker entries</h3><button class="btn btn-primary sm" id="mk-add">+ Add tanker</button></div>' +
+      // tanker list + search/filter + add
+      '<div class="panel"><div class="panel-head" style="gap:8px;flex-wrap:wrap"><h3>Tanker entries</h3>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-left:auto">' +
+          '<input class="input" id="mk-q" placeholder="Search code / tanker# / supplier" value="' + esc(_mkFilter.q) + '" style="min-width:210px">' +
+          '<select class="input" id="mk-status" style="max-width:120px"><option value="">All status</option><option value="OPEN"' + (_mkFilter.status === "OPEN" ? " selected" : "") + ">Open</option><option value=\"CLOSED\"" + (_mkFilter.status === "CLOSED" ? " selected" : "") + ">Closed</option></select>" +
+          '<button class="btn btn-primary sm" id="mk-add">+ Add tanker</button>' +
+        "</div></div>" +
         '<div class="panel-pad">' + (tankers.length
-          ? '<table class="tbl"><thead><tr><th>Code</th><th>Date</th><th>Tanker</th><th>Supplier</th><th>KG</th><th>FAT</th><th>Litres</th><th>Total cost</th><th>Cost/L</th><th>Remaining</th><th>Status</th><th></th></tr></thead><tbody>' +
-            tankers.map(function (t) {
-              return "<tr><td>" + esc(t.code) + "</td><td>" + esc(milkDate(t.procurementDate.slice(0, 10))) + "</td><td>" + esc(t.tankerNo) + "</td><td>" + esc(t.supplier) + "</td><td>" + t.quantityKg + "</td><td>" + t.fatPct + "%</td><td>" + t.litres + "</td><td>" + milkRs(t.totalCostPaise) + "</td><td>" + milkRs(t.costPerLitrePaise) + "</td><td>" + (Math.round(t.remainingLitres * 100) / 100) + " L</td><td>" + badge(t.status) + "</td><td><button class='btn btn-ghost sm js-mk-manage' data-id='" + t.id + "'>Manage</button></td></tr>";
-            }).join("") + "</tbody></table>"
+          ? '<div class="table-wrap"><table class="tbl"><thead><tr><th>Code</th><th>Date</th><th>Tanker</th><th>Supplier</th><th>KG</th><th>FAT</th><th>Litres</th><th>Total cost</th><th>Cost/L</th><th>Remaining</th><th>Status</th><th></th></tr></thead><tbody id="mk-tbody">' +
+            filtered().map(tankerRow).join("") + "</tbody></table></div>"
           : '<p class="muted-sm">No tankers yet. Add your first tanker to start tracking procurement + profit.</p>') +
         "</div></div>";
 
-    host.querySelector("#mk-add").addEventListener("click", function () { openTankerForm(); });
-    host.querySelectorAll(".js-mk-manage").forEach(function (b) { b.addEventListener("click", function () { openTankerManage(b.dataset.id); }); });
+    function wireRows() {
+      host.querySelectorAll(".js-mk-manage").forEach(function (b) { b.addEventListener("click", function () { openTankerManage(b.dataset.id); }); });
+      host.querySelectorAll(".js-mk-report").forEach(function (b) { b.addEventListener("click", function () { openTankerReport(b.dataset.id, b.dataset.code); }); });
+    }
+    function reList() { var tb = host.querySelector("#mk-tbody"); if (tb) { tb.innerHTML = filtered().map(tankerRow).join("") || '<tr><td colspan="12" class="muted-sm" style="text-align:center;padding:12px">No tankers match.</td></tr>'; wireRows(); } }
+    var mkAdd = host.querySelector("#mk-add"); if (mkAdd) mkAdd.addEventListener("click", function () { openTankerForm(); });
+    var mkQ = host.querySelector("#mk-q"); if (mkQ) mkQ.addEventListener("input", function () { _mkFilter.q = mkQ.value; reList(); });
+    var mkStatus = host.querySelector("#mk-status"); if (mkStatus) mkStatus.addEventListener("change", function () { _mkFilter.status = mkStatus.value; reList(); });
+    wireRows();
     var sb = host.querySelector("#mk-settle");
     if (sb) sb.addEventListener("click", function () {
       var date = host.querySelector("#mk-settle-date").value || istTodayStr();
@@ -6831,6 +6854,7 @@
       var m = asgnModal("Tanker " + t.code, "");
       var cons = (t.consumptions || []);
       var locked = t.consumedLitres > 1e-6 || t.status === "CLOSED";
+      var isSuperM = false; try { isSuperM = window.DOODLY_RBAC && DOODLY_RBAC.activeRole() === "super_admin"; } catch (e) {}
       m.body.innerHTML =
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-bottom:10px">' +
           "<div><span class='muted-sm'>Tanker</span><br><b>" + esc(t.tankerNo) + "</b></div>" +
@@ -6843,9 +6867,12 @@
         (cons.length ? '<div class="muted-sm" style="margin:6px 0 4px">Consumption ledger (FIFO draws)</div><div style="max-height:180px;overflow:auto"><table class="tbl"><thead><tr><th>Date</th><th>Channel</th><th>Litres</th><th>Cost</th></tr></thead><tbody>' +
           cons.map(function (c) { return "<tr><td>" + esc(milkDate(c.date.slice(0, 10))) + "</td><td>" + esc(c.channel) + "</td><td>" + (Math.round(c.litres * 100) / 100) + " L</td><td>" + milkRs(c.costPaise) + "</td></tr>"; }).join("") + "</tbody></table></div>" : '<p class="muted-sm">No milk drawn from this tanker yet.</p>') +
         '<p class="dac-err" id="tkm-err"></p>' +
-        '<div style="display:flex;justify-content:space-between;gap:10px;margin-top:10px">' +
-          (locked ? '<span class="muted-sm">Locked — milk has been drawn, so cost is fixed.</span>'
-                  : '<button class="btn btn-ghost sm" id="tkm-del">Delete</button><button class="btn btn-primary sm" id="tkm-edit">Edit</button>') +
+        '<div style="display:flex;justify-content:space-between;gap:10px;margin-top:10px;flex-wrap:wrap">' +
+          '<button class="btn btn-ghost sm" id="tkm-report">📄 View report</button>' +
+          '<div style="display:flex;gap:8px">' +
+            (locked ? (t.status === "OPEN" ? '<button class="btn btn-primary sm" id="tkm-close">Close tanker</button>' : '<span class="muted-sm" style="align-self:center">Closed — locked</span>')
+                    : '<button class="btn btn-ghost sm" id="tkm-del">Delete</button><button class="btn btn-primary sm" id="tkm-edit">Edit</button>') +
+          "</div>" +
         "</div>";
       var err = m.body.querySelector("#tkm-err");
       var del = m.body.querySelector("#tkm-del");
@@ -6857,7 +6884,100 @@
       });
       var ed = m.body.querySelector("#tkm-edit");
       if (ed) ed.addEventListener("click", function () { m.close(); openTankerEdit(t); });
+      var rep = m.body.querySelector("#tkm-report");
+      if (rep) rep.addEventListener("click", function () { m.close(); openTankerReport(id, t.code); });
+      var cl = m.body.querySelector("#tkm-close");
+      if (cl) cl.addEventListener("click", function () { closeTankerAction(id, t.code, t.remainingLitres, isSuperM, function () { m.close(); wireMilkTankersBackend(); }); });
     }).catch(function (e) { dacToast(e.message || "Couldn't load the tanker."); });
+  }
+
+  // Authed blob download/print of a tanker report (mirrors exportMilkReport).
+  function exportTankerReport(id, code, fmt, inline) {
+    var base = window.DOODLY_API ? DOODLY_API.base() : "";
+    var h = {}; try { var tok = localStorage.getItem("doodly-token"); if (tok) h.Authorization = "Bearer " + tok; } catch (e) {}
+    try { if (window.DOODLY_RBAC) { h["X-Doodly-Actor"] = DOODLY_RBAC.activeRole(); var cu = DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser(); if (cu && cu.id) h["X-Doodly-Actor-Id"] = cu.id; } } catch (e) {}
+    dacToast((inline ? "Opening" : "Preparing") + " " + fmt.toUpperCase() + "…");
+    fetch(base + "/api/admin/milk/tankers/" + id + "/report?format=" + fmt + (inline ? "&inline=1" : ""), { headers: h, credentials: "include" })
+      .then(function (rr) { if (!rr.ok) throw new Error(rr.status === 403 ? "Your role can't export (403)." : "Export failed (" + rr.status + ")"); return rr.blob(); })
+      .then(function (blob) {
+        var url = URL.createObjectURL(blob);
+        if (inline) { var w = window.open(url, "_blank"); if (w) { try { w.addEventListener("load", function () { w.print(); }); } catch (e) {} } }
+        else { var a = document.createElement("a"); a.href = url; a.download = "DOODLY_Tanker_" + code + "." + fmt; document.body.appendChild(a); a.click(); a.remove(); }
+        setTimeout(function () { URL.revokeObjectURL(url); }, 60000); dacToast("Done.");
+      })
+      .catch(function (e) { dacToast((e && e.message) || "Couldn't export."); });
+  }
+
+  function closeTankerAction(id, code, remaining, isSuper, onDone) {
+    var force = (remaining || 0) > 0.01;
+    if (force && !isSuper) { dacToast("Tanker still has " + remaining + " L — it carries forward as it sells. Only a Super-Admin can force-close (writes off the rest as wastage)."); return; }
+    var msg = force
+      ? "Force-close " + code + "?\n\nIt still has " + remaining + " L, which will be WRITTEN OFF as wastage. Enter a reason:"
+      : "Close " + code + "?\n\nOptional reason:";
+    var reason = window.prompt(msg, "");
+    if (reason === null) return;
+    DOODLY_API.patch("/api/admin/milk/tankers/" + id, { action: "close", reason: reason || undefined, force: force || undefined })
+      .then(function (x) { var r = x || {}; dacToast("Closed " + code + (r.wastageLitres > 0.01 ? " · wastage " + r.wastageLitres + " L" : "") + " — closing report frozen."); if (onDone) onDone(); })
+      .catch(function (e) { dacToast(e.code === "forbidden" ? "Only a Super-Admin can force-close a tanker with milk left." : (e.message || "Couldn't close the tanker.")); });
+  }
+
+  // Full Tanker Closing / Reconciliation Report — procurement → per-customer/business
+  // consumption → usage → financial → timeline, with in-report search + View/PDF/Excel/CSV/Print.
+  function openTankerReport(id, code) {
+    var m = asgnModal("Tanker Report — " + (code || ""), '<p class="muted-sm">Loading report…</p>');
+    var isSuper = false; try { isSuper = window.DOODLY_RBAC && DOODLY_RBAC.activeRole() === "super_admin"; } catch (e) {}
+    var q = "";
+    DOODLY_API.get("/api/admin/milk/tankers/" + id + "/report").then(function (x) {
+      var d = x || {}, R = d.recon; if (!R) { m.body.innerHTML = '<p class="dac-err">Report unavailable.</p>'; return; }
+      var t = R.tanker, u = R.usage, f = R.financial;
+      var seg = function (l, v, strong) { return '<div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0' + (strong ? ";border-top:1px solid rgba(0,0,0,.12);margin-top:3px;font-weight:700" : "") + '"><span' + (strong ? "" : ' class="muted-sm"') + ">" + l + "</span><span>" + v + "</span></div>"; };
+      var nL = function (n) { return (Math.round((n || 0) * 100) / 100).toLocaleString("en-IN") + " L"; };
+      var matches = function (l) { if (!q) return true; var s = q.toLowerCase(); return ((l.name || "") + " " + (l.orderCode || "") + " " + (l.invoiceNumber || "") + " " + (l.product || "") + " " + (l.exec || "")).toLowerCase().indexOf(s) >= 0; };
+      function retailBody() {
+        var rows = R.retail.lines.filter(matches);
+        return rows.length ? rows.map(function (l) { return "<tr><td>" + esc(l.date) + "</td><td><b>" + esc(l.name) + "</b></td><td class='muted-sm'>" + esc(l.product) + "</td><td style='text-align:right'>" + nL(l.litres) + "</td><td style='text-align:right'>" + milkRs(l.revenuePaise) + "</td><td class='muted-sm'>" + esc(l.exec || "—") + "</td></tr>"; }).join("") : '<tr><td colspan="6" class="muted-sm" style="text-align:center;padding:8px">No matching retail lines.</td></tr>';
+      }
+      function b2bBody() {
+        var rows = R.b2b.lines.filter(matches);
+        return rows.length ? rows.map(function (l) { return "<tr><td>" + esc(l.date) + "</td><td><b>" + esc(l.name) + "</b></td><td class='muted-sm'>" + esc(l.orderCode || "—") + (l.invoiceNumber ? " · " + esc(l.invoiceNumber) : "") + "</td><td class='muted-sm'>" + esc(l.qty || l.product) + "</td><td style='text-align:right'>" + nL(l.litres) + "</td><td style='text-align:right'>" + milkRs(l.revenuePaise) + "</td></tr>"; }).join("") : '<tr><td colspan="6" class="muted-sm" style="text-align:center;padding:8px">No matching B2B lines.</td></tr>';
+      }
+      function paint() {
+        m.body.innerHTML =
+          '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">' +
+            '<span class="badge ' + (t.status === "OPEN" ? "green" : "grey") + '">' + esc(t.status) + "</span>" +
+            (d.frozen ? '<span class="badge blue">Frozen snapshot</span>' : '<span class="badge amber">Live</span>') +
+            '<span class="badge ' + (R.reconciled ? "green" : "red") + '">' + (R.reconciled ? "Reconciled ✓" : "⚠ Not reconciled") + "</span>" +
+          "</div>" +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+            '<div class="panel" style="margin:0"><div class="panel-pad"><div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--leaf-700,#178a52);margin-bottom:3px">Procurement</div>' +
+              seg("Tanker", esc(t.tankerNo)) + seg("Supplier", esc(t.supplier)) + seg("Procured", esc(t.procurementDate)) + seg("Quantity", t.quantityKg + " kg @ " + t.fatPct + "%") + seg("Litres", nL(t.litres)) + seg("Cost / L", milkRs(t.costPerLitrePaise)) + seg("Procurement + transport", milkRs(f.procurementCostPaise) + " + " + milkRs(f.transportPaise)) + seg("Total cost", milkRs(t.totalCostPaise), true) + "</div></div>" +
+            '<div class="panel" style="margin:0"><div class="panel-pad"><div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--leaf-700,#178a52);margin-bottom:3px">Milk Usage</div>' +
+              seg("Opening", nL(u.openingLitres)) + seg("− Retail", nL(u.retailLitres)) + seg("− B2B", nL(u.b2bLitres)) + (u.wastageLitres ? seg("− Wastage", nL(u.wastageLitres)) : "") + seg("Carry-forward", nL(u.carryForwardLitres)) + seg("= Closing balance", nL(u.closingLitres), true) + "</div></div>" +
+          "</div>" +
+          '<div class="panel" style="margin-top:12px"><div class="panel-pad"><div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:#8a5cf6;margin-bottom:3px">Financial Summary</div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 16px">' +
+              seg("Retail revenue", milkRs(f.retailRevenuePaise)) + seg("B2B revenue", milkRs(f.b2bRevenuePaise)) + seg("Total revenue", milkRs(f.totalRevenuePaise), true) + seg("− COGS (milk sold)", milkRs(f.cogsPaise)) +
+            "</div>" +
+            '<div style="display:flex;justify-content:space-between;padding:6px 0;border-top:2px solid ' + (f.grossProfitPaise >= 0 ? "var(--leaf-600,#1FAE66)" : "#c0392b") + ';margin-top:6px;font-weight:800;font-size:15px;color:' + (f.grossProfitPaise >= 0 ? "var(--leaf-600,#1FAE66)" : "#c0392b") + '"><span>Gross profit</span><span>' + milkRs(f.grossProfitPaise) + "</span></div></div></div>" +
+          '<div class="muted-sm" style="margin-top:10px">🚚 Timeline: received ' + esc(t.procurementDate) + " → " + R.retail.deliveries + " retail + " + R.b2b.deliveries + " B2B deliveries" + (u.carryForwardLitres > 0.01 ? " → carry-forward " + nL(u.carryForwardLitres) : "") + " → " + (t.status === "CLOSED" ? "closed " + (t.closedAt ? esc(t.closedAt.slice(0, 10)) : "") : "open") + "</div>" +
+          '<input class="input" id="tr-q" placeholder="Search customer / business / order / invoice / product / exec" value="' + esc(q) + '" style="margin-top:12px">' +
+          '<div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--leaf-700,#178a52);margin:12px 0 4px">Retail Sales — ' + R.retail.customers + " customers · " + R.retail.deliveries + " deliveries · " + nL(R.retail.litres) + " · " + milkRs(R.retail.revenuePaise) + "</div>" +
+          '<div class="table-wrap" style="max-height:200px;overflow:auto"><table class="tbl"><thead><tr><th>Date</th><th>Customer</th><th>Product</th><th style="text-align:right">Litres</th><th style="text-align:right">Revenue</th><th>Exec</th></tr></thead><tbody id="tr-retail">' + retailBody() + "</tbody></table></div>" +
+          '<div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:#8a5cf6;margin:12px 0 4px">B2B Sales — ' + R.b2b.businesses + " businesses · " + R.b2b.deliveries + " deliveries · " + nL(R.b2b.litres) + " · " + milkRs(R.b2b.revenuePaise) + "</div>" +
+          '<div class="table-wrap" style="max-height:200px;overflow:auto"><table class="tbl"><thead><tr><th>Date</th><th>Business</th><th>Order · Invoice</th><th>Qty</th><th style="text-align:right">Litres</th><th style="text-align:right">Revenue</th></tr></thead><tbody id="tr-b2b">' + b2bBody() + "</tbody></table></div>" +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;align-items:center">' +
+            '<button class="btn btn-ghost sm" id="tr-pdf">⬇ PDF</button><button class="btn btn-ghost sm" id="tr-xls">Excel</button><button class="btn btn-ghost sm" id="tr-csv">CSV</button><button class="btn btn-ghost sm" id="tr-print">🖨 Print</button>' +
+            (t.status === "OPEN" ? '<button class="btn btn-primary sm" id="tr-close" style="margin-left:auto">Close tanker</button>' : "") +
+          "</div>";
+        var qi = m.body.querySelector("#tr-q"); if (qi) qi.addEventListener("input", function () { q = qi.value; m.body.querySelector("#tr-retail").innerHTML = retailBody(); m.body.querySelector("#tr-b2b").innerHTML = b2bBody(); });
+        m.body.querySelector("#tr-pdf").addEventListener("click", function () { exportTankerReport(id, t.code, "pdf", false); });
+        m.body.querySelector("#tr-xls").addEventListener("click", function () { exportTankerReport(id, t.code, "xls", false); });
+        m.body.querySelector("#tr-csv").addEventListener("click", function () { exportTankerReport(id, t.code, "csv", false); });
+        m.body.querySelector("#tr-print").addEventListener("click", function () { exportTankerReport(id, t.code, "pdf", true); });
+        var cb = m.body.querySelector("#tr-close"); if (cb) cb.addEventListener("click", function () { closeTankerAction(id, t.code, t.remainingLitres, isSuper, function () { m.close(); wireMilkTankersBackend(); }); });
+      }
+      paint();
+    }).catch(function (e) { m.body.innerHTML = '<p class="dac-err">' + esc((e && e.message) || "Couldn't load the report.") + "</p>"; });
   }
 
   // ---- Profit Center: daily/monthly P&L + rate settings ----
