@@ -61,6 +61,10 @@ export async function POST(req: NextRequest) {
           }
           // referral reward — credit the referrer if this buyer now has a qualifying subscription (idempotent, non-blocking)
           await maybeAwardReferralForUser(op.userId, { actorRole: "system" });
+          // Trial-Pack → subscription cashback — webhook parity with /verify (idempotent; only
+          // credits if the buyer upgraded to an eligible plan). Without this, a customer whose
+          // browser never hit /verify wouldn't get their ₹200 until an admin did it by hand.
+          try { const { creditTrialCashback } = await import("@/lib/wallet/service"); await creditTrialCashback({ userId: op.userId, actorRole: "system" }); } catch (e) { console.error("trial.cashback.webhook", (e as Error)?.message); }
           // DOODLY Pure Rewards: order + subscription points (idempotent; verify may also call this)
           await awardOrderPaid(op.userId, op.orderId);
           // Auto-generate + email the B2C invoice now that the order is PAID (idempotent).

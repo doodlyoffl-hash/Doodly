@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(json);
   if (!parsed.success) return NextResponse.json({ error: "Validation failed", issues: parsed.error.flatten() }, { status: 422 });
 
-  const a = { actorRole: role, actorId: actorId(req) ?? undefined };
+  const a = { actorRole: role, actorId: actorId(req) ?? undefined, ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || undefined, userAgent: req.headers.get("user-agent") ?? undefined };
   try {
     const d = parsed.data;
     const result =

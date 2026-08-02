@@ -278,7 +278,7 @@ export async function redeemPoints(p: { userId: string; points: number; idemKey?
   }
 
   try {
-    return await withRetry(() => db.$transaction(async (tx) => {
+    const res = await withRetry(() => db.$transaction(async (tx) => {
       const user = await tx.user.findUnique({ where: { id: p.userId }, select: { loyaltyPoints: true } });
       const available = user?.loyaltyPoints ?? 0;
       if (points > available) return { ok: false as const, reason: "insufficient", detail: { available } };
@@ -323,6 +323,12 @@ export async function redeemPoints(p: { userId: string; points: number; idemKey?
 
       return { ok: true as const, points, creditedPaise, pointsBalance: updated.loyaltyPoints, walletBalancePaise: balancePaise };
     }, TX));
+    // Notify the customer of the wallet credit (was previously silent).
+    if (res.ok && res.creditedPaise > 0) {
+      const amt = Math.round(res.creditedPaise / 100).toLocaleString("en-IN"), bal = Math.round(res.walletBalancePaise / 100).toLocaleString("en-IN");
+      await notify(p.userId, { title: `₹${amt} added to your DOODLY Wallet`, body: `${res.points} loyalty points redeemed. Updated balance: ₹${bal}.`, whatsapp: { template: "wallet_credited", vars: [amt, amt, "Loyalty redemption", bal] } }).catch(() => {});
+    }
+    return res;
   } catch (e) {
     log.error("loyalty.redeem", (e as Error)?.message ?? "failed", { userId: p.userId });
     return { ok: false, reason: "error" };

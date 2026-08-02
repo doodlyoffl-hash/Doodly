@@ -24,7 +24,7 @@ import * as T from "@/lib/email/templates";
 
 const rsTxt = (paise: number) => Math.round(paise / 100).toLocaleString("en-IN");
 
-interface Actor { actorId?: string; actorRole?: string }
+interface Actor { actorId?: string; actorRole?: string; ip?: string; userAgent?: string }
 
 const TX = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30_000 } as const;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -55,7 +55,7 @@ export async function getCashbackRules(client: Tx | typeof db = db): Promise<Cas
 async function postTxn(tx: Tx, p: {
   userId: string; type: "CREDIT" | "DEBIT"; kind: string; amountPaise: number;
   reason: string; description?: string; subscriptionId?: string; orderId?: string;
-  createdById?: string; approvedById?: string; ip?: string; userAgent?: string; reversedTxnId?: string;
+  createdById?: string; actorRole?: string; approvedById?: string; ip?: string; userAgent?: string; reversedTxnId?: string;
   /** Caller-supplied idempotency key. When set, it becomes the WalletTxn.reference and a
       collision (P2002) is NOT retried — it propagates so the caller can treat it as a
       duplicate. When omitted, a unique reference is generated + retried on collision. */
@@ -78,6 +78,15 @@ async function postTxn(tx: Tx, p: {
           ip: p.ip, userAgent: p.userAgent, reversedTxnId: p.reversedTxnId,
         },
       });
+      // Central audit trail, ATOMIC with the ledger row (every rupee is traceable).
+      await tx.auditLog.create({
+        data: {
+          userId: p.createdById ?? p.approvedById ?? null, actorRole: p.actorRole ?? "system",
+          action: `wallet.${p.kind}.${p.type.toLowerCase()}`,
+          target: `${p.userId} · ${p.type === "CREDIT" ? "+" : "−"}₹${(p.amountPaise / 100).toFixed(2)} · ${p.reason} · ${txn.reference}${p.orderId ? ` · order ${p.orderId.slice(-6)}` : ""}${p.subscriptionId ? ` · sub ${p.subscriptionId.slice(-6)}` : ""} · bal ₹${(balanceAfterPaise / 100).toFixed(2)}`,
+          ip: p.ip ?? null, device: p.userAgent ?? null,
+        },
+      }).catch(() => {});
       return { txn, balancePaise: balanceAfterPaise };
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && String(e.meta?.target).includes("reference")) {
@@ -142,8 +151,9 @@ export async function rechargeWallet(args: { userId: string; amountPaise: number
     const user = await tx.user.update({ where: { id: args.userId }, data: { walletPaise: { increment: amt } }, select: { walletPaise: true } });
     try {
       const txn = await tx.walletTxn.create({
-        data: { userId: args.userId, type: "CREDIT", kind: "topup", amountPaise: amt, balanceAfterPaise: user.walletPaise, reference: args.reference || generateReference(), description: `Wallet recharge${args.method ? " (" + args.method + ")" : ""}`, reason: "recharge", createdById: args.actorId ?? null },
+        data: { userId: args.userId, type: "CREDIT", kind: "topup", amountPaise: amt, balanceAfterPaise: user.walletPaise, reference: args.reference || generateReference(), description: `Wallet recharge${args.method ? " (" + args.method + ")" : ""}`, reason: "recharge", createdById: args.actorId ?? null, status: "POSTED", ip: args.ip, userAgent: args.userAgent },
       });
+      await tx.auditLog.create({ data: { userId: args.actorId ?? null, actorRole: args.actorRole ?? "customer", action: "wallet.topup.credit", target: `${args.userId} · +₹${(amt / 100).toFixed(2)} · recharge · ${txn.reference} · bal ₹${(user.walletPaise / 100).toFixed(2)}`, ip: args.ip ?? null, device: args.userAgent ?? null } }).catch(() => {});
       return { ok: true as const, idempotent: false, balancePaise: user.walletPaise, txnId: txn.id, reference: txn.reference };
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && args.reference) {
@@ -202,6 +212,14 @@ export async function creditTrialCashback(args: { userId: string; subscriptionId
           });
           if (sub) { targetPlanSlug = sub.plan.slug; resolvedSubId = sub.id; }
         }
+      }
+
+      // Defense-in-depth: a HARD 30-day floor beside the slug allowlist, so an admin who
+      // mistakenly adds a short plan (e.g. p7) to eligiblePlanSlugs can never pay out the
+      // ₹200 trial credit for a plan under 30 days.
+      if (targetPlanSlug) {
+        const plan = await tx.plan.findFirst({ where: { slug: targetPlanSlug }, select: { days: true } });
+        if ((plan?.days ?? 0) < 30) return { credited: false, reason: "plan_below_30_days" };
       }
 
       const decision = evaluateTrialCashback({
@@ -283,7 +301,7 @@ export async function previewWalletApply(args: { userId: string; orderTotalPaise
 export async function applyWalletAtCheckout(args: { userId: string; orderId: string; amountPaise: number } & Actor) {
   const { userId, orderId, amountPaise } = args;
   if (amountPaise <= 0) return { appliedPaise: 0 };
-  return withRetry(() =>
+  const out = await withRetry(() =>
     db.$transaction(async (tx) => {
       const dup = await tx.walletTxn.findFirst({ where: { orderId, kind: "usage" }, select: { amountPaise: true } });
       if (dup) return { appliedPaise: dup.amountPaise, idempotent: true };
@@ -291,26 +309,65 @@ export async function applyWalletAtCheckout(args: { userId: string; orderId: str
       const user = await tx.user.findUnique({ where: { id: userId }, select: { walletPaise: true } });
       const applied = Math.min(amountPaise, user?.walletPaise ?? 0);
       if (applied <= 0) return { appliedPaise: 0 };
-      const { balancePaise } = await postTxn(tx, { userId, type: "DEBIT", kind: "usage", amountPaise: applied, reason: "order", description: "Applied to order", orderId });
+      const { balancePaise } = await postTxn(tx, { userId, type: "DEBIT", kind: "usage", amountPaise: applied, reason: "order", description: "Applied to order", orderId, actorRole: args.actorRole ?? "customer", ip: args.ip, userAgent: args.userAgent });
       return { appliedPaise: applied, balancePaise };
     }, TX),
   );
+  // Notify the customer of the debit (was previously silent).
+  if (out.appliedPaise > 0 && !("idempotent" in out && out.idempotent)) {
+    const amt = rsTxt(out.appliedPaise);
+    await notify(userId, {
+      title: `₹${amt} used from your DOODLY Wallet`,
+      body: "Your wallet balance was applied to your order.",
+      whatsapp: { template: "wallet_debited", vars: [amt, "Order payment", rsTxt(("balancePaise" in out ? out.balancePaise : 0) as number)] },
+    }).catch(() => {});
+  }
+  return out;
 }
 
 // ---------- Admin ----------
 
-export async function adminCredit(args: { userId: string; amountPaise: number; reason: string; kind?: string } & Actor) {
+export async function adminCredit(args: { userId: string; amountPaise: number; reason: string; kind?: string; reference?: string; approvedById?: string; notify?: boolean } & Actor) {
   if (args.amountPaise <= 0) throw new Error("Amount must be positive");
-  return db.$transaction((tx) => postTxn(tx, { userId: args.userId, type: "CREDIT", kind: args.kind ?? "adjustment", amountPaise: args.amountPaise, reason: args.reason || "manual_credit", description: args.reason, createdById: args.actorId }), TX);
+  let idempotent = false;
+  const res = await db.$transaction((tx) => postTxn(tx, { userId: args.userId, type: "CREDIT", kind: args.kind ?? "adjustment", amountPaise: args.amountPaise, reason: args.reason || "manual_credit", description: args.reason, createdById: args.actorId, actorRole: args.actorRole, approvedById: args.approvedById, ip: args.ip, userAgent: args.userAgent, reference: args.reference }), TX)
+    .catch(async (e) => {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && args.reference) {
+        const ex = await db.walletTxn.findUnique({ where: { reference: args.reference } });   // duplicate submit → return the original
+        if (ex) { idempotent = true; return { txn: ex, balancePaise: ex.balanceAfterPaise }; }
+      }
+      throw e;
+    });
+  if (args.notify !== false && !idempotent) await notifyWalletChange(args.userId, "CREDIT", args.amountPaise, args.reason || "Wallet credit", res.balancePaise).catch(() => {});
+  return res;
 }
 
-export async function adminDebit(args: { userId: string; amountPaise: number; reason: string; allowNegative?: boolean } & Actor) {
+export async function adminDebit(args: { userId: string; amountPaise: number; reason: string; allowNegative?: boolean; reference?: string; approvedById?: string; notify?: boolean } & Actor) {
   if (args.amountPaise <= 0) throw new Error("Amount must be positive");
-  return db.$transaction(async (tx) => {
+  let idempotent = false;
+  const res = await db.$transaction(async (tx) => {
     const user = await tx.user.findUnique({ where: { id: args.userId }, select: { walletPaise: true } });
     if (!args.allowNegative && (user?.walletPaise ?? 0) < args.amountPaise) throw new Error("Insufficient wallet balance");
-    return postTxn(tx, { userId: args.userId, type: "DEBIT", kind: "adjustment", amountPaise: args.amountPaise, reason: args.reason || "manual_debit", description: args.reason, createdById: args.actorId });
-  }, TX);
+    return postTxn(tx, { userId: args.userId, type: "DEBIT", kind: "adjustment", amountPaise: args.amountPaise, reason: args.reason || "manual_debit", description: args.reason, createdById: args.actorId, actorRole: args.actorRole, approvedById: args.approvedById, ip: args.ip, userAgent: args.userAgent, reference: args.reference });
+  }, TX).catch(async (e) => {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && args.reference) {
+      const ex = await db.walletTxn.findUnique({ where: { reference: args.reference } });
+      if (ex) { idempotent = true; return { txn: ex, balancePaise: ex.balanceAfterPaise }; }
+    }
+    throw e;
+  });
+  if (args.notify !== false && !idempotent) await notifyWalletChange(args.userId, "DEBIT", args.amountPaise, args.reason || "Wallet debit", res.balancePaise).catch(() => {});
+  return res;
+}
+
+/** Customer notification for a manual admin credit/debit (in-app + WhatsApp when opted in). */
+async function notifyWalletChange(userId: string, type: "CREDIT" | "DEBIT", amountPaise: number, reason: string, balancePaise: number) {
+  const amt = rsTxt(amountPaise), bal = rsTxt(balancePaise);
+  await notify(userId, {
+    title: type === "CREDIT" ? `₹${amt} added to your DOODLY Wallet` : `₹${amt} deducted from your DOODLY Wallet`,
+    body: `${reason}. Updated balance: ₹${bal}.`,
+    whatsapp: type === "CREDIT" ? { template: "wallet_credited", vars: [amt, amt, reason, bal] } : { template: "wallet_debited", vars: [amt, reason, bal] },
+  });
 }
 
 /** Bulk manual credit — reuses adminCredit per user; never throws for one bad id. */
