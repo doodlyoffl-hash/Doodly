@@ -14,7 +14,7 @@
      S5 P&L reconciles — ledger across BOTH tankers: Σ consumption == Σ sold, no double-deduction, no leftover shortfall
      INVARIANTS: per-tanker opening = consumed + remaining; no PENDING left; older tanker's own draws unchanged.
    Run: TSX_TSCONFIG_PATH=scripts/tsconfig.json npx tsx scripts/verify-fifo-carryforward.ts */
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type MilkTanker } from "@prisma/client";
 import { writeFileSync, unlinkSync } from "fs";
 import { istDayWindow, istISO } from "../lib/delivery/stats";
 import { settleDay, listPendingAllocations } from "../lib/milk/settle";
@@ -34,7 +34,7 @@ const isoOf = (offsetDays: number) => istISO(new Date(stamp + (500 + offsetDays)
 const T1_PROC = isoOf(0), DAY_A = isoOf(1), DAY_B = isoOf(2), T2_PROC = isoOf(3);
 
 let bizId = "", t1 = "", t2 = "", ordA = "", ordB = "";
-let quarantined: { id: string; remainingLitres: number; consumedLitres: number; status: string; closedAt: Date | null }[] = [];
+let quarantined: Pick<MilkTanker, "id" | "remainingLitres" | "consumedLitres" | "status" | "closedAt">[] = [];
 
 async function quarantineRealOpenTankers() {
   quarantined = await db.milkTanker.findMany({
