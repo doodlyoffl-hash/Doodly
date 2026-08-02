@@ -4356,111 +4356,192 @@
     } catch (e2) {}
   }
 
-  // ---- Wallet Management (admin/wallet → live balances + transactions + credit/debit/reverse + trial-cashback config + dashboard; reuses /api/wallet/admin) ----
-  function mapWalletTxn(t) {
-    return {
-      id: t.id, ref: t.reference, date: t.createdAt,
-      kind: t.type === "CREDIT" ? "credit" : "debit", type: t.kind,
-      amount: (t.amountPaise || 0) / 100, desc: t.description || t.reason || "",
-      balanceAfter: (t.balanceAfterPaise || 0) / 100, reversed: !!t.reversed, by: t.createdById || "",
-    };
-  }
-  function renderWalStats(host, r) {
-    var el = document.getElementById("wal-stats");
-    if (!el) { el = document.createElement("div"); el.id = "wal-stats"; el.className = "kpi-row"; el.style.marginBottom = "14px"; if (host.parentNode) host.parentNode.insertBefore(el, host); }
+  // ---- Wallet Management — financial-ledger dashboard (admin/wallet → /api/wallet/admin).
+  //      KPIs + global ledger + customer wallets + maker-checker approval queue + reports.
+  //      All data is LIVE from the DB (no localStorage). ----
+  function renderWalletDashboard(host) {
+    if (!window.DOODLY_API || !host) return;
+    var e2 = function (s) { return esc(String(s == null ? "" : s)); };
     var rup = function (p) { return "₹" + Math.round((p || 0) / 100).toLocaleString("en-IN"); };
-    var cards = [
-      ["Total Wallet Balance", rup(r.totalBalancePaise)], ["Active Wallets", String(r.activeWallets || 0)],
-      ["Credits Today", rup(r.creditsTodayPaise)], ["Debits Today", rup(r.debitsTodayPaise)],
-      ["Trial Cashback", rup(r.totalCashbackIssuedPaise)], ["Referral Rewards", rup(r.referralRewardsIssuedPaise)],
-      ["Refund Credits", rup(r.refundCreditsPaise)], ["Wallet Used", rup(r.walletUsedPaise)],
-    ];
-    el.innerHTML = cards.map(function (c) { return '<div class="kpi"><div class="n" data-live="' + c[1] + '">' + c[1] + '</div><div class="l">' + c[0] + "</div></div>"; }).join("");
+    var dtm = function (d) { try { return new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }); } catch (e) { return d; } };
+    var st = { tab: "ledger", reports: null, wallets: [], txns: [], adjustments: [], q: "", tq: "", tfilter: "all" };
+    var TXKIND = { cashback: ["blue", "Cashback"], referral: ["blue", "Referral"], refund: ["green", "Refund"], topup: ["green", "Top-up"], usage: ["amber", "Used"], adjustment: ["violet", "Adjustment"], reversal: ["grey", "Reversal"], loyalty: ["blue", "Loyalty"], promo: ["blue", "Promo"] };
+
+    function load() {
+      return Promise.all([
+        DOODLY_API.get("/api/wallet/admin?view=reports"),
+        DOODLY_API.get("/api/wallet/admin?view=list"),
+        DOODLY_API.get("/api/wallet/admin?view=transactions&limit=2000"),
+        DOODLY_API.get("/api/wallet/admin?view=adjustments").catch(function () { return { adjustments: [] }; }),
+      ]).then(function (r) {
+        st.reports = r[0]; st.wallets = r[1].wallets || []; st.txns = r[2].transactions || []; st.adjustments = r[3].adjustments || [];
+        render();
+      }).catch(function (e) {
+        host.innerHTML = '<div class="panel"><div class="panel-pad">' + bannerHtml(e) + "</div></div>";
+      });
+    }
+    function bannerHtml(e) {
+      return '<div class="muted-sm">' + (e && e.code === "forbidden" ? "⚠ Your role can't access Wallet Management — Finance, Admin & Super Admin only (403)."
+        : e && e.code === "offline" ? "⚠ Backend offline — couldn't load live wallets." : "⚠ " + ((e && e.message) || "Couldn't load wallets.")) + "</div>";
+    }
+    function kpiRow() {
+      var r = st.reports || {};
+      var cards = [
+        ["Credits Today", rup(r.creditsTodayPaise)], ["Debits Today", rup(r.debitsTodayPaise)],
+        ["Total Liability", rup(r.totalBalancePaise)], ["Pending Refunds", rup(r.pendingRefundsPaise) + " · " + (r.pendingRefundsCount || 0)],
+        ["Processed Refunds", rup(r.processedRefundsPaise)], ["Active Wallets", String(r.activeWallets || 0)],
+        ["Avg Balance", rup(r.averageBalancePaise)], ["Txns Today", String(r.transactionsToday || 0)], ["Txns This Month", String(r.transactionsThisMonth || 0)],
+      ];
+      return '<div class="kpi-row" style="margin-bottom:14px">' + cards.map(function (c) { return '<div class="kpi"><div class="n">' + e2(c[1]) + '</div><div class="l">' + e2(c[0]) + "</div></div>"; }).join("") + "</div>";
+    }
+    function tabBar() {
+      var pend = st.adjustments.filter(function (a) { return a.status === "PENDING"; }).length;
+      var tabs = [["ledger", "Ledger"], ["customers", "Customers"], ["approvals", "Approvals" + (pend ? " (" + pend + ")" : "")], ["reports", "Reports"]];
+      return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">' + tabs.map(function (t) {
+        return '<button class="btn ' + (st.tab === t[0] ? "btn-primary" : "btn-ghost") + ' sm" data-tab="' + t[0] + '">' + e2(t[1]) + "</button>";
+      }).join("") + "</div>";
+    }
+    function kindBadge(k) { var m = TXKIND[k] || ["grey", k]; return '<span class="badge ' + m[0] + '">' + e2(m[1]) + "</span>"; }
+    function ledgerTab() {
+      var q = st.tq.toLowerCase();
+      var rows = st.txns.filter(function (t) {
+        if (st.tfilter !== "all" && (t.type || "").toUpperCase() !== st.tfilter) return false;
+        if (!q) return true;
+        return ((t.customerName || "") + " " + (t.reference || "") + " " + (t.reason || "") + " " + (t.orderId || "") + " " + (t.userId || "")).toLowerCase().indexOf(q) >= 0;
+      }).slice(0, 400);
+      var body = rows.map(function (t) {
+        return "<tr><td>" + dtm(t.createdAt) + "</td><td>" + e2(t.customerName || "—") + "</td>" +
+          '<td><span class="badge ' + (t.type === "CREDIT" ? "green" : "amber") + '">' + (t.type === "CREDIT" ? "＋" : "−") + "</span></td>" +
+          "<td>" + kindBadge(t.kind) + "</td>" +
+          '<td style="text-align:right' + (t.type === "CREDIT" ? ";color:var(--leaf-600,#178a52)" : "") + '">' + (t.type === "CREDIT" ? "+" : "−") + rup(t.amountPaise) + "</td>" +
+          '<td style="text-align:right">' + rup(t.balanceAfterPaise) + "</td>" +
+          '<td class="muted-sm">' + e2(t.reason || "") + "</td><td class=\"muted-sm\">" + e2(t.reference) + "</td>" +
+          "<td>" + (t.reversed ? '<span class="badge grey">Reversed</span>' : t.kind === "reversal" ? '<span class="badge grey">Reversal</span>' : '<button class="btn btn-ghost sm" data-rev="' + t.id + '">Reverse</button>') + "</td></tr>";
+      }).join("");
+      return '<div class="panel"><div class="panel-head" style="gap:10px;flex-wrap:wrap"><h3>Wallet Ledger <span class="muted-sm" style="font-weight:600">· every credit &amp; debit</span></h3>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap"><input class="input" id="wl-q" placeholder="Search customer, reference, order, reason…" value="' + e2(st.tq) + '" style="min-width:240px">' +
+        '<select class="input" id="wl-f" style="max-width:140px"><option value="all">All</option><option value="CREDIT"' + (st.tfilter === "CREDIT" ? " selected" : "") + '>Credits</option><option value="DEBIT"' + (st.tfilter === "DEBIT" ? " selected" : "") + '>Debits</option></select></div></div>' +
+        '<div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Customer</th><th></th><th>Kind</th><th style="text-align:right">Amount</th><th style="text-align:right">Balance</th><th>Reason</th><th>Reference</th><th></th></tr></thead><tbody>' +
+        (body || '<tr><td colspan="9" class="muted-sm" style="text-align:center;padding:14px">No transactions.</td></tr>') + "</tbody></table></div><p class=\"muted-sm\" style=\"margin-top:8px\">Showing " + rows.length + " of " + st.txns.length + " transactions.</p></div></div>";
+    }
+    function customersTab() {
+      var q = st.q.toLowerCase();
+      var rows = st.wallets.filter(function (w) { return !q || ((w.name || "") + " " + (w.phone || "") + " " + (w.email || "") + " " + w.id).toLowerCase().indexOf(q) >= 0; });
+      var body = rows.map(function (w) {
+        var trial = w.trialStatus === "redeemed" ? '<span class="badge green">Redeemed</span>' : w.trialStatus === "eligible" ? '<span class="badge blue">Eligible</span>' : '<span class="muted-sm">—</span>';
+        return "<tr><td><b>" + e2(w.name || "—") + '</b><div class="muted-sm">' + e2(w.phone || w.id.slice(-6)) + "</div></td>" +
+          '<td style="text-align:right"><b>' + rup(w.walletPaise) + "</b></td><td>" + trial + "</td>" +
+          '<td style="text-align:right;white-space:nowrap"><button class="btn btn-ghost sm" data-view="' + w.id + '">View</button> <button class="btn btn-ghost sm" data-adj="' + w.id + '" data-name="' + e2(w.name || "") + '">Credit / Debit</button></td></tr>';
+      }).join("");
+      return '<div class="panel"><div class="panel-head" style="gap:10px;flex-wrap:wrap"><h3>Customer Wallets</h3><input class="input" id="wc-q" placeholder="Search customer, phone, email…" value="' + e2(st.q) + '" style="min-width:240px"></div>' +
+        '<div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Customer</th><th style="text-align:right">Balance</th><th>Trial</th><th></th></tr></thead><tbody>' +
+        (body || '<tr><td colspan="4" class="muted-sm" style="text-align:center;padding:14px">No wallets.</td></tr>') + "</tbody></table></div></div></div>";
+    }
+    function approvalsTab() {
+      var rows = st.adjustments.map(function (a) {
+        var sb = a.status === "PENDING" ? '<span class="badge amber">Pending</span>' : a.status === "APPROVED" ? '<span class="badge green">Approved</span>' : '<span class="badge grey">Rejected</span>';
+        var act = a.status === "PENDING" ? '<button class="btn btn-ghost sm" data-approve="' + a.id + '">Approve</button> <button class="btn btn-ghost sm" data-reject="' + a.id + '">Reject</button>' : (a.decidedByRole ? '<span class="muted-sm">by ' + e2(a.decidedByRole) + "</span>" : "");
+        return "<tr><td>" + dtm(a.createdAt) + '</td><td class="muted-sm">' + e2(a.code) + "</td><td>" + e2(a.customerName) + "</td>" +
+          '<td><span class="badge ' + (a.type === "CREDIT" ? "green" : "amber") + '">' + a.type + '</span></td><td style="text-align:right">' + rup(a.amountPaise) + "</td>" +
+          '<td class="muted-sm">' + e2(a.reason) + "</td><td>" + sb + '</td><td style="text-align:right;white-space:nowrap">' + act + "</td></tr>";
+      }).join("");
+      return '<div class="panel"><div class="panel-head"><h3>Manual Adjustments <span class="muted-sm" style="font-weight:600">· maker-checker approval</span></h3></div>' +
+        '<div class="panel-pad"><p class="muted-sm" style="margin-top:0">A manual credit/debit is submitted here, sits <b>Pending</b> with no balance change, and only moves money when a <b>Super-Admin</b> approves it (approver must differ from the requester).</p>' +
+        '<div class="table-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Code</th><th>Customer</th><th>Type</th><th style="text-align:right">Amount</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>' +
+        (rows || '<tr><td colspan="8" class="muted-sm" style="text-align:center;padding:14px">No adjustment requests.</td></tr>') + "</tbody></table></div></div></div>";
+    }
+    function reportsTab() {
+      var reps = [["summary", "Wallet Summary"], ["customer", "Customer Wallets"], ["liability", "Wallet Liability"], ["refund", "All Refunds"], ["bottleRefund", "Bottle Deposit Refunds"], ["trialRefund", "Trial Cashback"], ["referral", "Referral Rewards"], ["adjustment", "Manual Adjustments"]];
+      return '<div class="panel"><div class="panel-head"><h3>Reports <span class="muted-sm" style="font-weight:600">· PDF · Excel · CSV</span></h3></div><div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Report</th><th></th></tr></thead><tbody>' +
+        reps.map(function (r) {
+          return "<tr><td><b>" + e2(r[1]) + '</b></td><td style="text-align:right;white-space:nowrap"><button class="btn btn-ghost sm" data-rep="' + r[0] + '" data-fmt="pdf">⬇ PDF</button> <button class="btn btn-ghost sm" data-rep="' + r[0] + '" data-fmt="xls">Excel</button> <button class="btn btn-ghost sm" data-rep="' + r[0] + '" data-fmt="csv">CSV</button></td></tr>';
+        }).join("") + "</tbody></table></div></div></div>";
+    }
+    function render() {
+      var content = st.tab === "customers" ? customersTab() : st.tab === "approvals" ? approvalsTab() : st.tab === "reports" ? reportsTab() : ledgerTab();
+      host.innerHTML = kpiRow() + tabBar() + content;
+      wire();
+    }
+    function modal(title, inner, onOk, okLabel) {
+      var bd = document.createElement("div"); bd.className = "wal-modal"; bd.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:16px";
+      bd.innerHTML = '<div class="panel" style="max-width:440px;width:100%;margin:0"><div class="panel-head"><h3>' + e2(title) + '</h3><button class="link wal-x">✕</button></div><div class="panel-pad">' + inner + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost sm wal-x">Cancel</button><button class="btn btn-primary sm wal-ok">' + e2(okLabel || "Confirm") + "</button></div></div></div>";
+      document.body.appendChild(bd);
+      var close = function () { bd.remove(); };
+      bd.querySelectorAll(".wal-x").forEach(function (b) { b.addEventListener("click", close); });
+      bd.querySelector(".wal-ok").addEventListener("click", function () { onOk(bd, close); });
+      return bd;
+    }
+    function requestAdjustment(userId, name) {
+      modal("Request wallet adjustment — " + (name || ""),
+        '<div style="display:flex;flex-direction:column;gap:10px">' +
+        '<label style="font-size:.78rem;font-weight:700">Type<select class="input" id="wa-type"><option value="CREDIT">Credit (add money)</option><option value="DEBIT">Debit (deduct money)</option></select></label>' +
+        '<label style="font-size:.78rem;font-weight:700">Amount (₹)<input class="input" id="wa-amt" type="number" min="0" step="0.01"></label>' +
+        '<label style="font-size:.78rem;font-weight:700">Reason (required)<input class="input" id="wa-reason" placeholder="e.g. Goodwill compensation"></label>' +
+        '<p class="muted-sm" style="margin:0">Submitting creates a <b>Pending</b> request — a Super-Admin must approve it before any money moves.</p></div>',
+        function (bd, close) {
+          var amt = Number(bd.querySelector("#wa-amt").value), reason = (bd.querySelector("#wa-reason").value || "").trim();
+          if (!(amt > 0)) { dacToast("Enter an amount greater than zero."); return; }
+          if (!reason) { dacToast("A reason is required."); return; }
+          DOODLY_API.post("/api/wallet/admin", { action: "requestAdjustment", userId: userId, type: bd.querySelector("#wa-type").value, amountPaise: Math.round(amt * 100), reason: reason })
+            .then(function () { close(); dacToast("Adjustment submitted for approval."); load(); })
+            .catch(function (e) { dacToast(e.code === "forbidden" ? "Your role can't request adjustments (403)." : (e.message || "Failed.")); });
+        }, "Submit for approval");
+    }
+    function decide(id, action) {
+      var isApprove = action === "approveAdjustment";
+      modal((isApprove ? "Approve" : "Reject") + " adjustment",
+        '<label style="font-size:.78rem;font-weight:700;display:block">Note (optional)<input class="input" id="wa-note"></label>' +
+        '<p class="muted-sm" style="margin:8px 0 0">' + (isApprove ? "Approving posts the real ledger entry and moves the money now." : "Rejecting closes the request with no money movement.") + " Super-Admin only.</p>",
+        function (bd, close) {
+          DOODLY_API.post("/api/wallet/admin", { action: action, id: id, note: (bd.querySelector("#wa-note").value || "").trim() || undefined })
+            .then(function () { close(); dacToast(isApprove ? "Approved & posted." : "Rejected."); load(); })
+            .catch(function (e) { dacToast(e.code === "forbidden" ? "Approving/rejecting is Super-Admin only (403)." : (e.message || "Failed.")); });
+        }, isApprove ? "Approve & post" : "Reject");
+    }
+    function viewCustomer(userId) {
+      DOODLY_API.get("/api/wallet/admin?view=detail&userId=" + encodeURIComponent(userId)).then(function (d) {
+        var u = d.user || {}, txns = d.transactions || [];
+        var cr = txns.filter(function (t) { return t.type === "CREDIT"; }).reduce(function (s, t) { return s + t.amountPaise; }, 0);
+        var db = txns.filter(function (t) { return t.type === "DEBIT"; }).reduce(function (s, t) { return s + t.amountPaise; }, 0);
+        var last = txns[0];
+        var info = [["Current balance", rup(d.balancePaise)], ["Lifetime credits", rup(cr)], ["Lifetime debits", rup(db)], ["Phone", e2(u.phone || "—")], ["Email", e2(u.email || "—")], ["Joined", u.createdAt ? dtm(u.createdAt) : "—"], ["Last transaction", last ? dtm(last.createdAt) + " · " + rup(last.amountPaise) : "—"]];
+        var led = txns.slice(0, 40).map(function (t) { return "<tr><td>" + dtm(t.createdAt) + '</td><td><span class="badge ' + (t.type === "CREDIT" ? "green" : "amber") + '">' + (t.type === "CREDIT" ? "+" : "−") + "</span> " + kindBadge(t.kind) + '</td><td style="text-align:right">' + rup(t.amountPaise) + '</td><td style="text-align:right">' + rup(t.balanceAfterPaise) + '</td><td class="muted-sm">' + e2(t.reference) + "</td></tr>"; }).join("");
+        modal("Wallet — " + (u.name || userId.slice(-6)),
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-bottom:10px">' + info.map(function (r) { return '<div class="muted-sm">' + r[0] + '</div><div style="font-weight:700;text-align:right">' + r[1] + "</div>"; }).join("") + "</div>" +
+          '<div class="table-wrap" style="max-height:280px;overflow:auto"><table class="tbl"><thead><tr><th>Date</th><th>Kind</th><th style="text-align:right">Amount</th><th style="text-align:right">Balance</th><th>Ref</th></tr></thead><tbody>' + (led || '<tr><td colspan="5" class="muted-sm">No transactions.</td></tr>') + "</tbody></table></div>",
+          function (bd, close) { close(); requestAdjustment(userId, u.name); }, "Credit / Debit");
+      }).catch(function (e) { dacToast((e && e.message) || "Couldn't load the customer wallet."); });
+    }
+    function exportReport(rep, fmt) {
+      var h = {}; try { var t = localStorage.getItem("doodly-token"); if (t) h.Authorization = "Bearer " + t; } catch (e) {}
+      try { if (window.DOODLY_RBAC) { h["X-Doodly-Actor"] = DOODLY_RBAC.activeRole(); var cu = DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser(); if (cu && cu.id) h["X-Doodly-Actor-Id"] = cu.id; } } catch (e) {}
+      dacToast("Preparing " + rep + " (" + fmt.toUpperCase() + ")…");
+      fetch(DOODLY_API.base() + "/api/wallet/admin/export?report=" + encodeURIComponent(rep) + "&format=" + fmt, { headers: h, credentials: "include" })
+        .then(function (r) { if (!r.ok) throw new Error(r.status === 403 ? "Your role can't export (403)." : "Export failed (" + r.status + ")"); return r.blob(); })
+        .then(function (blob) { var url = URL.createObjectURL(blob); var a = document.createElement("a"); a.href = url; a.download = "DOODLY_Wallet_" + rep + "." + fmt; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 60000); dacToast("Downloaded."); })
+        .catch(function (e) { dacToast((e && e.message) || "Couldn't export."); });
+    }
+    function wire() {
+      host.querySelectorAll("[data-tab]").forEach(function (b) { b.addEventListener("click", function () { st.tab = b.dataset.tab; render(); }); });
+      var wlq = host.querySelector("#wl-q"); if (wlq) wlq.addEventListener("input", function () { st.tq = wlq.value; var body = ledgerTab(); /* light refresh */ host.querySelector(".panel").outerHTML = body; wire(); });
+      var wlf = host.querySelector("#wl-f"); if (wlf) wlf.addEventListener("change", function () { st.tfilter = wlf.value; render(); });
+      var wcq = host.querySelector("#wc-q"); if (wcq) wcq.addEventListener("input", function () { st.q = wcq.value; render(); var f = host.querySelector("#wc-q"); if (f) { f.focus(); f.value = st.q; } });
+      host.querySelectorAll("[data-view]").forEach(function (b) { b.addEventListener("click", function () { viewCustomer(b.dataset.view); }); });
+      host.querySelectorAll("[data-adj]").forEach(function (b) { b.addEventListener("click", function () { requestAdjustment(b.dataset.adj, b.dataset.name); }); });
+      host.querySelectorAll("[data-approve]").forEach(function (b) { b.addEventListener("click", function () { decide(b.dataset.approve, "approveAdjustment"); }); });
+      host.querySelectorAll("[data-reject]").forEach(function (b) { b.addEventListener("click", function () { decide(b.dataset.reject, "rejectAdjustment"); }); });
+      host.querySelectorAll("[data-rev]").forEach(function (b) { b.addEventListener("click", function () { if (window.confirm("Reverse this transaction? An opposite entry will be posted (the ledger is never edited).")) DOODLY_API.post("/api/wallet/admin", { action: "reverse", txnId: b.dataset.rev }).then(function () { dacToast("Reversed."); load(); }).catch(function (e) { dacToast((e && e.message) || "Couldn't reverse."); }); }); });
+      host.querySelectorAll("[data-rep]").forEach(function (b) { b.addEventListener("click", function () { exportReport(b.dataset.rep, b.dataset.fmt); }); });
+    }
+    host.innerHTML = '<div class="panel"><div class="panel-pad muted-sm">Loading wallet ledger…</div></div>';
+    load();
   }
   async function wireWalletBackend() {
     if ((document.body.dataset.route || "") !== "admin/wallet" || !window.DOODLY_API) return;
     var host = document.getElementById("walletAdminMount");
-    try {
-      var listR = await DOODLY_API.get("/api/wallet/admin?view=list");
-      var txR = await DOODLY_API.get("/api/wallet/admin?view=transactions&limit=2000");
-      var cfg = await DOODLY_API.get("/api/wallet/admin?view=config");
-      var byUser = {};
-      (txR.transactions || []).forEach(function (t) { (byUser[t.userId] = byUser[t.userId] || []).push(mapWalletTxn(t)); });
-      var wallets = (listR.wallets || []).map(function (w) {
-        return { id: w.id, _bid: w.id, name: w.name || "—", mobile: w.phone || "", balance: (w.walletPaise || 0) / 100,
-          trialCredited: w.trialStatus === "redeemed", trialPurchased: w.trialStatus !== "none", txns: byUser[w.id] || [] };
-      });
-      try { localStorage.setItem("doodly-wallets", JSON.stringify(wallets)); } catch (e) {}
-      try { localStorage.setItem("doodly-wallet-config", JSON.stringify({ enabled: !!cfg.enabled, amount: (cfg.amountPaise || 0) / 100, eligiblePlans: cfg.eligiblePlanSlugs || ["p30", "p90"], expiryDays: cfg.expiryDays })); } catch (e) {}
-      var curTab = null; var onTab = host.querySelector(".exp-tab.on"); if (onTab) curTab = onTab.getAttribute("data-t");
-      window.DOODLY_WALLET.mountAdmin(host);
-      if (curTab && curTab !== "wallets") { var tb = host.querySelector('.exp-tab[data-t="' + curTab + '"]'); if (tb) tb.click(); }
-      installWalletInterceptor(host);
-      try { renderWalStats(host, await DOODLY_API.get("/api/wallet/admin?view=reports")); } catch (e2) {}
-      bkBanner(host, "● Live — " + wallets.length + " wallet(s) · " + (txR.transactions || []).length + " transaction(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
-    } catch (e) {
-      bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live wallets. Start next-app to go live."
-        : e.code === "forbidden" ? "⚠ Your role can't access Wallet Management — Finance, Admin & Super Admin only (403)."
-        : "⚠ " + (e.message || "Couldn't load wallets."), "err");
-    }
+    if (host) renderWalletDashboard(host);
   }
   window.DOODLY_ADMIN.wireWalletBackend = wireWalletBackend;
-
-  function installWalletInterceptor(host) {
-    if (host._walWired) return; host._walWired = true;
-    host.addEventListener("click", function (ev) {
-      var t = ev.target; if (!t || !t.closest) return;
-      var cr = t.closest(".w-cr"), db = t.closest(".w-db"), rf = t.closest(".w-rf"), rev = t.closest(".w-rev"), save = t.closest("#c-save");
-      if (!(cr || db || rf || rev || save)) return;
-      ev.preventDefault(); ev.stopImmediatePropagation();
-      if (cr) return walletCreditDebit(cr.getAttribute("data-id"), "credit");
-      if (db) return walletCreditDebit(db.getAttribute("data-id"), "debit");
-      if (rf) return walletBottleRefund(rf.getAttribute("data-id"));
-      if (rev) return walletReverse(rev.getAttribute("data-tx"));
-      if (save) return walletSaveConfig(host);
-    }, true);
-  }
-  async function walletCreditDebit(userId, mode) {
-    if (!userId) return;
-    var raw = prompt((mode === "credit" ? "Credit" : "Debit") + " amount (₹)"); if (raw === null) return;
-    var amt = Number(raw); if (!(amt > 0)) { dacToast("Enter a valid amount greater than zero"); return; }
-    var reason = prompt("Reason?" + (mode === "debit" ? " (required)" : "")) || (mode === "credit" ? "Manual credit" : "Manual debit");
-    try {
-      await DOODLY_API.post("/api/wallet/admin", { action: mode, userId: userId, amountPaise: Math.round(amt * 100), reason: reason });
-      dacToast("₹" + amt.toLocaleString("en-IN") + " " + (mode === "credit" ? "credited" : "debited"));
-      await wireWalletBackend();
-    } catch (e) { dacToast(e.code === "forbidden" ? "Your role can't manage wallets (403)." : e.code === "conflict" ? (e.message || "Insufficient balance.") : (e.message || "Action failed.")); }
-  }
-  async function walletBottleRefund(userId) {
-    if (!userId) return;
-    var raw = prompt("Refund deposit amount (₹)"); if (raw === null) return;
-    var amt = Number(raw); if (!(amt > 0)) { dacToast("Enter a valid amount greater than zero"); return; }
-    var qty = parseInt(prompt("Bottles returned (qty, optional)") || "", 10);
-    var note = prompt("Note? (optional)") || "";
-    var body = { action: "bottleRefund", userId: userId, amountPaise: Math.round(amt * 100) };
-    if (qty > 0) body.qty = qty;
-    if (note) body.note = note;
-    try {
-      await DOODLY_API.post("/api/wallet/admin", body);
-      dacToast("₹" + amt.toLocaleString("en-IN") + " deposit refunded to wallet");
-      await wireWalletBackend();
-    } catch (e) { dacToast(e.code === "forbidden" ? "Your role can't manage wallets (403)." : (e.message || "Refund failed.")); }
-  }
-  async function walletReverse(txnId) {
-    if (!txnId) return;
-    if (!confirm("Reverse this transaction? An opposite entry will be posted.")) return;
-    try { await DOODLY_API.post("/api/wallet/admin", { action: "reverse", txnId: txnId }); dacToast("Transaction reversed"); await wireWalletBackend(); }
-    catch (e) { dacToast(e.code === "forbidden" ? "Your role can't reverse (403)." : (e.message || "Couldn't reverse.")); }
-  }
-  async function walletSaveConfig(host) {
-    var en = host.querySelector("#c-en"), amt = host.querySelector("#c-amt"), exp = host.querySelector("#c-exp");
-    var plans = [].slice.call(host.querySelectorAll(".c-plan:checked")).map(function (i) { return i.value; });
-    try {
-      await DOODLY_API.post("/api/wallet/admin", { action: "config", enabled: !!(en && en.checked), amountPaise: Math.round((Number(amt && amt.value) || 0) * 100), eligiblePlanSlugs: plans, expiryDays: (exp && exp.value) ? Number(exp.value) : null });
-      dacToast("Cashback settings saved — live instantly");
-      await wireWalletBackend();
-    } catch (e) { dacToast(e.code === "forbidden" ? "Your role can't edit settings (403)." : (e.message || "Couldn't save settings.")); }
-  }
 
   // ---- Growth → Reports (admin/reports → live KPIs + charts + category reports + filters + export + drill-down; reuses /api/admin/reports) ----
   var _rpState = { preset: "last30", data: null };
