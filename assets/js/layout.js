@@ -7003,7 +7003,7 @@
         DOODLY_API.post("/api/admin/milk/settle", { date: dates[i] }).then(function () { okc++; }).catch(function () {}).finally(function () { i++; next(); });
       })();
     });
-    host.querySelector("#pc-b2b").addEventListener("click", function () { openMilkB2BBooking(function () { wireProfitCenterBackend(); }); });
+    host.querySelector("#pc-b2b").addEventListener("click", function () { openB2BOrderBooking(function () { wireProfitCenterBackend(); }); });
     host.querySelector("#pc-exp").addEventListener("click", function () { openMilkExpense(function () { wireProfitCenterBackend(); }); });
     var doReport = function (fmt) { exportMilkReport(host.querySelector("#pc-rtype").value, host.querySelector("#pc-rfrom").value, host.querySelector("#pc-rto").value, fmt); };
     host.querySelector("#pc-rpdf").addEventListener("click", function () { doReport("pdf"); });
@@ -7029,43 +7029,58 @@
     });
   }
 
-  // Book a B2B milk order from the Profit Center — reuses the existing B2B order
-  // engine (POST /api/b2b/orders). Server resolves pricing (milk in Litres →
-  // catalogue default); the order lands in the P&L's B2B revenue by delivery date.
-  function openMilkB2BBooking(onSaved) {
-    var m = asgnModal("Book B2B milk order", '<p class="muted-sm">Loading businesses…</p>');
-    DOODLY_API.get("/api/b2b/businesses").then(function (r) {
-      var biz = (r && r.businesses) || [];
+  // Book a B2B order (ANY product + unit) from the Profit Center — reuses the existing
+  // B2B order engine (POST /api/b2b/orders). Server resolves pricing from the business's
+  // negotiated (product, unit) rate or the catalogue default; the order lands in the P&L's
+  // B2B revenue on delivery. Solids (paneer/ghee/kova/curd) sold in KG draw milk-equivalent
+  // COGS once solids costing is enabled. Milk can be booked in Litres, Bottles OR KG.
+  function openB2BOrderBooking(onSaved) {
+    var m = asgnModal("Book B2B order", '<p class="muted-sm">Loading businesses & products…</p>');
+    Promise.all([
+      DOODLY_API.get("/api/b2b/businesses"),
+      DOODLY_API.get("/api/b2b/pricing/products").catch(function () { return { products: [] }; }),
+    ]).then(function (res) {
+      var biz = (res[0] && res[0].businesses) || [];
+      var prods = (res[1] && res[1].products) || [];
       if (!biz.length) {
         m.body.innerHTML = '<p class="muted-sm">No B2B businesses yet. Register one first in <a href="/admin/b2b.html" style="text-decoration:underline">Commerce → B2B Orders</a>, then book here.</p>';
         return;
       }
+      if (!prods.length) prods = [{ slug: "milk", name: "A2 Buffalo Milk", units: ["Litres", "Bottles", "KG"], primaryUnit: "Litres" }];
+      var bySlug = {}; prods.forEach(function (p) { bySlug[p.slug] = p; });
+      var unitOpts = function (slug) { var p = bySlug[slug] || prods[0]; return (p.units || ["Litres"]).map(function (u) { return '<option value="' + esc(u) + '">' + esc(u) + "</option>"; }).join(""); };
       m.body.innerHTML =
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
           '<label class="dac-f"><span>Business</span><select class="input" id="b2-biz">' + biz.map(function (b) { return '<option value="' + b.id + '">' + esc(b.name) + " (" + esc(b.code) + ")</option>"; }).join("") + "</select></label>" +
           '<label class="dac-f"><span>Delivery date</span><input class="input" id="b2-date" type="date" value="' + istTodayStr() + '"></label>' +
-          '<label class="dac-f"><span>Quantity (Litres)</span><input class="input" id="b2-qty" type="number" min="0" step="0.5" placeholder="50"></label>' +
+          '<label class="dac-f"><span>Product</span><select class="input" id="b2-prod">' + prods.map(function (p) { return '<option value="' + esc(p.slug) + '">' + esc(p.name) + "</option>"; }).join("") + "</select></label>" +
+          '<label class="dac-f"><span>Unit</span><select class="input" id="b2-unit">' + unitOpts(prods[0].slug) + "</select></label>" +
+          '<label class="dac-f"><span>Quantity</span><input class="input" id="b2-qty" type="number" min="0" step="0.5" placeholder="50"></label>' +
           '<label class="dac-f"><span>Delivery time</span><input class="input" id="b2-time" value="07:00"></label>' +
           '<label class="dac-f" style="grid-column:1/3"><span>Remarks (optional)</span><input class="input" id="b2-rem"></label>' +
         "</div>" +
-        '<p class="muted-sm" style="margin-top:6px">Milk is priced per litre from the business\'s negotiated rate (or the catalogue default). The order appears in B2B revenue immediately.</p>' +
+        '<p class="muted-sm" style="margin-top:6px">Priced by the business\'s negotiated rate for the product + unit (or the catalogue default). Milk can be booked in Litres, Bottles or KG; solids (paneer/ghee/kova/curd) in KG. The order appears in B2B revenue on delivery.</p>' +
         '<p class="dac-err" id="b2-err"></p>' +
         '<div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-primary sm" id="b2-save">Book order</button></div>';
       var err = m.body.querySelector("#b2-err");
+      var prodSel = m.body.querySelector("#b2-prod"), unitSel = m.body.querySelector("#b2-unit");
+      // repopulate the unit list whenever the product changes (each product allows its own units)
+      prodSel.addEventListener("change", function () { unitSel.innerHTML = unitOpts(prodSel.value); });
       m.body.querySelector("#b2-save").addEventListener("click", function () {
         var qty = +m.body.querySelector("#b2-qty").value || 0;
-        if (!(qty > 0)) { err.textContent = "Enter a quantity in litres."; return; }
+        var slug = prodSel.value, unit = unitSel.value, prod = bySlug[slug] || {};
+        if (!(qty > 0)) { err.textContent = "Enter a quantity greater than 0."; return; }
         var body = {
           businessId: m.body.querySelector("#b2-biz").value,
           deliveryDate: m.body.querySelector("#b2-date").value || istTodayStr(),
           deliveryTime: m.body.querySelector("#b2-time").value.trim() || "07:00",
           remarks: m.body.querySelector("#b2-rem").value.trim() || undefined,
-          items: [{ productSlug: "milk", productName: "A2 Buffalo Milk", quantity: qty, unit: "Litres", unitPricePaise: 0 }],
+          items: [{ productSlug: slug, productName: prod.name || slug, quantity: qty, unit: unit, unitPricePaise: 0 }],
         };
         var b = m.body.querySelector("#b2-save"); b.disabled = true;
         DOODLY_API.post("/api/b2b/orders", body)
           .then(function (x) { var o = x.order || x; dacToast("B2B order " + (o.code || "") + " booked — " + milkRs(o.totalPaise || 0) + "."); m.close(); if (onSaved) onSaved(); })
-          .catch(function (e) { b.disabled = false; err.textContent = e.code === "forbidden" ? "Your role can't book B2B orders." : e.code === "conflict" ? (e.message || "No B2B price set for milk — set one in B2B Pricing.") : (e.message || "Couldn't book the order."); });
+          .catch(function (e) { b.disabled = false; err.textContent = e.code === "forbidden" ? "Your role can't book B2B orders." : e.code === "conflict" ? (e.message || ("No B2B price set for " + (prod.name || slug) + " in " + unit + " — add one in B2B Pricing.")) : (e.message || "Couldn't book the order."); });
       });
     }).catch(function (e) { m.body.innerHTML = '<p class="dac-err">' + esc(e.message || "Couldn't load businesses.") + "</p>"; });
   }
