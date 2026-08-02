@@ -609,13 +609,19 @@ export async function walletReports(args: { from?: Date | string; to?: Date | st
   const where: Prisma.WalletTxnWhereInput = args.from || args.to ? { createdAt: range } : {};
 
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-  const [byKind, outstanding, trialAgg, activeWallets, todayByType, referralAgg] = await Promise.all([
+  const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+  const [byKind, outstanding, trialAgg, activeWallets, todayByType, referralAgg, pendingAdj, pendingRefunds, txnsToday, txnsMonth] = await Promise.all([
     db.walletTxn.groupBy({ by: ["kind", "type"], where, _sum: { amountPaise: true }, _count: true }),
     db.user.aggregate({ _sum: { walletPaise: true } }),
     db.trialCashback.aggregate({ where: { status: "CREDITED" }, _count: true, _sum: { amountPaise: true } }),
     db.user.count({ where: { walletPaise: { gt: 0 } } }),
     db.walletTxn.groupBy({ by: ["type"], where: { createdAt: { gte: todayStart } }, _sum: { amountPaise: true } }),
     db.referralReward.aggregate({ where: { status: "CREDITED" }, _count: true, _sum: { amountPaise: true } }),
+    // pending manual adjustments (maker-checker queue) + bottle-deposit refunds owed
+    db.walletAdjustmentRequest.aggregate({ where: { status: "PENDING" }, _count: true, _sum: { amountPaise: true } }),
+    db.bottlePickupRequest.aggregate({ where: { status: { in: ["COLLECTED", "VERIFIED"] }, refundedPaise: 0 }, _count: true, _sum: { refundableDepositPaise: true } }),
+    db.walletTxn.count({ where: { createdAt: { gte: todayStart } } }),
+    db.walletTxn.count({ where: { createdAt: { gte: monthStart } } }),
   ]);
   const sum = (kind: string, type: "CREDIT" | "DEBIT") => byKind.filter((g) => g.kind === kind && g.type === type).reduce((s, g) => s + (g._sum.amountPaise ?? 0), 0);
   const totalCredited = byKind.filter((g) => g.type === "CREDIT").reduce((s, g) => s + (g._sum.amountPaise ?? 0), 0);
@@ -630,20 +636,28 @@ export async function walletReports(args: { from?: Date | string; to?: Date | st
     referralRewardsIssuedPaise: sum("referral", "CREDIT"),
     promoIssuedPaise: sum("promo", "CREDIT"),
     refundCreditsPaise: sum("refund", "CREDIT"),
+    processedRefundsPaise: sum("refund", "CREDIT"),   // refunds actually credited to wallets
     adjustmentCreditsPaise: sum("adjustment", "CREDIT"),
     walletUsedPaise: byKind.filter((g) => g.type === "DEBIT").reduce((s, g) => s + (g._sum.amountPaise ?? 0), 0),
     totalCreditedPaise: totalCredited,
     cashbackConversionRate: totalPaidTrials ? Math.round((trialAgg._count / totalPaidTrials) * 1000) / 10 : 0,
     // live dashboard fields (not range-filtered)
     totalBalancePaise: outstanding._sum.walletPaise ?? 0,
-    outstandingBalancePaise: outstanding._sum.walletPaise ?? 0,
+    outstandingBalancePaise: outstanding._sum.walletPaise ?? 0,      // total wallet LIABILITY
     activeWallets,
+    averageBalancePaise: activeWallets > 0 ? Math.round((outstanding._sum.walletPaise ?? 0) / activeWallets) : 0,
     creditsTodayPaise: today("CREDIT"),
     debitsTodayPaise: today("DEBIT"),
+    transactionsToday: txnsToday,
+    transactionsThisMonth: txnsMonth,
     referralRewardsCount: referralAgg._count,
     referralRewardsAllTimePaise: referralAgg._sum.amountPaise ?? 0,
-    pendingAdjustments: 0, // future-ready (no approval queue for wallet adjustments yet)
-    expiredCreditsPaise: 0, // future-ready (wallet-credit expiry policy not yet enabled)
+    // REAL pending figures (were hardcoded 0)
+    pendingRefundsCount: pendingRefunds._count,
+    pendingRefundsPaise: pendingRefunds._sum.refundableDepositPaise ?? 0,   // bottle deposits owed (collected, not yet refunded)
+    pendingAdjustments: pendingAdj._count,
+    pendingAdjustmentsPaise: pendingAdj._sum.amountPaise ?? 0,
+    expiredCreditsPaise: 0,   // honest 0 — no promotional-credit expiry engine yet
   };
 }
 
