@@ -246,11 +246,16 @@ export async function renewSubscriptionCycle(subscriptionId: string, planDays: n
   if (!sub || sub.status === "CANCELLED") return null;                       // never resurrect a cancelled sub
   const oldEndDate = sub.endDate;
   if (sub.status !== "ACTIVE") await db.subscription.update({ where: { id: subscriptionId }, data: { status: "ACTIVE" } }).catch(() => {});
-  const base = sub.targetDeliveries ?? sub.plan.days ?? 0;
+  // `currentTarget` = the target actually materialised so far (0 if never set — e.g. a fresh
+  // AutoPay sub whose order stayed PENDING). The absolute path compares against THIS, not the
+  // plan.days fallback below — else cycle 1 (absoluteTarget = 1×plan.days) would equal the
+  // fallback and no-op, so the first paid cycle never materialises.
+  const currentTarget = sub.targetDeliveries ?? 0;
+  const base = sub.targetDeliveries ?? sub.plan.days ?? 0;   // relative bump anchors on plan.days for a fresh sub
   // NB CAP (200) ceilings the cumulative target — a plan renewed past ~200 delivered days needs a
   // manual Extend / CAP raise (flagged as a follow-up); covers >6 months of a daily 30-day plan.
-  const nextTarget = meta?.absoluteTarget != null ? Math.max(base, Math.floor(meta.absoluteTarget)) : base + n;
-  if (nextTarget <= base && meta?.absoluteTarget != null) return { created: 0, oldEndDate, endDate: sub.endDate };  // absolute no-op (replay / already at target)
+  const nextTarget = meta?.absoluteTarget != null ? Math.max(currentTarget, Math.floor(meta.absoluteTarget)) : base + n;
+  if (meta?.absoluteTarget != null && nextTarget <= currentTarget) return { created: 0, oldEndDate, endDate: sub.endDate };  // absolute no-op (replay / already at target)
   await db.subscription.update({ where: { id: subscriptionId }, data: { targetDeliveries: Math.min(CAP, nextTarget) } });
   const rec = await reconcileSchedule(subscriptionId);
   await logEvent(subscriptionId, "RENEWED", `Renewed → target ${Math.min(CAP, nextTarget)} delivery day(s)${meta?.source ? ` (${meta.source})` : ""}`, { planDays: n, cycleRef: meta?.cycleRef ?? null, absoluteTarget: meta?.absoluteTarget ?? null, oldEndDate, newEndDate: rec.endDate }, actor);
