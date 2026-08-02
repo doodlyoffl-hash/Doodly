@@ -79,14 +79,19 @@ async function postTxn(tx: Tx, p: {
         },
       });
       // Central audit trail, ATOMIC with the ledger row (every rupee is traceable).
+      // userId is left NULL on purpose: AuditLog.userId is a User FK and the actor id may be
+      // a dev-bridge / non-User id — writing it would violate the FK and roll back the money
+      // transaction. The actor (id + role) rides in actorRole + target; the customer + amount +
+      // reference are in the target; the structured actor also lives on the WalletTxn row itself.
+      const actorTag = p.approvedById ? ` · by ${p.approvedById}` : p.createdById ? ` · by ${p.createdById}` : "";
       await tx.auditLog.create({
         data: {
-          userId: p.createdById ?? p.approvedById ?? null, actorRole: p.actorRole ?? "system",
+          userId: null, actorRole: p.actorRole ?? "system",
           action: `wallet.${p.kind}.${p.type.toLowerCase()}`,
-          target: `${p.userId} · ${p.type === "CREDIT" ? "+" : "−"}₹${(p.amountPaise / 100).toFixed(2)} · ${p.reason} · ${txn.reference}${p.orderId ? ` · order ${p.orderId.slice(-6)}` : ""}${p.subscriptionId ? ` · sub ${p.subscriptionId.slice(-6)}` : ""} · bal ₹${(balanceAfterPaise / 100).toFixed(2)}`,
+          target: `cust ${p.userId} · ${p.type === "CREDIT" ? "+" : "−"}₹${(p.amountPaise / 100).toFixed(2)} · ${p.reason} · ${txn.reference}${p.orderId ? ` · order ${p.orderId.slice(-6)}` : ""}${p.subscriptionId ? ` · sub ${p.subscriptionId.slice(-6)}` : ""} · bal ₹${(balanceAfterPaise / 100).toFixed(2)}${actorTag}`,
           ip: p.ip ?? null, device: p.userAgent ?? null,
         },
-      }).catch(() => {});
+      });
       return { txn, balancePaise: balanceAfterPaise };
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && String(e.meta?.target).includes("reference")) {
@@ -153,7 +158,7 @@ export async function rechargeWallet(args: { userId: string; amountPaise: number
       const txn = await tx.walletTxn.create({
         data: { userId: args.userId, type: "CREDIT", kind: "topup", amountPaise: amt, balanceAfterPaise: user.walletPaise, reference: args.reference || generateReference(), description: `Wallet recharge${args.method ? " (" + args.method + ")" : ""}`, reason: "recharge", createdById: args.actorId ?? null, status: "POSTED", ip: args.ip, userAgent: args.userAgent },
       });
-      await tx.auditLog.create({ data: { userId: args.actorId ?? null, actorRole: args.actorRole ?? "customer", action: "wallet.topup.credit", target: `${args.userId} · +₹${(amt / 100).toFixed(2)} · recharge · ${txn.reference} · bal ₹${(user.walletPaise / 100).toFixed(2)}`, ip: args.ip ?? null, device: args.userAgent ?? null } }).catch(() => {});
+      await tx.auditLog.create({ data: { userId: null, actorRole: args.actorRole ?? "customer", action: "wallet.topup.credit", target: `cust ${args.userId} · +₹${(amt / 100).toFixed(2)} · recharge · ${txn.reference} · bal ₹${(user.walletPaise / 100).toFixed(2)}${args.actorId ? ` · by ${args.actorId}` : ""}`, ip: args.ip ?? null, device: args.userAgent ?? null } });
       return { ok: true as const, idempotent: false, balancePaise: user.walletPaise, txnId: txn.id, reference: txn.reference };
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && args.reference) {

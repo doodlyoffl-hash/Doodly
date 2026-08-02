@@ -9,6 +9,7 @@ import {
   walletDetail, listAllTransactions, creditReferralReward, bulkCredit, bulkDebit,
   refundBottleDeposit,
 } from "@/lib/wallet/service";
+import { requestAdjustment, approveAdjustment, rejectAdjustment, listAdjustments } from "@/lib/wallet/adjustments";
 import { actorRole, actorId, canViewWallets, canManageWallets } from "@/lib/wallet/guard";
 
 export const runtime = "nodejs";
@@ -24,6 +25,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(await walletReports({ from: sp.get("from") ?? undefined, to: sp.get("to") ?? undefined }), { headers: { "Cache-Control": "no-store" } });
     }
     if (view === "config") return NextResponse.json(await getCashbackConfig());
+    if (view === "adjustments") return NextResponse.json({ adjustments: await listAdjustments({ status: sp.get("status") ?? undefined }) }, { headers: { "Cache-Control": "no-store" } });
     if (view === "detail") {
       const userId = sp.get("userId");
       if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
@@ -55,6 +57,9 @@ const Body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("bottleRefund"), userId: z.string().min(1), amountPaise: z.number().int().positive(), qty: z.number().int().nonnegative().optional(), note: z.string().max(200).optional() }),
   z.object({ action: z.literal("bulkCredit"), userIds: z.array(z.string().min(1)).min(1).max(500), amountPaise: z.number().int().positive(), reason: z.string().min(1) }),
   z.object({ action: z.literal("bulkDebit"), userIds: z.array(z.string().min(1)).min(1).max(500), amountPaise: z.number().int().positive(), reason: z.string().min(1) }),
+  z.object({ action: z.literal("requestAdjustment"), userId: z.string().min(1), type: z.enum(["CREDIT", "DEBIT"]), amountPaise: z.number().int().positive(), reason: z.string().min(1).max(200) }),
+  z.object({ action: z.literal("approveAdjustment"), id: z.string().min(1), note: z.string().max(200).optional() }),
+  z.object({ action: z.literal("rejectAdjustment"), id: z.string().min(1), note: z.string().max(200).optional() }),
   z.object({
     action: z.literal("config"),
     enabled: z.boolean().optional(),
@@ -74,10 +79,17 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Validation failed", issues: parsed.error.flatten() }, { status: 422 });
 
   const a = { actorRole: role, actorId: actorId(req) ?? undefined, ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || undefined, userAgent: req.headers.get("user-agent") ?? undefined };
+  const d = parsed.data;
+  // Approve/reject a manual adjustment is a CHECKER action → Super-Admin only (maker-checker).
+  if ((d.action === "approveAdjustment" || d.action === "rejectAdjustment") && role !== "super_admin") {
+    return NextResponse.json({ error: "Approving or rejecting a wallet adjustment is Super-Admin only." }, { status: 403 });
+  }
   try {
-    const d = parsed.data;
     const result =
-      d.action === "credit" ? await adminCredit({ userId: d.userId, amountPaise: d.amountPaise, reason: d.reason, ...a })
+      d.action === "requestAdjustment" ? await requestAdjustment({ userId: d.userId, type: d.type, amountPaise: d.amountPaise, reason: d.reason, ...a })
+      : d.action === "approveAdjustment" ? await approveAdjustment(d.id, { note: d.note, ...a })
+      : d.action === "rejectAdjustment" ? await rejectAdjustment(d.id, { note: d.note, ...a })
+      : d.action === "credit" ? await adminCredit({ userId: d.userId, amountPaise: d.amountPaise, reason: d.reason, ...a })
       : d.action === "debit" ? await adminDebit({ userId: d.userId, amountPaise: d.amountPaise, reason: d.reason, ...a })
       : d.action === "reverse" ? await reverseTxn({ txnId: d.txnId, ...a })
       : d.action === "cashback" ? await creditTrialCashback({ userId: d.userId, subscriptionId: d.subscriptionId, ...a })
