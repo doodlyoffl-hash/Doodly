@@ -93,6 +93,10 @@ async function handle(req: NextRequest) {
   // now runs the 20:00 IST cut-off. Idempotent, so a re-run never double-credits.
   const { runDailyLoyaltyMaintenance } = await import("@/lib/loyalty/daily");
   const loyalty = await runDailyLoyaltyMaintenance().catch((e) => ({ error: (e as Error)?.message ?? "failed" }));
+  // Promotional wallet-credit expiry: claw back the unspent remainder of past-due promo
+  // lots + nudge customers whose credit expires soon. Idempotent (lot-stamped expiredAt).
+  const { runWalletExpiryMaintenance } = await import("@/lib/wallet/expiry");
+  const walletExpiry = await runWalletExpiryMaintenance().catch((e) => ({ error: (e as Error)?.message ?? "failed" }));
   // Reward-redemption expiry: mark past-due rewards EXPIRED + nudge customers whose
   // unclaimed prize expires in 7/3/1 days. Idempotent (exact day-windows).
   const { runRewardExpiryReminders } = await import("@/lib/rewards/expiry");
@@ -101,7 +105,7 @@ async function handle(req: NextRequest) {
   // (legacy rows, or an inline compute that was skipped). Runs after new deliveries are generated.
   const { backfillDeliveryDistances } = await import("@/lib/warehouse/distance");
   const distances = await backfillDeliveryDistances(500).catch((e) => ({ error: (e as Error)?.message ?? "failed" }));
-  return NextResponse.json({ ok: true, ...result, whatsapp, autopay, addressChanges, addressChangeReminders, subDeliveries, cutoff, cutoffWa, cutoffHealth, loyalty, rewardExpiry, distances });
+  return NextResponse.json({ ok: true, ...result, whatsapp, autopay, addressChanges, addressChangeReminders, subDeliveries, cutoff, cutoffWa, cutoffHealth, loyalty, walletExpiry, rewardExpiry, distances });
 }
 
 export const GET = handle;

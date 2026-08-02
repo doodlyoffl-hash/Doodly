@@ -13,7 +13,7 @@ import type { MilkReport } from "@/lib/milk/reports";
 import { milkReportCsv, milkReportXls } from "@/lib/milk/reports";
 import { renderMilkReportPdf } from "@/lib/milk/report-pdf";
 
-export const WALLET_REPORTS = ["summary", "customer", "liability", "refund", "bottleRefund", "trialRefund", "referral", "adjustment"] as const;
+export const WALLET_REPORTS = ["summary", "customer", "liability", "refund", "bottleRefund", "trialRefund", "referral", "adjustment", "expiry"] as const;
 export type WalletReportKey = (typeof WALLET_REPORTS)[number];
 
 const rup = (p: number) => "₹" + ((p || 0) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -63,6 +63,8 @@ export async function buildWalletReport(key: WalletReportKey, from?: Date, to?: 
         ["Refunds — processed", rup(w.processedRefundsPaise)],
         ["Refunds — pending (bottle deposits owed)", `${w.pendingRefundsCount} · ${rup(w.pendingRefundsPaise)}`],
         ["Manual adjustments — pending approval", `${w.pendingAdjustments} · ${rup(w.pendingAdjustmentsPaise)}`],
+        ["Promotional credit expired (range)", rup(w.expiredCreditsPaise)],
+        ["Promotional credit expiring in 30 days", `${w.expiringSoonCount} · ${rup(w.expiringSoonPaise)}`],
         ["Trial → subscription conversion", `${w.cashbackConversionRate}%`],
       ];
       return mk("summary", { title: "Wallet Summary", subtitle: `Wallet ledger overview`, columns: [{ label: "Metric" }, { label: "Value", right: true }], rows });
@@ -80,6 +82,7 @@ export async function buildWalletReport(key: WalletReportKey, from?: Date, to?: 
         totalRow: ["TOTAL", "", rup(totalBal), ""],
       });
     }
+    case "expiry": return ledgerReport("expiry", "Promotional Credit Expiry Report", { kind: "expiry" }, from, to);
     case "refund": return ledgerReport("refund", "Wallet Refund Report", { kind: "refund" }, from, to);
     case "bottleRefund": return ledgerReport("bottleRefund", "Bottle Deposit Refund Report", { kind: "refund", reason: "bottle_deposit_refund" }, from, to);
     case "trialRefund": return ledgerReport("trialRefund", "Trial Upgrade Cashback Report", { kind: "cashback", reason: "trial_cashback" }, from, to);

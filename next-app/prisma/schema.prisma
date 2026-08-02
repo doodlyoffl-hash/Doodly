@@ -1132,7 +1132,7 @@ model WalletTxn {
   userId            String
   user              User     @relation(fields: [userId], references: [id])
   type              TxnType                              // CREDIT | DEBIT
-  kind              String   @default("adjustment")      // cashback | referral | promo | usage | topup | refund | adjustment | reversal | loyalty
+  kind              String   @default("adjustment")      // cashback | referral | promo | usage | topup | refund | adjustment | reversal | loyalty | expiry
   amountPaise       Int                                  // always positive; `type` gives direction
   balanceAfterPaise Int      @default(0)                 // wallet balance immediately after this txn
   reference         String   @unique                     // human ref, e.g. "WTX-7K3M2A"
@@ -1146,10 +1146,19 @@ model WalletTxn {
   approvedById      String?                              // approver for a maker-checker manual adjustment
   ip                String?                              // request IP at the time of the action (traceability)
   userAgent         String?                              // request device/user-agent (traceability)
+  // Promotional-credit expiry (FIFO lots, like loyalty points). Set ONLY on expirable
+  // CREDITs (kind in the wallet.expiry config) when expiry is enabled: expiresAt = the
+  // deadline, remainingPaise = the UNSPENT portion (a spend DEBIT consumes lots oldest-
+  // expiry-first). expiredAt is stamped by the daily sweep when the unspent remainder is
+  // clawed back via an "expiry" DEBIT. NULL remainingPaise = non-expirable "cash" credit.
+  expiresAt         DateTime?
+  remainingPaise    Int?
+  expiredAt         DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @default(now()) @updatedAt
   @@index([userId, createdAt])
   @@index([kind, createdAt])
+  @@index([expiresAt])
 }
 
 // Maker-checker queue for MANUAL admin wallet credit/debit. An admin submits a

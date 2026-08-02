@@ -10,6 +10,7 @@ import {
   refundBottleDeposit,
 } from "@/lib/wallet/service";
 import { requestAdjustment, approveAdjustment, rejectAdjustment, listAdjustments } from "@/lib/wallet/adjustments";
+import { getWalletExpiryConfig, setWalletExpiryConfig, expireWalletCredits } from "@/lib/wallet/expiry";
 import { actorRole, actorId, canViewWallets, canManageWallets } from "@/lib/wallet/guard";
 
 export const runtime = "nodejs";
@@ -25,6 +26,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(await walletReports({ from: sp.get("from") ?? undefined, to: sp.get("to") ?? undefined }), { headers: { "Cache-Control": "no-store" } });
     }
     if (view === "config") return NextResponse.json(await getCashbackConfig());
+    if (view === "expiryConfig") return NextResponse.json(await getWalletExpiryConfig());
     if (view === "adjustments") return NextResponse.json({ adjustments: await listAdjustments({ status: sp.get("status") ?? undefined }) }, { headers: { "Cache-Control": "no-store" } });
     if (view === "detail") {
       const userId = sp.get("userId");
@@ -67,6 +69,14 @@ const Body = z.discriminatedUnion("action", [
     eligiblePlanSlugs: z.array(z.string()).optional(),
     expiryDays: z.number().int().nonnegative().nullable().optional(),
   }),
+  z.object({
+    action: z.literal("expiryConfig"),
+    enabled: z.boolean().optional(),
+    expiryDays: z.number().int().positive().optional(),
+    expiringKinds: z.array(z.string()).optional(),
+    remindDays: z.array(z.number().int().positive()).optional(),
+  }),
+  z.object({ action: z.literal("expireNow") }),
 ]);
 
 export async function POST(req: NextRequest) {
@@ -84,6 +94,10 @@ export async function POST(req: NextRequest) {
   if ((d.action === "approveAdjustment" || d.action === "rejectAdjustment") && role !== "super_admin") {
     return NextResponse.json({ error: "Approving or rejecting a wallet adjustment is Super-Admin only." }, { status: 403 });
   }
+  // Changing the promo-expiry policy or forcing a sweep can DEBIT customer wallets → Super-Admin only.
+  if ((d.action === "expiryConfig" || d.action === "expireNow") && role !== "super_admin") {
+    return NextResponse.json({ error: "Changing the promotional-credit expiry policy is Super-Admin only." }, { status: 403 });
+  }
   try {
     const result =
       d.action === "requestAdjustment" ? await requestAdjustment({ userId: d.userId, type: d.type, amountPaise: d.amountPaise, reason: d.reason, ...a })
@@ -97,6 +111,8 @@ export async function POST(req: NextRequest) {
       : d.action === "bottleRefund" ? await refundBottleDeposit({ userId: d.userId, amountPaise: d.amountPaise, qty: d.qty, note: d.note, ...a })
       : d.action === "bulkCredit" ? await bulkCredit({ userIds: d.userIds, amountPaise: d.amountPaise, reason: d.reason, ...a })
       : d.action === "bulkDebit" ? await bulkDebit({ userIds: d.userIds, amountPaise: d.amountPaise, reason: d.reason, ...a })
+      : d.action === "expiryConfig" ? await setWalletExpiryConfig({ enabled: d.enabled, expiryDays: d.expiryDays, expiringKinds: d.expiringKinds, remindDays: d.remindDays })
+      : d.action === "expireNow" ? await expireWalletCredits()
       : await setCashbackConfig({ enabled: d.enabled, amountPaise: d.amountPaise, eligiblePlanSlugs: d.eligiblePlanSlugs, expiryDays: d.expiryDays, ...a });
     return NextResponse.json({ ok: true, result });
   } catch (e) {

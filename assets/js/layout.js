@@ -4364,8 +4364,9 @@
     var e2 = function (s) { return esc(String(s == null ? "" : s)); };
     var rup = function (p) { return "₹" + Math.round((p || 0) / 100).toLocaleString("en-IN"); };
     var dtm = function (d) { try { return new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }); } catch (e) { return d; } };
-    var st = { tab: "ledger", reports: null, wallets: [], txns: [], adjustments: [], q: "", tq: "", tfilter: "all" };
-    var TXKIND = { cashback: ["blue", "Cashback"], referral: ["blue", "Referral"], refund: ["green", "Refund"], topup: ["green", "Top-up"], usage: ["amber", "Used"], adjustment: ["violet", "Adjustment"], reversal: ["grey", "Reversal"], loyalty: ["blue", "Loyalty"], promo: ["blue", "Promo"] };
+    var st = { tab: "ledger", reports: null, wallets: [], txns: [], adjustments: [], expiryCfg: null, q: "", tq: "", tfilter: "all" };
+    var TXKIND = { cashback: ["blue", "Cashback"], referral: ["blue", "Referral"], refund: ["green", "Refund"], topup: ["green", "Top-up"], usage: ["amber", "Used"], adjustment: ["violet", "Adjustment"], reversal: ["grey", "Reversal"], loyalty: ["blue", "Loyalty"], promo: ["blue", "Promo"], expiry: ["grey", "Expired"] };
+    var EXPIRY_KINDS = [["promo", "Promotional credit"], ["cashback", "Trial cashback"], ["referral", "Referral rewards"], ["adjustment", "Manual adjustments"], ["loyalty", "Loyalty redemptions"]];
 
     function load() {
       return Promise.all([
@@ -4373,8 +4374,9 @@
         DOODLY_API.get("/api/wallet/admin?view=list"),
         DOODLY_API.get("/api/wallet/admin?view=transactions&limit=2000"),
         DOODLY_API.get("/api/wallet/admin?view=adjustments").catch(function () { return { adjustments: [] }; }),
+        DOODLY_API.get("/api/wallet/admin?view=expiryConfig").catch(function () { return null; }),
       ]).then(function (r) {
-        st.reports = r[0]; st.wallets = r[1].wallets || []; st.txns = r[2].transactions || []; st.adjustments = r[3].adjustments || [];
+        st.reports = r[0]; st.wallets = r[1].wallets || []; st.txns = r[2].transactions || []; st.adjustments = r[3].adjustments || []; st.expiryCfg = r[4];
         render();
       }).catch(function (e) {
         host.innerHTML = '<div class="panel"><div class="panel-pad">' + bannerHtml(e) + "</div></div>";
@@ -4392,11 +4394,12 @@
         ["Processed Refunds", rup(r.processedRefundsPaise)], ["Active Wallets", String(r.activeWallets || 0)],
         ["Avg Balance", rup(r.averageBalancePaise)], ["Txns Today", String(r.transactionsToday || 0)], ["Txns This Month", String(r.transactionsThisMonth || 0)],
       ];
+      if (r.expiringSoonPaise || r.expiredCreditsPaise) cards.push(["Promo Expiring (30d)", rup(r.expiringSoonPaise) + " · " + (r.expiringSoonCount || 0)]);
       return '<div class="kpi-row" style="margin-bottom:14px">' + cards.map(function (c) { return '<div class="kpi"><div class="n">' + e2(c[1]) + '</div><div class="l">' + e2(c[0]) + "</div></div>"; }).join("") + "</div>";
     }
     function tabBar() {
       var pend = st.adjustments.filter(function (a) { return a.status === "PENDING"; }).length;
-      var tabs = [["ledger", "Ledger"], ["customers", "Customers"], ["approvals", "Approvals" + (pend ? " (" + pend + ")" : "")], ["reports", "Reports"]];
+      var tabs = [["ledger", "Ledger"], ["customers", "Customers"], ["approvals", "Approvals" + (pend ? " (" + pend + ")" : "")], ["reports", "Reports"], ["settings", "Expiry"]];
       return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">' + tabs.map(function (t) {
         return '<button class="btn ' + (st.tab === t[0] ? "btn-primary" : "btn-ghost") + ' sm" data-tab="' + t[0] + '">' + e2(t[1]) + "</button>";
       }).join("") + "</div>";
@@ -4451,14 +4454,37 @@
         (rows || '<tr><td colspan="8" class="muted-sm" style="text-align:center;padding:14px">No adjustment requests.</td></tr>') + "</tbody></table></div></div></div>";
     }
     function reportsTab() {
-      var reps = [["summary", "Wallet Summary"], ["customer", "Customer Wallets"], ["liability", "Wallet Liability"], ["refund", "All Refunds"], ["bottleRefund", "Bottle Deposit Refunds"], ["trialRefund", "Trial Cashback"], ["referral", "Referral Rewards"], ["adjustment", "Manual Adjustments"]];
+      var reps = [["summary", "Wallet Summary"], ["customer", "Customer Wallets"], ["liability", "Wallet Liability"], ["refund", "All Refunds"], ["bottleRefund", "Bottle Deposit Refunds"], ["trialRefund", "Trial Cashback"], ["referral", "Referral Rewards"], ["adjustment", "Manual Adjustments"], ["expiry", "Promotional Credit Expiry"]];
       return '<div class="panel"><div class="panel-head"><h3>Reports <span class="muted-sm" style="font-weight:600">· PDF · Excel · CSV</span></h3></div><div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Report</th><th></th></tr></thead><tbody>' +
         reps.map(function (r) {
           return "<tr><td><b>" + e2(r[1]) + '</b></td><td style="text-align:right;white-space:nowrap"><button class="btn btn-ghost sm" data-rep="' + r[0] + '" data-fmt="pdf">⬇ PDF</button> <button class="btn btn-ghost sm" data-rep="' + r[0] + '" data-fmt="xls">Excel</button> <button class="btn btn-ghost sm" data-rep="' + r[0] + '" data-fmt="csv">CSV</button></td></tr>';
         }).join("") + "</tbody></table></div></div></div>";
     }
+    function settingsTab() {
+      var c = st.expiryCfg || { enabled: false, expiryDays: 180, expiringKinds: ["promo"], remindDays: [7] };
+      var r = st.reports || {};
+      var kinds = c.expiringKinds || [];
+      var checks = EXPIRY_KINDS.map(function (k) {
+        return '<label style="display:flex;align-items:center;gap:8px;font-size:.82rem"><input type="checkbox" class="we-kind" value="' + k[0] + '"' + (kinds.indexOf(k[0]) >= 0 ? " checked" : "") + "> " + e2(k[1]) + "</label>";
+      }).join("");
+      return '<div class="panel"><div class="panel-head"><h3>Promotional Credit Expiry <span class="muted-sm" style="font-weight:600">· auto-expire unspent promo credit</span></h3>' +
+        '<span class="badge ' + (c.enabled ? "green" : "grey") + '">' + (c.enabled ? "Enabled" : "Disabled") + "</span></div>" +
+        '<div class="panel-pad">' +
+        '<p class="muted-sm" style="margin-top:0">Promotional wallet credit (of the selected kinds) expires after the set number of days. Only the <b>unspent</b> portion is ever clawed back — a spend always draws the soonest-expiring credit first. Turning this on <b>never</b> expires credit issued <i>before</i> now; only new credit gets a deadline. Changing this policy is <b>Super-Admin</b> only.</p>' +
+        '<div class="kpi-row" style="margin:10px 0 16px"><div class="kpi"><div class="n">' + rup(r.expiredCreditsPaise) + '</div><div class="l">Expired to date</div></div>' +
+        '<div class="kpi"><div class="n">' + rup(r.expiringSoonPaise) + " · " + (r.expiringSoonCount || 0) + '</div><div class="l">Expiring in 30 days</div></div></div>' +
+        '<div style="display:flex;flex-direction:column;gap:14px;max-width:520px">' +
+        '<label style="display:flex;align-items:center;gap:10px;font-weight:700;font-size:.85rem"><input type="checkbox" id="we-enabled"' + (c.enabled ? " checked" : "") + '> Enable promotional-credit expiry</label>' +
+        '<label style="font-size:.78rem;font-weight:700">Validity (days after credit)<input class="input" id="we-days" type="number" min="1" max="3650" value="' + (c.expiryDays || 180) + '" style="max-width:160px"></label>' +
+        '<div><div style="font-size:.78rem;font-weight:700;margin-bottom:6px">Which credits expire</div><div style="display:flex;flex-direction:column;gap:6px">' + checks + "</div></div>" +
+        '<label style="font-size:.78rem;font-weight:700">Remind customers this many days before (comma-separated)<input class="input" id="we-remind" value="' + e2((c.remindDays || [7]).join(", ")) + '" style="max-width:220px"></label>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary sm" id="we-save">Save policy</button>' +
+        '<button class="btn btn-ghost sm" id="we-run">Run expiry sweep now</button></div>' +
+        '<p class="muted-sm" style="margin:0">The daily sweep also runs automatically at 02:00. “Run now” expires any already-due promotional credit immediately.</p>' +
+        "</div></div></div>";
+    }
     function render() {
-      var content = st.tab === "customers" ? customersTab() : st.tab === "approvals" ? approvalsTab() : st.tab === "reports" ? reportsTab() : ledgerTab();
+      var content = st.tab === "customers" ? customersTab() : st.tab === "approvals" ? approvalsTab() : st.tab === "reports" ? reportsTab() : st.tab === "settings" ? settingsTab() : ledgerTab();
       host.innerHTML = kpiRow() + tabBar() + content;
       wire();
     }
@@ -4532,6 +4558,22 @@
       host.querySelectorAll("[data-reject]").forEach(function (b) { b.addEventListener("click", function () { decide(b.dataset.reject, "rejectAdjustment"); }); });
       host.querySelectorAll("[data-rev]").forEach(function (b) { b.addEventListener("click", function () { if (window.confirm("Reverse this transaction? An opposite entry will be posted (the ledger is never edited).")) DOODLY_API.post("/api/wallet/admin", { action: "reverse", txnId: b.dataset.rev }).then(function () { dacToast("Reversed."); load(); }).catch(function (e) { dacToast((e && e.message) || "Couldn't reverse."); }); }); });
       host.querySelectorAll("[data-rep]").forEach(function (b) { b.addEventListener("click", function () { exportReport(b.dataset.rep, b.dataset.fmt); }); });
+      var wesave = host.querySelector("#we-save");
+      if (wesave) wesave.addEventListener("click", function () {
+        var kinds = Array.prototype.map.call(host.querySelectorAll(".we-kind:checked"), function (c) { return c.value; });
+        if (!kinds.length) { dacToast("Pick at least one credit kind to expire."); return; }
+        var remind = (host.querySelector("#we-remind").value || "").split(",").map(function (s) { return parseInt(s, 10); }).filter(function (n) { return n > 0; });
+        DOODLY_API.post("/api/wallet/admin", { action: "expiryConfig", enabled: host.querySelector("#we-enabled").checked, expiryDays: Math.max(1, parseInt(host.querySelector("#we-days").value, 10) || 180), expiringKinds: kinds, remindDays: remind.length ? remind : [7] })
+          .then(function (res) { st.expiryCfg = res.result || st.expiryCfg; dacToast("Expiry policy saved."); load(); })
+          .catch(function (e) { dacToast(e.code === "forbidden" ? "Changing the expiry policy is Super-Admin only (403)." : (e.message || "Couldn't save.")); });
+      });
+      var werun = host.querySelector("#we-run");
+      if (werun) werun.addEventListener("click", function () {
+        if (!window.confirm("Run the expiry sweep now? Any promotional credit already past its validity date will be debited from the customers' wallets.")) return;
+        DOODLY_API.post("/api/wallet/admin", { action: "expireNow" })
+          .then(function (res) { var d = (res && res.result) || {}; dacToast("Sweep done — expired " + (d.lots || 0) + " lot(s), " + rup(d.paise) + "."); load(); })
+          .catch(function (e) { dacToast(e.code === "forbidden" ? "Running the sweep is Super-Admin only (403)." : (e.message || "Sweep failed.")); });
+      });
     }
     host.innerHTML = '<div class="panel"><div class="panel-pad muted-sm">Loading wallet ledger…</div></div>';
     load();

@@ -49,7 +49,7 @@ window.DOODLY_WALLET = (function () {
     try {
       var r = await window.DOODLY_API.get("/api/wallet");
       var u = rbacUser() || {};
-      _mine = { id: ME, name: u.name || "You", mobile: u.phone || "", balance: Math.round((r && r.balancePaise || 0) / 100), pendingRefundPaise: (r && r.pendingRefundPaise) || 0, trialCredited: false, trialPurchased: false,
+      _mine = { id: ME, name: u.name || "You", mobile: u.phone || "", balance: Math.round((r && r.balancePaise || 0) / 100), pendingRefundPaise: (r && r.pendingRefundPaise) || 0, expiringSoonPaise: (r && r.expiring && r.expiring.soonPaise) || 0, nextExpiryAt: (r && r.expiring && r.expiring.nextExpiryAt) || null, trialCredited: false, trialPurchased: false,
         txns: ((r && r.transactions) || []).map(function (t) { return { id: t.id, ref: t.reference, date: t.createdAt, kind: t.type === "CREDIT" ? "credit" : "debit", type: String(t.kind || "").toLowerCase(), amount: Math.round((t.amountPaise || 0) / 100), desc: t.description || "", balanceAfter: Math.round((t.balanceAfterPaise || 0) / 100), by: "" }; }) };
     } catch (e) { _mine = emptyMine(); }             // failed → empty, NEVER demo
     try { refreshPanel(); } catch (e) {}
@@ -196,6 +196,8 @@ window.DOODLY_WALLET = (function () {
     var c = config();
     s.pendingCashback = (promoActive() && (w.trialPurchased || localStorage.getItem("doodly-trial-purchased") === "1") && !w.trialCredited) ? (c.amount || 0) : 0;
     s.pendingRefund = (w.pendingRefundPaise || 0) / 100;   // real bottle-deposit refunds owed (collected, not yet credited)
+    s.expiringSoon = (w.expiringSoonPaise || 0) / 100;     // promo credit expiring within 30 days (0 when the engine is off)
+    s.expiringSoonAt = w.nextExpiryAt || null;
     s.totalSavings = s.cashback + s.referral + s.promo + s.refund;
     s.frozen = !!w.frozen;
     return s;
@@ -411,7 +413,8 @@ window.DOODLY_WALLET = (function () {
       + '<div class="wal-hero-fx" aria-hidden="true"><span class="wal-rupee r1">₹</span><span class="wal-rupee r2">₹</span><span class="wal-rupee r3">₹</span><span class="wal-hero-glow"></span></div>'
       + '<div class="wal-hero-top"><span class="wal-hero-label">DOODLY Wallet balance</span>' + (m.frozen ? '<span class="badge red">Frozen</span>' : '<span class="wal-hero-chip">' + LOCK_SVG + " Secure</span>") + "</div>"
       + '<p class="wal-bal" data-target="' + w.balance + '">' + inr2(w.balance) + "</p>"
-      + '<div class="wal-hero-sub">Available at checkout' + (m.pendingCashback ? ' · <b>' + inr(m.pendingCashback) + "</b> cashback pending" : "") + "</div>"
+      + '<div class="wal-hero-sub">Available at checkout' + (m.pendingCashback ? ' · <b>' + inr(m.pendingCashback) + "</b> cashback pending" : "")
+        + (m.expiringSoon ? ' · <b>' + inr(m.expiringSoon) + "</b> promo credit expiring" + (m.expiringSoonAt ? " by " + (function () { try { return new Date(m.expiringSoonAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }); } catch (e) { return "soon"; } })() : "") : "") + "</div>"
       + '<div class="wal-hero-cta"><button type="button" class="wal-add js-wal-add">＋ Add Money</button><a class="wal-use" href="/subscriptions.html">Use at checkout</a></div>'
       + "</div>";
     var quick = '<div class="wal-qas">'
@@ -502,6 +505,8 @@ window.DOODLY_WALLET = (function () {
       var w = meWallet();
       w.balance = Math.round(d.balancePaise) / 100;
       w.pendingRefundPaise = d.pendingRefundPaise || 0;
+      w.expiringSoonPaise = (d.expiring && d.expiring.soonPaise) || 0;
+      w.nextExpiryAt = (d.expiring && d.expiring.nextExpiryAt) || null;
       w.txns = (d.transactions || []).map(function (t) {
         return {
           id: t.id, ref: t.reference || t.id, date: t.createdAt,

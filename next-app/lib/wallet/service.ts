@@ -19,6 +19,7 @@ import {
   evaluateTrialCashback, computeWalletApply, generateReference,
   DEFAULT_CASHBACK_RULES, type CashbackRules,
 } from "./engine";
+import { getWalletExpiryConfigTx, expiryStampFor } from "./expiry";
 import { emailIfOptedIn, notify } from "@/lib/notifications/dispatch";
 import * as T from "@/lib/email/templates";
 
@@ -45,6 +46,26 @@ async function withRetry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
 
 type Tx = Prisma.TransactionClient;
 
+/** FIFO-consume a customer's expirable promo lots by `amountPaise`, soonest-expiry first.
+ *  Only lots with remainingPaise>0 are touched (non-expirable "cash" credits are NULL and
+ *  ignored); any spend beyond the expirable balance simply draws from that untracked cash.
+ *  This is what makes the daily sweep claw back only the still-UNSPENT promotional credit. */
+async function consumeExpirableLots(tx: Tx, userId: string, amountPaise: number) {
+  let need = amountPaise;
+  const lots = await tx.walletTxn.findMany({
+    where: { userId, type: "CREDIT", remainingPaise: { gt: 0 } },
+    orderBy: [{ expiresAt: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
+    select: { id: true, remainingPaise: true },
+  });
+  for (const lot of lots) {
+    if (need <= 0) break;
+    const take = Math.min(lot.remainingPaise ?? 0, need);
+    if (take <= 0) continue;
+    await tx.walletTxn.update({ where: { id: lot.id }, data: { remainingPaise: { decrement: take } } });
+    need -= take;
+  }
+}
+
 export async function getCashbackRules(client: Tx | typeof db = db): Promise<CashbackRules> {
   const cfg = await client.cashbackConfig.findUnique({ where: { id: "default" } });
   if (!cfg) return DEFAULT_CASHBACK_RULES;
@@ -68,6 +89,12 @@ async function postTxn(tx: Tx, p: {
     select: { walletPaise: true },
   });
   const balanceAfterPaise = user.walletPaise;
+  // Promotional-credit expiry lots (FIFO). A stamped CREDIT becomes an expirable lot;
+  // a spend DEBIT consumes the soonest-expiring lots first so only truly-unspent promo is
+  // ever clawed back later. "expiry"/"reversal" DEBITs are accounting entries and must NOT
+  // consume (expiry drains its own lot; reverseTxn voids the reversed lot explicitly).
+  const { expiresAt, remainingPaise } = expiryStampFor(await getWalletExpiryConfigTx(tx), p.type, p.kind, p.amountPaise);
+  if (p.type === "DEBIT" && p.kind !== "expiry" && p.kind !== "reversal") await consumeExpirableLots(tx, p.userId, p.amountPaise);
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       const txn = await tx.walletTxn.create({
@@ -76,6 +103,7 @@ async function postTxn(tx: Tx, p: {
           reference: p.reference ?? generateReference(), description: p.description, reason: p.reason, status: "POSTED",
           subscriptionId: p.subscriptionId, orderId: p.orderId, createdById: p.createdById, approvedById: p.approvedById,
           ip: p.ip, userAgent: p.userAgent, reversedTxnId: p.reversedTxnId,
+          expiresAt, remainingPaise,
         },
       });
       // Central audit trail, ATOMIC with the ledger row (every rupee is traceable).
@@ -273,7 +301,9 @@ export async function creditTrialCashback(args: { userId: string; subscriptionId
 // ---------- Customer wallet ----------
 
 export async function getWallet(args: { userId: string; limit?: number }) {
-  const [user, transactions, byKind, pendingRefund] = await Promise.all([
+  const now = new Date();
+  const soon = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const [user, transactions, byKind, pendingRefund, expiringSoon, nextExpiry] = await Promise.all([
     db.user.findUnique({ where: { id: args.userId }, select: { walletPaise: true } }),
     db.walletTxn.findMany({
       where: { userId: args.userId }, orderBy: { createdAt: "desc" }, take: args.limit ?? 100,
@@ -282,6 +312,9 @@ export async function getWallet(args: { userId: string; limit?: number }) {
     db.walletTxn.groupBy({ by: ["kind", "type"], where: { userId: args.userId }, _sum: { amountPaise: true } }),
     // bottle-deposit refunds OWED to this customer (collected, not yet credited)
     db.bottlePickupRequest.aggregate({ where: { userId: args.userId, status: { in: ["COLLECTED", "VERIFIED"] }, refundedPaise: 0 }, _sum: { refundableDepositPaise: true } }),
+    // promotional credit expiring within 30 days (unspent lots), + the soonest deadline
+    db.walletTxn.aggregate({ where: { userId: args.userId, type: "CREDIT", remainingPaise: { gt: 0 }, expiredAt: null, expiresAt: { gt: now, lte: soon } }, _sum: { remainingPaise: true } }),
+    db.walletTxn.findFirst({ where: { userId: args.userId, type: "CREDIT", remainingPaise: { gt: 0 }, expiredAt: null, expiresAt: { gt: now } }, orderBy: { expiresAt: "asc" }, select: { expiresAt: true, remainingPaise: true } }),
   ]);
   const sum = (kind: string, type: "CREDIT" | "DEBIT") =>
     byKind.filter((g) => g.kind === kind && g.type === type).reduce((s, g) => s + (g._sum.amountPaise ?? 0), 0);
@@ -294,6 +327,12 @@ export async function getWallet(args: { userId: string; limit?: number }) {
       referralRewardsPaise: sum("referral", "CREDIT"),
       promoCreditsPaise: sum("promo", "CREDIT"),
       usedPaise: byKind.filter((g) => g.type === "DEBIT").reduce((s, g) => s + (g._sum.amountPaise ?? 0), 0),
+    },
+    // promotional-credit expiry surfaced to the customer (0 / null when the engine is off)
+    expiring: {
+      soonPaise: expiringSoon._sum.remainingPaise ?? 0,
+      nextExpiryAt: nextExpiry?.expiresAt ? nextExpiry.expiresAt.toISOString() : null,
+      nextExpiryPaise: nextExpiry?.remainingPaise ?? 0,
     },
   };
 }
@@ -522,6 +561,9 @@ export async function reverseTxn(args: { txnId: string } & Actor) {
       });
       // If we reversed a trial cashback, void the ledger so it could be re-evaluated.
       if (orig.kind === "cashback") await tx.trialCashback.updateMany({ where: { walletTxnId: orig.id }, data: { status: "VOID" } });
+      // If the reversed row was an expirable promo lot, void its remaining so the daily
+      // expiry sweep can't later claw back a credit that's already been reversed.
+      if (orig.type === "CREDIT" && (orig.remainingPaise ?? 0) > 0) await tx.walletTxn.update({ where: { id: orig.id }, data: { remainingPaise: 0 } });
       return res;
     }, TX),
   );
@@ -613,7 +655,8 @@ export async function walletReports(args: { from?: Date | string; to?: Date | st
 
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
   const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
-  const [byKind, outstanding, trialAgg, activeWallets, todayByType, referralAgg, pendingAdj, pendingRefunds, txnsToday, txnsMonth] = await Promise.all([
+  const in30 = new Date(todayStart.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const [byKind, outstanding, trialAgg, activeWallets, todayByType, referralAgg, pendingAdj, pendingRefunds, txnsToday, txnsMonth, expiringSoon] = await Promise.all([
     db.walletTxn.groupBy({ by: ["kind", "type"], where, _sum: { amountPaise: true }, _count: true }),
     db.user.aggregate({ _sum: { walletPaise: true } }),
     db.trialCashback.aggregate({ where: { status: "CREDITED" }, _count: true, _sum: { amountPaise: true } }),
@@ -625,6 +668,8 @@ export async function walletReports(args: { from?: Date | string; to?: Date | st
     db.bottlePickupRequest.aggregate({ where: { status: { in: ["COLLECTED", "VERIFIED"] }, refundedPaise: 0 }, _count: true, _sum: { refundableDepositPaise: true } }),
     db.walletTxn.count({ where: { createdAt: { gte: todayStart } } }),
     db.walletTxn.count({ where: { createdAt: { gte: monthStart } } }),
+    // promotional credit set to expire within 30 days (unspent lots) — live liability at risk
+    db.walletTxn.aggregate({ where: { type: "CREDIT", remainingPaise: { gt: 0 }, expiredAt: null, expiresAt: { gt: todayStart, lte: in30 } }, _count: true, _sum: { remainingPaise: true } }),
   ]);
   const sum = (kind: string, type: "CREDIT" | "DEBIT") => byKind.filter((g) => g.kind === kind && g.type === type).reduce((s, g) => s + (g._sum.amountPaise ?? 0), 0);
   const totalCredited = byKind.filter((g) => g.type === "CREDIT").reduce((s, g) => s + (g._sum.amountPaise ?? 0), 0);
@@ -660,7 +705,10 @@ export async function walletReports(args: { from?: Date | string; to?: Date | st
     pendingRefundsPaise: pendingRefunds._sum.refundableDepositPaise ?? 0,   // bottle deposits owed (collected, not yet refunded)
     pendingAdjustments: pendingAdj._count,
     pendingAdjustmentsPaise: pendingAdj._sum.amountPaise ?? 0,
-    expiredCreditsPaise: 0,   // honest 0 — no promotional-credit expiry engine yet
+    // promotional-credit expiry engine (real now): clawed-back total (range-aware) + at-risk soon
+    expiredCreditsPaise: sum("expiry", "DEBIT"),
+    expiringSoonCount: expiringSoon._count,
+    expiringSoonPaise: expiringSoon._sum.remainingPaise ?? 0,
   };
 }
 
