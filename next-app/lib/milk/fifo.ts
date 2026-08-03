@@ -86,11 +86,14 @@ export async function reverseByRef(tx: Prisma.TransactionClient, sourceRef: stri
   const byLot = new Map<string, number>();
   for (const r of rows) byLot.set(r.tankerId, (byLot.get(r.tankerId) ?? 0) + r.litres);
 
-  const lots = await tx.milkTanker.findMany({ where: { id: { in: [...byLot.keys()] } }, select: { id: true, remainingLitres: true, consumedLitres: true, litres: true } });
+  const lots = await tx.milkTanker.findMany({ where: { id: { in: [...byLot.keys()] } }, select: { id: true, remainingLitres: true, consumedLitres: true, litres: true, freshoutLitres: true } });
   let restored = 0;
   for (const lot of lots) {
     const back = byLot.get(lot.id) ?? 0;
-    const remaining = Math.min(lot.litres, lot.remainingLitres + back);
+    // Cap at the lot's USABLE capacity = opening litres + freshout litres (residue extracted
+    // from the same tanker). Capping at just `litres` would silently drop freshout capacity
+    // when a consumed day is reversed for a re-settle.
+    const remaining = Math.min(lot.litres + (lot.freshoutLitres ?? 0), lot.remainingLitres + back);
     await tx.milkTanker.update({
       where: { id: lot.id },
       // Restoring litres re-opens a lot that had closed; a re-opened lot's profit

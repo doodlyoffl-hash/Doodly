@@ -12,12 +12,13 @@ import { db } from "@/lib/db";
 import { Errors } from "@/lib/http";
 import { audit } from "@/lib/auth/audit";
 import { istDayWindow } from "@/lib/delivery/stats";
-import { computeTankerCost } from "@/lib/milk/cost";
+import { computeTankerCost, litresOf } from "@/lib/milk/cost";
 import { getMilkConfig } from "@/lib/milk/config";
 import { tankerReconciliation } from "@/lib/milk/reconcile";
 import { freezeTankerReport, getTankerReport } from "@/lib/milk/tanker-report";
 
 const EPS = 1e-6;
+const round3 = (n: number) => Math.round((n || 0) * 1000) / 1000;
 
 async function nextSeq(tx: Prisma.TransactionClient, key: string): Promise<number> {
   const row = await tx.counter.upsert({ where: { key }, create: { key, value: 1 }, update: { value: { increment: 1 } } });
@@ -121,6 +122,86 @@ export async function updateTanker(id: string, patch: Partial<TankerInput>, acto
   });
   await audit({ userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system", action: "milk.tanker.update", target: `${updated.code} · ${cost.litres}L · ₹${(cost.totalCostPaise / 100).toFixed(2)}` }).catch(() => {});
   return updated;
+}
+
+/**
+ * Add Freshout Milk to a tanker — extra litres extracted from the SAME tanker after it
+ * reads "empty" (outlet/pipeline residue). This is NOT a new procurement:
+ *   • usable capacity grows:   remainingLitres += freshoutLitres  (lot re-opens if it had drained)
+ *   • total cost is UNCHANGED: costPerLitre re-dilutes to totalCost / (litres + freshout)
+ *   • FIFO is preserved:       it's the SAME (oldest) lot, so it is always consumed before the
+ *                              next tanker; deliveries stay linked to this tanker.
+ * Then the affected days re-settle: this tanker's already-consumed days (so their FROZEN
+ * TankerConsumption.costPaise — which the daily P&L sums — refresh at the new diluted rate)
+ * and any PENDING allocation days (so the fresh capacity absorbs the overflow, exactly like a
+ * new tanker's arrival). Multiple entries are allowed and summed. Cannot be added once the
+ * tanker is permanently CLOSED.
+ */
+export async function addFreshout(id: string, input: { quantityKg: number; remarks?: string | null }, actor?: { actorId?: string; actorRole?: string }) {
+  const kg = Number(input.quantityKg);
+  if (!(kg > 0)) throw Errors.badRequest("Freshout quantity (KG) must be greater than 0.");
+
+  const t = await db.milkTanker.findUnique({ where: { id } });
+  if (!t || t.deletedAt) throw Errors.notFound("Tanker not found.");
+  // A tanker that merely DRAINED (fifo auto-sets status=CLOSED at zero) is only "awaiting final
+  // closure" — Freshout is exactly meant for that moment, so it re-opens the lot. Only a MANUAL,
+  // permanent close blocks it. Manual close stamps closedByRole on the frozen report; a lazy
+  // freeze-on-view leaves it null, and that stale snapshot is dropped as the tanker re-opens.
+  if (t.status === "CLOSED") {
+    const frozen = await db.tankerClosingReport.findUnique({ where: { tankerId: t.id }, select: { closedByRole: true } });
+    if (frozen?.closedByRole) throw Errors.badRequest("This tanker has been permanently closed — Freshout can no longer be added.");
+    if (frozen) await db.tankerClosingReport.delete({ where: { tankerId: t.id } }).catch(() => {});
+  }
+
+  const litres = litresOf(kg, t.conversionFactor);               // same conversion as procurement
+  const prevKg = t.freshoutKg, prevLitres = t.freshoutLitres;
+  const newFreshoutKg = prevKg + kg;
+  const newFreshoutLitres = prevLitres + litres;
+  const usableLitres = t.litres + newFreshoutLitres;             // opening + all freshout
+  // Cost is diluted, NOT increased: the same procurement cost now covers more usable litres,
+  // so total COGS over the full lot still equals procurement cost (Step 9 — no new purchase).
+  const costPerLitrePaise = usableLitres > 0 ? Math.round(t.totalCostPaise / usableLitres) : t.costPerLitrePaise;
+  const costPerKgPaise = (t.quantityKg + newFreshoutKg) > 0 ? Math.round(t.totalCostPaise / (t.quantityKg + newFreshoutKg)) : t.costPerKgPaise;
+
+  const entry = await db.$transaction(async (tx) => {
+    const e = await tx.milkTankerFreshout.create({ data: { tankerId: t.id, quantityKg: round3(kg), litres: round3(litres), conversionFactor: t.conversionFactor, enteredById: actor?.actorId ?? null, remarks: input.remarks ?? null } });
+    await tx.milkTanker.update({
+      where: { id: t.id },
+      data: {
+        freshoutKg: round3(newFreshoutKg), freshoutLitres: round3(newFreshoutLitres),
+        remainingLitres: { increment: litres },
+        costPerLitrePaise, costPerKgPaise,
+        // re-open a lot that had drained to zero — its freshout residue is now sellable stock
+        ...(t.status === "CLOSED" ? { status: "OPEN" as const, closedAt: null } : {}),
+      },
+    });
+    return e;
+  });
+
+  await audit({
+    userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system",
+    action: "milk.freshout.added",
+    // Step 13: tanker id, KG, litres, previous → new value all captured in the trace.
+    target: `${t.id} · ${t.code} · +${round3(kg)}kg → +${round3(litres)}L freshout · total ${round3(prevLitres)}L→${round3(newFreshoutLitres)}L (${round3(prevKg)}→${round3(newFreshoutKg)}kg) · cost/L ${t.costPerLitrePaise}→${costPerLitrePaise}p${input.remarks ? " · " + input.remarks : ""}`,
+  }).catch(() => {});
+
+  // Re-settle the affected days: this tanker's already-consumed days (refresh their frozen COGS
+  // at the new diluted rate) ∪ any PENDING allocation days (absorb overflow into the freshout
+  // capacity — same mechanism as a new tanker arriving). Oldest-first. Best-effort.
+  try {
+    const { settleDay, listPendingAllocations } = await import("@/lib/milk/settle");
+    const { istISO } = await import("@/lib/delivery/stats");
+    const myDays = await db.tankerConsumption.findMany({ where: { tankerId: t.id, channel: { in: ["RETAIL", "B2B"] } }, select: { date: true }, distinct: ["date"] });
+    const pending = await listPendingAllocations();
+    const dayIsos = new Set<string>();
+    for (const d of myDays) dayIsos.add(istISO(d.date));
+    for (const p of pending) dayIsos.add(istISO(p.date));
+    const ordered = [...dayIsos].sort();
+    for (const dayIso of ordered) await settleDay(dayIso, { actorId: actor?.actorId, actorRole: actor?.actorRole ?? "system", quiet: true, clearedByTankerId: t.id });
+    if (ordered.length) await audit({ userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system", action: "milk.tanker.recalculated", target: `${t.code} · re-settled ${ordered.length} day(s) after freshout (${ordered[0]}…${ordered[ordered.length - 1]}) — COGS refreshed + pending absorbed` }).catch(() => {});
+  } catch { /* re-settle after freshout is best-effort — never blocks the entry */ }
+
+  return { ok: true as const, entry, freshoutLitres: round3(newFreshoutLitres), remainingLitres: round3(t.remainingLitres + litres), costPerLitrePaise };
 }
 
 export async function deleteTanker(id: string, actor?: { actorId?: string; actorRole?: string }) {

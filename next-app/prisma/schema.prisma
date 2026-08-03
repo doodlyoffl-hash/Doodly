@@ -1770,9 +1770,15 @@ model MilkTanker {
   costPerLitrePaise Int
   costPerKgPaise   Int
 
+  // Freshout Milk — extra litres extracted from the SAME tanker after it reads "empty"
+  // (outlet/pipeline residue). NOT a new procurement: it enlarges this lot's usable
+  // stock at the SAME total cost (so costPerLitre dilutes). Aggregate of all entries.
+  freshoutKg       Float         @default(0)
+  freshoutLitres   Float         @default(0)            // usable capacity = litres + freshoutLitres
+
   // FIFO lot state (canonical unit = LITRES)
   consumedLitres   Float         @default(0)
-  remainingLitres  Float                                // = litres − consumedLitres, denormalised for fast queries
+  remainingLitres  Float                                // = (litres + freshoutLitres) − consumedLitres, denormalised
   status           TankerStatus  @default(OPEN)
   closedAt         DateTime?
 
@@ -1782,10 +1788,28 @@ model MilkTanker {
   deletedAt        DateTime?
 
   consumptions     TankerConsumption[]
+  freshouts        MilkTankerFreshout[]
 
   @@index([procurementDate])
   @@index([status, procurementDate])
   @@index([deletedAt])
+}
+
+// One row per Freshout entry against a tanker (multiple allowed; summed into the
+// tanker's freshoutKg/freshoutLitres aggregates). Append-only trace for audit.
+model MilkTankerFreshout {
+  id               String     @id @default(cuid())
+  tankerId         String
+  tanker           MilkTanker @relation(fields: [tankerId], references: [id], onDelete: Cascade)
+  quantityKg       Float
+  litres           Float                                // = quantityKg / tanker.conversionFactor (same conversion)
+  conversionFactor Float                                // snapshot used for this entry
+  enteredById      String?
+  remarks          String?
+  entryAt          DateTime   @default(now())
+  createdAt        DateTime   @default(now())
+
+  @@index([tankerId])
 }
 
 // One row per FIFO draw against a tanker. The sum of a tanker's RETAIL+B2B+ADJUSTMENT
@@ -1823,6 +1847,8 @@ model TankerClosingReport {
   forced               Boolean  @default(false)   // Super-Admin force-close with leftover (→ wastage)
   // frozen milk-usage (litres)
   openingLitres        Float
+  freshoutKg           Float    @default(0)
+  freshoutLitres       Float    @default(0)
   retailLitres         Float
   b2bLitres            Float
   wastageLitres        Float    @default(0)

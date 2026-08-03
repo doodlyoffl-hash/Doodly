@@ -134,10 +134,10 @@ export type B2bRow = Awaited<ReturnType<typeof b2bOrderRows>>[number];
 const overlap = (rStart: number, rLen: number, tStart: number, tEnd: number) => Math.max(0, Math.min(rStart + rLen, tEnd) - Math.max(rStart, tStart));
 
 export interface TankerRecon {
-  tanker: { id: string; code: string; tankerNo: string; supplier: string; procurementDate: string; quantityKg: number; fatPct: number; litres: number; consumedLitres: number; remainingLitres: number; costPerLitrePaise: number; milkCostPaise: number; fatCostPaise: number; transportPaise: number; totalCostPaise: number; status: string; closedAt: string | null };
+  tanker: { id: string; code: string; tankerNo: string; supplier: string; procurementDate: string; quantityKg: number; fatPct: number; litres: number; freshoutKg: number; freshoutLitres: number; consumedLitres: number; remainingLitres: number; costPerLitrePaise: number; milkCostPaise: number; fatCostPaise: number; transportPaise: number; totalCostPaise: number; status: string; closedAt: string | null };
   retail: { customers: number; deliveries: number; litres: number; revenuePaise: number; lines: ReconLine[] };
   b2b: { businesses: number; deliveries: number; litres: number; revenuePaise: number; lines: ReconLine[] };
-  usage: { openingLitres: number; retailLitres: number; b2bLitres: number; wastageLitres: number; carryForwardInLitres: number; carryForwardOutLitres: number; availableAfterCarryForward: number; carryForwardLitres: number; closingLitres: number };
+  usage: { openingLitres: number; freshoutLitres: number; totalAvailableLitres: number; retailLitres: number; b2bLitres: number; wastageLitres: number; carryForwardInLitres: number; carryForwardOutLitres: number; availableAfterCarryForward: number; carryForwardLitres: number; closingLitres: number };
   financial: { retailRevenuePaise: number; b2bRevenuePaise: number; totalRevenuePaise: number; procurementCostPaise: number; transportPaise: number; totalCostPaise: number; cogsPaise: number; grossProfitPaise: number; netProfitPaise: number };
   reconciled: boolean;
 }
@@ -232,10 +232,10 @@ export async function tankerReconciliation(tankerId: string): Promise<TankerReco
   const carryForwardOutLitres = await carryForwardOutForTanker(tankerId);
 
   return {
-    tanker: { id: t.id, code: t.code, tankerNo: t.tankerNo, supplier: t.supplier, procurementDate: istISO(t.procurementDate), quantityKg: t.quantityKg, fatPct: t.fatPct, litres: t.litres, consumedLitres: r2(t.consumedLitres), remainingLitres: r2(t.remainingLitres), costPerLitrePaise: t.costPerLitrePaise, milkCostPaise: t.milkCostPaise, fatCostPaise: t.fatCostPaise, transportPaise: t.transportPaise, totalCostPaise: t.totalCostPaise, status: t.status, closedAt: t.closedAt ? t.closedAt.toISOString() : null },
+    tanker: { id: t.id, code: t.code, tankerNo: t.tankerNo, supplier: t.supplier, procurementDate: istISO(t.procurementDate), quantityKg: t.quantityKg, fatPct: t.fatPct, litres: t.litres, freshoutKg: r2(t.freshoutKg), freshoutLitres: r2(t.freshoutLitres), consumedLitres: r2(t.consumedLitres), remainingLitres: r2(t.remainingLitres), costPerLitrePaise: t.costPerLitrePaise, milkCostPaise: t.milkCostPaise, fatCostPaise: t.fatCostPaise, transportPaise: t.transportPaise, totalCostPaise: t.totalCostPaise, status: t.status, closedAt: t.closedAt ? t.closedAt.toISOString() : null },
     retail: { customers: new Set(retailLines.map((l) => l.refId).filter(Boolean)).size, deliveries: retailLines.length, litres: retailLitres, revenuePaise: retailRev, lines: retailLines },
     b2b: { businesses: new Set(b2bLines.map((l) => l.refId).filter(Boolean)).size, deliveries: b2bLines.length, litres: b2bLitres, revenuePaise: b2bRev, lines: b2bLines },
-    usage: { openingLitres: r2(t.litres), retailLitres, b2bLitres, wastageLitres: r2(wastageLitres), carryForwardInLitres, carryForwardOutLitres, availableAfterCarryForward: r2(t.litres - carryForwardInLitres), carryForwardLitres: t.status === "OPEN" ? r2(t.remainingLitres) : 0, closingLitres: r2(t.remainingLitres) },
+    usage: { openingLitres: r2(t.litres), freshoutLitres: r2(t.freshoutLitres), totalAvailableLitres: r2(t.litres + t.freshoutLitres), retailLitres, b2bLitres, wastageLitres: r2(wastageLitres), carryForwardInLitres, carryForwardOutLitres, availableAfterCarryForward: r2(t.litres + t.freshoutLitres - carryForwardInLitres), carryForwardLitres: t.status === "OPEN" ? r2(t.remainingLitres) : 0, closingLitres: r2(t.remainingLitres) },
     financial: { retailRevenuePaise: retailRev, b2bRevenuePaise: b2bRev, totalRevenuePaise: totalRev, procurementCostPaise, transportPaise: t.transportPaise, totalCostPaise: t.totalCostPaise, cogsPaise, grossProfitPaise: totalRev - cogsPaise, netProfitPaise: totalRev - cogsPaise },
     reconciled,
   };

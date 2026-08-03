@@ -8,7 +8,7 @@ import { ok, route, Errors } from "@/lib/http";
 import { requirePermission } from "@/lib/auth/authorize";
 import { readUserId, readRole } from "@/lib/auth/identity";
 import { db } from "@/lib/db";
-import { updateTanker, deleteTanker, closeTanker } from "@/lib/milk/tanker";
+import { updateTanker, deleteTanker, closeTanker, addFreshout } from "@/lib/milk/tanker";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,10 +17,13 @@ export const GET = route("admin.milk.tanker.get", async (req: NextRequest, ctx: 
   requirePermission(req, "procurement", "view");
   const tanker = await db.milkTanker.findUnique({
     where: { id: ctx.params.id },
-    include: { consumptions: { orderBy: { date: "desc" }, take: 200 }, farmer: { select: { id: true, name: true } } },
+    include: { consumptions: { orderBy: { date: "desc" }, take: 200 }, freshouts: { orderBy: { entryAt: "desc" }, take: 50 }, farmer: { select: { id: true, name: true } } },
   });
   if (!tanker || tanker.deletedAt) throw Errors.notFound("Tanker not found.");
-  return ok({ tanker });
+  // Permanently closed = a MANUAL close (frozen report stamped with a role). A merely-drained
+  // (auto-closed) tanker is "awaiting closure" and can still accept Freshout, so the UI shows the form.
+  const frozen = await db.tankerClosingReport.findUnique({ where: { tankerId: ctx.params.id }, select: { closedByRole: true } });
+  return ok({ tanker, permanentlyClosed: !!frozen?.closedByRole });
 });
 
 const patchSchema = z.object({
@@ -35,6 +38,7 @@ const patchSchema = z.object({
 });
 
 const closeSchema = z.object({ action: z.literal("close"), reason: z.string().max(300).optional().nullable(), force: z.boolean().optional() });
+const freshoutSchema = z.object({ action: z.literal("freshout"), quantityKg: z.number().positive(), remarks: z.string().max(500).optional().nullable() });
 
 export const PATCH = route("admin.milk.tanker.update", async (req: NextRequest, ctx: { params: { id: string } }) => {
   const role = requirePermission(req, "procurement", "edit");
@@ -45,6 +49,13 @@ export const PATCH = route("admin.milk.tanker.update", async (req: NextRequest, 
     if (!c.success) throw Errors.badRequest("Invalid close request.");
     if (c.data.force && role !== "super_admin") throw Errors.forbidden("Only a Super-Admin can force-close a tanker that still has milk.");
     const result = await closeTanker({ id: ctx.params.id, reason: c.data.reason ?? null, force: c.data.force }, { actorId: readUserId(req) ?? undefined, actorRole: role });
+    return ok(result);
+  }
+  // action:"freshout" — add Freshout Milk (extra residue litres) to this tanker's SAME lot
+  if (raw.action === "freshout") {
+    const f = freshoutSchema.safeParse(raw);
+    if (!f.success) throw Errors.badRequest("Freshout quantity (KG) must be a positive number.");
+    const result = await addFreshout(ctx.params.id, { quantityKg: f.data.quantityKg, remarks: f.data.remarks ?? null }, { actorId: readUserId(req) ?? undefined, actorRole: role });
     return ok(result);
   }
   const p = patchSchema.safeParse(raw);
