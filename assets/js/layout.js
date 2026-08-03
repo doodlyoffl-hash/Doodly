@@ -1472,7 +1472,7 @@
         "</div>" +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
           '<select class="input" id="b2i-status" style="max-width:140px"><option value="">Any status</option>' + opt(statuses, s.status) + "</select>" +
-          '<button type="button" class="exp-chip b2i-overdue ' + (s.overdue ? "on" : "") + '" data-v="overdue">Overdue only</button>' +
+          '<button type="button" id="b2i-overdue" class="exp-chip ' + (s.overdue ? "on" : "") + '" data-v="overdue">Overdue only</button>' +
           '<select class="input" id="b2i-biz" style="max-width:220px"><option value="">All businesses</option>' + _b2iBiz.map(function (b) { return '<option value="' + b.id + '"' + (b.id === s.businessId ? " selected" : "") + ">" + esc((b.code ? b.code + " · " : "") + b.name) + "</option>"; }).join("") + "</select>" +
           '<input class="input" id="b2i-amin" type="number" min="0" placeholder="₹ min" value="' + esc(s.amountMin) + '" style="max-width:90px" title="Amount min">' +
           '<input class="input" id="b2i-amax" type="number" min="0" placeholder="₹ max" value="' + esc(s.amountMax) + '" style="max-width:90px" title="Amount max">' +
