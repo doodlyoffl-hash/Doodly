@@ -35,7 +35,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       case "update":
         return NextResponse.json({ ok: true, invoice: await updateInvoice(params.id, (body.patch ?? {}) as { dueDate?: string | null; notes?: string; terms?: string }, a) });
       case "pay":
-        return NextResponse.json({ ok: true, invoice: await recordInvoicePayment(params.id, { amountPaise: Math.round(Number(body.amountPaise) || 0), method: String(body.method ?? "Cash"), reference: body.reference as string | undefined, note: body.note as string | undefined, ...a }) });
+        return NextResponse.json({ ok: true, invoice: await recordInvoicePayment(params.id, { amountPaise: Math.round(Number(body.amountPaise) || 0), method: String(body.method ?? "Cash"), reference: body.reference as string | undefined, note: body.note as string | undefined, paidAt: (body.paidAt as string | undefined) ?? null, ...a }) });
       case "pdf":
         return NextResponse.json({ ok: true, result: await logInvoiceAction(params.id, "pdf", a) });
       case "link": {

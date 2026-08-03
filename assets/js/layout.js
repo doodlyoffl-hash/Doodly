@@ -1460,7 +1460,8 @@
     var statuses = [["ISSUED", "Unpaid"], ["PARTIAL", "Partial"], ["PAID", "Paid"], ["VOID", "Void"]];
     var opt = function (arr, sel) { return arr.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === sel ? " selected" : "") + ">" + esc(o[1]) + "</option>"; }).join(""); };
     host.innerHTML =
-      '<div class="panel-head" style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><h3 style="margin:0">Invoice Management</h3><span class="muted-sm">Auto-generated on delivery · live from the database</span></div>' +
+      '<div class="panel-head" style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><h3 style="margin:0">Invoice Management</h3><span class="muted-sm">Auto-generated on delivery · live from the database</span>' +
+        '<div style="margin-left:auto;display:flex;gap:4px"><button class="btn btn-primary sm" id="b2i-tab-inv">Invoices</button><button class="btn btn-ghost sm" id="b2i-tab-out">Outstanding</button></div></div>' +
       '<div id="b2i-summary" class="dl-an-kpis" style="margin-bottom:12px"></div>' +
       '<div class="panel" style="margin-bottom:12px"><div class="panel-pad" style="display:flex;flex-direction:column;gap:8px">' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
@@ -1500,6 +1501,7 @@
     host.querySelector("#b2i-size").addEventListener("change", function (e) { s.pageSize = Number(e.target.value); s.page = 1; b2iReload(host); });
     host.querySelector("#b2i-reset").addEventListener("click", function () { _b2iState = b2iFreshState(); renderB2BInvoices(host); });
     host.querySelector("#b2i-reports").addEventListener("click", function () { b2iReports(); });
+    var toOut = host.querySelector("#b2i-tab-out"); if (toOut) toOut.addEventListener("click", function () { renderB2BOutstanding(host); });
     [["pdf-all", "pdf"], ["xls-all", "xls"], ["csv-all", "csv"], ["print-all", "print"]].forEach(function (m) { var el = host.querySelector("#b2i-" + m[0]); if (el) el.addEventListener("click", function () { b2iExport(m[1]); }); });
     b2iReload(host);
   }
@@ -1511,6 +1513,112 @@
     fetch(url, { headers: h, credentials: "include" }).then(function (res) { if (!res.ok) throw new Error(res.status === 403 ? "Your role can't export (403)." : "Export failed (" + res.status + ")"); return res.blob(); })
       .then(function (blob) { var u = URL.createObjectURL(blob); if (fmt === "print") { window.open(u, "_blank"); } else { var a = document.createElement("a"); a.href = u; a.download = "DOODLY_B2B_Invoices." + ext; document.body.appendChild(a); a.click(); a.remove(); } setTimeout(function () { URL.revokeObjectURL(u); }, 60000); dacToast("Invoice register exported (" + ext.toUpperCase() + ")."); })
       .catch(function (e) { dacToast(e.message || "Couldn't export."); });
+  }
+
+  // ===== Outstanding Ledger view — payment-ledger source of truth (as-of-date reconciliation) =====
+  function b2oFreshState() { var t = new Date().toISOString().slice(0, 10); return { asOf: t, from: "", to: "", basis: "payment", q: "", businessId: "", status: "", all: false }; }
+  var _b2oState = b2oFreshState();
+  function b2oQuery(extra) {
+    var s = _b2oState, p = new URLSearchParams();
+    if (s.asOf) p.set("asOf", s.asOf); if (s.from) p.set("from", s.from); if (s.to) p.set("to", s.to);
+    if (s.basis) p.set("basis", s.basis); if (s.q.trim()) p.set("q", s.q.trim());
+    if (s.businessId) p.set("businessId", s.businessId); if (s.status) p.set("status", s.status); if (s.all) p.set("all", "1");
+    if (extra) for (var k in extra) p.set(k, extra[k]);
+    return p.toString();
+  }
+  function renderB2BOutstanding(host) {
+    var s = _b2oState;
+    var opt = function (arr, sel) { return arr.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === sel ? " selected" : "") + ">" + esc(o[1]) + "</option>"; }).join(""); };
+    var bases = [["payment", "Payment date"], ["issued", "Invoice date"], ["delivery", "Delivery date"], ["cleared", "Outstanding cleared date"], ["created", "Outstanding created date"]];
+    var statuses = [["", "All owing"], ["overdue", "Overdue only"], ["cleared", "Fully paid"]];
+    host.innerHTML =
+      '<div class="panel-head" style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><h3 style="margin:0">Outstanding Ledger</h3><span class="muted-sm">Payment-ledger truth · outstanding as of any date, never hides old balances</span>' +
+        '<div style="margin-left:auto;display:flex;gap:4px"><button class="btn btn-ghost sm" id="b2o-tab-inv">Invoices</button><button class="btn btn-primary sm" id="b2o-tab-out">Outstanding</button></div></div>' +
+      '<div id="b2o-summary" class="dl-an-kpis" style="margin-bottom:10px"></div>' +
+      '<div id="b2o-aging" class="dl-an-kpis" style="margin-bottom:12px"></div>' +
+      '<div class="panel" style="margin-bottom:12px"><div class="panel-pad" style="display:flex;flex-direction:column;gap:8px">' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+          '<label class="muted-sm">Outstanding as of <input class="input" id="b2o-asof" type="date" value="' + esc(s.asOf) + '" style="max-width:150px"></label>' +
+          '<span class="muted-sm">Period</span><input class="input" id="b2o-from" type="date" value="' + esc(s.from) + '" style="max-width:140px" title="From">' +
+          '<input class="input" id="b2o-to" type="date" value="' + esc(s.to) + '" style="max-width:140px" title="To">' +
+          '<span class="muted-sm">by</span><select class="input" id="b2o-basis" style="max-width:200px">' + opt(bases, s.basis) + "</select>" +
+        "</div>" +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+          '<input class="input" id="b2o-q" placeholder="Search invoice / business / GST" value="' + esc(s.q) + '" style="flex:1;min-width:220px">' +
+          '<select class="input" id="b2o-biz" style="max-width:220px"><option value="">All businesses</option>' + _b2iBiz.map(function (b) { return '<option value="' + b.id + '"' + (b.id === s.businessId ? " selected" : "") + ">" + esc((b.code ? b.code + " · " : "") + b.name) + "</option>"; }).join("") + "</select>" +
+          '<select class="input" id="b2o-status" style="max-width:150px">' + opt(statuses, s.status) + "</select>" +
+          '<label class="muted-sm"><input type="checkbox" id="b2o-all"' + (s.all ? " checked" : "") + "> Include paid</label>" +
+          '<button class="btn btn-ghost sm" id="b2o-reset">Reset</button>' +
+          '<div style="margin-left:auto;display:flex;gap:6px">' +
+            '<button class="btn btn-ghost sm" id="b2o-x-out">⬇ Outstanding</button><button class="btn btn-ghost sm" id="b2o-x-aging">Aging</button><button class="btn btn-ghost sm" id="b2o-x-coll">Collection</button><button class="btn btn-ghost sm" id="b2o-x-pay">Payments</button>' +
+          "</div>" +
+        "</div>" +
+      "</div></div>" +
+      '<div id="b2o-body"><p class="muted-sm">Loading…</p></div>';
+    var q = host.querySelector("#b2o-q"), qt;
+    q.addEventListener("input", function () { clearTimeout(qt); qt = setTimeout(function () { s.q = q.value; b2oReload(host); }, 350); });
+    host.querySelector("#b2o-asof").addEventListener("change", function (e) { s.asOf = e.target.value; b2oReload(host); });
+    host.querySelector("#b2o-from").addEventListener("change", function (e) { s.from = e.target.value; b2oReload(host); });
+    host.querySelector("#b2o-to").addEventListener("change", function (e) { s.to = e.target.value; b2oReload(host); });
+    host.querySelector("#b2o-basis").addEventListener("change", function (e) { s.basis = e.target.value; b2oReload(host); });
+    host.querySelector("#b2o-biz").addEventListener("change", function (e) { s.businessId = e.target.value; b2oReload(host); });
+    host.querySelector("#b2o-status").addEventListener("change", function (e) { s.status = e.target.value; b2oReload(host); });
+    host.querySelector("#b2o-all").addEventListener("change", function (e) { s.all = e.target.checked; b2oReload(host); });
+    host.querySelector("#b2o-reset").addEventListener("click", function () { _b2oState = b2oFreshState(); renderB2BOutstanding(host); });
+    host.querySelector("#b2o-tab-inv").addEventListener("click", function () { renderB2BInvoices(host); });
+    [["out", "outstanding"], ["aging", "aging"], ["coll", "collection"], ["pay", "payments"]].forEach(function (m) { host.querySelector("#b2o-x-" + m[0]).addEventListener("click", function () { b2oExport(m[1]); }); });
+    b2oReload(host);
+  }
+  function b2oReload(host) {
+    var body = host.querySelector("#b2o-body"), sum = host.querySelector("#b2o-summary"), aging = host.querySelector("#b2o-aging");
+    DOODLY_API.get("/api/b2b/invoices/outstanding?summary=1&" + b2oQuery()).then(function (r) {
+      var c = r.summary || {}, rows = r.rows || [];
+      sum.innerHTML = milkStat(b2iRs(c.invoiceTotalPaise), "Invoice value") + milkStat(b2iRs(c.collectedAsOfPaise), "Collected") + milkStat(b2iRs(c.outstandingAsOfPaise), "Outstanding") + milkStat(b2iRs(c.overdueAmountPaise), "Overdue") + milkStat((c.fullyPaid || 0) + " / " + (c.partiallyPaid || 0) + " / " + (c.unpaid || 0), "Paid/Partial/Unpaid") + milkStat((c.paidInPeriodPaise != null ? b2iRs(c.paidInPeriodPaise) : "—"), "Paid in period") + milkStat((c.avgCollectionDays || 0) + " d", "Avg collection");
+      aging.innerHTML = (c.aging || []).map(function (b) { return milkStat(b2iRs(b.amountPaise) + " · " + b.count, b.label + " days"); }).join("");
+      body.innerHTML = b2oTable(r);
+      body.querySelectorAll(".b2o-ledger").forEach(function (b) { b.addEventListener("click", function () { b2oBusinessLedger(b.dataset.id, b.dataset.name); }); });
+      body.querySelectorAll(".b2o-pay").forEach(function (b) { b.addEventListener("click", function () { b2iPay(b.dataset.id, Number(b.dataset.bal), null); setTimeout(function () { b2oReload(host); }, 400); }); });
+    }).catch(function (e) { body.innerHTML = '<div class="panel panel-pad dac-err">' + esc((e && e.message) || "Couldn't load the outstanding ledger.") + "</div>"; });
+  }
+  function b2oTable(r) {
+    var d10 = function (s) { return s ? String(s).slice(0, 10) : "—"; };
+    var tone = { PAID: "green", PARTIAL: "amber", UNPAID: "grey" };
+    var rows = (r.rows || []).map(function (o) {
+      return "<tr><td><b>" + esc(o.number) + "</b><br><span class='muted-sm'>" + esc(o.orderCode || "") + "</span></td>" +
+        "<td>" + esc(o.businessName) + "<br><span class='muted-sm'>" + esc(o.businessCode || "") + "</span></td>" +
+        "<td>" + d10(o.issuedAt) + "</td><td style='text-align:right'>" + b2iRs(o.invoiceTotalPaise) + "</td>" +
+        "<td style='text-align:right'>" + b2iRs(o.paidAsOfPaise) + "</td>" +
+        "<td style='text-align:right'><b>" + b2iRs(o.outstandingAsOfPaise) + "</b></td>" +
+        "<td>" + d10(o.outstandingSince) + "</td><td>" + d10(o.lastPaymentAt) + "</td>" +
+        "<td style='text-align:right'>" + o.daysOutstanding + "</td>" +
+        "<td><span class='badge " + (tone[o.statusAsOf] || "grey") + "'>" + esc(o.statusAsOf) + "</span>" + (o.overdue ? " <span class='badge red' style='font-size:10px'>OVERDUE</span>" : "") + "</td>" +
+        "<td><div style='display:flex;gap:4px'><button class='btn btn-ghost sm b2o-ledger' data-id='" + o.businessId + "' data-name='" + esc(o.businessName) + "' title='Business ledger'>Ledger</button>" +
+        (o.outstandingAsOfPaise > 0 ? "<button class='btn btn-ghost sm b2o-pay' data-id='" + o.invoiceId + "' data-bal='" + o.outstandingAsOfPaise + "' title='Record payment'>₹</button>" : "") + "</div></td></tr>";
+    }).join("") || '<tr><td colspan="11" class="muted-sm" style="text-align:center;padding:24px">No outstanding invoices for these filters.</td></tr>';
+    return '<div class="panel"><div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Invoice</th><th>Business</th><th>Inv date</th><th style="text-align:right">Amount</th><th style="text-align:right">Paid</th><th style="text-align:right">Outstanding</th><th>Since</th><th>Last pay</th><th style="text-align:right">Days</th><th>Status</th><th>Actions</th></tr></thead><tbody>' + rows + "</tbody></table></div><div class='muted-sm' style='margin-top:6px'>" + (r.rows || []).length + " invoice(s) · outstanding as of " + d10(r.asOf) + "</div></div></div>";
+  }
+  function b2oExport(kind) {
+    var base = window.DOODLY_API ? DOODLY_API.base() : "", h = b2iAuthHeaders();
+    dacToast("Preparing the " + kind + " report (PDF)…");
+    var url = base + "/api/b2b/invoices/export?format=pdf&report=" + kind + "&" + b2oQuery();
+    fetch(url, { headers: h, credentials: "include" }).then(function (res) { if (!res.ok) throw new Error(res.status === 403 ? "Your role can't export (403)." : "Export failed (" + res.status + ")"); return res.blob(); })
+      .then(function (blob) { var u = URL.createObjectURL(blob); var a = document.createElement("a"); a.href = u; a.download = "DOODLY_B2B_" + kind + ".pdf"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 60000); dacToast("Report exported."); })
+      .catch(function (e) { dacToast(e.message || "Couldn't export."); });
+  }
+  function b2oBusinessLedger(businessId, name) {
+    DOODLY_API.get("/api/b2b/invoices/business-ledger?businessId=" + encodeURIComponent(businessId) + (_b2oState.asOf ? "&asOf=" + _b2oState.asOf : "")).then(function (l) {
+      var m = document.createElement("div"); m.className = "rbac-modal";
+      var d10 = function (s) { return s ? String(s).slice(0, 10) : "—"; };
+      var rows = (l.lines || []).map(function (e) { return "<tr><td>" + d10(e.date) + "</td><td><span class='badge " + (e.kind === "INVOICE" ? "blue" : "green") + "'>" + esc(e.kind) + "</span></td><td>" + esc(e.ref) + "</td><td class='muted-sm'>" + esc(e.label) + "</td><td style='text-align:right'>" + (e.debitPaise ? b2iRs(e.debitPaise) : "") + "</td><td style='text-align:right'>" + (e.creditPaise ? b2iRs(e.creditPaise) : "") + "</td><td style='text-align:right'><b>" + b2iRs(e.balancePaise) + "</b></td></tr>"; }).join("") || "<tr><td colspan='7' class='muted-sm' style='text-align:center;padding:12px'>No entries.</td></tr>";
+      m.innerHTML = '<div class="rbac-modal-card" role="dialog" aria-modal="true" style="max-width:720px"><div class="rbac-modal-head"><h3>Business Ledger — ' + esc(name || "") + '</h3><button class="rbac-x">✕</button></div>' +
+        '<div class="dl-an-kpis" style="margin:8px 0">' + milkStat(b2iRs(l.closingBalancePaise), "Closing balance (owed)") + milkStat((l.lines || []).length, "Entries") + milkStat(d10(l.asOf), "As of") + "</div>" +
+        '<div class="table-wrap" style="max-height:420px;overflow:auto"><table class="tbl"><thead><tr><th>Date</th><th>Type</th><th>Ref</th><th>Particulars</th><th style="text-align:right">Debit</th><th style="text-align:right">Credit</th><th style="text-align:right">Balance</th></tr></thead><tbody>' + rows + "</tbody></table></div>" +
+        '<div style="display:flex;gap:6px;margin-top:10px"><button class="btn btn-ghost sm" id="b2o-bl-pdf">⬇ PDF</button></div></div>';
+      document.body.appendChild(m); requestAnimationFrame(function () { m.classList.add("show"); });
+      var close = function () { m.classList.remove("show"); setTimeout(function () { m.remove(); }, 200); };
+      m.addEventListener("click", function (e) { if (e.target === m || e.target.closest(".rbac-x")) close(); });
+      m.querySelector("#b2o-bl-pdf").addEventListener("click", function () { var base = DOODLY_API.base(), h = b2iAuthHeaders(); fetch(base + "/api/b2b/invoices/export?format=pdf&report=business-ledger&businessId=" + encodeURIComponent(businessId) + (_b2oState.asOf ? "&asOf=" + _b2oState.asOf : ""), { headers: h, credentials: "include" }).then(function (res) { return res.blob(); }).then(function (blob) { var u = URL.createObjectURL(blob); var a = document.createElement("a"); a.href = u; a.download = "DOODLY_B2B_business-ledger.pdf"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 60000); }).catch(function () { dacToast("Couldn't export."); }); });
+    }).catch(function (e) { dacToast((e && e.message) || "Couldn't load the business ledger."); });
   }
   function b2iReload(host) {
     var body = host.querySelector("#b2i-body"), sum = host.querySelector("#b2i-summary");
@@ -1594,7 +1702,14 @@
     if (v == null) return; var amt = Math.round(Number(v) * 100);
     if (!(amt > 0)) { dacToast("Enter a valid amount."); return; }
     var method = window.prompt("Payment method?", "Cash") || "Cash";
-    DOODLY_API.patch("/api/b2b/invoices/" + id, { action: "pay", amountPaise: amt, method: method }).then(function () { dacToast("Payment recorded."); b2iReload(host); }).catch(function (e) { dacToast((e && e.message) || "Couldn't record payment."); });
+    // Optional effective payment date (blank = today) — a payment made earlier can be back-dated
+    // so the outstanding ledger reconciles by the real date it was received.
+    var today = new Date().toISOString().slice(0, 10);
+    var dateStr = window.prompt("Payment date (YYYY-MM-DD, blank = today):", today);
+    if (dateStr === null) return;
+    var body = { action: "pay", amountPaise: amt, method: method };
+    if (dateStr && dateStr.trim() && dateStr.trim() !== today) body.paidAt = dateStr.trim();
+    DOODLY_API.patch("/api/b2b/invoices/" + id, body).then(function () { dacToast("Payment recorded."); if (host) b2iReload(host); }).catch(function (e) { dacToast((e && e.message) || "Couldn't record payment."); });
   }
   function b2iVoid(id, no, host) {
     if (!window.confirm("Void invoice " + no + "? This cancels the invoice (the record is kept for audit). This cannot be undone.")) return;

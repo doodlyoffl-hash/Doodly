@@ -405,12 +405,15 @@ export async function getOrder(id: string) {
 
 // ---------- payments + invoices ----------
 
-export async function recordPayment(args: { orderId: string; amountPaise: number; method: string; reference?: string; note?: string } & Actor) {
+export async function recordPayment(args: { orderId: string; amountPaise: number; method: string; reference?: string; note?: string; paidAt?: string | Date | null } & Actor) {
   if (args.amountPaise <= 0) throw new Error("Amount must be positive");
+  // Effective payment date for the ledger — a payment made earlier may be recorded today.
+  const paidAt = args.paidAt ? new Date(args.paidAt) : null;
+  if (paidAt && isNaN(paidAt.getTime())) throw new Error("Invalid payment date");
   return db.$transaction(async (tx) => {
     const order = await tx.businessOrder.findUnique({ where: { id: args.orderId }, select: { businessId: true, totalPaise: true, paidPaise: true, paymentTerm: true } });
     if (!order) throw new Error("Order not found");
-    await tx.businessPayment.create({ data: { businessId: order.businessId, orderId: args.orderId, amountPaise: args.amountPaise, method: args.method, reference: clean(args.reference), note: clean(args.note), recordedById: args.actorId } });
+    await tx.businessPayment.create({ data: { businessId: order.businessId, orderId: args.orderId, amountPaise: args.amountPaise, method: args.method, reference: clean(args.reference), note: clean(args.note), recordedById: args.actorId, paidAt } });
     const paidPaise = order.paidPaise + args.amountPaise;
     const updated = await tx.businessOrder.update({ where: { id: args.orderId }, data: { paidPaise, paymentStatus: derivePaymentStatus(order.totalPaise, paidPaise, order.paymentTerm) } });
     await logEvent(tx, args.orderId, "PAYMENT", { byId: args.actorId, note: `${rupees(args.amountPaise)} via ${args.method}${args.reference ? ` (${args.reference})` : ""}` });

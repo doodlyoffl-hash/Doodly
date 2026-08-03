@@ -2891,8 +2891,13 @@ model BusinessPayment {
   reference    String?
   note         String?
   recordedById String?
+  // Effective payment date for date-based reconciliation (a payment made 01 Aug may be entered
+  // 03 Aug). NULL → fall back to createdAt. All outstanding/collection date math uses paidAt ?? createdAt.
+  paidAt       DateTime?
   createdAt    DateTime       @default(now())
   @@index([businessId, createdAt])
+  @@index([orderId])
+  @@index([paidAt])
 }
 
 enum B2BInvoiceStatus {
@@ -2913,6 +2918,12 @@ model BusinessInvoice {
   status      B2BInvoiceStatus @default(ISSUED)
   dueDate     DateTime?
   voidedAt    DateTime?
+  // Outstanding-ledger cache: the moment cumulative payments first fully covered the invoice
+  // (status → PAID). NULL while any balance remains. ALWAYS recomputed from the payment ledger
+  // when a payment is recorded/edited — never hand-set — so it can never drift from the truth.
+  // Lets "filter basis = Outstanding Cleared Date" be an indexed query. Outstanding itself is
+  // ALWAYS computed (total − Σ payments), never stored.
+  clearedAt   DateTime?
   notes       String?
   terms       String?
   createdById String?
@@ -2936,6 +2947,7 @@ model BusinessInvoice {
   @@index([status])
   @@index([businessId])
   @@index([emailStatus])
+  @@index([clearedAt])
 }
 
 // Invoice audit trail / status history (created, payment, void, updated, pdf, export).

@@ -10,6 +10,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { formatInvoiceNumber } from "./engine";
 import { recordPayment } from "./service";
+import { audit } from "@/lib/auth/audit";
 import type { MilkReport } from "@/lib/milk/reports";
 
 interface Actor { actorId?: string; actorRole?: string; ip?: string }
@@ -58,6 +59,8 @@ function shapeRow(inv: InvWithOrder) {
     lastUpdated: (inv.events.at(-1)?.createdAt ?? inv.issuedAt).toISOString(),
     emailStatus: inv.emailStatus, emailSentAt: inv.emailSentAt?.toISOString() ?? null,
     whatsappStatus: inv.whatsappStatus, whatsappSentAt: inv.whatsappSentAt?.toISOString() ?? null,
+    clearedAt: inv.clearedAt?.toISOString() ?? null,
+    outstandingPaise: Math.max(0, o.totalPaise - o.paidPaise),
   };
 }
 
@@ -156,7 +159,7 @@ export async function getInvoiceDetail(id: string) {
   const o = inv.order;
   const istDay = (d: Date) => new Date(d.getTime() + 5.5 * 3600e3).toISOString().slice(0, 10);
   return {
-    id: inv.id, number: inv.number, status: inv.status, dueDate: inv.dueDate?.toISOString() ?? null, voidedAt: inv.voidedAt?.toISOString() ?? null,
+    id: inv.id, number: inv.number, status: inv.status, dueDate: inv.dueDate?.toISOString() ?? null, voidedAt: inv.voidedAt?.toISOString() ?? null, clearedAt: inv.clearedAt?.toISOString() ?? null,
     notes: inv.notes, terms: inv.terms, issuedAt: inv.issuedAt.toISOString(), gstPaise: inv.gstPaise,
     paymentStatus: paymentStatusOf(o.totalPaise, o.paidPaise, inv.dueDate, inv.status),
     // Complete traceability (Step 7): Order ID + Invoice ID + Revenue Reference (the frozen
@@ -172,7 +175,7 @@ export async function getInvoiceDetail(id: string) {
     order: { code: o.code, deliveryDate: o.deliveryDate.toISOString(), deliveryTime: o.deliveryTime, subtotalPaise: o.subtotalPaise, discountPaise: o.discountPaise, taxPaise: o.taxPaise, totalPaise: o.totalPaise, paidPaise: o.paidPaise, paymentTerm: o.paymentTerm },
     business: { code: o.business.code, name: o.business.name, gst: o.business.gst, pan: o.business.pan, contactPerson: o.business.contactPerson, mobile: o.business.mobile, email: o.business.email, line1: o.business.line1, city: o.business.city, state: o.business.state, pincode: o.business.pincode, billingAddress: o.business.billingAddress },
     items: o.items.map((i) => ({ id: i.id, productName: i.productName, quantity: i.quantity, unit: i.unit, unitPricePaise: i.unitPricePaise, lineTotalPaise: i.lineTotalPaise, slabMinQty: i.slabMinQty ?? null })),
-    payments: o.payments.map((p) => ({ id: p.id, amountPaise: p.amountPaise, method: p.method, reference: p.reference, createdAt: p.createdAt.toISOString() })),
+    payments: o.payments.map((p) => ({ id: p.id, amountPaise: p.amountPaise, method: p.method, reference: p.reference, createdAt: p.createdAt.toISOString(), paidAt: (p.paidAt ?? p.createdAt).toISOString() })),
     events: inv.events.map((e) => ({ id: e.id, type: e.type, note: e.note, byRole: e.byRole, createdAt: e.createdAt.toISOString() })),
     email: { status: inv.emailStatus, to: inv.emailTo, sentAt: inv.emailSentAt?.toISOString() ?? null, messageId: inv.emailMessageId, retryCount: inv.emailRetryCount, error: inv.emailError },
   };
@@ -233,18 +236,29 @@ export async function voidInvoice(id: string, actor: Actor) {
 }
 
 /** Record a payment against the invoice's order, then sync the invoice status. */
-export async function recordInvoicePayment(id: string, args: { amountPaise: number; method: string; reference?: string; note?: string } & Actor) {
-  const inv = await db.businessInvoice.findUnique({ where: { id }, select: { orderId: true, status: true } });
+export async function recordInvoicePayment(id: string, args: { amountPaise: number; method: string; reference?: string; note?: string; paidAt?: string | null } & Actor) {
+  const inv = await db.businessInvoice.findUnique({ where: { id }, select: { orderId: true, status: true, businessId: true, number: true, order: { select: { totalPaise: true, paidPaise: true } } } });
   if (!inv) throw new Error("Invoice not found");
   if (inv.status === "VOID") throw new Error("Cannot record a payment on a voided invoice.");
-  await recordPayment({ orderId: inv.orderId, amountPaise: args.amountPaise, method: args.method, reference: args.reference, note: args.note, actorId: args.actorId, actorRole: args.actorRole });
+  const total = inv.order.totalPaise;
+  const outstandingBefore = Math.max(0, total - inv.order.paidPaise);
+  await recordPayment({ orderId: inv.orderId, amountPaise: args.amountPaise, method: args.method, reference: args.reference, note: args.note, paidAt: args.paidAt ?? null, actorId: args.actorId, actorRole: args.actorRole });
   const order = await db.businessOrder.findUnique({ where: { id: inv.orderId }, select: { totalPaise: true, paidPaise: true } });
-  const newStatus = order && order.paidPaise >= order.totalPaise ? "PAID" : "PARTIAL";
-  return db.$transaction(async (tx) => {
-    const updated = await tx.businessInvoice.update({ where: { id }, data: { status: newStatus } });
-    await logInvoiceEvent(tx, id, "payment", { note: `₹${(args.amountPaise / 100).toFixed(2)} via ${args.method}`, actorId: args.actorId, actorRole: args.actorRole, ip: args.ip });
-    return updated;
+  const paid = order?.paidPaise ?? 0;
+  const fullyPaid = paid >= total;
+  const newStatus = fullyPaid ? "PAID" : "PARTIAL";
+  const outstandingAfter = Math.max(0, total - paid);
+  // clearedAt cache: set to the payment's effective date the moment the invoice becomes fully paid;
+  // reset to null if a (reversing) payment drops it back below the total. Always recomputed — never drifts.
+  const clearedAt = fullyPaid ? (args.paidAt ? new Date(args.paidAt) : new Date()) : null;
+  const updated = await db.$transaction(async (tx) => {
+    const u = await tx.businessInvoice.update({ where: { id }, data: { status: newStatus, clearedAt } });
+    await logInvoiceEvent(tx, id, "payment", { note: `₹${(args.amountPaise / 100).toFixed(2)} via ${args.method} · outstanding ₹${(outstandingBefore / 100).toFixed(2)} → ₹${(outstandingAfter / 100).toFixed(2)}${fullyPaid ? " · CLEARED" : ""}`, actorId: args.actorId, actorRole: args.actorRole, ip: args.ip });
+    return u;
   }, TX);
+  // Step 12 audit — invoice/business/amount + outstanding before→after.
+  await audit({ userId: args.actorId ?? null, actorRole: args.actorRole ?? "system", action: fullyPaid ? "b2b.invoice.payment.cleared" : "b2b.invoice.payment", target: `${inv.number} · biz ${inv.businessId} · +₹${(args.amountPaise / 100).toFixed(2)} via ${args.method} · outstanding ₹${(outstandingBefore / 100).toFixed(2)}→₹${(outstandingAfter / 100).toFixed(2)}${fullyPaid ? " · FULLY PAID" : ""}` }).catch(() => {});
+  return updated;
 }
 
 export async function logInvoiceAction(id: string, type: "pdf" | "export" | "link", actor: Actor) {

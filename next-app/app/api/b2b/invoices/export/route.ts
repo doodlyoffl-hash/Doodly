@@ -6,6 +6,7 @@ import { actorRole, actorId, canUseB2B } from "@/lib/b2b/guard";
 import { audit } from "@/lib/auth/audit";
 import { reqContext } from "@/lib/auth/request";
 import { b2bInvoicesReport, type InvoiceSort, type InvoiceFilterArgs } from "@/lib/b2b/invoices";
+import { outstandingReport, agingReport, collectionReportTable, paymentHistoryReport, businessLedgerReport, parseOutstandingFilters } from "@/lib/b2b/outstanding";
 import { milkReportCsv, milkReportXls, milkReportFilename, type MilkReport } from "@/lib/milk/reports";
 import { renderMilkReportPdf } from "@/lib/milk/report-pdf";
 
@@ -40,11 +41,20 @@ export async function GET(req: NextRequest) {
     overdue: sp.get("overdue") === "1",
     sort: (sp.get("sort") as InvoiceSort) ?? undefined,
   };
+  // report selector: register (default) | outstanding | aging | collection | payments | business-ledger
+  const reportKind = (sp.get("report") || "register").toLowerCase();
   const subtitle = filterSubtitle(sp);
-  const log = (fmt: string) => audit({ userId: actorId(req) ?? null, actorRole: role, action: "b2b.invoices.export", target: `${fmt.toUpperCase()} · ${subtitle}`, ctx: reqContext(req) }).catch(() => {});
+  const log = (fmt: string) => audit({ userId: actorId(req) ?? null, actorRole: role, action: "b2b.invoices.export", target: `${reportKind}/${fmt.toUpperCase()} · ${subtitle}`, ctx: reqContext(req) }).catch(() => {});
 
   try {
-    const report = await b2bInvoicesReport(filters, { subtitle });
+    const of = parseOutstandingFilters(sp);
+    const report =
+      reportKind === "outstanding" ? await outstandingReport(of)
+      : reportKind === "aging" ? await agingReport(of)
+      : reportKind === "collection" ? await collectionReportTable(of)
+      : reportKind === "payments" ? await paymentHistoryReport(of)
+      : reportKind === "business-ledger" ? await businessLedgerReport(sp.get("businessId") ?? "", of)
+      : await b2bInvoicesReport(filters, { subtitle });
     if (format === "json") { await log("json"); return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } }); }
     if (format === "csv") {
       await log("csv");
