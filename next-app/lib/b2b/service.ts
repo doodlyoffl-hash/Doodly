@@ -343,6 +343,14 @@ export async function updateOrderStatus(args: { id: string; status: B2BOrderStat
     }
     return { updated: row, post };
   }, TX);
+  // Auto-generate the Business Invoice the MOMENT the order is DELIVERED — the core "delivered →
+  // invoice" wiring that was missing. Idempotent (no-op if one already exists); generateInvoice
+  // also auto-sends the branded email + PDF (+ WhatsApp). Only DELIVERED reaches recognition, so an
+  // invoice is never created for pending / assigned / in-transit / cancelled / failed orders.
+  if (args.status === "DELIVERED") {
+    try { const inv = await generateInvoice({ orderId: args.id, actorId: args.actorId, actorRole: args.actorRole }); if (post) post.invoiceNumber = inv?.number ?? post.invoiceNumber; }
+    catch (e) { console.error("b2b.autoInvoice", (e as Error)?.message); }
+  }
   // After commit: draw the delivered day's B2B milk COGS (FIFO settle) + audit the recognition.
   if (post) await onB2BDelivered({ orderId: args.id, ...post, actorId: args.actorId, actorRole: args.actorRole });
   return updated;

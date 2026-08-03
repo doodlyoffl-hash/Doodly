@@ -38,12 +38,24 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         return NextResponse.json({ ok: true, invoice: await recordInvoicePayment(params.id, { amountPaise: Math.round(Number(body.amountPaise) || 0), method: String(body.method ?? "Cash"), reference: body.reference as string | undefined, note: body.note as string | undefined, ...a }) });
       case "pdf":
         return NextResponse.json({ ok: true, result: await logInvoiceAction(params.id, "pdf", a) });
+      case "link": {
+        const { invoiceLinks } = await import("@/lib/b2b/invoice-token");
+        const links = await invoiceLinks(params.id);
+        await logInvoiceAction(params.id, "link", a);
+        return NextResponse.json({ ok: true, links });
+      }
       case "export":
         return NextResponse.json({ ok: true, result: await logInvoiceAction(params.id, "export", a) });
       case "resend-email": {
         if (role !== "super_admin") return NextResponse.json({ error: "Only a Super Admin can resend invoice emails." }, { status: 403 });
         const { sendBusinessInvoiceEmail } = await import("@/lib/b2b/invoice-email");
         const result = await sendBusinessInvoiceEmail(params.id, { force: true, actorId: a.actorId, actorRole: role });
+        return NextResponse.json({ ok: result.ok, result });
+      }
+      case "resend-whatsapp": {
+        if (role !== "super_admin") return NextResponse.json({ error: "Only a Super Admin can resend invoice WhatsApp messages." }, { status: 403 });
+        const { sendBusinessInvoiceWhatsApp } = await import("@/lib/b2b/invoice-email");
+        const result = await sendBusinessInvoiceWhatsApp(params.id, { force: true, actorId: a.actorId, actorRole: role });
         return NextResponse.json({ ok: result.ok, result });
       }
       default:

@@ -18,7 +18,7 @@ import { log } from "@/lib/logger";
 import { getInvoiceDetail } from "./invoices";
 import { renderInvoicePdf, invoicePdfFilename, type InvoicePdfData } from "./invoice-pdf";
 import { invoiceLinks } from "./invoice-token";
-import { sendEmail, channelStatus, type EmailAttachment } from "@/lib/notifications/providers";
+import { sendEmail, sendWhatsApp, channelStatus, type EmailAttachment } from "@/lib/notifications/providers";
 import { notify } from "@/lib/notifications/dispatch";
 import * as T from "@/lib/email/templates";
 
@@ -80,7 +80,7 @@ export async function renderInvoiceEmailById(id: string): Promise<{ subject: str
 }
 
 // ---- audit trail (reuses BusinessInvoiceEvent) ----
-async function logEmailEvent(invoiceId: string, type: "email" | "email_failed" | "email_skipped", note: string, actorId?: string, actorRole?: string) {
+async function logEmailEvent(invoiceId: string, type: string, note: string, actorId?: string, actorRole?: string) {
   try { await db.businessInvoiceEvent.create({ data: { invoiceId, type, note: note.slice(0, 400), byId: actorId ?? null, byRole: actorRole ?? null } }); }
   catch (e) { log.error("b2b.invoiceEmail.event", (e as Error)?.message ?? "event write failed", { invoiceId }); }
 }
@@ -177,4 +177,59 @@ export async function sendBusinessInvoiceEmail(invoiceId: string, opts: SendInvo
 export async function autoSendOnCreate(invoiceId: string, actor: { actorId?: string; actorRole?: string }) {
   try { await sendBusinessInvoiceEmail(invoiceId, { actorId: actor.actorId, actorRole: actor.actorRole }); }
   catch (e) { log.error("b2b.invoiceEmail.auto", (e as Error)?.message ?? "auto-send failed", { invoiceId }); }
+  try { await sendBusinessInvoiceWhatsApp(invoiceId, { actorId: actor.actorId, actorRole: actor.actorRole }); }
+  catch (e) { log.error("b2b.invoiceWhatsApp.auto", (e as Error)?.message ?? "auto-send failed", { invoiceId }); }
+}
+
+/**
+ * Send the invoice to the business WhatsApp number (secure view/download link — WhatsApp
+ * doc-attach needs a media template; a link is the portable, tracked alternative). Mirrors the
+ * email path: idempotent, tracked (whatsappStatus), in-call retry, event trail. Never throws.
+ * Actual delivery needs the WhatsApp provider live + the `b2b_invoice` template approved — until
+ * then it tracks PENDING/FAILED (same "sends on first real prod invoice" posture as email).
+ */
+export async function sendBusinessInvoiceWhatsApp(invoiceId: string, opts: SendInvoiceEmailOpts = {}): Promise<{ ok: boolean; skipped?: boolean; status: string; error?: string; messageId?: string | null }> {
+  const maxAttempts = Math.min(5, Math.max(1, opts.maxAttempts ?? 2));
+  try {
+    const head = await db.businessInvoice.findUnique({ where: { id: invoiceId }, select: { id: true, whatsappStatus: true } });
+    if (!head) return { ok: false, error: "invoice-not-found", status: "FAILED" };
+    if (head.whatsappStatus === "SENT" && !opts.force) return { ok: true, skipped: true, status: "SENT" };
+
+    const d = await getInvoiceDetail(invoiceId);
+    if (!d) return { ok: false, error: "invoice-detail-missing", status: "FAILED" };
+    const to = (d.business.mobile || "").trim();
+    if (!to) {
+      await db.businessInvoice.update({ where: { id: invoiceId }, data: { whatsappStatus: "SKIPPED", whatsappError: "no-business-mobile" } });
+      await logEmailEvent(invoiceId, "whatsapp_skipped", `No WhatsApp number on file for ${d.business.name} — invoice ${d.number} not sent.`, opts.actorId, opts.actorRole);
+      return { ok: false, skipped: true, error: "no-business-mobile", status: "SKIPPED" };
+    }
+    if (!channelStatus().whatsapp) {
+      await db.businessInvoice.update({ where: { id: invoiceId }, data: { whatsappStatus: "PENDING", whatsappTo: to, whatsappError: "whatsapp-provider-not-configured" } });
+      await logEmailEvent(invoiceId, "whatsapp_skipped", `WhatsApp provider not configured — invoice ${d.number} queued for ${to}.`, opts.actorId, opts.actorRole);
+      return { ok: false, skipped: true, error: "whatsapp-provider-not-configured", status: "PENDING" };
+    }
+
+    const links = await invoiceLinks(invoiceId);
+    const amount = "₹" + Math.round((d.order?.totalPaise ?? 0) / 100).toLocaleString("en-IN");
+    const text = `Thank you for choosing DOODLY. Your order has been successfully delivered.\nInvoice ${d.number} · ${amount}\nView / download: ${links.view}\nThank you for your business.`;
+    let sent = false, messageId: string | null = null, lastErr = "";
+    for (let i = 0; i < maxAttempts; i++) {
+      const res = await sendWhatsApp(to, { text, template: "b2b_invoice", vars: [d.business.contactPerson || d.business.name, d.number, amount, links.view] });
+      if (res.ok) { sent = true; messageId = res.ref ?? null; break; }
+      lastErr = res.error || "send-failed";
+      if (res.skipped) break;
+    }
+    if (sent) {
+      await db.businessInvoice.update({ where: { id: invoiceId }, data: { whatsappStatus: "SENT", whatsappTo: to, whatsappSentAt: new Date(), whatsappMessageId: messageId, whatsappError: null, whatsappRetryCount: { increment: 1 } } });
+      await logEmailEvent(invoiceId, "whatsapp", `Invoice WhatsApp sent to ${to}${messageId ? " · " + messageId : ""}.`, opts.actorId, opts.actorRole);
+      return { ok: true, messageId, status: "SENT" };
+    }
+    await db.businessInvoice.update({ where: { id: invoiceId }, data: { whatsappStatus: "FAILED", whatsappTo: to, whatsappError: lastErr.slice(0, 300), whatsappRetryCount: { increment: maxAttempts } } });
+    await logEmailEvent(invoiceId, "whatsapp_failed", `Failed to WhatsApp ${d.number} to ${to} after ${maxAttempts} attempt(s): ${lastErr}.`, opts.actorId, opts.actorRole);
+    return { ok: false, error: lastErr, status: "FAILED" };
+  } catch (e) {
+    log.error("b2b.invoiceWhatsApp", (e as Error)?.message ?? "exception", { invoiceId });
+    try { await db.businessInvoice.update({ where: { id: invoiceId }, data: { whatsappStatus: "FAILED", whatsappError: String((e as Error)?.message || "exception").slice(0, 300) } }); } catch { /* best-effort */ }
+    return { ok: false, error: "exception", status: "FAILED" };
+  }
 }

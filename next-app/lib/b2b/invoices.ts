@@ -56,23 +56,31 @@ function shapeRow(inv: InvWithOrder) {
     itemsSummary: o.items.map((i) => `${i.quantity} ${i.unit} ${i.productName}`).slice(0, 3).join(", "),
     lastUpdated: (inv.events.at(-1)?.createdAt ?? inv.issuedAt).toISOString(),
     emailStatus: inv.emailStatus, emailSentAt: inv.emailSentAt?.toISOString() ?? null,
+    whatsappStatus: inv.whatsappStatus, whatsappSentAt: inv.whatsappSentAt?.toISOString() ?? null,
   };
 }
 
 // ---------- list ----------
 
 export type InvoiceSort = "latest" | "oldest" | "amount_desc" | "amount_asc" | "business" | "due";
-export async function listInvoices(args: {
-  status?: string; businessId?: string; productSlug?: string; q?: string;
-  from?: string; to?: string; amountFromPaise?: number; amountToPaise?: number; overdue?: boolean;
-  sort?: InvoiceSort; limit?: number; offset?: number;
-} = {}) {
+export type InvoiceFilterArgs = { status?: string; businessId?: string; productSlug?: string; q?: string; from?: string; to?: string; dateType?: "issued" | "delivery" | "order"; amountFromPaise?: number; amountToPaise?: number; overdue?: boolean };
+
+/** THE shared filtered-set predicate for invoices (list + summary + export can't disagree). */
+export function invoiceWhere(args: InvoiceFilterArgs): Prisma.BusinessInvoiceWhereInput {
   const where: Prisma.BusinessInvoiceWhereInput = {};
   if (args.status) where.status = args.status as never;
   if (args.businessId) where.businessId = args.businessId;
-  if (args.from || args.to) where.issuedAt = { ...(args.from ? { gte: new Date(args.from) } : {}), ...(args.to ? { lte: new Date(`${args.to}T23:59:59`) } : {}) };
-  if (args.overdue) { where.status = { in: ["ISSUED", "PARTIAL"] }; where.dueDate = { lt: new Date() }; }
+  // "Overdue" = the due DAY has fully elapsed — not the instant a due-on-delivery invoice is issued.
+  if (args.overdue) { const t = new Date(); t.setHours(0, 0, 0, 0); where.status = { in: ["ISSUED", "PARTIAL"] }; where.dueDate = { lt: t }; }
   const orderConds: Prisma.BusinessOrderWhereInput = {};
+  // Step 7 — the date range can key off the invoice's issue date (default), the order's
+  // delivery date, or the order's booking date. Same set for list + summary + export.
+  if (args.from || args.to) {
+    const range = { ...(args.from ? { gte: new Date(args.from) } : {}), ...(args.to ? { lte: new Date(`${args.to}T23:59:59`) } : {}) };
+    if (args.dateType === "delivery") orderConds.deliveryDate = range;
+    else if (args.dateType === "order") orderConds.createdAt = range;
+    else where.issuedAt = range;
+  }
   if (args.amountFromPaise != null || args.amountToPaise != null) orderConds.totalPaise = { ...(args.amountFromPaise != null ? { gte: args.amountFromPaise } : {}), ...(args.amountToPaise != null ? { lte: args.amountToPaise } : {}) };
   if (args.productSlug) orderConds.items = { some: { productSlug: args.productSlug } };
   if (args.q?.trim()) {
@@ -83,9 +91,40 @@ export async function listInvoices(args: {
       { order: { business: { code: { contains: s, mode: "insensitive" } } } },
       { order: { business: { name: { contains: s, mode: "insensitive" } } } },
       { order: { business: { gst: { contains: s, mode: "insensitive" } } } },
+      { order: { business: { contactPerson: { contains: s, mode: "insensitive" } } } },
+      { order: { business: { mobile: { contains: s } } } },
+      { order: { business: { email: { contains: s, mode: "insensitive" } } } },
     ];
   }
   if (Object.keys(orderConds).length) where.order = { is: orderConds };
+  return where;
+}
+
+/** Invoice dashboard summary over the SAME filtered set (Step 5) — updates as filters change. */
+export async function b2bInvoiceSummary(args: InvoiceFilterArgs = {}) {
+  const where = invoiceWhere(args);
+  const now = new Date();
+  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const [byStatus, total, today, month, valueAgg, overdue] = await Promise.all([
+    db.businessInvoice.groupBy({ by: ["status"], where, _count: { _all: true } }),
+    db.businessInvoice.count({ where }),
+    db.businessInvoice.count({ where: { AND: [where, { issuedAt: { gte: todayStart } }] } }),
+    db.businessInvoice.count({ where: { AND: [where, { issuedAt: { gte: monthStart } }] } }),
+    db.businessOrder.aggregate({ where: { invoice: { is: where } }, _sum: { totalPaise: true, paidPaise: true } }),
+    db.businessInvoice.count({ where: { AND: [where, { status: { in: ["ISSUED", "PARTIAL"] }, dueDate: { lt: todayStart } }] } }),
+  ]);
+  const c = (s: string) => byStatus.find((b) => b.status === s)?._count._all ?? 0;
+  const totalValuePaise = valueAgg._sum.totalPaise ?? 0, paidPaise = valueAgg._sum.paidPaise ?? 0;
+  return {
+    totalInvoices: total, todayInvoices: today, monthInvoices: month,
+    totalValuePaise, paidPaise, outstandingPaise: Math.max(0, totalValuePaise - paidPaise),
+    paid: c("PAID"), unpaid: c("ISSUED"), partial: c("PARTIAL"), voided: c("VOID"), overdue,
+  };
+}
+
+export async function listInvoices(args: InvoiceFilterArgs & { sort?: InvoiceSort; limit?: number; offset?: number } = {}) {
+  const where = invoiceWhere(args);
 
   const orderBy: Prisma.BusinessInvoiceOrderByWithRelationInput =
     args.sort === "oldest" ? { issuedAt: "asc" }
@@ -207,7 +246,7 @@ export async function recordInvoicePayment(id: string, args: { amountPaise: numb
   }, TX);
 }
 
-export async function logInvoiceAction(id: string, type: "pdf" | "export", actor: Actor) {
+export async function logInvoiceAction(id: string, type: "pdf" | "export" | "link", actor: Actor) {
   return db.$transaction((tx) => logInvoiceEvent(tx, id, type, { actorId: actor.actorId, actorRole: actor.actorRole, ip: actor.ip }));
 }
 

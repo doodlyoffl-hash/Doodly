@@ -2900,6 +2900,12 @@ model BusinessInvoice {
   emailMessageId  String?                          // Resend message id (provider ref)
   emailRetryCount Int       @default(0)             // number of attempts made
   emailError      String?                          // last failure reason (truncated)
+  whatsappStatus     String    @default("PENDING")  // PENDING | SENT | FAILED | SKIPPED
+  whatsappTo         String?                        // number the invoice was sent to
+  whatsappSentAt     DateTime?
+  whatsappMessageId  String?
+  whatsappRetryCount Int       @default(0)
+  whatsappError      String?
   events      BusinessInvoiceEvent[]
   @@index([status])
   @@index([businessId])

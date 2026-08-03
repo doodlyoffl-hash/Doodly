@@ -1409,11 +1409,199 @@
   async function wireB2BInvoiceBackend() {
     if (!window.DOODLY_API) return;
     var host = document.querySelector("#invoiceB2BMount");
+    if (!host) return;
+    // Two stacked sections on the Business Invoices page:
+    //   1) live Invoice Management dashboard (server-side filter / summary / actions)
+    //   2) the existing per-business Partner Statement (from mirrored real data).
+    host.innerHTML = '<div id="b2iMount"><p class="muted-sm">Loading invoices…</p></div><div id="b2iStatement" style="margin-top:22px"></div>';
+    var dash = host.querySelector("#b2iMount"), stmt = host.querySelector("#b2iStatement");
+    try { var bz = await DOODLY_API.get("/api/b2b/businesses"); _b2iBiz = (bz.businesses || []).filter(function (b) { return !b.deletedAt; }); }
+    catch (e) { if (e.code === "forbidden") { dash.innerHTML = '<div class="panel panel-pad muted-sm">Your role can\'t access Business Invoices (403).</div>'; return; } _b2iBiz = []; }
+    renderB2BInvoices(dash);
     try {
       var n = await b2bMirror();
-      if (window.DOODLY_INVOICE && host) DOODLY_INVOICE.mountB2B(host);   // re-render the statement from real businesses/orders
-      bkBanner(host, "● Live — B2B statement from the DOODLY database (" + n.biz + " business(es), " + n.ords + " order(s)).", "ok");
-    } catch (e) { b2bErr(host, e); }
+      if (window.DOODLY_INVOICE && stmt) DOODLY_INVOICE.mountB2B(stmt);   // per-business statement from real businesses/orders
+      bkBanner(stmt, "● Live — statement from the DOODLY database (" + n.biz + " business(es), " + n.ords + " order(s)).", "ok");
+    } catch (e) { b2bErr(stmt, e); }
+  }
+
+  // ===== Invoice Management dashboard — server-side filter / search / summary / actions =====
+  var _b2iBiz = [];
+  function b2iFreshState() { return { dateType: "issued", preset: "all", from: "", to: "", q: "", status: "", overdue: false, businessId: "", amountMin: "", amountMax: "", sort: "newest", page: 1, pageSize: 25 }; }
+  var _b2iState = b2iFreshState();
+  var b2iRs = function (p) { return "₹" + Math.round((p || 0) / 100).toLocaleString("en-IN"); };
+  function b2iPreset(preset) {
+    var s = _b2iState, t = new Date(), fmt = function (d) { return d.toISOString().slice(0, 10); }, f = "", to = fmt(t);
+    if (preset === "today") f = fmt(t);
+    else if (preset === "yesterday") { var y = new Date(t); y.setDate(y.getDate() - 1); f = to = fmt(y); }
+    else if (preset === "last7") { var d = new Date(t); d.setDate(d.getDate() - 6); f = fmt(d); }
+    else if (preset === "last30") { var d2 = new Date(t); d2.setDate(d2.getDate() - 29); f = fmt(d2); }
+    else if (preset === "thisMonth") f = fmt(new Date(t.getFullYear(), t.getMonth(), 1));
+    else if (preset === "lastMonth") { f = fmt(new Date(t.getFullYear(), t.getMonth() - 1, 1)); to = fmt(new Date(t.getFullYear(), t.getMonth(), 0)); }
+    else if (preset === "all") { f = ""; to = ""; }
+    s.preset = preset; if (preset !== "custom") { s.from = f; s.to = to; } s.page = 1;
+  }
+  function b2iQuery(extra) {
+    var s = _b2iState, p = new URLSearchParams();
+    p.set("limit", s.pageSize); p.set("offset", (s.page - 1) * s.pageSize);
+    if (s.sort) p.set("sort", s.sort); if (s.dateType) p.set("dateType", s.dateType);
+    if (s.from) p.set("from", s.from); if (s.to) p.set("to", s.to); if (s.q.trim()) p.set("q", s.q.trim());
+    if (s.status) p.set("status", s.status); if (s.overdue) p.set("overdue", "1");
+    if (s.businessId) p.set("businessId", s.businessId);
+    if (s.amountMin !== "") p.set("amountFrom", s.amountMin); if (s.amountMax !== "") p.set("amountTo", s.amountMax);
+    if (extra) for (var k in extra) p.set(k, extra[k]);
+    return p.toString();
+  }
+  function b2iIsSuper() { try { return window.DOODLY_RBAC && DOODLY_RBAC.activeRole() === "super_admin"; } catch (e) { return false; } }
+  function renderB2BInvoices(host) {
+    var s = _b2iState;
+    var presets = [["today", "Today"], ["yesterday", "Yesterday"], ["last7", "Last 7 days"], ["last30", "Last 30 days"], ["thisMonth", "This month"], ["lastMonth", "Last month"], ["all", "All time"], ["custom", "Custom"]];
+    var dateTypes = [["issued", "Invoice date"], ["delivery", "Delivery date"], ["order", "Order date"]];
+    var statuses = [["ISSUED", "Unpaid"], ["PARTIAL", "Partial"], ["PAID", "Paid"], ["VOID", "Void"]];
+    var opt = function (arr, sel) { return arr.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === sel ? " selected" : "") + ">" + esc(o[1]) + "</option>"; }).join(""); };
+    host.innerHTML =
+      '<div class="panel-head" style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><h3 style="margin:0">Invoice Management</h3><span class="muted-sm">Auto-generated on delivery · live from the database</span></div>' +
+      '<div id="b2i-summary" class="dl-an-kpis" style="margin-bottom:12px"></div>' +
+      '<div class="panel" style="margin-bottom:12px"><div class="panel-pad" style="display:flex;flex-direction:column;gap:8px">' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+          '<select class="input" id="b2i-preset" style="max-width:150px">' + opt(presets, s.preset) + "</select>" +
+          '<input class="input" id="b2i-from" type="date" value="' + esc(s.from) + '" style="max-width:150px" title="From">' +
+          '<input class="input" id="b2i-to" type="date" value="' + esc(s.to) + '" style="max-width:150px" title="To">' +
+          '<span class="muted-sm">by</span><select class="input" id="b2i-dtype" style="max-width:150px">' + opt(dateTypes, s.dateType) + "</select>" +
+          '<input class="input" id="b2i-q" placeholder="Search invoice / order / business / GST / mobile / email" value="' + esc(s.q) + '" style="flex:1;min-width:240px">' +
+        "</div>" +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+          '<select class="input" id="b2i-status" style="max-width:140px"><option value="">Any status</option>' + opt(statuses, s.status) + "</select>" +
+          '<button type="button" class="exp-chip b2i-overdue ' + (s.overdue ? "on" : "") + '" data-v="overdue">Overdue only</button>' +
+          '<select class="input" id="b2i-biz" style="max-width:220px"><option value="">All businesses</option>' + _b2iBiz.map(function (b) { return '<option value="' + b.id + '"' + (b.id === s.businessId ? " selected" : "") + ">" + esc((b.code ? b.code + " · " : "") + b.name) + "</option>"; }).join("") + "</select>" +
+          '<input class="input" id="b2i-amin" type="number" min="0" placeholder="₹ min" value="' + esc(s.amountMin) + '" style="max-width:90px" title="Amount min">' +
+          '<input class="input" id="b2i-amax" type="number" min="0" placeholder="₹ max" value="' + esc(s.amountMax) + '" style="max-width:90px" title="Amount max">' +
+          '<button class="btn btn-ghost sm" id="b2i-reset">Reset</button>' +
+        "</div>" +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+          '<span class="muted-sm">Sort:</span><select class="input" id="b2i-sort" style="max-width:160px">' + opt([["newest", "Newest first"], ["oldest", "Oldest first"], ["amount_desc", "Amount ↓"], ["amount_asc", "Amount ↑"], ["business", "Business A→Z"], ["due", "Due date"]], s.sort) + "</select>" +
+          '<span class="muted-sm">Rows:</span><select class="input" id="b2i-size" style="max-width:80px">' + opt([["10", "10"], ["25", "25"], ["50", "50"], ["100", "100"]], String(s.pageSize)) + "</select>" +
+          '<div style="margin-left:auto;display:flex;gap:6px"><button class="btn btn-ghost sm" id="b2i-reports">📊 Reports</button></div>' +
+        "</div>" +
+      "</div></div>" +
+      '<div id="b2i-body"><p class="muted-sm">Loading…</p></div>';
+    var q = host.querySelector("#b2i-q"), qt;
+    q.addEventListener("input", function () { clearTimeout(qt); qt = setTimeout(function () { s.q = q.value; s.page = 1; b2iReload(host); }, 350); });
+    host.querySelector("#b2i-preset").addEventListener("change", function (e) { b2iPreset(e.target.value); if (e.target.value !== "custom") { host.querySelector("#b2i-from").value = s.from; host.querySelector("#b2i-to").value = s.to; } b2iReload(host); });
+    host.querySelector("#b2i-from").addEventListener("change", function (e) { s.from = e.target.value; s.preset = "custom"; host.querySelector("#b2i-preset").value = "custom"; s.page = 1; b2iReload(host); });
+    host.querySelector("#b2i-to").addEventListener("change", function (e) { s.to = e.target.value; s.preset = "custom"; host.querySelector("#b2i-preset").value = "custom"; s.page = 1; b2iReload(host); });
+    host.querySelector("#b2i-dtype").addEventListener("change", function (e) { s.dateType = e.target.value; s.page = 1; b2iReload(host); });
+    host.querySelector("#b2i-status").addEventListener("change", function (e) { s.status = e.target.value; s.page = 1; b2iReload(host); });
+    host.querySelector("#b2i-overdue").addEventListener("click", function () { s.overdue = !s.overdue; this.classList.toggle("on", s.overdue); s.page = 1; b2iReload(host); });
+    host.querySelector("#b2i-biz").addEventListener("change", function (e) { s.businessId = e.target.value; s.page = 1; b2iReload(host); });
+    host.querySelector("#b2i-amin").addEventListener("change", function (e) { s.amountMin = e.target.value; s.page = 1; b2iReload(host); });
+    host.querySelector("#b2i-amax").addEventListener("change", function (e) { s.amountMax = e.target.value; s.page = 1; b2iReload(host); });
+    host.querySelector("#b2i-sort").addEventListener("change", function (e) { s.sort = e.target.value; b2iReload(host); });
+    host.querySelector("#b2i-size").addEventListener("change", function (e) { s.pageSize = Number(e.target.value); s.page = 1; b2iReload(host); });
+    host.querySelector("#b2i-reset").addEventListener("click", function () { _b2iState = b2iFreshState(); renderB2BInvoices(host); });
+    host.querySelector("#b2i-reports").addEventListener("click", function () { b2iReports(); });
+    b2iReload(host);
+  }
+  function b2iReload(host) {
+    var body = host.querySelector("#b2i-body"), sum = host.querySelector("#b2i-summary");
+    DOODLY_API.get("/api/b2b/invoices?summary=1&" + b2iQuery()).then(function (r) {
+      var c = r.summary || {};
+      sum.innerHTML = milkStat(c.totalInvoices || 0, "Invoices") + milkStat(c.todayInvoices || 0, "Today") + milkStat(c.monthInvoices || 0, "This month") + milkStat(b2iRs(c.totalValuePaise), "Total value") + milkStat(b2iRs(c.paidPaise), "Collected") + milkStat(b2iRs(c.outstandingPaise), "Outstanding") + milkStat(c.unpaid || 0, "Unpaid") + milkStat(c.overdue || 0, "Overdue");
+      body.innerHTML = b2iTable(r, host);
+      body.querySelectorAll(".b2i-page").forEach(function (b) { b.addEventListener("click", function () { _b2iState.page = Number(b.dataset.p); b2iReload(host); }); });
+      body.querySelectorAll(".b2i-pdf").forEach(function (b) { b.addEventListener("click", function () { b2iPdf(b.dataset.id, false); }); });
+      body.querySelectorAll(".b2i-view").forEach(function (b) { b.addEventListener("click", function () { b2iPdf(b.dataset.id, true); }); });
+      body.querySelectorAll(".b2i-link").forEach(function (b) { b.addEventListener("click", function () { b2iCopyLink(b.dataset.id); }); });
+      body.querySelectorAll(".b2i-email").forEach(function (b) { b.addEventListener("click", function () { b2iSend(b.dataset.id, "resend-email", host); }); });
+      body.querySelectorAll(".b2i-wa").forEach(function (b) { b.addEventListener("click", function () { b2iSend(b.dataset.id, "resend-whatsapp", host); }); });
+      body.querySelectorAll(".b2i-pay").forEach(function (b) { b.addEventListener("click", function () { b2iPay(b.dataset.id, Number(b.dataset.bal), host); }); });
+      body.querySelectorAll(".b2i-void").forEach(function (b) { b.addEventListener("click", function () { b2iVoid(b.dataset.id, b.dataset.no, host); }); });
+    }).catch(function (e) { body.innerHTML = '<div class="panel panel-pad dac-err">' + esc((e && e.message) || "Couldn't load invoices.") + "</div>"; });
+  }
+  function b2iTable(r, host) {
+    var stTone = { PAID: "green", ISSUED: "amber", PARTIAL: "blue", VOID: "grey" };
+    var chan = function (icon, st) { var t = st === "SENT" ? "green" : st === "FAILED" ? "red" : st === "SKIPPED" ? "grey" : "amber"; return '<span class="badge ' + t + '" title="' + esc(st || "—") + '" style="font-size:10px;padding:1px 5px">' + icon + "</span>"; };
+    var sup = b2iIsSuper();
+    var rows = (r.invoices || []).map(function (o) {
+      var bal = (o.totalPaise || 0) - (o.paidPaise || 0);
+      var acts = '<div style="display:flex;gap:4px;flex-wrap:wrap">' +
+        '<button class="btn btn-ghost sm b2i-view" data-id="' + o.id + '" title="View invoice">View</button>' +
+        '<button class="btn btn-ghost sm b2i-pdf" data-id="' + o.id + '" title="Download PDF">PDF</button>' +
+        '<button class="btn btn-ghost sm b2i-link" data-id="' + o.id + '" title="Copy shareable link">Link</button>' +
+        (sup ? '<button class="btn btn-ghost sm b2i-email" data-id="' + o.id + '" title="Resend email">✉</button><button class="btn btn-ghost sm b2i-wa" data-id="' + o.id + '" title="Resend WhatsApp">WA</button>' : "") +
+        (o.status !== "PAID" && o.status !== "VOID" ? '<button class="btn btn-ghost sm b2i-pay" data-id="' + o.id + '" data-bal="' + bal + '" title="Record payment">₹</button>' : "") +
+        (o.status !== "VOID" ? '<button class="btn btn-ghost sm b2i-void" data-id="' + o.id + '" data-no="' + esc(o.number) + '" title="Void invoice">Void</button>' : "") +
+        "</div>";
+      return "<tr><td><b>" + esc(o.number) + "</b><br><span class='muted-sm'>" + esc(o.orderCode || "") + "</span></td>" +
+        "<td>" + esc(o.businessName) + "<br><span class='muted-sm'>" + esc(o.businessCode || "") + (o.gst ? " · " + esc(o.gst) : "") + "</span></td>" +
+        "<td>" + esc(String(o.issuedAt).slice(0, 10)) + "</td>" +
+        "<td>" + (o.dueDate ? esc(String(o.dueDate).slice(0, 10)) : "—") + "</td>" +
+        "<td class='muted-sm'>" + esc(o.itemsSummary || "") + "</td>" +
+        "<td style='text-align:right'>" + b2iRs(o.totalPaise) + "</td>" +
+        "<td style='text-align:right'>" + (bal > 0 ? "<span class='muted-sm'>" + b2iRs(bal) + " due</span>" : "✓") + "</td>" +
+        "<td><span class='badge " + (stTone[o.status] || "grey") + "'>" + esc(o.status) + "</span></td>" +
+        "<td>" + chan("✉", o.emailStatus) + " " + chan("WA", o.whatsappStatus) + "</td>" +
+        "<td>" + acts + "</td></tr>";
+    }).join("") || '<tr><td colspan="10" class="muted-sm" style="text-align:center;padding:24px">No invoices match these filters.</td></tr>';
+    var total = r.total || 0, limit = r.limit || _b2iState.pageSize, page = _b2iState.page, pages = Math.max(1, Math.ceil(total / limit));
+    var start = total ? (page - 1) * limit + 1 : 0, end = Math.min(page * limit, total);
+    var pager = '<div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px">' +
+      '<span class="muted-sm">' + start + "–" + end + " of " + total + " · page " + page + "/" + pages + "</span>" +
+      '<button class="btn btn-ghost sm b2i-page" data-p="' + (page - 1) + '"' + (page <= 1 ? " disabled" : "") + ">‹ Prev</button>" +
+      '<button class="btn btn-ghost sm b2i-page" data-p="' + (page + 1) + '"' + (page >= pages ? " disabled" : "") + ">Next ›</button></div>";
+    return '<div class="panel"><div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Invoice</th><th>Business</th><th>Issued</th><th>Due</th><th>Items</th><th style="text-align:right">Amount</th><th style="text-align:right">Balance</th><th>Status</th><th>Sent</th><th>Actions</th></tr></thead><tbody>' + rows + "</tbody></table></div>" + pager + "</div></div>";
+  }
+  // ---- per-invoice actions (all server-authoritative) ----
+  function b2iPdf(id, inline) {
+    var base = DOODLY_API.base(), h = b2iAuthHeaders();
+    dacToast("Preparing invoice PDF…");
+    fetch(base + "/api/b2b/invoices/" + id + "/pdf" + (inline ? "" : "?dl=1"), { headers: h, credentials: "include" })
+      .then(function (res) { if (!res.ok) throw new Error(res.status === 403 ? "Your role can't open this (403)." : "Couldn't load PDF (" + res.status + ")"); return res.blob(); })
+      .then(function (blob) { var u = URL.createObjectURL(blob); if (inline) { window.open(u, "_blank"); } else { var a = document.createElement("a"); a.href = u; a.download = "DOODLY_Invoice.pdf"; document.body.appendChild(a); a.click(); a.remove(); } setTimeout(function () { URL.revokeObjectURL(u); }, 60000); })
+      .catch(function (e) { dacToast(e.message || "Couldn't open PDF."); });
+  }
+  function b2iAuthHeaders() { var h = {}; try { var t = localStorage.getItem("doodly-token"); if (t) h["Authorization"] = "Bearer " + t; } catch (e) {} try { if (window.DOODLY_RBAC) { h["X-Doodly-Actor"] = DOODLY_RBAC.activeRole(); var cu = DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser(); if (cu && cu.id) h["X-Doodly-Actor-Id"] = cu.id; } } catch (e) {} return h; }
+  function b2iCopyLink(id) {
+    DOODLY_API.patch("/api/b2b/invoices/" + id, { action: "link" }).then(function (r) {
+      var link = r && r.links && r.links.view; if (!link) { dacToast("No link available."); return; }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(function () { dacToast("Shareable invoice link copied."); }, function () { window.prompt("Copy this invoice link:", link); });
+      else window.prompt("Copy this invoice link:", link);
+    }).catch(function (e) { dacToast((e && e.message) || "Couldn't create link."); });
+  }
+  function b2iSend(id, action, host) {
+    var label = action === "resend-whatsapp" ? "WhatsApp" : "email";
+    if (!window.confirm("Resend this invoice by " + label + "?")) return;
+    dacToast("Resending by " + label + "…");
+    DOODLY_API.patch("/api/b2b/invoices/" + id, { action: action }).then(function (r) {
+      var st = r && r.result && r.result.status;
+      dacToast(r && r.ok ? "Invoice " + label + " sent." : "Not sent" + (st ? " (" + st + ")" : "") + ((r && r.result && r.result.error) ? " — " + r.result.error : "") + ".");
+      b2iReload(host);
+    }).catch(function (e) { dacToast((e && e.message) || "Couldn't resend."); });
+  }
+  function b2iPay(id, bal, host) {
+    var def = bal > 0 ? (bal / 100) : "";
+    var v = window.prompt("Record a payment against this invoice.\nEnter amount in ₹" + (bal > 0 ? " (balance " + b2iRs(bal) + ")" : "") + ":", String(def));
+    if (v == null) return; var amt = Math.round(Number(v) * 100);
+    if (!(amt > 0)) { dacToast("Enter a valid amount."); return; }
+    var method = window.prompt("Payment method?", "Cash") || "Cash";
+    DOODLY_API.patch("/api/b2b/invoices/" + id, { action: "pay", amountPaise: amt, method: method }).then(function () { dacToast("Payment recorded."); b2iReload(host); }).catch(function (e) { dacToast((e && e.message) || "Couldn't record payment."); });
+  }
+  function b2iVoid(id, no, host) {
+    if (!window.confirm("Void invoice " + no + "? This cancels the invoice (the record is kept for audit). This cannot be undone.")) return;
+    DOODLY_API.patch("/api/b2b/invoices/" + id, { action: "void" }).then(function () { dacToast("Invoice voided."); b2iReload(host); }).catch(function (e) { dacToast((e && e.message) || "Couldn't void."); });
+  }
+  function b2iReports() {
+    DOODLY_API.get("/api/b2b/invoices/reports?" + (function () { var s = _b2iState, p = new URLSearchParams(); if (s.from) p.set("from", s.from); if (s.to) p.set("to", s.to); return p.toString(); })()).then(function (r) {
+      var m = document.createElement("div"); m.className = "rbac-modal";
+      var money = function (p) { return b2iRs(p); };
+      var byBiz = (r.byBusiness || []).map(function (b) { return "<tr><td>" + esc(b.name || "") + (b.code ? " <span class='muted-sm'>" + esc(b.code) + "</span>" : "") + "</td><td style='text-align:right'>" + (b.count || 0) + "</td><td style='text-align:right'>" + money(b.revenuePaise || 0) + "</td><td style='text-align:right'>" + money(b.outstandingPaise || 0) + "</td></tr>"; }).join("") || "<tr><td colspan='4' class='muted-sm' style='text-align:center;padding:12px'>No data for this period.</td></tr>";
+      m.innerHTML = '<div class="rbac-modal-card" role="dialog" aria-modal="true" style="max-width:640px"><div class="rbac-modal-head"><h3>Invoice reports' + ((_b2iState.from || _b2iState.to) ? ' <span class="muted-sm">' + esc(_b2iState.from || "…") + " → " + esc(_b2iState.to || "…") + "</span>" : "") + '</h3><button class="rbac-x">✕</button></div>' +
+        '<div class="dl-an-kpis" style="margin:8px 0">' + milkStat(r.totalInvoices || 0, "Invoices") + milkStat(money(r.revenueInvoicedPaise || 0), "Invoiced value") + milkStat(money(r.collectedPaise || 0), "Collected") + milkStat(money(r.gstPaise || 0), "GST") + milkStat(money(r.outstandingPaise || 0), "Outstanding") + milkStat((r.overdueCount || 0) + " · " + money(r.overduePaise || 0), "Overdue") + "</div>" +
+        '<div class="muted-sm" style="margin:4px 0 6px">Top businesses by invoiced value</div><div class="table-wrap"><table class="tbl"><thead><tr><th>Business</th><th style="text-align:right">Invoices</th><th style="text-align:right">Value</th><th style="text-align:right">Outstanding</th></tr></thead><tbody>' + byBiz + "</tbody></table></div></div>";
+      document.body.appendChild(m); requestAnimationFrame(function () { m.classList.add("show"); });
+      var close = function () { m.classList.remove("show"); setTimeout(function () { m.remove(); }, 200); };
+      m.addEventListener("click", function (e) { if (e.target === m || e.target.closest(".rbac-x")) close(); });
+    }).catch(function (e) { dacToast((e && e.message) || "Couldn't load reports."); });
   }
   /* ---- Unit Pricing (KG / Litre) — DB-backed editor, the AUTHORITATIVE per-unit
      B2B price that order creation / invoices / P&L use. Writes BusinessPricing rows
