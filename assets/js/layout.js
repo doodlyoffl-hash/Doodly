@@ -1225,8 +1225,9 @@
     bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live B2B data." : e.code === "forbidden" ? "⚠ Your role can't access B2B (403)." : "⚠ " + (e.message || "Couldn't load B2B."), "err");
   }
   // ===== B2B Orders — server-side filter / search / sort / paginate / summary / export =====
-  var _b2bBiz = [];
-  var _b2bState = { dateType: "created", preset: "all", from: "", to: "", q: "", statuses: [], businessId: "", unit: "", paymentStatuses: [], invoice: "", valueMin: "", valueMax: "", qtyMin: "", qtyMax: "", qtyUnit: "", sort: "newest", page: 1, pageSize: 25 };
+  var _b2bBiz = [], _b2bExecs = [];
+  function b2bFreshState() { return { dateType: "created", preset: "all", from: "", to: "", q: "", statuses: [], businessId: "", unit: "", paymentStatuses: [], invoice: "", valueMin: "", valueMax: "", qtyMin: "", qtyMax: "", qtyUnit: "", execId: "", execState: "", sort: "newest", page: 1, pageSize: 25 }; }
+  var _b2bState = b2bFreshState();
   var _b2bStatuses = [["PENDING", "Pending"], ["CONFIRMED", "Confirmed"], ["PREPARING", "Preparing"], ["OUT_FOR_DELIVERY", "Out for delivery"], ["DELIVERED", "Delivered"], ["COMPLETED", "Completed / Closed"], ["CANCELLED", "Cancelled"]];
   var _b2bPays = [["PAID", "Paid"], ["PENDING", "Unpaid"], ["PARTIAL", "Partially paid"], ["CREDIT", "Credit sale"]];
   var b2bRs = function (p) { return "₹" + Math.round((p || 0) / 100).toLocaleString("en-IN"); };
@@ -1252,6 +1253,7 @@
     if (s.invoice) p.set("invoice", s.invoice);
     if (s.valueMin !== "") p.set("valueMin", Math.round(Number(s.valueMin) * 100)); if (s.valueMax !== "") p.set("valueMax", Math.round(Number(s.valueMax) * 100));
     if (s.qtyMin !== "") p.set("qtyMin", s.qtyMin); if (s.qtyMax !== "") p.set("qtyMax", s.qtyMax); if (s.qtyUnit) p.set("qtyUnit", s.qtyUnit);
+    if (s.execId) p.set("execId", s.execId); if (s.execState) p.set("execState", s.execState);
     if (extra) for (var k in extra) p.set(k, extra[k]);
     return p.toString();
   }
@@ -1260,6 +1262,7 @@
     var host = document.querySelector("#b2bMount"); if (!host) return;
     host.innerHTML = '<p class="muted-sm">Loading B2B orders…</p>';
     try { var bz = await DOODLY_API.get("/api/b2b/businesses"); _b2bBiz = (bz.businesses || []).filter(function (b) { return !b.deletedAt; }); } catch (e) { if (e.code === "forbidden") { host.innerHTML = '<div class="panel panel-pad muted-sm">Your role can\'t access B2B (403).</div>'; return; } _b2bBiz = []; }
+    try { var dv = await DOODLY_API.get("/api/admin/drivers"); _b2bExecs = (dv.drivers || []).map(function (d) { return { id: d.id, name: d.name || (d.user && d.user.name) || d.employeeId || "Executive" }; }); } catch (e) { _b2bExecs = []; }   // best-effort (needs drivers:view)
     renderB2BOrders(host);
   }
   function renderB2BOrders(host) {
@@ -1280,6 +1283,11 @@
         "</div>" +
         '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="muted-sm">Status:</span>' + chip(_b2bStatuses, s.statuses, "b2f-st") + "</div>" +
         '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="muted-sm">Payment:</span>' + chip(_b2bPays, s.paymentStatuses, "b2f-pay") + "</div>" +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="muted-sm">Executive:</span>' +
+          '<select class="input" id="b2f-exec" style="max-width:180px"><option value="">Any executive</option>' + _b2bExecs.map(function (x) { return '<option value="' + x.id + '"' + (x.id === s.execId ? " selected" : "") + ">" + esc(x.name) + "</option>"; }).join("") + "</select>" +
+          chip([["assigned", "Assigned"], ["unassigned", "Unassigned"], ["auto", "Auto assigned"], ["manual", "Manually assigned"]], (s.execState ? [s.execState] : []), "b2f-exs") +
+          (_b2bExecs.length ? "" : '<span class="muted-sm">· exec list needs Drivers → view</span>') +
+        "</div>" +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
           '<select class="input" id="b2f-biz" style="max-width:220px"><option value="">All businesses</option>' + _b2bBiz.map(function (b) { return '<option value="' + b.id + '"' + (b.id === s.businessId ? " selected" : "") + ">" + esc((b.code ? b.code + " · " : "") + b.name) + "</option>"; }).join("") + "</select>" +
           '<select class="input" id="b2f-unit" style="max-width:120px"><option value="">All units</option><option value="KG"' + (s.unit === "KG" ? " selected" : "") + ">KG</option><option value=\"Litres\"" + (s.unit === "Litres" ? " selected" : "") + ">Litres</option><option value=\"Bottles\"" + (s.unit === "Bottles" ? " selected" : "") + ">Bottles</option></select>" +
@@ -1312,12 +1320,16 @@
     ["vmin", "vmax", "qmin", "qmax"].forEach(function (k) { var map = { vmin: "valueMin", vmax: "valueMax", qmin: "qtyMin", qmax: "qtyMax" }; var el = host.querySelector("#b2f-" + k); el.addEventListener("change", function () { s[map[k]] = el.value; s.page = 1; b2bReload(host); }); });
     host.querySelectorAll(".b2f-st").forEach(function (c) { c.addEventListener("click", function () { b2bToggle(s.statuses, c.dataset.v); c.classList.toggle("on"); s.page = 1; b2bReload(host); }); });
     host.querySelectorAll(".b2f-pay").forEach(function (c) { c.addEventListener("click", function () { b2bToggle(s.paymentStatuses, c.dataset.v); c.classList.toggle("on"); s.page = 1; b2bReload(host); }); });
-    host.querySelector("#b2f-reset").addEventListener("click", function () { _b2bState = { dateType: "created", preset: "all", from: "", to: "", q: "", statuses: [], businessId: "", unit: "", paymentStatuses: [], invoice: "", valueMin: "", valueMax: "", qtyMin: "", qtyMax: "", qtyUnit: "", sort: "newest", page: 1, pageSize: 25 }; renderB2BOrders(host); });
+    var exSel = host.querySelector("#b2f-exec"); if (exSel) exSel.addEventListener("change", function () { s.execId = exSel.value; s.page = 1; b2bReload(host); });
+    host.querySelectorAll(".b2f-exs").forEach(function (c) { c.addEventListener("click", function () { var v = c.dataset.v; s.execState = (s.execState === v ? "" : v); host.querySelectorAll(".b2f-exs").forEach(function (x) { x.classList.toggle("on", x.dataset.v === s.execState); }); s.page = 1; b2bReload(host); }); });
+    host.querySelector("#b2f-reset").addEventListener("click", function () { _b2bState = b2bFreshState(); renderB2BOrders(host); });
     host.querySelector("#b2f-new").addEventListener("click", function () { if (typeof openB2BOrderBooking === "function") openB2BOrderBooking(function () { b2bReload(host); }); else dacToast("Booking unavailable."); });
     ["pdf", "xls", "csv", "print"].forEach(function (fmt) { host.querySelector("#b2f-" + fmt).addEventListener("click", function () { b2bExport(fmt); }); });
     b2bReload(host);
   }
   function b2bToggle(arr, v) { var i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v); }
+  function b2bAssign(id, driverId, host) { DOODLY_API.patch("/api/b2b/orders/" + id, { action: "assign", driverId: driverId, mode: "MANUAL" }).then(function () { dacToast("Executive assigned."); b2bReload(host); }).catch(function (e) { dacToast((e && e.message) || "Couldn't assign."); }); }
+  function b2bUnassign(id, host) { DOODLY_API.patch("/api/b2b/orders/" + id, { action: "unassign" }).then(function () { dacToast("Executive removed."); b2bReload(host); }).catch(function (e) { dacToast((e && e.message) || "Couldn't unassign."); }); }
   function b2bReload(host) {
     var body = host.querySelector("#b2b-body"), sum = host.querySelector("#b2b-summary");
     DOODLY_API.get("/api/b2b/orders?summary=1&" + b2bQuery()).then(function (r) {
@@ -1325,6 +1337,8 @@
       sum.innerHTML = milkStat(c.totalOrders || 0, "Orders") + milkStat(c.delivered || 0, "Delivered") + milkStat(c.pending || 0, "Pending") + milkStat(c.cancelled || 0, "Cancelled") + milkStat(b2bRs(c.totalValuePaise), "Order value") + milkStat(b2bRs(c.totalRevenuePaise), "Revenue (recognised)") + milkStat((c.totalKg || 0) + " KG · " + (c.totalLitres || 0) + " L", "Quantity") + milkStat(c.totalBusinesses || 0, "Businesses");
       body.innerHTML = b2bTable(r);
       body.querySelectorAll(".b2o-page").forEach(function (b) { b.addEventListener("click", function () { _b2bState.page = Number(b.dataset.p); b2bReload(host); }); });
+      body.querySelectorAll(".b2o-assign").forEach(function (sel) { sel.addEventListener("change", function () { if (sel.value) b2bAssign(sel.dataset.id, sel.value, host); }); });
+      body.querySelectorAll(".b2o-unassign").forEach(function (b) { b.addEventListener("click", function () { b2bUnassign(b.dataset.id, host); }); });
     }).catch(function (e) { body.innerHTML = '<div class="panel panel-pad dac-err">' + esc((e && e.message) || "Couldn't load orders.") + "</div>"; });
   }
   function b2bTable(r) {
@@ -1332,14 +1346,15 @@
     var payTone = { PAID: "green", PENDING: "grey", PARTIAL: "amber", CREDIT: "blue" };
     var rows = (r.orders || []).map(function (o) {
       var items = (o.items || []).map(function (i) { return i.quantity + " " + i.unit; }).join(", ");
-      return "<tr><td><b>" + esc(o.code) + "</b></td><td>" + esc(o.businessName) + "<br><span class='muted-sm'>" + esc(o.businessCode || "") + "</span></td><td>" + esc(String(o.deliveryDate).slice(0, 10)) + "</td><td class='muted-sm'>" + esc(items) + "</td><td style='text-align:right'>" + b2bRs(o.totalPaise) + "</td><td style='text-align:right'>" + (o.revenuePaise != null ? b2bRs(o.revenuePaise) : "—") + "</td><td><span class='badge " + (tone[o.status] || "grey") + "'>" + esc(o.status) + "</span></td><td><span class='badge " + (payTone[o.paymentStatus] || "grey") + "'>" + esc(o.paymentStatus) + "</span></td><td class='muted-sm'>" + (o.invoiceNumber ? esc(o.invoiceNumber) : "—") + "</td></tr>";
-    }).join("") || '<tr><td colspan="9" class="muted-sm" style="text-align:center;padding:24px">No B2B orders match these filters.</td></tr>';
+      var exCell = o.execName ? "<span class='badge blue'>" + esc(o.execName) + "</span> <button class='btn btn-ghost sm b2o-unassign' data-id='" + o.id + "' title='Unassign'>✕</button>" : "<select class='input b2o-assign' data-id='" + o.id + "' style='max-width:130px;font-size:12px'><option value=''>Assign…</option>" + _b2bExecs.map(function (x) { return "<option value='" + x.id + "'>" + esc(x.name) + "</option>"; }).join("") + "</select>";
+      return "<tr><td><b>" + esc(o.code) + "</b></td><td>" + esc(o.businessName) + "<br><span class='muted-sm'>" + esc(o.businessCode || "") + "</span></td><td>" + esc(String(o.deliveryDate).slice(0, 10)) + "</td><td class='muted-sm'>" + esc(items) + "</td><td style='text-align:right'>" + b2bRs(o.totalPaise) + "</td><td style='text-align:right'>" + (o.revenuePaise != null ? b2bRs(o.revenuePaise) : "—") + "</td><td><span class='badge " + (tone[o.status] || "grey") + "'>" + esc(o.status) + "</span></td><td><span class='badge " + (payTone[o.paymentStatus] || "grey") + "'>" + esc(o.paymentStatus) + "</span></td><td class='muted-sm'>" + (o.invoiceNumber ? esc(o.invoiceNumber) : "—") + "</td><td>" + exCell + "</td></tr>";
+    }).join("") || '<tr><td colspan="10" class="muted-sm" style="text-align:center;padding:24px">No B2B orders match these filters.</td></tr>';
     var start = (r.total ? (r.page - 1) * r.pageSize + 1 : 0), end = Math.min(r.page * r.pageSize, r.total);
     var pager = '<div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px">' +
       '<span class="muted-sm">' + start + "–" + end + " of " + r.total + " · page " + r.page + "/" + r.pages + '</span>' +
       '<button class="btn btn-ghost sm b2o-page" data-p="' + (r.page - 1) + '"' + (r.page <= 1 ? " disabled" : "") + ">‹ Prev</button>" +
       '<button class="btn btn-ghost sm b2o-page" data-p="' + (r.page + 1) + '"' + (r.page >= r.pages ? " disabled" : "") + ">Next ›</button></div>";
-    return '<div class="panel"><div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Order</th><th>Business</th><th>Delivery</th><th>Items</th><th style="text-align:right">Value</th><th style="text-align:right">Revenue</th><th>Status</th><th>Payment</th><th>Invoice</th></tr></thead><tbody>' + rows + "</tbody></table></div>" + pager + "</div></div>";
+    return '<div class="panel"><div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Order</th><th>Business</th><th>Delivery</th><th>Items</th><th style="text-align:right">Value</th><th style="text-align:right">Revenue</th><th>Status</th><th>Payment</th><th>Invoice</th><th>Executive</th></tr></thead><tbody>' + rows + "</tbody></table></div>" + pager + "</div></div>";
   }
   function b2bExport(fmt) {
     var base = window.DOODLY_API ? DOODLY_API.base() : "", h = {};

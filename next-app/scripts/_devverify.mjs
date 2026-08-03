@@ -15,9 +15,12 @@ try { rmSync(DATA_DIR, { recursive: true, force: true }); } catch {}
 const pg = new EmbeddedPostgres({ databaseDir: DATA_DIR, user: "postgres", password: "postgres", port: PORT, persistent: false });
 await pg.initialise();
 await pg.start();
-await pg.createDatabase("doodly_dev");
 const url = `postgresql://postgres:postgres@localhost:${PORT}/doodly_dev`;
+const adminUrl = `postgresql://postgres:postgres@localhost:${PORT}/postgres`;
 const env = { ...process.env, DATABASE_URL: url, DIRECT_URL: url, TSX_TSCONFIG_PATH: "scripts/tsconfig.json" };
+// Create the app DB as UTF8 (this box's initdb defaults the cluster to WIN1252, which rejects the
+// app's unicode — emoji/arrows in notifications + event summaries; prod/Supabase is UTF8).
+execSync('npx prisma db execute --url "' + adminUrl + '" --stdin', { input: "CREATE DATABASE doodly_dev WITH ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C' TEMPLATE template0;", stdio: ["pipe", "inherit", "inherit"] });
 console.log("LOCAL DEV DB UP — pushing schema…");
 let code = 0;
 try {

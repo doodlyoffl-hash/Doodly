@@ -4,6 +4,7 @@
    combinations, summary, sorting, pagination and export-respects-filters. */
 import { db } from "@/lib/db";
 import { queryB2BOrders, b2bOrdersSummary, b2bOrdersReport, type B2BOrderFilters } from "@/lib/b2b/order-query";
+import { assignB2BOrder, unassignB2BOrder } from "@/lib/b2b/service";
 
 const R: { name: string; pass: boolean; detail?: string }[] = [];
 const ok = (n: string, c: boolean, d?: string) => R.push({ name: n, pass: !!c, detail: d });
@@ -36,7 +37,7 @@ async function run() {
   const xyz = await mkBiz("xyz", "XYZ Hotel");
 
   // A: today, DELIVERED, PAID, KG 50, ₹5000, revenue ₹4500, invoiced+SENT
-  await mkOrder({ biz: abc, created: day(0), delivery: day(0), status: "DELIVERED", pay: "PAID", unit: "KG", qty: 50, totalPaise: 500000, revenuePaise: 450000, deliveredAt: day(0), invoice: { number: "INV-A", emailStatus: "SENT" } });
+  const aId = await mkOrder({ biz: abc, created: day(0), delivery: day(0), status: "DELIVERED", pay: "PAID", unit: "KG", qty: 50, totalPaise: 500000, revenuePaise: 450000, deliveredAt: day(0), invoice: { number: "INV-A", emailStatus: "SENT" } });
   // B: 3 days ago, PENDING, unpaid, Litres 20, ₹2000, no invoice
   await mkOrder({ biz: abc, created: day(-3), delivery: day(-3), status: "PENDING", pay: "PENDING", unit: "Litres", qty: 20, totalPaise: 200000 });
   // C: 10 days ago, CANCELLED, unpaid, KG 10, ₹1000
@@ -118,6 +119,21 @@ async function run() {
   const repKg = await b2bOrdersReport({ unit: "KG" });
   ok("Export(all) has 5 rows; Export(KG) has 3 rows (respects filter)", repAll.rowCount === 5 && repKg.rowCount === 3, JSON.stringify({ all: repAll.rowCount, kg: repKg.rowCount }));
   ok("Export total row sums filtered value (KG = ₹6,500)", repKg.totalRow?.[7] === "₹6,500", repKg.totalRow?.[7]);
+
+  // ---- Executive assignment + filter ----
+  const exUser = await db.user.create({ data: { name: "Exec One", role: "CUSTOMER", email: "exec1@local.test", phone: "9111111111" } });
+  const drv = await db.driver.create({ data: { userId: exUser.id, active: true } });
+  ok("Exec: unassigned = 5 before any assignment", (await count({ execState: "unassigned" })) === 5, String(await count({ execState: "unassigned" })));
+  await assignB2BOrder({ id: aId, driverId: drv.id, mode: "MANUAL", actorRole: "system" });
+  ok("Exec: assigned → 1 (A)", (await count({ execState: "assigned" })) === 1, String(await count({ execState: "assigned" })));
+  ok("Exec: unassigned → 4", (await count({ execState: "unassigned" })) === 4);
+  ok("Exec: by execId → 1 (A)", (await count({ execId: drv.id })) === 1);
+  ok("Exec: manually assigned → 1; auto → 0", (await count({ execState: "manual" })) === 1 && (await count({ execState: "auto" })) === 0, JSON.stringify({ m: await count({ execState: "manual" }), a: await count({ execState: "auto" }) }));
+  const arow = (await queryB2BOrders({ execId: drv.id }, {})).orders[0];
+  ok("Exec: row carries execName + mode", arow.execName === "Exec One" && arow.assignmentMode === "MANUAL", JSON.stringify({ name: arow.execName, mode: arow.assignmentMode }));
+  ok("Exec: notification created for the executive", (await db.notification.count({ where: { userId: exUser.id } })) >= 1);
+  await unassignB2BOrder({ id: aId, actorRole: "system" });
+  ok("Exec: after unassign → assigned 0, unassigned 5", (await count({ execState: "assigned" })) === 0 && (await count({ execState: "unassigned" })) === 5);
 }
 
 run()

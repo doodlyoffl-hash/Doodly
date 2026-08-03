@@ -1900,6 +1900,7 @@ model Driver {                                    // = Delivery Executive (own /
   geoCorrections GeoCorrection[]                   // GPS pin corrections performed by this executive
   bottlePickups  BottlePickupRequest[]             // bottle-return pickups assigned to this executive
   shifts         Shift[]                           // work shifts (start/end + totals)
+  b2bOrders      BusinessOrder[] @relation("B2BOrderDriver")  // B2B orders assigned to this executive
 }
 
 model DeliveryIssue {
@@ -2768,6 +2769,11 @@ model BusinessOrder {
   // corrections go to BusinessRevenueAdjustment, never an edit of this row.
   revenuePaise  Int?
   deliveredAt   DateTime?
+  // Delivery-executive assignment (parity with retail Delivery.driverId). NULL = unassigned.
+  driverId       String?
+  driver         Driver?          @relation("B2BOrderDriver", fields: [driverId], references: [id])
+  assignedAt     DateTime?
+  assignmentMode String?                                  // "AUTO" | "MANUAL"
   createdById   String?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
@@ -2785,6 +2791,7 @@ model BusinessOrder {
   @@index([updatedAt])            // updated-date filter
   @@index([totalPaise])           // order-value range + sort
   @@index([revenuePaise])         // revenue range + sort
+  @@index([driverId])             // executive filter (assigned / by-exec)
 }
 
 // Immutable post-delivery revenue correction for an ALREADY-RECOGNISED B2B order

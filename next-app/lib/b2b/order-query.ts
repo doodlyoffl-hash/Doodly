@@ -30,6 +30,8 @@ export interface B2BOrderFilters {
   valueMin?: number; valueMax?: number;       // Order.totalPaise range (paise)
   revenueMin?: number; revenueMax?: number;   // recognised revenuePaise range (paise)
   qtyUnit?: string; qtyMin?: number; qtyMax?: number;  // per-line quantity range for a given unit
+  execId?: string;                            // filter by a specific delivery executive (Driver.id)
+  execState?: "assigned" | "unassigned" | "auto" | "manual";
 }
 
 const dayStart = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
@@ -68,6 +70,13 @@ export function b2bOrderWhere(f: B2BOrderFilters): Prisma.BusinessOrderWhereInpu
   if (f.statuses?.length) where.status = { in: f.statuses };
   if (f.businessId) where.businessId = f.businessId;
   if (f.paymentStatuses?.length) where.paymentStatus = { in: f.paymentStatuses };
+
+  // ---- delivery-executive assignment ----
+  if (f.execState === "assigned") where.driverId = { not: null };
+  else if (f.execState === "unassigned") where.driverId = null;
+  if (f.execState === "auto") where.assignmentMode = "AUTO";
+  else if (f.execState === "manual") where.assignmentMode = "MANUAL";
+  if (f.execId) where.driverId = f.execId;   // a specific exec overrides the assigned/unassigned state
 
   const value = intRange(f.valueMin, f.valueMax); if (value) where.totalPaise = value;
   const rev = intRange(f.revenueMin, f.revenueMax); if (rev) where.revenuePaise = rev;
@@ -118,6 +127,7 @@ export interface B2BOrderRow {
   units: string[]; totalQty: number;
   items: { productName: string; quantity: number; unit: string }[];
   invoiceNumber: string | null; invoiceStatus: string | null; invoiceEmail: string | null;
+  execId: string | null; execName: string | null; assignmentMode: string | null; assignedAt: string | null;
 }
 
 /** Paginated, sorted, filtered list. */
@@ -132,10 +142,11 @@ export async function queryB2BOrders(f: B2BOrderFilters, opts: { sort?: SortKey;
       where, orderBy, take: pageSize, skip: (page - 1) * pageSize,
       select: {
         id: true, code: true, status: true, paymentStatus: true, deliveryDate: true, deliveredAt: true, createdAt: true, updatedAt: true,
-        totalPaise: true, paidPaise: true, revenuePaise: true,
+        totalPaise: true, paidPaise: true, revenuePaise: true, assignmentMode: true, assignedAt: true,
         business: { select: { id: true, code: true, name: true } },
         items: { select: { productName: true, quantity: true, unit: true } },
         invoice: { select: { number: true, status: true, emailStatus: true } },
+        driver: { select: { id: true, user: { select: { name: true } } } },
       },
     }),
     db.businessOrder.count({ where }),
@@ -151,6 +162,7 @@ export async function queryB2BOrders(f: B2BOrderFilters, opts: { sort?: SortKey;
     totalQty: Math.round(o.items.reduce((s, i) => s + i.quantity, 0) * 1000) / 1000,
     items: o.items.map((i) => ({ productName: i.productName, quantity: i.quantity, unit: i.unit })),
     invoiceNumber: o.invoice?.number ?? null, invoiceStatus: o.invoice?.status ?? null, invoiceEmail: o.invoice?.emailStatus ?? null,
+    execId: o.driver?.id ?? null, execName: o.driver?.user?.name ?? null, assignmentMode: o.assignmentMode ?? null, assignedAt: o.assignedAt?.toISOString() ?? null,
   }));
   return { orders, total, page, pageSize, pages: Math.max(1, Math.ceil(total / pageSize)) };
 }
@@ -190,7 +202,7 @@ export async function b2bOrdersReport(f: B2BOrderFilters, opts: { sort?: SortKey
   const rows = orders.map((o) => [
     o.code, o.businessName, o.status, o.paymentStatus, o.deliveryDate.slice(0, 10),
     o.items.map((i) => `${i.quantity} ${i.unit} ${i.productName}`).join("; "),
-    String(o.totalQty), rup(o.totalPaise), o.revenuePaise != null ? rup(o.revenuePaise) : "—", o.invoiceNumber ?? "—",
+    String(o.totalQty), rup(o.totalPaise), o.revenuePaise != null ? rup(o.revenuePaise) : "—", o.invoiceNumber ?? "—", o.execName ?? "—",
   ]);
   const totalValue = orders.reduce((s, o) => s + o.totalPaise, 0);
   const totalRev = orders.reduce((s, o) => s + (o.revenuePaise ?? 0), 0);
@@ -200,9 +212,9 @@ export async function b2bOrdersReport(f: B2BOrderFilters, opts: { sort?: SortKey
     title: "B2B Orders",
     subtitle: `${(opts.subtitle ?? "All orders")}${capped}`,
     rowCount: rows.length,
-    columns: [{ label: "Order" }, { label: "Business" }, { label: "Status" }, { label: "Payment" }, { label: "Delivery" }, { label: "Items" }, { label: "Qty", right: true }, { label: "Value", right: true }, { label: "Revenue", right: true }, { label: "Invoice" }],
+    columns: [{ label: "Order" }, { label: "Business" }, { label: "Status" }, { label: "Payment" }, { label: "Delivery" }, { label: "Items" }, { label: "Qty", right: true }, { label: "Value", right: true }, { label: "Revenue", right: true }, { label: "Invoice" }, { label: "Executive" }],
     rows,
-    totalRow: ["TOTAL", `${orders.length} order(s)`, "", "", "", "", "", rup(totalValue), rup(totalRev), ""],
+    totalRow: ["TOTAL", `${orders.length} order(s)`, "", "", "", "", "", rup(totalValue), rup(totalRev), "", ""],
   };
 }
 
@@ -222,5 +234,7 @@ export function parseB2BFilters(sp: URLSearchParams): B2BOrderFilters {
     valueMin: num("valueMin"), valueMax: num("valueMax"),
     revenueMin: num("revenueMin"), revenueMax: num("revenueMax"),
     qtyUnit: sp.get("qtyUnit") ?? undefined, qtyMin: num("qtyMin"), qtyMax: num("qtyMax"),
+    execId: sp.get("execId") ?? undefined,
+    execState: (sp.get("execState") as B2BOrderFilters["execState"]) ?? undefined,
   };
 }

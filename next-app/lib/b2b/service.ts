@@ -295,6 +295,32 @@ export async function addOrderNote(args: { id: string; note: string } & Actor) {
   }, TX);
 }
 
+/** Assign a B2B order to a delivery executive (Driver). mode MANUAL (admin) or AUTO (future
+    auto-assign). Notifies the executive + audits. */
+export async function assignB2BOrder(args: { id: string; driverId: string; mode?: "AUTO" | "MANUAL" } & Actor) {
+  const driver = await db.driver.findUnique({ where: { id: args.driverId }, select: { id: true, userId: true, active: true, user: { select: { name: true } } } });
+  if (!driver) throw new Error("Executive not found");
+  const order = await db.$transaction(async (tx) => {
+    const o = await tx.businessOrder.update({ where: { id: args.id }, data: { driverId: args.driverId, assignedAt: new Date(), assignmentMode: args.mode ?? "MANUAL" }, select: { id: true, code: true, deliveryDate: true, business: { select: { name: true } } } });
+    await logEvent(tx, args.id, "NOTE", { byId: args.actorId, note: `Assigned to executive ${driver.user?.name || args.driverId}${args.mode === "AUTO" ? " (auto)" : ""}` });
+    return o;
+  });
+  try { const { notifyExecutive } = await import("@/lib/assignment/notify"); await notifyExecutive(db, driver.userId, "New B2B delivery assigned 📦", `Order ${order.code} for ${order.business?.name || "a business"} · delivery ${new Date(order.deliveryDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}.`); } catch { /* non-blocking */ }
+  await audit({ userId: args.actorId ?? null, actorRole: args.actorRole ?? "system", action: "b2b.order.assign", target: `${order.code} → ${driver.user?.name || args.driverId}${args.mode === "AUTO" ? " (auto)" : ""}` }).catch(() => {});
+  return order;
+}
+
+/** Remove a B2B order's executive assignment. */
+export async function unassignB2BOrder(args: { id: string } & Actor) {
+  const order = await db.$transaction(async (tx) => {
+    const o = await tx.businessOrder.update({ where: { id: args.id }, data: { driverId: null, assignedAt: null, assignmentMode: null }, select: { id: true, code: true } });
+    await logEvent(tx, args.id, "NOTE", { byId: args.actorId, note: "Executive removed (unassigned)" });
+    return o;
+  });
+  await audit({ userId: args.actorId ?? null, actorRole: args.actorRole ?? "system", action: "b2b.order.unassign", target: order.code }).catch(() => {});
+  return order;
+}
+
 export async function updateOrderStatus(args: { id: string; status: B2BOrderStatus } & Actor) {
   type Post = { orderCode: string; businessId: string; revenuePaise: number; deliveredAt: Date; items: { productName: string; quantity: number; unit: string }[]; invoiceNumber: string | null };
   const { updated, post } = await db.$transaction(async (tx) => {

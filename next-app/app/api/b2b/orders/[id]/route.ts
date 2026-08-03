@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getOrder, updateOrderStatus, cancelOrder, reorder, recordPayment, generateInvoice, updateOrder, addOrderNote,
+  assignB2BOrder, unassignB2BOrder,
 } from "@/lib/b2b/service";
 import { actorRole, actorId, canUseB2B } from "@/lib/b2b/guard";
 import type { B2BOrderStatus } from "@/lib/b2b/engine";
@@ -49,6 +50,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         }) });
       case "invoice":
         return NextResponse.json({ ok: true, invoice: await generateInvoice({ orderId: params.id, ...a }) });
+      case "assign":
+        return NextResponse.json({ ok: true, order: await assignB2BOrder({ id: params.id, driverId: String(body.driverId), mode: body.mode === "AUTO" ? "AUTO" : "MANUAL", ...a }) });
+      case "unassign":
+        return NextResponse.json({ ok: true, order: await unassignB2BOrder({ id: params.id, ...a }) });
       default:
         return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }
