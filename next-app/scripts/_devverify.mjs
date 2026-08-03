@@ -21,8 +21,9 @@ const env = { ...process.env, DATABASE_URL: url, DIRECT_URL: url, TSX_TSCONFIG_P
 console.log("LOCAL DEV DB UP — pushing schema…");
 let code = 0;
 try {
+  const script = process.argv[2] || "scripts/verify-abc.ts";
   execSync("npx prisma db push --skip-generate --accept-data-loss", { stdio: "inherit", env });
-  execSync("npx tsx scripts/verify-abc.ts", { stdio: "inherit", env });
+  execSync(`npx tsx ${script}`, { stdio: "inherit", env });
 } catch { code = 1; }
 finally { await pg.stop(); console.log("\n(local dev DB discarded)"); }
 process.exit(code);

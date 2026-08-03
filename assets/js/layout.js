@@ -1224,15 +1224,133 @@
   function b2bErr(host, e) {
     bkBanner(host, e.code === "offline" ? "⚠ Backend offline at " + DOODLY_API.base() + " — couldn't load live B2B data." : e.code === "forbidden" ? "⚠ Your role can't access B2B (403)." : "⚠ " + (e.message || "Couldn't load B2B."), "err");
   }
+  // ===== B2B Orders — server-side filter / search / sort / paginate / summary / export =====
+  var _b2bBiz = [];
+  var _b2bState = { dateType: "created", preset: "all", from: "", to: "", q: "", statuses: [], businessId: "", unit: "", paymentStatuses: [], invoice: "", valueMin: "", valueMax: "", qtyMin: "", qtyMax: "", qtyUnit: "", sort: "newest", page: 1, pageSize: 25 };
+  var _b2bStatuses = [["PENDING", "Pending"], ["CONFIRMED", "Confirmed"], ["PREPARING", "Preparing"], ["OUT_FOR_DELIVERY", "Out for delivery"], ["DELIVERED", "Delivered"], ["COMPLETED", "Completed / Closed"], ["CANCELLED", "Cancelled"]];
+  var _b2bPays = [["PAID", "Paid"], ["PENDING", "Unpaid"], ["PARTIAL", "Partially paid"], ["CREDIT", "Credit sale"]];
+  var b2bRs = function (p) { return "₹" + Math.round((p || 0) / 100).toLocaleString("en-IN"); };
+
+  function b2bPreset(preset) {
+    var s = _b2bState, t = new Date(), fmt = function (d) { return d.toISOString().slice(0, 10); }, f = "", to = fmt(t);
+    if (preset === "today") f = fmt(t);
+    else if (preset === "yesterday") { var y = new Date(t); y.setDate(y.getDate() - 1); f = to = fmt(y); }
+    else if (preset === "last7") { var d = new Date(t); d.setDate(d.getDate() - 6); f = fmt(d); }
+    else if (preset === "last30") { var d2 = new Date(t); d2.setDate(d2.getDate() - 29); f = fmt(d2); }
+    else if (preset === "thisMonth") f = fmt(new Date(t.getFullYear(), t.getMonth(), 1));
+    else if (preset === "lastMonth") { f = fmt(new Date(t.getFullYear(), t.getMonth() - 1, 1)); to = fmt(new Date(t.getFullYear(), t.getMonth(), 0)); }
+    else if (preset === "all") { f = ""; to = ""; }
+    s.preset = preset; if (preset !== "custom") { s.from = f; s.to = to; } s.page = 1;
+  }
+  function b2bQuery(extra) {
+    var s = _b2bState, p = new URLSearchParams();
+    p.set("sort", s.sort); p.set("page", s.page); p.set("pageSize", s.pageSize); if (s.dateType) p.set("dateType", s.dateType);
+    if (s.from) p.set("from", s.from); if (s.to) p.set("to", s.to); if (s.q.trim()) p.set("q", s.q.trim());
+    if (s.statuses.length) p.set("statuses", s.statuses.join(","));
+    if (s.businessId) p.set("businessId", s.businessId); if (s.unit) p.set("unit", s.unit);
+    if (s.paymentStatuses.length) p.set("paymentStatuses", s.paymentStatuses.join(","));
+    if (s.invoice) p.set("invoice", s.invoice);
+    if (s.valueMin !== "") p.set("valueMin", Math.round(Number(s.valueMin) * 100)); if (s.valueMax !== "") p.set("valueMax", Math.round(Number(s.valueMax) * 100));
+    if (s.qtyMin !== "") p.set("qtyMin", s.qtyMin); if (s.qtyMax !== "") p.set("qtyMax", s.qtyMax); if (s.qtyUnit) p.set("qtyUnit", s.qtyUnit);
+    if (extra) for (var k in extra) p.set(k, extra[k]);
+    return p.toString();
+  }
   async function wireB2BBackend() {
     if (!window.DOODLY_API) return;
-    var host = document.querySelector("#b2bMount");
-    try {
-      var n = await b2bMirror();
-      if (window.DOODLY_B2B && host) DOODLY_B2B.mount(host);   // re-render from the mirrored DB data
-      if (host) installB2BInterceptor(host);
-      bkBanner(host, "● Live — " + n.biz + " business(es) + " + n.ords + " order(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
-    } catch (e) { b2bErr(host, e); }
+    var host = document.querySelector("#b2bMount"); if (!host) return;
+    host.innerHTML = '<p class="muted-sm">Loading B2B orders…</p>';
+    try { var bz = await DOODLY_API.get("/api/b2b/businesses"); _b2bBiz = (bz.businesses || []).filter(function (b) { return !b.deletedAt; }); } catch (e) { if (e.code === "forbidden") { host.innerHTML = '<div class="panel panel-pad muted-sm">Your role can\'t access B2B (403).</div>'; return; } _b2bBiz = []; }
+    renderB2BOrders(host);
+  }
+  function renderB2BOrders(host) {
+    var s = _b2bState;
+    var presets = [["today", "Today"], ["yesterday", "Yesterday"], ["last7", "Last 7 days"], ["last30", "Last 30 days"], ["thisMonth", "This month"], ["lastMonth", "Last month"], ["all", "All time"], ["custom", "Custom"]];
+    var dateTypes = [["created", "Created date"], ["delivery", "Delivery date"], ["delivered", "Delivered date"], ["invoice", "Invoice date"], ["updated", "Updated date"]];
+    var opt = function (arr, sel) { return arr.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === sel ? " selected" : "") + ">" + esc(o[1]) + "</option>"; }).join(""); };
+    var chip = function (arr, selected, cls) { return arr.map(function (o) { return '<button type="button" class="exp-chip ' + cls + " " + (selected.indexOf(o[0]) >= 0 ? "on" : "") + '" data-v="' + o[0] + '">' + esc(o[1]) + "</button>"; }).join(""); };
+    host.innerHTML =
+      '<div id="b2b-summary" class="dl-an-kpis" style="margin-bottom:12px"></div>' +
+      '<div class="panel" style="margin-bottom:12px"><div class="panel-pad" style="display:flex;flex-direction:column;gap:8px">' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+          '<select class="input" id="b2f-preset" style="max-width:150px">' + opt(presets, s.preset) + "</select>" +
+          '<input class="input" id="b2f-from" type="date" value="' + esc(s.from) + '" style="max-width:150px" title="From">' +
+          '<input class="input" id="b2f-to" type="date" value="' + esc(s.to) + '" style="max-width:150px" title="To">' +
+          '<span class="muted-sm">by</span><select class="input" id="b2f-dtype" style="max-width:150px">' + opt(dateTypes, s.dateType) + "</select>" +
+          '<input class="input" id="b2f-q" placeholder="Search business / order / invoice / contact / mobile / GST / email" value="' + esc(s.q) + '" style="flex:1;min-width:240px">' +
+        "</div>" +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="muted-sm">Status:</span>' + chip(_b2bStatuses, s.statuses, "b2f-st") + "</div>" +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="muted-sm">Payment:</span>' + chip(_b2bPays, s.paymentStatuses, "b2f-pay") + "</div>" +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+          '<select class="input" id="b2f-biz" style="max-width:220px"><option value="">All businesses</option>' + _b2bBiz.map(function (b) { return '<option value="' + b.id + '"' + (b.id === s.businessId ? " selected" : "") + ">" + esc((b.code ? b.code + " · " : "") + b.name) + "</option>"; }).join("") + "</select>" +
+          '<select class="input" id="b2f-unit" style="max-width:120px"><option value="">All units</option><option value="KG"' + (s.unit === "KG" ? " selected" : "") + ">KG</option><option value=\"Litres\"" + (s.unit === "Litres" ? " selected" : "") + ">Litres</option><option value=\"Bottles\"" + (s.unit === "Bottles" ? " selected" : "") + ">Bottles</option></select>" +
+          '<select class="input" id="b2f-inv" style="max-width:150px"><option value="">Any invoice</option><option value="generated"' + (s.invoice === "generated" ? " selected" : "") + ">Invoice generated</option><option value=\"pending\"" + (s.invoice === "pending" ? " selected" : "") + ">Invoice pending</option><option value=\"sent\"" + (s.invoice === "sent" ? " selected" : "") + ">Invoice sent</option></select>" +
+          '<input class="input" id="b2f-vmin" type="number" min="0" placeholder="₹ min" value="' + esc(s.valueMin) + '" style="max-width:90px" title="Order value min">' +
+          '<input class="input" id="b2f-vmax" type="number" min="0" placeholder="₹ max" value="' + esc(s.valueMax) + '" style="max-width:90px" title="Order value max">' +
+          '<input class="input" id="b2f-qmin" type="number" min="0" placeholder="Qty min" value="' + esc(s.qtyMin) + '" style="max-width:90px" title="Quantity min">' +
+          '<input class="input" id="b2f-qmax" type="number" min="0" placeholder="Qty max" value="' + esc(s.qtyMax) + '" style="max-width:90px" title="Quantity max">' +
+          '<button class="btn btn-ghost sm" id="b2f-reset">Reset</button>' +
+        "</div>" +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+          '<span class="muted-sm">Sort:</span><select class="input" id="b2f-sort" style="max-width:180px">' + opt([["newest", "Newest first"], ["oldest", "Oldest first"], ["delivery_desc", "Delivery date ↓"], ["delivery_asc", "Delivery date ↑"], ["business_asc", "Business A→Z"], ["business_desc", "Business Z→A"], ["value_desc", "Value ↓"], ["value_asc", "Value ↑"], ["revenue_desc", "Revenue ↓"], ["invoice_desc", "Invoice # ↓"]], s.sort) + "</select>" +
+          '<span class="muted-sm">Rows:</span><select class="input" id="b2f-size" style="max-width:80px">' + opt([["10", "10"], ["25", "25"], ["50", "50"], ["100", "100"]], String(s.pageSize)) + "</select>" +
+          '<div style="margin-left:auto;display:flex;gap:6px"><button class="btn btn-ghost sm" id="b2f-pdf">⬇ PDF</button><button class="btn btn-ghost sm" id="b2f-xls">Excel</button><button class="btn btn-ghost sm" id="b2f-csv">CSV</button><button class="btn btn-ghost sm" id="b2f-print">🖨 Print</button><button class="btn btn-primary sm" id="b2f-new">+ New order</button></div>' +
+        "</div>" +
+      "</div></div>" +
+      '<div id="b2b-body"><p class="muted-sm">Loading…</p></div>';
+
+    var q = host.querySelector("#b2f-q"), qt;
+    q.addEventListener("input", function () { clearTimeout(qt); qt = setTimeout(function () { s.q = q.value; s.page = 1; b2bReload(host); }, 350); });
+    host.querySelector("#b2f-preset").addEventListener("change", function (e) { b2bPreset(e.target.value); if (e.target.value !== "custom") { host.querySelector("#b2f-from").value = s.from; host.querySelector("#b2f-to").value = s.to; } b2bReload(host); });
+    host.querySelector("#b2f-from").addEventListener("change", function (e) { s.from = e.target.value; s.preset = "custom"; host.querySelector("#b2f-preset").value = "custom"; s.page = 1; b2bReload(host); });
+    host.querySelector("#b2f-to").addEventListener("change", function (e) { s.to = e.target.value; s.preset = "custom"; host.querySelector("#b2f-preset").value = "custom"; s.page = 1; b2bReload(host); });
+    host.querySelector("#b2f-dtype").addEventListener("change", function (e) { s.dateType = e.target.value; s.page = 1; b2bReload(host); });
+    host.querySelector("#b2f-biz").addEventListener("change", function (e) { s.businessId = e.target.value; s.page = 1; b2bReload(host); });
+    host.querySelector("#b2f-unit").addEventListener("change", function (e) { s.unit = e.target.value; s.qtyUnit = e.target.value; s.page = 1; b2bReload(host); });
+    host.querySelector("#b2f-inv").addEventListener("change", function (e) { s.invoice = e.target.value; s.page = 1; b2bReload(host); });
+    host.querySelector("#b2f-sort").addEventListener("change", function (e) { s.sort = e.target.value; b2bReload(host); });
+    host.querySelector("#b2f-size").addEventListener("change", function (e) { s.pageSize = Number(e.target.value); s.page = 1; b2bReload(host); });
+    ["vmin", "vmax", "qmin", "qmax"].forEach(function (k) { var map = { vmin: "valueMin", vmax: "valueMax", qmin: "qtyMin", qmax: "qtyMax" }; var el = host.querySelector("#b2f-" + k); el.addEventListener("change", function () { s[map[k]] = el.value; s.page = 1; b2bReload(host); }); });
+    host.querySelectorAll(".b2f-st").forEach(function (c) { c.addEventListener("click", function () { b2bToggle(s.statuses, c.dataset.v); c.classList.toggle("on"); s.page = 1; b2bReload(host); }); });
+    host.querySelectorAll(".b2f-pay").forEach(function (c) { c.addEventListener("click", function () { b2bToggle(s.paymentStatuses, c.dataset.v); c.classList.toggle("on"); s.page = 1; b2bReload(host); }); });
+    host.querySelector("#b2f-reset").addEventListener("click", function () { _b2bState = { dateType: "created", preset: "all", from: "", to: "", q: "", statuses: [], businessId: "", unit: "", paymentStatuses: [], invoice: "", valueMin: "", valueMax: "", qtyMin: "", qtyMax: "", qtyUnit: "", sort: "newest", page: 1, pageSize: 25 }; renderB2BOrders(host); });
+    host.querySelector("#b2f-new").addEventListener("click", function () { if (typeof openB2BOrderBooking === "function") openB2BOrderBooking(function () { b2bReload(host); }); else dacToast("Booking unavailable."); });
+    ["pdf", "xls", "csv", "print"].forEach(function (fmt) { host.querySelector("#b2f-" + fmt).addEventListener("click", function () { b2bExport(fmt); }); });
+    b2bReload(host);
+  }
+  function b2bToggle(arr, v) { var i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v); }
+  function b2bReload(host) {
+    var body = host.querySelector("#b2b-body"), sum = host.querySelector("#b2b-summary");
+    DOODLY_API.get("/api/b2b/orders?summary=1&" + b2bQuery()).then(function (r) {
+      var c = r.summary || {};
+      sum.innerHTML = milkStat(c.totalOrders || 0, "Orders") + milkStat(c.delivered || 0, "Delivered") + milkStat(c.pending || 0, "Pending") + milkStat(c.cancelled || 0, "Cancelled") + milkStat(b2bRs(c.totalValuePaise), "Order value") + milkStat(b2bRs(c.totalRevenuePaise), "Revenue (recognised)") + milkStat((c.totalKg || 0) + " KG · " + (c.totalLitres || 0) + " L", "Quantity") + milkStat(c.totalBusinesses || 0, "Businesses");
+      body.innerHTML = b2bTable(r);
+      body.querySelectorAll(".b2o-page").forEach(function (b) { b.addEventListener("click", function () { _b2bState.page = Number(b.dataset.p); b2bReload(host); }); });
+    }).catch(function (e) { body.innerHTML = '<div class="panel panel-pad dac-err">' + esc((e && e.message) || "Couldn't load orders.") + "</div>"; });
+  }
+  function b2bTable(r) {
+    var tone = { DELIVERED: "green", COMPLETED: "green", CANCELLED: "red", PENDING: "amber", CONFIRMED: "blue", PREPARING: "blue", OUT_FOR_DELIVERY: "blue" };
+    var payTone = { PAID: "green", PENDING: "grey", PARTIAL: "amber", CREDIT: "blue" };
+    var rows = (r.orders || []).map(function (o) {
+      var items = (o.items || []).map(function (i) { return i.quantity + " " + i.unit; }).join(", ");
+      return "<tr><td><b>" + esc(o.code) + "</b></td><td>" + esc(o.businessName) + "<br><span class='muted-sm'>" + esc(o.businessCode || "") + "</span></td><td>" + esc(String(o.deliveryDate).slice(0, 10)) + "</td><td class='muted-sm'>" + esc(items) + "</td><td style='text-align:right'>" + b2bRs(o.totalPaise) + "</td><td style='text-align:right'>" + (o.revenuePaise != null ? b2bRs(o.revenuePaise) : "—") + "</td><td><span class='badge " + (tone[o.status] || "grey") + "'>" + esc(o.status) + "</span></td><td><span class='badge " + (payTone[o.paymentStatus] || "grey") + "'>" + esc(o.paymentStatus) + "</span></td><td class='muted-sm'>" + (o.invoiceNumber ? esc(o.invoiceNumber) : "—") + "</td></tr>";
+    }).join("") || '<tr><td colspan="9" class="muted-sm" style="text-align:center;padding:24px">No B2B orders match these filters.</td></tr>';
+    var start = (r.total ? (r.page - 1) * r.pageSize + 1 : 0), end = Math.min(r.page * r.pageSize, r.total);
+    var pager = '<div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px">' +
+      '<span class="muted-sm">' + start + "–" + end + " of " + r.total + " · page " + r.page + "/" + r.pages + '</span>' +
+      '<button class="btn btn-ghost sm b2o-page" data-p="' + (r.page - 1) + '"' + (r.page <= 1 ? " disabled" : "") + ">‹ Prev</button>" +
+      '<button class="btn btn-ghost sm b2o-page" data-p="' + (r.page + 1) + '"' + (r.page >= r.pages ? " disabled" : "") + ">Next ›</button></div>";
+    return '<div class="panel"><div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Order</th><th>Business</th><th>Delivery</th><th>Items</th><th style="text-align:right">Value</th><th style="text-align:right">Revenue</th><th>Status</th><th>Payment</th><th>Invoice</th></tr></thead><tbody>' + rows + "</tbody></table></div>" + pager + "</div></div>";
+  }
+  function b2bExport(fmt) {
+    var base = window.DOODLY_API ? DOODLY_API.base() : "", h = {};
+    try { var t = localStorage.getItem("doodly-token"); if (t) h["Authorization"] = "Bearer " + t; } catch (e) {}
+    try { if (window.DOODLY_RBAC) { h["X-Doodly-Actor"] = DOODLY_RBAC.activeRole(); var cu = DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser(); if (cu && cu.id) h["X-Doodly-Actor-Id"] = cu.id; } } catch (e) {}
+    var ext = fmt === "xls" ? "xls" : fmt === "csv" ? "csv" : "pdf", inline = fmt === "print" ? "&inline=1" : "";
+    dacToast("Preparing the filtered B2B orders (" + ext.toUpperCase() + ")…");
+    var url = base + "/api/b2b/orders/export?format=" + ext + inline + "&" + b2bQuery();
+    fetch(url, { headers: h, credentials: "include" }).then(function (res) { if (!res.ok) throw new Error(res.status === 403 ? "Your role can't export (403)." : "Export failed (" + res.status + ")"); return res.blob(); })
+      .then(function (blob) { var u = URL.createObjectURL(blob); if (fmt === "print") { window.open(u, "_blank"); } else { var a = document.createElement("a"); a.href = u; a.download = "DOODLY_B2B_Orders." + ext; document.body.appendChild(a); a.click(); a.remove(); } setTimeout(function () { URL.revokeObjectURL(u); }, 60000); dacToast("B2B orders exported (" + ext.toUpperCase() + ")."); })
+      .catch(function (e) { dacToast(e.message || "Couldn't export."); });
   }
   // Persist B2B "Register business" to the real DB (POST /api/b2b/businesses) instead of localStorage.
   function installB2BInterceptor(host) {

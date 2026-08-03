@@ -2781,6 +2781,10 @@ model BusinessOrder {
   @@index([deliveryDate])
   @@index([deliveredAt])
   @@index([paymentStatus])
+  @@index([createdAt])            // default newest/oldest sort + created-date filter (global, no business filter)
+  @@index([updatedAt])            // updated-date filter
+  @@index([totalPaise])           // order-value range + sort
+  @@index([revenuePaise])         // revenue range + sort
 }
 
 // Immutable post-delivery revenue correction for an ALREADY-RECOGNISED B2B order
