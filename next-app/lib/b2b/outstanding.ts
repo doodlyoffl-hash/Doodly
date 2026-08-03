@@ -97,6 +97,9 @@ function invoiceWhere(f: OutstandingFilters, asOfEnd: Date): Prisma.BusinessInvo
     + outstanding-only are applied in JS (they need the computed values). Returns rows + the asOf. */
 export async function computeLedger(f: OutstandingFilters = {}): Promise<{ rows: LedgerRow[]; asOf: Date }> {
   const asOfEnd = endOf(f.asOf) ?? new Date();
+  // "Overdue as of D" = the due DAY has fully elapsed by D — a same-day-due (cash) invoice is not
+  // overdue on its due date, only after. Matches the invoice-register overdue convention.
+  const asOfDayStart = startOf(f.asOf) ?? (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })();
   const fromStart = startOf(f.from), toEnd = endOf(f.to);
   const invoices = (await db.businessInvoice.findMany({
     where: invoiceWhere(f, asOfEnd),
@@ -135,7 +138,7 @@ export async function computeLedger(f: OutstandingFilters = {}): Promise<{ rows:
     const stillOwing = outstandingAsOf > 0;
     const outstandingSince = stillOwing ? inv.issuedAt : null;
     const statusAsOf: LedgerRow["statusAsOf"] = paidAsOf >= total ? "PAID" : paidAsOf > 0 ? "PARTIAL" : "UNPAID";
-    const overdue = stillOwing && !!inv.dueDate && inv.dueDate < asOfEnd;
+    const overdue = stillOwing && !!inv.dueDate && inv.dueDate < asOfDayStart;
     rows.push({
       invoiceId: inv.id, number: inv.number, orderId: inv.order.id, orderCode: inv.order.code,
       businessId: inv.businessId, businessCode: inv.order.business.code, businessName: inv.order.business.name, gst: inv.order.business.gst,
