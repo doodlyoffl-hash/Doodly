@@ -3,7 +3,7 @@
    local Postgres (scripts/_devverify.mjs verify-b2b-invoices.ts). */
 import { db } from "@/lib/db";
 import { updateOrderStatus, cancelOrder } from "@/lib/b2b/service";
-import { b2bInvoiceSummary, listInvoices, recordInvoicePayment } from "@/lib/b2b/invoices";
+import { b2bInvoiceSummary, listInvoices, recordInvoicePayment, b2bInvoicesReport } from "@/lib/b2b/invoices";
 
 const R: { name: string; pass: boolean; detail?: string }[] = [];
 const ok = (n: string, c: boolean, d?: string) => R.push({ name: n, pass: !!c, detail: d });
@@ -83,6 +83,11 @@ async function run() {
   await recordInvoicePayment(inv1!.id, { amountPaise: 500000, method: "Cash", actorRole: "system" });
   const sumPaid = await b2bInvoiceSummary({});
   ok("S7: after full payment — paid=1, unpaid=0, outstanding=0", sumPaid.paid === 1 && sumPaid.unpaid === 0 && sumPaid.outstandingPaise === 0, JSON.stringify({ p: sumPaid.paid, u: sumPaid.unpaid, o: sumPaid.outstandingPaise }));
+
+  // ---- S8: filtered register export (Step 12) — MilkReport of the on-screen set ----
+  const rep = await b2bInvoicesReport({});
+  ok("S8: register export has the 1 invoice row + 10 columns + a TOTAL row", rep.rowCount === 1 && rep.columns.length === 10 && !!rep.totalRow && rep.totalRow[0] === "TOTAL", JSON.stringify({ rows: rep.rowCount, cols: rep.columns.length }));
+  ok("S8: register row shows the invoice number + ₹5,000 amount, fully paid", rep.rows[0][0] === inv1!.number && rep.rows[0][7] === "₹5,000" && rep.rows[0][9] === "₹0", JSON.stringify(rep.rows[0]));
 }
 
 run()

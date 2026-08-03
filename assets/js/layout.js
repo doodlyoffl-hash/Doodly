@@ -1481,7 +1481,7 @@
         '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
           '<span class="muted-sm">Sort:</span><select class="input" id="b2i-sort" style="max-width:160px">' + opt([["newest", "Newest first"], ["oldest", "Oldest first"], ["amount_desc", "Amount ↓"], ["amount_asc", "Amount ↑"], ["business", "Business A→Z"], ["due", "Due date"]], s.sort) + "</select>" +
           '<span class="muted-sm">Rows:</span><select class="input" id="b2i-size" style="max-width:80px">' + opt([["10", "10"], ["25", "25"], ["50", "50"], ["100", "100"]], String(s.pageSize)) + "</select>" +
-          '<div style="margin-left:auto;display:flex;gap:6px"><button class="btn btn-ghost sm" id="b2i-reports">📊 Reports</button></div>' +
+          '<div style="margin-left:auto;display:flex;gap:6px"><button class="btn btn-ghost sm" id="b2i-pdf-all">⬇ PDF</button><button class="btn btn-ghost sm" id="b2i-xls-all">Excel</button><button class="btn btn-ghost sm" id="b2i-csv-all">CSV</button><button class="btn btn-ghost sm" id="b2i-print-all">🖨 Print</button><button class="btn btn-ghost sm" id="b2i-reports">📊 Reports</button></div>' +
         "</div>" +
       "</div></div>" +
       '<div id="b2i-body"><p class="muted-sm">Loading…</p></div>';
@@ -1500,7 +1500,17 @@
     host.querySelector("#b2i-size").addEventListener("change", function (e) { s.pageSize = Number(e.target.value); s.page = 1; b2iReload(host); });
     host.querySelector("#b2i-reset").addEventListener("click", function () { _b2iState = b2iFreshState(); renderB2BInvoices(host); });
     host.querySelector("#b2i-reports").addEventListener("click", function () { b2iReports(); });
+    [["pdf-all", "pdf"], ["xls-all", "xls"], ["csv-all", "csv"], ["print-all", "print"]].forEach(function (m) { var el = host.querySelector("#b2i-" + m[0]); if (el) el.addEventListener("click", function () { b2iExport(m[1]); }); });
     b2iReload(host);
+  }
+  function b2iExport(fmt) {
+    var base = window.DOODLY_API ? DOODLY_API.base() : "", h = b2iAuthHeaders();
+    var ext = fmt === "xls" ? "xls" : fmt === "csv" ? "csv" : "pdf", inline = fmt === "print" ? "&inline=1" : "";
+    dacToast("Preparing the filtered invoice register (" + ext.toUpperCase() + ")…");
+    var url = base + "/api/b2b/invoices/export?format=" + ext + inline + "&" + b2iQuery();
+    fetch(url, { headers: h, credentials: "include" }).then(function (res) { if (!res.ok) throw new Error(res.status === 403 ? "Your role can't export (403)." : "Export failed (" + res.status + ")"); return res.blob(); })
+      .then(function (blob) { var u = URL.createObjectURL(blob); if (fmt === "print") { window.open(u, "_blank"); } else { var a = document.createElement("a"); a.href = u; a.download = "DOODLY_B2B_Invoices." + ext; document.body.appendChild(a); a.click(); a.remove(); } setTimeout(function () { URL.revokeObjectURL(u); }, 60000); dacToast("Invoice register exported (" + ext.toUpperCase() + ")."); })
+      .catch(function (e) { dacToast(e.message || "Couldn't export."); });
   }
   function b2iReload(host) {
     var body = host.querySelector("#b2i-body"), sum = host.querySelector("#b2i-summary");

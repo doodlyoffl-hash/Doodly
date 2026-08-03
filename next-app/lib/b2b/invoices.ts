@@ -10,6 +10,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { formatInvoiceNumber } from "./engine";
 import { recordPayment } from "./service";
+import type { MilkReport } from "@/lib/milk/reports";
 
 interface Actor { actorId?: string; actorRole?: string; ip?: string }
 
@@ -276,5 +277,31 @@ export async function invoiceReports(args: { from?: string; to?: string } = {}) 
     overdueCount: overdue.length,
     overduePaise: overdue.reduce((s, r) => s + Math.max(0, r.order.totalPaise - r.order.paidPaise), 0),
     byBusiness: [...byBiz.values()].sort((a, b) => b.revenuePaise - a.revenuePaise).slice(0, 10),
+  };
+}
+
+/** The filtered invoice REGISTER as a MilkReport (drives PDF / Excel / CSV / Print export).
+    Reuses invoiceWhere via listInvoices, so the export = exactly the on-screen filtered set. */
+export async function b2bInvoicesReport(f: InvoiceFilterArgs & { sort?: InvoiceSort }, opts: { subtitle?: string; cap?: number } = {}): Promise<MilkReport> {
+  const cap = Math.min(opts.cap ?? 5000, 5000);
+  const { invoices, total } = await listInvoices({ ...f, limit: cap, offset: 0 });
+  const rup = (p: number) => "₹" + Math.round((p || 0) / 100).toLocaleString("en-IN");
+  const rows = invoices.map((i) => [
+    i.number, `${i.businessName}${i.businessCode ? ` (${i.businessCode})` : ""}`, i.gst ?? "—",
+    i.issuedAt.slice(0, 10), i.dueDate ? i.dueDate.slice(0, 10) : "—", i.status,
+    i.itemsSummary || "—", rup(i.totalPaise), rup(i.paidPaise), rup(Math.max(0, i.totalPaise - i.paidPaise)),
+  ]);
+  const sumTotal = invoices.reduce((s, i) => s + i.totalPaise, 0);
+  const sumPaid = invoices.reduce((s, i) => s + i.paidPaise, 0);
+  const sumBal = invoices.reduce((s, i) => s + Math.max(0, i.totalPaise - i.paidPaise), 0);
+  const capped = total > invoices.length ? ` (showing first ${invoices.length} of ${total})` : "";
+  return {
+    type: "b2bInvoices" as unknown as MilkReport["type"],
+    title: "B2B Invoice Register",
+    subtitle: `${opts.subtitle ?? "All invoices"}${capped}`,
+    rowCount: rows.length,
+    columns: [{ label: "Invoice" }, { label: "Business" }, { label: "GSTIN" }, { label: "Issued" }, { label: "Due" }, { label: "Status" }, { label: "Items" }, { label: "Amount", right: true }, { label: "Paid", right: true }, { label: "Balance", right: true }],
+    rows,
+    totalRow: ["TOTAL", `${invoices.length} invoice(s)`, "", "", "", "", "", rup(sumTotal), rup(sumPaid), rup(sumBal)],
   };
 }
