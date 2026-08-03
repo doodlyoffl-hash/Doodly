@@ -61,8 +61,21 @@ export async function renderMilkReportPdf(report: MilkReport): Promise<{ bytes: 
     p.drawText("Pure | Fresh | Honest", { x: M, y: A4L.h - 50, size: 8.5, font, color: GOLD });
     const t = safe(report.title);
     p.drawText(t, { x: rightEdge - bold.widthOfTextAtSize(t, 13), y: A4L.h - 32, size: 13, font: bold, color: WHITE });
-    const st = safe(report.subtitle);
-    p.drawText(fit(st, usable, font, 8.5), { x: rightEdge - font.widthOfTextAtSize(fit(st, usable, font, 8.5), 8.5), y: A4L.h - 48, size: 8.5, font, color: rgb(0.85, 0.9, 0.87) });
+  };
+  // The subtitle carries the full reconciliation summary (procurement · USAGE incl. Freshout ·
+  // RETAIL/B2B · REVENUE − COGS = GROSS). It's far longer than one line, so WRAP it into a block
+  // below the header on page 1 rather than ellipsising it — otherwise most of it (Freshout,
+  // closing balance, financials) is silently cut off. Returns the y below the block.
+  const wrap = (s: string, width: number, f: PDFFont, sz: number): string[] => {
+    const words = safe(s).split(/\s+/); const lines: string[] = []; let cur = "";
+    for (const w of words) { const cand = cur ? cur + " " + w : w; if (f.widthOfTextAtSize(cand, sz) <= width) cur = cand; else { if (cur) lines.push(cur); cur = f.widthOfTextAtSize(w, sz) <= width ? w : fit(w, width, f, sz); } }
+    if (cur) lines.push(cur); return lines;
+  };
+  const subtitleBlock = (p: PDFPage): number => {
+    const lines = wrap(report.subtitle, usable, font, 8);
+    let yy = A4L.h - 70 - 13;
+    for (const ln of lines) { p.drawText(ln, { x: M, y: yy, size: 8, font, color: MUTE }); yy -= 11; }
+    return yy - 3;
   };
   const tableHead = (p: PDFPage, y: number) => {
     p.drawRectangle({ x: M, y: y - 6, width: usable, height: 20, color: FOREST });
@@ -71,7 +84,7 @@ export async function renderMilkReportPdf(report: MilkReport): Promise<{ bytes: 
   };
 
   header(page);
-  let y = A4L.h - 70 - 26;
+  let y = subtitleBlock(page);   // page 1: full wrapped summary below the header band
   y = tableHead(page, y);
   if (!report.rows.length) { page.drawText("No data for this range.", { x: M + 6, y: y - 4, size: 10, font, color: MUTE }); y -= 20; }
 
