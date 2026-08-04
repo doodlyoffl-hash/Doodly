@@ -7175,6 +7175,47 @@
   window.DOODLY_ADMIN.wireMilkTankersBackend = wireMilkTankersBackend;
 
   var _mkFilter = { q: "", status: "" };
+  // ===== Milk Inventory Ledger + Dashboard — inventory is a DERIVED result of tanker procurement =====
+  var _mkInvDate = null;
+  var mkInvL = function (n) { return (Math.round((n || 0) * 100) / 100).toLocaleString("en-IN") + " L"; };
+  function mkInvExport(fmt) {
+    var base = window.DOODLY_API ? DOODLY_API.base() : "", h = {};
+    try { var t = localStorage.getItem("doodly-token"); if (t) h["Authorization"] = "Bearer " + t; } catch (e) {}
+    try { if (window.DOODLY_RBAC) { h["X-Doodly-Actor"] = DOODLY_RBAC.activeRole(); var cu = DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser(); if (cu && cu.id) h["X-Doodly-Actor-Id"] = cu.id; } } catch (e) {}
+    var ext = fmt === "xls" ? "xls" : fmt === "csv" ? "csv" : "pdf", inline = fmt === "print" ? "&inline=1" : "";
+    var d = _mkInvDate || istTodayStr();
+    dacToast("Preparing the milk inventory ledger (" + ext.toUpperCase() + ")…");
+    fetch(base + "/api/admin/milk/inventory?view=ledger&format=" + ext + inline + "&from=" + d + "&to=" + d, { headers: h, credentials: "include" })
+      .then(function (res) { if (!res.ok) throw new Error(res.status === 403 ? "Your role can't export (403)." : "Export failed (" + res.status + ")"); return res.blob(); })
+      .then(function (blob) { var u = URL.createObjectURL(blob); if (fmt === "print") { window.open(u, "_blank"); } else { var a = document.createElement("a"); a.href = u; a.download = "DOODLY_Milk_Inventory." + ext; document.body.appendChild(a); a.click(); a.remove(); } setTimeout(function () { URL.revokeObjectURL(u); }, 60000); dacToast("Inventory ledger exported."); })
+      .catch(function (e) { dacToast(e.message || "Couldn't export."); });
+  }
+  function mkLoadInventoryLedger(host) {
+    var mount = host.querySelector("#mk-invledger"); if (!mount || !window.DOODLY_API) return;
+    var d = _mkInvDate || istTodayStr();
+    mount.innerHTML = '<div class="panel"><div class="panel-pad muted-sm">Loading inventory ledger…</div></div>';
+    Promise.all([
+      DOODLY_API.get("/api/admin/milk/inventory?view=summary&date=" + d),
+      DOODLY_API.get("/api/admin/milk/inventory?view=ledger&from=" + d + "&to=" + d),
+    ]).then(function (res) {
+      var s = res[0] || {}, led = res[1] || {}, moves = led.movements || [];
+      var TL = { PROCUREMENT: ["green", "Tanker received"], FRESHOUT: ["green", "Freshout"], RETAIL: ["amber", "Retail delivered"], B2B: ["blue", "B2B delivered"], WASTAGE: ["red", "Wastage"] };
+      var kpis = milkStat(mkInvL(s.currentAvailable), "Available now") + milkStat(mkInvL(s.openingBalance), "Opening") + milkStat("+" + mkInvL(s.procurement), "Procurement") + milkStat("+" + mkInvL(s.freshout), "Freshout") + milkStat("−" + mkInvL(s.retailConsumed), "Retail") + milkStat("−" + mkInvL(s.b2bConsumed), "B2B") + milkStat("−" + mkInvL(s.wastage), "Wastage") + milkStat(mkInvL(s.closingBalance), "Closing");
+      var rows = moves.map(function (m) { var tl = TL[m.type] || ["grey", m.type]; return "<tr><td>" + esc(String(m.at).slice(0, 10)) + "</td><td><span class='badge " + tl[0] + "'>" + tl[1] + "</span></td><td class='muted-sm'>" + esc(m.tankerCode || "—") + "</td><td style='text-align:right" + (m.in ? ";color:var(--leaf-600,#178a52)" : "") + "'>" + (m.in ? "+" + mkInvL(m.litres) : "") + "</td><td style='text-align:right'>" + (!m.in ? "−" + mkInvL(-m.litres) : "") + "</td><td style='text-align:right'><b>" + mkInvL(m.balanceAfter) + "</b></td></tr>"; }).join("") || '<tr><td colspan="6" class="muted-sm" style="text-align:center;padding:14px">No milk movements on this day.</td></tr>';
+      mount.innerHTML =
+        '<div class="panel"><div class="panel-head" style="gap:8px;flex-wrap:wrap"><h3>📒 Milk Inventory Ledger <span class="muted-sm" style="font-weight:600">· auto-derived from tanker procurement</span></h3>' +
+          '<div style="display:flex;gap:6px;align-items:center;margin-left:auto"><input class="input" id="mk-inv-date" type="date" value="' + esc(d) + '" style="max-width:150px">' +
+          '<button class="btn btn-ghost sm" id="mk-inv-pdf">⬇ PDF</button><button class="btn btn-ghost sm" id="mk-inv-xls">Excel</button><button class="btn btn-ghost sm" id="mk-inv-csv">CSV</button><button class="btn btn-ghost sm" id="mk-inv-print">🖨</button></div></div>' +
+          '<div class="panel-pad"><div class="dl-an-kpis" style="margin-bottom:10px">' + kpis + "</div>" +
+          (s.reconciled ? "" : '<p class="dac-err" style="margin:0 0 8px">⚠ Ledger closing (' + mkInvL(s.closingBalance) + ") does not reconcile with live available (" + mkInvL(s.currentAvailable) + ").</p>") +
+          '<div class="table-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Movement</th><th>Tanker</th><th style="text-align:right">In</th><th style="text-align:right">Out</th><th style="text-align:right">Balance</th></tr></thead><tbody>' + rows + "</tbody></table></div>" +
+          '<p class="muted-sm" style="margin-top:6px">Opening ' + mkInvL(s.openingBalance) + " + procurement " + mkInvL(s.procurement) + " + freshout " + mkInvL(s.freshout) + " − retail " + mkInvL(s.retailConsumed) + " − B2B " + mkInvL(s.b2bConsumed) + " − wastage " + mkInvL(s.wastage) + " = closing <b>" + mkInvL(s.closingBalance) + "</b> · reconciles with " + s.openLots + " open lot(s).</p>" +
+          "</div></div>";
+      var di = mount.querySelector("#mk-inv-date"); if (di) di.addEventListener("change", function () { _mkInvDate = di.value; mkLoadInventoryLedger(host); });
+      [["pdf", "pdf"], ["xls", "xls"], ["csv", "csv"], ["print", "print"]].forEach(function (m) { var el = mount.querySelector("#mk-inv-" + m[0]); if (el) el.addEventListener("click", function () { mkInvExport(m[1]); }); });
+    }).catch(function (e) { mount.innerHTML = '<div class="panel"><div class="panel-pad dac-err">' + esc((e && e.message) || "Couldn't load the inventory ledger.") + "</div></div>"; });
+  }
+
   function renderMilkTankers(host, r, inv, pending) {
     var s = r.stats || {}, tankers = r.tankers || [], lots = (inv && inv.openLots) || [];
     var pendRows = (pending && pending.pending) || [], pendTotal = (pending && pending.totalLitres) || 0;
@@ -7209,6 +7250,8 @@
         milkStat((s.openTankers || 0) + " / " + (s.closedTankers || 0), "Open / Closed") +
       "</div>" +
       pendPanel +
+      // Milk Inventory Ledger + Dashboard (derived from tanker procurement — the single source of truth)
+      '<div id="mk-invledger" style="margin-bottom:14px"></div>' +
       // carry-forward / FIFO inventory
       '<div class="panel" style="margin-bottom:14px"><div class="panel-head"><h3>🥛 Inventory & carry-forward (FIFO — oldest first)</h3>' +
         '<div style="display:flex;gap:6px;align-items:center"><input class="input" id="mk-settle-date" type="date" value="' + istTodayStr() + '" style="max-width:150px"><button class="btn btn-ghost sm" id="mk-settle">Settle a day\'s sales</button></div></div>' +
@@ -7240,6 +7283,7 @@
     var mkQ = host.querySelector("#mk-q"); if (mkQ) mkQ.addEventListener("input", function () { _mkFilter.q = mkQ.value; reList(); });
     var mkStatus = host.querySelector("#mk-status"); if (mkStatus) mkStatus.addEventListener("change", function () { _mkFilter.status = mkStatus.value; reList(); });
     wireRows();
+    mkLoadInventoryLedger(host);
     var sb = host.querySelector("#mk-settle");
     if (sb) sb.addEventListener("click", function () {
       var date = host.querySelector("#mk-settle-date").value || istTodayStr();
