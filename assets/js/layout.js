@@ -2733,6 +2733,7 @@
      how fresh the fix is, and route progress. Injected above the analytics panel and
      refreshed by the deliveries poll. Reuses Driver.lat/lng/lastSeenAt + open Shift. */
   var _payEditorOpen = false;   // suppress the 20s poll re-render while rates are being edited
+  var _geoEditorOpen = false;   // suppress the poll re-render while the auto-reach geofence is being edited
   var PAY_FIELDS = [
     { k: "perKmRate", l: "Per km (₹)" }, { k: "fuelPerKm", l: "Fuel /km (₹)" }, { k: "perDeliveryRate", l: "Per delivery (₹)" },
     { k: "baseShiftPay", l: "Base /shift (₹)" }, { k: "minShiftPay", l: "Min /shift (₹)" },
@@ -2740,7 +2741,7 @@
   function money0(n) { return "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN"); }
   function renderLiveTracking(iso) {
     if (!window.DOODLY_API) return;
-    if (_payEditorOpen) return;   // don't clobber an open rate editor mid-edit
+    if (_payEditorOpen || _geoEditorOpen) return;   // don't clobber an open inline editor mid-edit
     var anchor = document.getElementById("delAnalytics");
     if (!anchor || !anchor.parentNode) return;
     var mount = document.getElementById("doodlyLiveTrack");
@@ -2750,10 +2751,11 @@
       var payOn = !!pay.enabled;
       var payTools = '<span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
         (payOn ? '<span class="muted-sm" style="font-weight:600" title="How the pay estimate is computed">Pay est. @ ' + esc(pay.basis) + '</span>' : '') +
+        '<button type="button" class="btn btn-ghost sm" id="geoCfgBtn" title="Automatic Reached-Customer geofence settings">⚙ Auto-reach</button>' +
         '<button type="button" class="btn btn-ghost sm" id="payRatesBtn">⚙ Pay rates</button><span class="badge green">● Live</span></span>';
       if (!execs.length) {
-        mount.innerHTML = '<div class="panel mt-3"><div class="panel-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h3>Live executive tracking</h3>' + payTools + '</div><div id="payRatesBox"></div><div class="panel-pad"><p class="muted-sm">No executive is on shift right now. Live GPS distance and position appear here the moment a shift starts.</p></div></div>';
-        wirePayRates(iso);
+        mount.innerHTML = '<div class="panel mt-3"><div class="panel-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h3>Live executive tracking</h3>' + payTools + '</div><div id="payRatesBox"></div><div id="geoCfgBox"></div><div class="panel-pad"><p class="muted-sm">No executive is on shift right now. Live GPS distance and position appear here the moment a shift starts.</p></div></div>';
+        wirePayRates(iso); wireGeofenceCfg(iso);
         return;
       }
       var ageTxt = function (s) { return s == null ? "—" : s < 90 ? "just now" : s < 3600 ? Math.round(s / 60) + "m ago" : Math.round(s / 3600) + "h ago"; };
@@ -2774,11 +2776,11 @@
       var payFoot = payOn ? '<td style="text-align:right"><b>' + (t.payEstimate != null ? money0(t.payEstimate) : "—") + '</b></td>' : '';
       mount.innerHTML = '<div class="panel mt-3"><div class="panel-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">' +
         '<h3>Live executive tracking <span class="muted-sm" style="font-weight:600">· ' + t.onShift + ' on shift · ' + Number(t.actualKm || 0).toFixed(1) + ' km travelled today' + (payOn && t.payEstimate != null ? ' · ~' + money0(t.payEstimate) + ' est. pay' : '') + '</span></h3>' +
-        payTools + '</div><div id="payRatesBox"></div>' +
+        payTools + '</div><div id="payRatesBox"></div><div id="geoCfgBox"></div>' +
         '<div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Executive</th><th>Last GPS</th><th style="text-align:right">Distance so far</th><th style="text-align:right">Planned</th><th style="text-align:right">Efficiency</th><th style="text-align:right">Progress</th>' + payHead + '<th></th></tr></thead><tbody>' + rows +
         '<tr style="font-weight:700;background:rgba(15,61,46,.04)"><td>TOTAL</td><td></td><td style="text-align:right">' + Number(t.actualKm || 0).toFixed(1) + ' km</td><td></td><td></td><td style="text-align:right">' + (t.deliveriesDone || 0) + '/' + (t.deliveriesTotal || 0) + '</td>' + payFoot + '<td></td></tr>' +
         '</tbody></table></div>' + (payOn ? '<p class="muted-sm" style="margin-top:8px">Estimated driver pay from GPS distance — planning figure only, not a payout. Tune rates with “Pay rates”.</p>' : '') + '</div></div>';
-      wirePayRates(iso);
+      wirePayRates(iso); wireGeofenceCfg(iso);
     }).catch(function () { /* keep the last good render on a transient error */ });
   }
 
@@ -2817,6 +2819,52 @@
             }).catch(function (e) { sv.disabled = false; sv.textContent = "Save rates"; dacToast((e && e.message) || (e && e.code === "forbidden" ? "Your role can't edit pay rates (403)." : "Couldn't save rates.")); });
           });
         }).catch(function (e) { _payEditorOpen = false; box.innerHTML = ""; dacToast(e && e.code === "forbidden" ? "Your role can't view pay rates (403)." : "Couldn't load pay rates."); });
+      });
+    }
+  }
+
+  /* "Auto-reach" inline editor — Super-Admin/Operations tune the automatic "Reached Customer"
+     geofence (radius / min GPS accuracy / dwell / verified-pin / on-off). deliverySettings-gated
+     server-side (a delivery executive is 403). No deploy needed to adjust the arrival rules. */
+  function wireGeofenceCfg(iso) {
+    var btn = document.getElementById("geoCfgBtn");
+    if (btn && !btn._wired) {
+      btn._wired = true;
+      btn.addEventListener("click", function () {
+        var box = document.getElementById("geoCfgBox");
+        if (!box) return;
+        if (_geoEditorOpen) { _geoEditorOpen = false; box.innerHTML = ""; return; }   // toggle closed
+        _geoEditorOpen = true;
+        box.innerHTML = '<div class="panel-pad muted-sm">Loading auto-reach settings…</div>';
+        DOODLY_API.get("/api/admin/deliveries/geofence-config").then(function (r) {
+          var c = (r && r.config) || {};
+          var num = function (k, l, min, max, step) {
+            return '<label style="display:flex;flex-direction:column;gap:3px;font-size:.78rem;font-weight:700;color:var(--ink-2,#37423d)">' + esc(l) +
+              '<input type="number" min="' + min + '" max="' + max + '" step="' + (step || 1) + '" id="gf-' + k + '" value="' + (c[k] != null ? c[k] : 0) + '" style="width:120px;padding:6px 8px;border:1px solid var(--line,#dfe6e1);border-radius:8px"></label>';
+          };
+          box.innerHTML = '<div class="panel-pad" style="border-bottom:1px solid var(--line,#eef2ef);background:rgba(31,174,102,.05)">' +
+            '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">' +
+            '<label style="display:flex;align-items:center;gap:6px;font-size:.82rem;font-weight:700"><input type="checkbox" id="gf-enabled"' + (c.enabled ? ' checked' : '') + '> Auto-reach on</label>' +
+            num("radiusM", "Radius (m)", 10, 2000, 5) + num("minAccuracyM", "Min GPS accuracy (m)", 10, 1000, 5) + num("minStaySeconds", "Dwell (sec)", 0, 600, 5) +
+            '<label style="display:flex;align-items:center;gap:6px;font-size:.82rem;font-weight:700"><input type="checkbox" id="gf-verified"' + (c.requireVerifiedPin ? ' checked' : '') + '> Verified pin only</label>' +
+            '<button type="button" class="btn btn-primary sm" id="gf-save">Save</button>' +
+            '<button type="button" class="btn btn-ghost sm" id="gf-cancel">Cancel</button></div>' +
+            '<p class="muted-sm" style="margin-top:8px">When an on-shift executive stays within the radius of the customer\'s verified pin for the dwell time, the stop auto-flips to <b>Reached</b>. “Delivered” always stays a manual confirmation.</p></div>';
+          document.getElementById("gf-cancel").addEventListener("click", function () { _geoEditorOpen = false; box.innerHTML = ""; renderLiveTracking(iso); });
+          document.getElementById("gf-save").addEventListener("click", function () {
+            var body = {
+              enabled: document.getElementById("gf-enabled").checked,
+              requireVerifiedPin: document.getElementById("gf-verified").checked,
+              radiusM: Number(document.getElementById("gf-radiusM").value) || 50,
+              minAccuracyM: Number(document.getElementById("gf-minAccuracyM").value) || 50,
+              minStaySeconds: Number(document.getElementById("gf-minStaySeconds").value) || 0,
+            };
+            var sv = document.getElementById("gf-save"); sv.disabled = true; sv.textContent = "Saving…";
+            DOODLY_API.patch("/api/admin/deliveries/geofence-config", body).then(function () {
+              _geoEditorOpen = false; box.innerHTML = ""; dacToast("Auto-reach settings saved."); renderLiveTracking(iso);
+            }).catch(function (e) { sv.disabled = false; sv.textContent = "Save"; dacToast((e && e.message) || (e && e.code === "forbidden" ? "Your role can't edit these settings (403)." : "Couldn't save.")); });
+          });
+        }).catch(function (e) { _geoEditorOpen = false; box.innerHTML = ""; dacToast(e && e.code === "forbidden" ? "Your role can't view these settings (403)." : "Couldn't load auto-reach settings."); });
       });
     }
   }
@@ -3226,6 +3274,16 @@
     var rsMap = { NO_COORDS: "No location pinned", FAR: "Far — check location", OK: "" };
     var distLine = (d.distanceKm != null || d.travelTimeMin != null || (d.routeStatus && d.routeStatus !== "OK")) ?
       ('<div><b>Warehouse distance</b> — ' + (d.distanceKm != null ? esc(d.distanceKm) + " km" : "—") + (d.travelTimeMin != null ? " · ~" + esc(d.travelTimeMin) + " min" : "") + (d.distanceSource ? ' <span class="muted-sm">(' + (d.distanceSource === "ROAD" ? "road" : "straight-line") + ")</span>" : "") + (d.routeStatus && rsMap[d.routeStatus] ? ' · <span class="badge amber">' + esc(rsMap[d.routeStatus]) + "</span>" : "") + (navUrl ? ' · <a href="' + navUrl + '" target="_blank" rel="noopener">Open navigation &#8599;</a>' : "") + "</div>") : "";
+    // Arrival timeline (Step 8): on-the-way → reached → delivered, with auto/manual + duration.
+    var fmtT = function (v) { try { return v ? new Date(v).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null; } catch (e) { return null; } };
+    var durTxt = function (a, b) { if (!a || !b) return ""; var m = Math.round((new Date(b) - new Date(a)) / 60000); if (!(m >= 0)) return ""; return " (" + (m >= 60 ? Math.floor(m / 60) + "h " + (m % 60) + "m" : m + "m") + ")"; };
+    var tlBits = [];
+    var tOn = fmtT(d.onThewayAt), tReach = fmtT(d.reachedAt), tDel = fmtT(d.deliveredAt);
+    if (tOn) tlBits.push("On the way " + tOn);
+    if (tReach) tlBits.push("Reached " + tReach + (d.reachedAuto ? ' <span class="badge green">auto' + (d.reachedDistanceM != null ? " · " + d.reachedDistanceM + "m" : "") + "</span>" : ' <span class="badge grey">manual</span>'));
+    if (tDel) tlBits.push("Delivered " + tDel);
+    var durLine = (d.onThewayAt && d.deliveredAt) ? ("on-the-way→delivered" + durTxt(d.onThewayAt, d.deliveredAt)) : ((d.reachedAt && d.deliveredAt) ? ("at door" + durTxt(d.reachedAt, d.deliveredAt)) : "");
+    var timelineLine = tlBits.length ? ('<div><b>Timeline</b> — ' + tlBits.join(" · ") + (durLine ? ' · <span class="muted-sm">' + durLine + "</span>" : "") + "</div>") : "";
     var detail =
       '<div class="dac-detail" style="background:rgba(0,0,0,.035);border-radius:10px;padding:12px 14px;margin:-2px 0 14px;font-size:.88rem;line-height:1.75">' +
         '<div><b>Customer</b> — ' + esc(d.customer) + (d.mobile && d.mobile !== "—" ? ' · <a href="tel:' + esc(d.mobile) + '">' + esc(d.mobile) + "</a>" : "") + "</div>" +
@@ -3239,6 +3297,7 @@
         '<div><b>Products</b> — ' + esc(d.products || "—") + "</div>" +
         '<div><b>Payment</b> — ' + esc(payMap[d.paymentStatus] || d.paymentStatus || "—") + (d.paymentMethod ? " (" + esc(d.paymentMethod) + ")" : "") + ' · <b>Invoice</b> — ' + (d.invoiceNumber ? esc(d.invoiceNumber) : "—") + "</div>" +
         '<div><b>Packing</b> — ' + esc(packMap[d.packingStatus] || d.packingStatus || "—") + ' · <b>Slot</b> — ' + esc(d.slot || "—") + ' · <b>Bottles</b> — ' + ((d.bottlesIn || 0) + "/" + (d.bottleCount || 0)) + (d.bottlesOutstanding != null ? ' · <b>Empties owed</b> — ' + d.bottlesOutstanding + (d.bottlesOutstanding > 0 ? ' <span class="badge amber">to collect</span>' : "") : "") + "</div>" +
+        timelineLine +
       "</div>";
     var statusOpts = Object.keys(DEL_STATUS).map(function (s) { return '<option value="' + s + '"' + (s === d.status ? " selected" : "") + ">" + DEL_STATUS[s][1] + "</option>"; }).join("");
     var curDrv = d.driver ? d.driver.id : "";

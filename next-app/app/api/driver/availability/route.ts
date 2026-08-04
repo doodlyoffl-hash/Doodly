@@ -11,6 +11,7 @@ import { ok, parseBody, route, Errors } from "@/lib/http";
 import { requireUserId } from "@/lib/auth/authorize";
 import { openShift, closeShift, currentShift } from "@/lib/delivery/shift";
 import { getGpsTrackingConfig } from "@/lib/delivery/gps-config";
+import { getGeofenceConfig } from "@/lib/delivery/geofence-config";
 import type { DeliveryStatus } from "@prisma/client";
 
 export const runtime = "nodejs";
@@ -30,10 +31,12 @@ export const GET = route("driver.availability.get", async (req: NextRequest) => 
   const userId = requireUserId(req);
   const d = await driverOf(userId);
   const availability = d.execStatus?.availability ?? "OFFLINE";
-  const [shift, gps] = await Promise.all([currentShift(d.id).catch(() => null), getGpsTrackingConfig().catch(() => null)]);
+  const [shift, gps, geo] = await Promise.all([currentShift(d.id).catch(() => null), getGpsTrackingConfig().catch(() => null), getGeofenceConfig().catch(() => null)]);
   // gpsConfig tells the exec app how to sample GPS (cadence + client-side filters) during a shift.
   const gpsConfig = gps ? { enabled: gps.enabled, sampleIntervalS: gps.sampleIntervalS, minMoveM: gps.minMoveM, maxAccuracyM: gps.maxAccuracyM } : null;
-  return ok({ availability, available: availability === "AVAILABLE" || availability === "RETURNED_TO_DAIRY", onTrip: (ON_TRIP as readonly string[]).includes(availability), shift, gpsConfig });
+  // geofenceConfig lets the exec app show an optimistic "arriving / auto-reach" hint (server stays authoritative).
+  const geofenceConfig = geo ? { enabled: geo.enabled, radiusM: geo.radiusM, minAccuracyM: geo.minAccuracyM, minStaySeconds: geo.minStaySeconds } : null;
+  return ok({ availability, available: availability === "AVAILABLE" || availability === "RETURNED_TO_DAIRY", onTrip: (ON_TRIP as readonly string[]).includes(availability), shift, gpsConfig, geofenceConfig });
 });
 
 const Body = z.object({ available: z.boolean(), lat: z.number().gte(-90).lte(90).optional(), lng: z.number().gte(-180).lte(180).optional() });

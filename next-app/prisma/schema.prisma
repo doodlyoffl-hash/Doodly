@@ -935,6 +935,7 @@ model Delivery {
   driverId       String?
   driver         Driver?        @relation(fields: [driverId], references: [id])
   sequence       Int?                              // stop order on the route
+  onThewayAt     DateTime?                         // when the exec tapped "On the way" (out-for-delivery timeline start)
   reachedAt      DateTime?                         // arrival time at the stop (delivery timeline)
   deliveredAt    DateTime?
   otp            String?                           // delivery OTP
@@ -965,6 +966,13 @@ model Delivery {
   etaMinutes     Int?                              // estimated arrival, minutes after leaving the warehouse
   routeSource    String?                           // "ROAD" (Directions) | "HAVERSINE" (fallback)
   actualLegKm    Float?                            // GPS-measured distance travelled since the previous stop (timeline)
+  // ---- Geofence auto-"Reached" detection (GPS proximity to the customer's verified pin) ----
+  geofenceEnteredAt DateTime?                       // first live fix seen inside the geofence (dwell clock; cleared on exit)
+  reachedAuto       Boolean   @default(false)       // true = REACHED flipped automatically by geofence · false = manual
+  reachedDistanceM  Float?                           // metres from the customer pin at the auto-arrival fix
+  reachedAccuracyM  Float?                           // GPS accuracy (metres) of the arrival fix
+  reachedLat        Float?                           // where the exec stood when auto-reached (audit / dispute)
+  reachedLng        Float?
   revenuePaise   Int?                              // recognised retail revenue for THIS delivery, frozen at completion (delivery-based P&L)
   assignment     DeliveryAssignment?
   queueEntry     AssignmentQueue?

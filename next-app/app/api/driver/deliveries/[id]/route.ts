@@ -38,7 +38,7 @@ export const PATCH = route("driver.delivery.update", async (req: NextRequest, { 
 
   const del = await db.delivery.findFirst({
     where: { id: params.id, driverId: driver.id },
-    select: { id: true, status: true, bottleCount: true, subscriptionId: true, subscription: { select: { userId: true } }, order: { select: { userId: true } } },
+    select: { id: true, status: true, bottleCount: true, subscriptionId: true, onThewayAt: true, reachedAt: true, subscription: { select: { userId: true } }, order: { select: { userId: true } } },
   });
   if (!del) throw Errors.notFound("Delivery not found on your route.");
 
@@ -70,10 +70,16 @@ export const PATCH = route("driver.delivery.update", async (req: NextRequest, { 
   }
 
   // Non-completion status / field update.
+  // Timeline parity with the exec app: first "On the way" flip stamps onThewayAt + arms a fresh
+  // geofence dwell clock; a manual "Reached" stamps the arrival time once (first REACHED wins).
+  const startOnway = body.status === "ON_THE_WAY" && del.status !== "ON_THE_WAY";
+  const stampReached = body.status === "REACHED" && !del.reachedAt;
   const delivery = await db.delivery.update({
     where: { id: del.id },
     data: {
       ...(body.status !== undefined ? { status: body.status } : {}),
+      ...(startOnway ? { onThewayAt: del.onThewayAt ?? new Date(), geofenceEnteredAt: null } : {}),
+      ...(stampReached ? { reachedAt: new Date() } : {}),
       ...(body.bottlesIn !== undefined ? { bottlesIn: body.bottlesIn } : {}),
       ...(body.bottlesOut !== undefined ? { bottlesOut: body.bottlesOut } : {}),
       ...(body.cashCollected !== undefined ? { cashCollected: body.cashCollected } : {}),

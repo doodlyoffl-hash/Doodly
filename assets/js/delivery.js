@@ -182,9 +182,17 @@ window.DOODLY_DELIVERY = (function () {
   let _gpsWatch = null, _gpsFlush = null, _gpsLastCap = null, _gpsBusy = false, _gpsOnlineWired = false;
   let _gpsStats = null;      // { actualDistanceKm, gpsPointCount } from the latest /track response
   let _gpsPlannedKm = 0;     // planned round-trip (route optimiser) — set by render(), used for live efficiency
+  let _curStop = null;       // the current unresolved stop — published by render() for the GPS layer
+  let _applyArrivals = null; // hook set by render() → reflect server-side geofence auto-arrivals in the UI
   function gpsCfg() {
     const c = (_avail && _avail.gpsConfig) || {};
     return { enabled: c.enabled !== false, sampleIntervalS: c.sampleIntervalS || 6, minMoveM: c.minMoveM || 8, maxAccuracyM: c.maxAccuracyM || 100 };
+  }
+  // Auto-"Reached" geofence policy the server enforces (radius/accuracy) — the exec app uses it
+  // only to flush eagerly when closing in on a stop; the SERVER stays authoritative for the flip.
+  function geoReachCfg() {
+    const c = (_avail && _avail.geofenceConfig) || {};
+    return { enabled: c.enabled !== false, radiusM: c.radiusM || 50, minAccuracyM: c.minAccuracyM || 50 };
   }
   function gpsClientId() { try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {} return "gps-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8); }
   function gpsQLoad() { try { return JSON.parse(localStorage.getItem("doodly-gps-queue") || "[]"); } catch (e) { return []; } }
@@ -202,6 +210,13 @@ window.DOODLY_DELIVERY = (function () {
     const q = gpsQLoad();
     q.push({ lat: c.latitude, lng: c.longitude, accuracyM: (c.accuracy != null ? c.accuracy : null), speed: (c.speed != null ? c.speed : null), capturedAt: new Date(t).toISOString(), clientId: gpsClientId() });
     gpsQSave(q);
+    // Closing in on the current stop → flush now so the server can auto-detect arrival promptly
+    // (dwell + accuracy still gated server-side), instead of waiting for the periodic timer.
+    try {
+      const gc = geoReachCfg();
+      if (gc.enabled && _curStop && _curStop.lat != null && (c.accuracy == null || c.accuracy <= gc.minAccuracyM)
+        && gpsHavM({ lat: c.latitude, lng: c.longitude }, { lat: _curStop.lat, lng: _curStop.lng }) <= Math.max(150, gc.radiusM * 3)) { flushGps(); return; }
+    } catch (e) { /* proximity nudge is best-effort */ }
     if (q.length >= 12) flushGps();                                           // send in small batches while moving
   }
   function flushGps() {
@@ -212,6 +227,8 @@ window.DOODLY_DELIVERY = (function () {
     return API().post("/api/delivery/track", { points: batch }).then((r) => {
       gpsQSave(gpsQLoad().slice(batch.length));                               // drop only the batch we sent (queue may have grown)
       if (r && r.actualDistanceKm != null) { _gpsStats = { actualDistanceKm: r.actualDistanceKm, gpsPointCount: r.gpsPointCount }; paintGps(); }
+      // Automatic "Reached Customer": the server auto-flipped these stops → reflect them instantly.
+      if (r && r.arrivals && r.arrivals.length && _applyArrivals) { try { _applyArrivals(r.arrivals); } catch (e) {} }
       _gpsBusy = false;
       return gpsQLoad().length ? flushGps() : batch.length;                   // keep draining a backlog
     }).catch(() => { _gpsBusy = false; return 0; });                          // offline / error → keep the queue, retry on timer or `online`
@@ -382,14 +399,22 @@ window.DOODLY_DELIVERY = (function () {
         if (cur.legMin != null) bits.push(`~${cur.legMin} min`);
         if (cur.distanceFromWarehouseKm != null) bits.push(`${Number(cur.distanceFromWarehouseKm).toFixed(1)} km from warehouse`);
       }
-      return `<div class="dl-card dl-navcard">
-        <div class="dl-navcard-h"><span class="dl-navcard-tag">Current stop · #${cur.seq}</span>${cur.noCoords ? '<span class="badge amber">Location not pinned</span>' : ""}<span class="dl-navcard-prog">${s.done}/${s.total} done</span></div>
+      // Once the geofence auto-reaches (or the exec taps Reached), pause navigation and switch the
+      // card to the hand-over → Delivered prompt. "Delivered" is always a manual confirmation.
+      const reached = stStatus(st, cur.id) === "reached";
+      const arrInfo = cur.reachedAt ? `${cur.reachedAuto ? "Auto-reached" : "Arrived"} ${fmtHM(cur.reachedAt)}${cur.reachedAuto && cur.reachedDistanceM != null ? ` · ${cur.reachedDistanceM} m from door` : ""}` : "You've arrived";
+      return `<div class="dl-card dl-navcard${reached ? " arrived" : ""}">
+        <div class="dl-navcard-h"><span class="dl-navcard-tag${reached ? " ok" : ""}">${reached ? `${svg("check", 14)} Reached · #${cur.seq}` : `Current stop · #${cur.seq}`}</span>${cur.noCoords ? '<span class="badge amber">Location not pinned</span>' : ""}<span class="dl-navcard-prog">${s.done}/${s.total} done</span></div>
         <div class="dl-navcard-name">${esc(cur.name)}</div>
         <div class="dl-navcard-addr">${svg("pin", 13)} ${esc(cur.address)}</div>
-        ${bits.length ? `<div class="dl-navcard-meta">${bits.map((b) => `<span>${b}</span>`).join("")}</div>` : ""}
+        ${reached
+          ? `<div class="dl-navcard-meta"><span>${svg("check", 12)} ${esc(arrInfo)} — hand over &amp; collect empties, then confirm delivery</span></div>`
+          : (bits.length ? `<div class="dl-navcard-meta">${bits.map((b) => `<span>${b}</span>`).join("")}</div>` : "")}
         <div class="dl-navcard-btns">
-          <a class="btn btn-primary"${cur.noCoords ? ' aria-disabled="true" style="opacity:.5;pointer-events:none"' : ` href="${curNav}" target="_blank" rel="noopener"`}>${svg("nav", 16)} Navigate to stop</a>
-          <button class="btn btn-ghost" data-navroute>${svg("nav", 15)} Navigate route</button>
+          ${reached
+            ? `<button class="btn btn-primary" data-next="${cur.id}">${svg("check", 16)} Mark delivered</button>`
+            : `<a class="btn btn-primary"${cur.noCoords ? ' aria-disabled="true" style="opacity:.5;pointer-events:none"' : ` href="${curNav}" target="_blank" rel="noopener"`}>${svg("nav", 16)} Navigate to stop</a>
+          <button class="btn btn-ghost" data-navroute>${svg("nav", 15)} Navigate route</button>`}
           <button class="btn btn-ghost" id="dlGoCur">View stop details</button>
         </div>
         <div class="dl-navcard-next">${nxt ? `${svg("nav", 12)} Next: <b>#${nxt.seq} ${esc(nxt.name)}</b>${nxt.noCoords ? " · 📍 location not pinned" : (nxt.legKm != null ? ` · ${Number(nxt.legKm).toFixed(1)} km further` : "")}` : "This is your final stop before returning to the warehouse."}</div>
@@ -399,6 +424,8 @@ window.DOODLY_DELIVERY = (function () {
     function render() {
       const s = summary();
       _gpsPlannedKm = s.plannedKm;                    // feed the live route-efficiency readout
+      _curStop = currentStop();                       // publish to the GPS layer (eager-flush near the stop)
+      _applyArrivals = applyArrivals;                 // and the auto-"Reached" reflection hook
       host.innerHTML = `
         <div class="dl-hero">
           <div><div class="dl-greet">Good morning, ${esc(_live ? String((_live.driver || {}).name || "Executive").split(/\s+/)[0] : "Executive")} 👋</div>
@@ -497,7 +524,7 @@ window.DOODLY_DELIVERY = (function () {
           const arr = s2.reachedAt, dep = s2.deliveredAt, leg = s2.actualLegKm;
           if (arr == null && leg == null) return "";
           const bits = [];
-          if (arr) bits.push(`Arrived ${fmtHM(arr)}`);
+          if (arr) bits.push(`${s2.reachedAuto ? "Auto-reached" : "Arrived"} ${fmtHM(arr)}${s2.reachedAuto && s2.reachedDistanceM != null ? ` (${s2.reachedDistanceM} m from door)` : ""}`);
           if (dep) bits.push(`Departed ${fmtHM(dep)}`);
           if (leg != null) { bits.push(`${Number(leg).toFixed(1)} km GPS leg`); const cum = cumulativeActualKm(s2); if (cum > 0) bits.push(`${cum.toFixed(1)} km cumulative`); }
           return bits.length ? `<div class="dl-timeline">${svg("nav", 11)} ${bits.join(" · ")}</div>` : "";
@@ -537,6 +564,25 @@ window.DOODLY_DELIVERY = (function () {
     function setStatus(id, status) {
       st[id] = Object.assign({}, st[id], { status }); save(st);
       if (_live && (status === "onway" || status === "reached")) postStop(id, { action: "status", status: status });
+    }
+    // Reflect a server-side automatic "Reached Customer" event (from the /track response). The
+    // server is authoritative + idempotent, so this only advances a stop the exec hasn't resolved;
+    // it never re-POSTs (no double-fire) and never marks Delivered (that stays a manual tap).
+    function applyArrivals(events) {
+      if (!host || !host.isConnected || !Array.isArray(events) || !events.length || !_live) return;
+      let changed = false;
+      events.forEach((ev) => {
+        const s2 = all.find((x) => x.id === ev.deliveryId);
+        if (!s2) return;
+        const cur = stStatus(st, s2.id);
+        if (isResolved(cur) || cur === "reached") return;         // already advanced — nothing to do
+        st[s2.id] = Object.assign({}, st[s2.id], { status: "reached" });
+        s2.status = "reached"; s2.reachedAt = ev.reachedAt; s2.reachedAuto = true; s2.reachedDistanceM = ev.distanceM;
+        changed = true;
+        toast("📍 Reached " + (s2.name || "customer") + " automatically — hand over, collect empties, then tap Delivered");
+        try { if (window.DOODLY_SOUND && DOODLY_SOUND.play) DOODLY_SOUND.play("toast"); } catch (e) {}
+      });
+      if (changed) { save(st); render(); }
     }
     function setBottles(id, n) { const s2 = all.find((x) => x.id === id); st[id] = Object.assign({}, st[id], { bottles: Math.max(0, Math.min(stOwed(s2), n)) }); save(st); }
     // Record a door outcome (can't deliver). Maps to the server's outcome action + local resolved state.

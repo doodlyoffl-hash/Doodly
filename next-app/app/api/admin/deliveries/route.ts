@@ -52,6 +52,7 @@ export const GET = route("admin.deliveries.list", async (req: NextRequest) => {
     select: {
       id: true, orderId: true, date: true, status: true, packingStatus: true, slot: true, sequence: true, kind: true, userId: true,
       bottleCount: true, bottlesIn: true, cashCollected: true, customerRemark: true,
+      onThewayAt: true, reachedAt: true, deliveredAt: true, reachedAuto: true, reachedDistanceM: true,   // arrival timeline (geofence)
       distanceKm: true, travelTimeMin: true, routeStatus: true, distanceSource: true,   // warehouse distance engine
       user: { select: { id: true, name: true, phone: true } },   // direct customer (bottle-return PICKUP)
       driver: { select: { id: true, employeeId: true, user: { select: { name: true } } } },
@@ -96,6 +97,9 @@ export const GET = route("admin.deliveries.list", async (req: NextRequest) => {
       addressId: addr?.id ?? null,
       lat: addr?.lat ?? null, lng: addr?.lng ?? null, deliveryNote: addr?.deliveryNote ?? null,
       distanceKm: d.distanceKm, travelTimeMin: d.travelTimeMin, routeStatus: d.routeStatus, distanceSource: d.distanceSource,
+      // arrival timeline (Step 8): on-the-way / reached / delivered + how "reached" was detected
+      onThewayAt: d.onThewayAt, reachedAt: d.reachedAt, deliveredAt: d.deliveredAt,
+      reachedAuto: d.reachedAuto ?? false, reachedDistanceM: d.reachedDistanceM != null ? Math.round(d.reachedDistanceM) : null,
       driver: d.driver ? { id: d.driver.id, name: d.driver.user.name, employeeId: d.driver.employeeId } : null,
       route: d.route ? (d.route.code || d.route.name || null) : null,
       products: isPickup ? "Empty bottle collection" : (products || "—"),

@@ -200,11 +200,15 @@ export interface GpsTrackPoint {
   capturedAt: string;   // ISO
   clientId: string;     // idempotency key per reading
 }
+/** A stop the geofence auto-flipped to REACHED while this batch was ingested. */
+export interface TrackArrival { deliveryId: string; reachedAt: string; distanceM: number; accuracyM: number | null; }
 export interface TrackResult {
   shiftId: string | null;
   accepted: number;
   actualDistanceKm: number;
   gpsPointCount: number;
+  /** Automatic "Reached Customer" arrivals detected server-side over this batch. */
+  arrivals?: TrackArrival[];
 }
 
 /** Stream a BATCH of GPS fixes for the OPEN shift. Queued offline (FIFO); every

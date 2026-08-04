@@ -59,9 +59,19 @@ export const POST = route("delivery.stop", async (req: NextRequest, { params }: 
     const next = body.status === "reached" ? "REACHED" : "ON_THE_WAY";
     // Stamp the arrival time once (delivery timeline) — first REACHED wins, never overwritten.
     const stampReached = next === "REACHED" && !delivery.reachedAt;
-    await db.delivery.update({ where: { id: delivery.id }, data: { status: next, ...(stampReached ? { reachedAt: new Date() } : {}) } });
+    // First "On the way" flip: stamp the timeline start + arm a fresh geofence dwell clock so the
+    // auto-"Reached Customer" detector (POST /api/delivery/track) can take over from here.
+    const startOnway = next === "ON_THE_WAY" && delivery.status !== "ON_THE_WAY";
+    await db.delivery.update({
+      where: { id: delivery.id },
+      data: {
+        status: next,
+        ...(stampReached ? { reachedAt: new Date() } : {}),
+        ...(startOnway ? { onThewayAt: delivery.onThewayAt ?? new Date(), geofenceEnteredAt: null } : {}),
+      },
+    });
     // Tell the customer their milk is en route (only on the first en-route flip, not on "reached").
-    if (next === "ON_THE_WAY" && delivery.status !== "ON_THE_WAY" && custId) {
+    if (startOnway && custId) {
       try { await notifyOutForDelivery(custId); } catch { /* non-blocking */ }
     }
     return ok({ status: body.status });

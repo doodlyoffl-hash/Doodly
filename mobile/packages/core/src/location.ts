@@ -43,11 +43,15 @@ export async function getDeviceLocation(): Promise<DeviceFix> {
 export interface TrackerFix {
   lat: number; lng: number; accuracyM: number | null; speed: number | null; capturedAt: string; clientId: string;
 }
+/** A stop the server auto-flipped to REACHED (geofence) while ingesting a track batch. */
+export interface TrackerArrival { deliveryId: string; reachedAt: string; distanceM: number; accuracyM: number | null; }
 export interface ShiftTrackerOptions {
   sampleIntervalS?: number;   // min seconds between fixes (default 6)
   minMoveM?: number;          // min metres between fixes (default 8)
   batchSize?: number;         // flush after N buffered fixes (default 12)
   onBatch: (points: TrackerFix[]) => Promise<unknown>;
+  /** Called when a batch response reports automatic "Reached Customer" arrivals (server-authoritative). */
+  onArrivals?: (arrivals: TrackerArrival[]) => void;
 }
 
 let _seq = 0;
@@ -60,12 +64,14 @@ export class ShiftGpsTracker {
   private readonly minMoveM: number;
   private readonly batchSize: number;
   private readonly onBatch: (points: TrackerFix[]) => Promise<unknown>;
+  private readonly onArrivals?: (arrivals: TrackerArrival[]) => void;
 
   constructor(opts: ShiftTrackerOptions) {
     this.sampleIntervalS = opts.sampleIntervalS ?? 6;
     this.minMoveM = opts.minMoveM ?? 8;
     this.batchSize = opts.batchSize ?? 12;
     this.onBatch = opts.onBatch;
+    this.onArrivals = opts.onArrivals;
   }
 
   /** Begin tracking. Returns false when foreground permission is denied. */
@@ -86,11 +92,19 @@ export class ShiftGpsTracker {
     if (this.buf.length >= this.batchSize) void this.flush();
   }
 
-  /** Send the buffered fixes. onBatch already queues offline, so this only re-buffers on a hard error. */
+  /** Send the buffered fixes. onBatch already queues offline, so this only re-buffers on a hard error.
+      When the batch response reports automatic "Reached Customer" arrivals, forward them to onArrivals. */
   async flush(): Promise<void> {
     if (!this.buf.length) return;
     const batch = this.buf.splice(0, 500);
-    try { await this.onBatch(batch); }
+    try {
+      const res = await this.onBatch(batch);
+      if (this.onArrivals) {
+        const r = res as { data?: { arrivals?: TrackerArrival[] }; arrivals?: TrackerArrival[] } | null | undefined;
+        const events = r?.data?.arrivals ?? r?.arrivals;
+        if (Array.isArray(events) && events.length) this.onArrivals(events);
+      }
+    }
     catch { this.buf.unshift(...batch); }
   }
 

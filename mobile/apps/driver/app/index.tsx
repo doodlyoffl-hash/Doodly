@@ -26,12 +26,15 @@ export default function DashboardScreen() {
   const [pending, setPending] = useState(0);
   const [online, setOnline] = useState(true);
   const trackerRef = useRef<ShiftGpsTracker | null>(null);
+  const loadRef = useRef<() => void>(() => {});   // always points at the latest load() for the GPS tracker's onArrivals
 
   // Continuous GPS distance tracking (foreground). The server computes the
   // fraud-filtered km; the tracker only samples + forwards batches (queued offline).
   const startTracking = useCallback((cfg?: GpsTrackingConfig | null) => {
     if (trackerRef.current || cfg?.enabled === false) return;
-    const t = new ShiftGpsTracker({ sampleIntervalS: cfg?.sampleIntervalS, minMoveM: cfg?.minMoveM, onBatch: postTrack });
+    // onArrivals: the server auto-flipped a stop to REACHED from our GPS stream → refresh the
+    // numbers (the route screen shows the per-stop status). "Delivered" stays a manual tap.
+    const t = new ShiftGpsTracker({ sampleIntervalS: cfg?.sampleIntervalS, minMoveM: cfg?.minMoveM, onBatch: postTrack, onArrivals: () => { void loadRef.current(); } });
     trackerRef.current = t;
     void t.start().catch(() => {});
   }, []);
@@ -58,6 +61,7 @@ export default function DashboardScreen() {
       setLoading(false);
     }
   }, []);
+  loadRef.current = load;   // keep the tracker's onArrivals refresh pointed at the current load()
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => onQueueChange(({ pending }) => setPending(pending)), []);

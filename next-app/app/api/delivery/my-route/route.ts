@@ -136,7 +136,10 @@ export const GET = route("delivery.myRoute", async (req: NextRequest) => {
       status: STATUS_MAP[d.status] ?? "assigned",
       slot: d.slot, deliveredAt: d.deliveredAt,
       // ---- delivery timeline (GPS) ----
+      onThewayAt: d.onThewayAt,                                          // when the exec tapped "On the way"
       reachedAt: d.reachedAt,                                            // arrival at the door
+      reachedAuto: d.reachedAuto ?? false,                              // arrival detected automatically by geofence
+      reachedDistanceM: d.reachedDistanceM != null ? Math.round(d.reachedDistanceM) : null,  // metres from the pin at auto-arrival
       actualLegKm: d.actualLegKm != null ? round2(d.actualLegKm) : null, // GPS distance travelled to reach this stop
       // route-optimisation metrics (warehouse-anchored, populated by the optimiser)
       legKm: d.legDistanceKm != null ? round2(d.legDistanceKm) : null,   // from the previous stop (warehouse → first)

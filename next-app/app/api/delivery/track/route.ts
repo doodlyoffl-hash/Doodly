@@ -8,7 +8,9 @@ import { db } from "@/lib/db";
 import { ok, parseBody, route, Errors } from "@/lib/http";
 import { requireUserId } from "@/lib/auth/authorize";
 import { readRole } from "@/lib/auth/identity";
+import { reqContext } from "@/lib/auth/request";
 import { ingestGpsPoints } from "@/lib/delivery/gps-track";
+import { detectArrivals } from "@/lib/delivery/geofence";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,5 +33,10 @@ export const POST = route("delivery.track", async (req: NextRequest) => {
   if (!driver) throw Errors.notFound("No delivery-executive profile is linked to this account.");
 
   const body = await parseBody(req, Body);
-  return ok(await ingestGpsPoints(driver.id, body.points));
+  const result = await ingestGpsPoints(driver.id, body.points);
+  // Automatic "Reached Customer" geofence detection over the same batch (server-authoritative,
+  // offline-replay-safe). Returns any stops that just auto-flipped to REACHED so the exec app
+  // can reflect them instantly. "Delivered" stays a manual action.
+  const arrivals = await detectArrivals(driver.id, body.points, { userId, role, ctx: reqContext(req) });
+  return ok({ ...result, arrivals });
 });
