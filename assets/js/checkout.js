@@ -29,7 +29,7 @@ window.DOODLY_CHECKOUT = (function () {
   // The payment instrument (UPI / Card / Net Banking / Wallet) is chosen on
   // Razorpay's hosted popup — NOT on this page — so there is no on-page method list.
 
-  let mount, coPicker, state = { step: 0, slot: 0, addr: 0, reached: 0, coupon: null, useWallet: false, walletPaise: 0, autopay: false, ownership: null, extraBottles: 0 };
+  let mount, coPicker, state = { step: 0, slot: 0, addr: 0, reached: 0, coupon: null, useWallet: false, walletPaise: 0, autopay: false, ownership: null, extraBottles: 0, unavailable: 0, unavailableReason: "lost" };
 
   /* ---------------- markup ---------------- */
   function stepperHTML() {
@@ -218,6 +218,15 @@ window.DOODLY_CHECKOUT = (function () {
             : '<div class="muted-sm" style="margin-top:4px">Deposit for ' + dep.depositBottles + ' new bottle' + (dep.depositBottles === 1 ? "" : "s") + '.</div>') +
           '<div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="muted-sm">➕ Request additional spare bottles</span>' +
           '<button type="button" class="btn btn-ghost sm" id="coExtraDec">−</button><b id="coExtraN">' + (state.extraBottles || 0) + '</b><button type="button" class="btn btn-ghost sm" id="coExtraInc">+</button></div>' +
+          // Step 3 — lost / broken / kept: no longer have the bottle → a replacement deposit is charged.
+          '<div style="margin-top:8px;border-top:1px dashed rgba(0,0,0,.12);padding-top:6px">' +
+            '<label class="muted-sm" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="coUnavail"' + (state.unavailable ? " checked" : "") + '> I don\'t have my previous bottle(s)</label>' +
+            (state.unavailable
+              ? '<div style="margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span class="muted-sm">Reason</span><select class="input" id="coUnavailReason" style="max-width:170px">' +
+                  [["lost", "Lost"], ["broken", "Broken"], ["kept", "Kept permanently"], ["other", "Other"]].map(function (r) { return '<option value="' + r[0] + '"' + (state.unavailableReason === r[0] ? " selected" : "") + ">" + r[1] + "</option>"; }).join("") +
+                '</select></div><div class="muted-sm" style="margin-top:4px">A refundable replacement deposit is charged for the ' + owned + ' bottle' + (owned === 1 ? "" : "s") + ' you no longer have.</div>'
+              : "") +
+          '</div>' +
           '</div>';
       }
       return '<div class="co-own" style="margin:10px 0;padding:10px 12px;border-radius:10px;background:rgba(163,91,18,.08)">' +
@@ -373,7 +382,7 @@ window.DOODLY_CHECKOUT = (function () {
   }
   function hydrateOwnership() {
     if (!coSignedIn() || !window.DOODLY_API) { state.ownership = null; return; }
-    DOODLY_API.get("/api/checkout/deposit-preview?bottles=" + requiredBottles() + "&extra=" + (state.extraBottles || 0))
+    DOODLY_API.get("/api/checkout/deposit-preview?bottles=" + requiredBottles() + "&extra=" + (state.extraBottles || 0) + (state.unavailable ? "&unavailable=" + state.unavailable + "&reason=" + state.unavailableReason : ""))
       .then(function (r) { state.ownership = r || null; refreshSummary(); })
       .catch(function () { state.ownership = null; });
   }
@@ -474,6 +483,8 @@ window.DOODLY_CHECKOUT = (function () {
       variantId: sub.variantId, planId: sub.planId || undefined,
       bottles: requiredBottles(),
       extraBottles: (state.extraBottles || 0) > 0 ? state.extraBottles : undefined,
+      unavailableBottles: (state.unavailable || 0) > 0 ? state.unavailable : undefined,
+      unavailableReason: (state.unavailable || 0) > 0 ? state.unavailableReason : undefined,
       autopay: autopay,
       couponCode: (!autopay && state.coupon) ? state.coupon.code : undefined,
       walletAmountPaise: walletIntent > 0 ? walletIntent : undefined,
@@ -667,6 +678,8 @@ window.DOODLY_CHECKOUT = (function () {
       if (t.closest(".co-coupon-apply")) { applyCoupon(); return; }
       if (t.closest("#coExtraInc")) { state.extraBottles = (state.extraBottles || 0) + 1; hydrateOwnership(); return; }
       if (t.closest("#coExtraDec")) { state.extraBottles = Math.max(0, (state.extraBottles || 0) - 1); hydrateOwnership(); return; }
+      var uch = t.closest("#coUnavail");
+      if (uch) { var owned = (state.ownership && state.ownership.ownership && state.ownership.ownership.owned) || 0; state.unavailable = uch.checked ? owned : 0; if (state.unavailable && !state.unavailableReason) state.unavailableReason = "lost"; hydrateOwnership(); return; }
       if (t.closest(".co-next")) {
         if (t.closest(".co-pay")) { pay(); return; }
         if (state.step === 1 && !addrChosen()) { showAddrReq(true); return; }   // an address MUST be selected first
@@ -697,6 +710,7 @@ window.DOODLY_CHECKOUT = (function () {
       const t = e.target;
       if (t.id === "coUseWallet") { state.useWallet = t.checked; recalcPromo(); return; }
       if (t.id === "apEnable") { state.autopay = t.checked; recalcPromo(); return; }
+      if (t.id === "coUnavailReason") { state.unavailableReason = t.value; hydrateOwnership(); return; }
     });
   }
   function ripple(el, e) {
@@ -865,7 +879,7 @@ window.DOODLY_CHECKOUT = (function () {
       }
     } catch (e) {}
     mount.dataset.built = "1";
-    state = { step: 0, slot: 0, addr: 0, addrId: null, reached: 0, realOrder: null, coupon: null, useWallet: false, walletPaise: 0, autopay: false, ownership: null, extraBottles: 0 };
+    state = { step: 0, slot: 0, addr: 0, addrId: null, reached: 0, realOrder: null, coupon: null, useWallet: false, walletPaise: 0, autopay: false, ownership: null, extraBottles: 0, unavailable: 0, unavailableReason: "lost" };
     build(); wire();
     try { hydrateAddresses(); } catch (e) {}   // signed-in customer → real saved addresses + map pin
     try { hydrateOwnership(); } catch (e) {}    // smart bottle deposit — held-aware (existing owners pay ₹0 new)

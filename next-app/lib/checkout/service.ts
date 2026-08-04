@@ -25,7 +25,7 @@ import { maybeAwardReferralForPaidOrder } from "@/lib/referrals/service";
 import { earn } from "@/lib/loyalty/service";
 import { notify, notifyOrderConfirmed } from "@/lib/notifications/dispatch";
 import { audit } from "@/lib/auth/audit";
-import { depositForCheckout } from "@/lib/bottles/ownership";
+import { depositForCheckout, recordBottleUnavailability } from "@/lib/bottles/ownership";
 import { assertDeliverableAddress } from "@/lib/addresses/deliverable";
 import type { ReqContext } from "@/lib/auth/request";
 
@@ -37,6 +37,8 @@ export interface CheckoutInput {
   planId?: string;
   bottles?: number;
   extraBottles?: number;                    // voluntary spare bottles beyond the plan requirement (deposit charged)
+  unavailableBottles?: number;              // owned bottles the customer no longer has (lost/broken/kept) — replacement charged
+  unavailableReason?: "lost" | "broken" | "kept" | "other";
   method?: "upi" | "card" | "netbanking" | "wallet" | "cod";  // instrument chosen in the Razorpay popup
   autopay?: boolean;                        // opt-in recurring mandate (subscription plans only)
   couponCode?: string;                      // optional coupon (validated + applied server-side)
@@ -77,7 +79,7 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
   // extras. Existing owners renewing pay ₹0; new customers / owners who returned everything
   // pay the mandatory deposit. Single per-bottle rate from bottle.deposit.config (charge +
   // refund unified). Never charges twice for a bottle the customer already owns.
-  const dep = await depositForCheckout({ userId, requiredBottles: bottles, extraBottles: input.extraBottles });
+  const dep = await depositForCheckout({ userId, requiredBottles: bottles, extraBottles: input.extraBottles, unavailableBottles: input.unavailableBottles, unavailableReason: input.unavailableReason ?? null });
   const depositPaise = dep.depositPaise;
   const isSubscriptionOrder = variant.type === "SUBSCRIPTION" || variant.type === "TRIAL";
   // quote() prices ONE bottle per delivery (dailyPaise × days) — it takes no quantity.
@@ -247,7 +249,13 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
   }, TX);
 
   // Smart-deposit decision trail (Step 12): why this order was / wasn't charged a deposit.
-  await audit({ userId, actorRole: "customer", action: "bottle.deposit.smart", target: `order ${order.id} · owned ${dep.ownedBottles} · required ${dep.requiredBottles} · new ${dep.depositBottles} · ₹${Math.round(dep.depositPaise / 100)} · ${dep.reason}`, ctx }).catch(() => {});
+  await audit({ userId, actorRole: "customer", action: "bottle.deposit.smart", target: `order ${order.id} · owned ${dep.ownedBottles} · reuse ${dep.reuseBottles} · replacement ${dep.replacementBottles} · new ${dep.depositBottles} · ₹${Math.round(dep.depositPaise / 100)} · ${dep.reason}`, ctx }).catch(() => {});
+  // Step 3 — the customer declared they no longer have some owned bottles (lost/broken/kept):
+  // write them off (held drops, so the replacement deposit charged above is justified) + audit.
+  // Idempotent by orderId, so a checkout retry / re-place never double-writes.
+  if (dep.unavailableBottles > 0 && dep.unavailableReason) {
+    await recordBottleUnavailability({ userId, qty: dep.unavailableBottles, reason: dep.unavailableReason, orderId: order.id, subscriptionId, actorId: userId, actorRole: "customer" }).catch(() => {});
+  }
 
   const base = { orderId: order.id, number: num(order.id), totalPaise, depositPaise, subscriptionId, type: orderType, couponDiscountPaise, walletAppliedPaise, payablePaise, bottleOwnership: { owned: dep.ownedBottles, newBottles: dep.depositBottles, reason: dep.reason } };
 
