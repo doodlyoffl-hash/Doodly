@@ -4853,13 +4853,14 @@
     function kindBadge(k) { var m = TXKIND[k] || ["grey", k]; return '<span class="badge ' + m[0] + '">' + e2(m[1]) + "</span>"; }
     function ledgerTab() {
       var q = st.tq.toLowerCase();
+      var custLabel = function (t) { return t.customerName || t.customerPhone || (t.customerId ? "#" + String(t.customerId).slice(-6) : ""); };
       var rows = st.txns.filter(function (t) {
         if (st.tfilter !== "all" && (t.type || "").toUpperCase() !== st.tfilter) return false;
         if (!q) return true;
-        return ((t.customerName || "") + " " + (t.reference || "") + " " + (t.reason || "") + " " + (t.orderId || "") + " " + (t.userId || "")).toLowerCase().indexOf(q) >= 0;
+        return ((t.customerName || "") + " " + (t.customerPhone || "") + " " + (t.reference || "") + " " + (t.reason || "") + " " + (t.orderId || "") + " " + (t.customerId || t.userId || "")).toLowerCase().indexOf(q) >= 0;
       }).slice(0, 400);
       var body = rows.map(function (t) {
-        return "<tr><td>" + dtm(t.createdAt) + "</td><td>" + e2(t.customerName || "—") + "</td>" +
+        return "<tr><td>" + dtm(t.createdAt) + "</td><td>" + e2(custLabel(t) || "—") + "</td>" +
           '<td><span class="badge ' + (t.type === "CREDIT" ? "green" : "amber") + '">' + (t.type === "CREDIT" ? "＋" : "−") + "</span></td>" +
           "<td>" + kindBadge(t.kind) + "</td>" +
           '<td style="text-align:right' + (t.type === "CREDIT" ? ";color:var(--leaf-600,#178a52)" : "") + '">' + (t.type === "CREDIT" ? "+" : "−") + rup(t.amountPaise) + "</td>" +

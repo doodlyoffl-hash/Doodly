@@ -632,7 +632,10 @@ export async function listAllTransactions(args: { from?: string | Date; to?: str
     },
   });
   const reversedIds = new Set(rows.filter((r) => r.reversedTxnId).map((r) => r.reversedTxnId as string));
-  return rows.map((r) => ({ ...r, reversed: reversedIds.has(r.id) }));
+  // Flatten the joined customer so the admin ledger (which reads t.customerName / t.customerPhone)
+  // and its search actually show WHO each credit/debit belongs to — the nested `user` shape left
+  // the Customer column blank ("—"). Every WalletTxn.userId is non-null, so a customer always exists.
+  return rows.map((r) => ({ ...r, reversed: reversedIds.has(r.id), customerName: r.user?.name ?? null, customerPhone: r.user?.phone ?? null, customerId: r.userId }));
 }
 
 /** Full admin view of one customer's wallet: profile + balance + history + referral + trial. */

@@ -38,7 +38,7 @@ async function ledgerReport(key: WalletReportKey, title: string, where: Prisma.W
   return mk(key, {
     title, subtitle: `${rows.length} transaction(s) · credited ${rup(cr)} · net ${rup(total)}`,
     columns: [{ label: "Date" }, { label: "Customer" }, { label: "Type" }, { label: "Amount", right: true }, { label: "Reason" }, { label: "Reference" }],
-    rows: rows.map((r) => [dtm(r.createdAt), r.user?.name ?? "—", r.type, rup(r.amountPaise), r.reason, r.reference]),
+    rows: rows.map((r) => [dtm(r.createdAt), r.user?.name ?? r.user?.phone ?? "—", r.type, rup(r.amountPaise), r.reason, r.reference]),
     totalRow: ["TOTAL", "", "", rup(cr), "", ""],
   });
 }
