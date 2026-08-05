@@ -169,7 +169,10 @@ export async function puzzleOverview(userId: string | null) {
       : null;
     currentView = {
       id: current.id, monthIndex: current.monthIndex, title: current.title, theme: current.theme,
-      imageUrl: current.imageUrl, size: current.size, phase,
+      // Link to the cacheable image endpoint instead of inlining the ~50KB base64 data URI on
+      // every poll. Versioned by updatedAt so a re-upload busts the cache. null → theme SVG art.
+      imageUrl: current.imageUrl ? `/api/puzzles/${current.id}/image?v=${current.updatedAt.getTime()}` : null,
+      size: current.size, phase,
       unlockAt: current.unlockAt, closeAt: current.closeAt, winnerAt: current.winnerAt,
       participants, completed, leaderboard: lb,
       interested, myInterest,

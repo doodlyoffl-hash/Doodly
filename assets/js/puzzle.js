@@ -187,7 +187,13 @@ window.DOODLY_PUZZLE = (function () {
     },
   };
   function artUrl(p) {
-    if (p && p.imageUrl) return p.imageUrl;
+    if (p && p.imageUrl) {
+      var u = String(p.imageUrl);
+      // The game overview links to the cacheable image endpoint with a ROOT-RELATIVE path —
+      // resolve it against the API backend origin. data: URIs (admin) / absolute URLs pass through.
+      if (u.charAt(0) === "/") { try { return (window.DOODLY_API && DOODLY_API.base ? DOODLY_API.base() : "") + u; } catch (e) { return u; } }
+      return u;
+    }
     var key = p && ART[p.theme] ? p.theme : "logo";
     return "data:image/svg+xml," + encodeURIComponent(ART[key]());
   }
