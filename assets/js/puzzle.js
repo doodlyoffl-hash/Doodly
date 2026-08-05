@@ -27,15 +27,25 @@ window.DOODLY_PUZZLE = (function () {
 
   /* ---------------- server state ---------------- */
   var _ov = null, _ovAt = 0, _loading = null, _skewMs = 0;
+  var _gameRetries = 0, _gameRetryTimer = null;   // resilient auto-retry for the game page
+  // One overview fetch, with a short backoff retry for TRANSIENT failures (cold start / a
+  // momentary 5xx or network blip — e.g. a backend redeploy window). Resolves to the data or null.
+  function fetchOverview(tries) {
+    return API().get("/api/puzzles").then(function (d) {
+      _ov = d; _ovAt = Date.now();
+      try { _skewMs = new Date(d.serverNow).getTime() - Date.now(); } catch (e) { _skewMs = 0; }
+      return d;
+    }).catch(function (e) {
+      var transient = !e || e.code === "offline" || !e.status || e.status >= 500 || e.status === 429;
+      if (tries > 0 && transient) return new Promise(function (r) { setTimeout(r, 800); }).then(function () { return fetchOverview(tries - 1); });
+      return null;   // hard failure (or retries exhausted) → caller shows a recoverable error
+    });
+  }
   function load(force) {
     if (!API()) return Promise.resolve(null);
     if (_ov && !force && Date.now() - _ovAt < 30000) return Promise.resolve(_ov);
     if (_loading) return _loading;
-    _loading = API().get("/api/puzzles").then(function (d) {
-      _ov = d; _ovAt = Date.now(); _loading = null;
-      try { _skewMs = new Date(d.serverNow).getTime() - Date.now(); } catch (e) { _skewMs = 0; }
-      return d;
-    }).catch(function () { _loading = null; return null; });
+    _loading = fetchOverview(2).then(function (d) { _loading = null; return d; }).catch(function () { _loading = null; return null; });
     return _loading;
   }
   var now = function () { return Date.now() + _skewMs; };
@@ -368,8 +378,20 @@ window.DOODLY_PUZZLE = (function () {
   function mountGame() {
     var host = document.getElementById("puzzleGameMount");
     if (!host) return;
+    if (_gameRetryTimer) { clearTimeout(_gameRetryTimer); _gameRetryTimer = null; }
+    _gameRetries = 0;
     host.innerHTML = '<div class="pz-page"><div class="pz-state"><div class="pzs-emoji">🧩</div><h2>Loading the challenge…</h2></div></div>';
-    load(true).then(function (ov) { renderGamePage(host, ov); });
+    attemptGame(host);
+  }
+  // Load + render; on a transient "can't reach" (null overview) auto-retry a few times with
+  // backoff so a cold-start / redeploy blip self-heals instead of stranding the player.
+  function attemptGame(host) {
+    load(true).then(function (ov) {
+      if (!host || !document.body.contains(host)) return;                 // navigated away — stop
+      if (ov) { _gameRetries = 0; if (_gameRetryTimer) { clearTimeout(_gameRetryTimer); _gameRetryTimer = null; } renderGamePage(host, ov); return; }
+      renderGamePage(host, null);                                          // recoverable error (+ Try again)
+      if (_gameRetries < 5) { _gameRetries++; _gameRetryTimer = setTimeout(function () { attemptGame(host); }, Math.min(10000, 1500 * _gameRetries)); }
+    });
   }
 
   function totalMonths(ov) { return (ov && ov.schedule && ov.schedule.length) || 6; }
@@ -418,7 +440,12 @@ window.DOODLY_PUZZLE = (function () {
 
   function renderGamePage(host, ov) {
     _timers.forEach(clearInterval); _timers = [];
-    if (!ov) { host.innerHTML = '<div class="pz-page"><div class="pz-state"><div class="pzs-emoji">📡</div><h2>Can’t reach DOODLY right now</h2><p>The Puzzle Challenge needs a connection. Please try again in a moment.</p></div></div>'; return; }
+    if (!ov) {
+      var reconnecting = _gameRetries > 0 && _gameRetries < 5;
+      host.innerHTML = '<div class="pz-page"><div class="pz-state"><div class="pzs-emoji">📡</div><h2>Can’t reach DOODLY right now</h2><p>The Puzzle Challenge needs a connection. ' + (reconnecting ? "Reconnecting…" : "Please try again in a moment.") + '</p><button type="button" class="btn btn-primary" id="pzRetry" style="margin-top:14px">Try again</button></div></div>';
+      var rb = document.getElementById("pzRetry"); if (rb) rb.addEventListener("click", function () { mountGame(); });
+      return;
+    }
     if (!ov.enabled) { host.innerHTML = '<div class="pz-page"><div class="pz-state"><div class="pzs-emoji">😴</div><h2>The Puzzle Challenge is taking a break</h2><p>Check back soon — or keep an eye on your notifications.</p></div></div>'; return; }
     if (!ov.current) { host.innerHTML = '<div class="pz-page"><div class="pz-state"><div class="pzs-emoji">🏁</div><h2>The 6-month challenge has ended</h2><p>Thanks for playing! Winners are listed below.</p></div>' + pastWinnersHtml(ov) + "</div>"; return; }
 
