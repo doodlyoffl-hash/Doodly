@@ -88,6 +88,42 @@ window.DOODLY_ANALYTICS = (function () {
     } catch (e) { return false; }
   }
 
+  /* ---------------- staff-device opt-out (belt-and-suspenders for Clarity IP blocking) ----------------
+     A team member can flag THIS browser/device so their own browsing of the PUBLIC
+     storefront is never recorded by Clarity or counted as customer traffic — regardless
+     of login, network or IP (so it covers office, home & mobile, where fixed-IP blocking
+     can't reach). Set from the admin "User behaviour" card, or by opening
+     doodly.in/#doodly-staff-optout on any device. Persists in localStorage on the
+     doodly.in origin (admin + storefront share it). #doodly-staff-optin reverses it. */
+  var STAFF_KEY = "doodly-staff-device";
+  function isStaffDevice() { try { return localStorage.getItem(STAFF_KEY) === "1"; } catch (e) { return false; } }
+  function setStaffDevice(on) {
+    try {
+      if (on) { localStorage.setItem(STAFF_KEY, "1"); var lc = clr(); if (lc) { try { lc("stop"); } catch (e) {} } }   // stop any in-progress recording immediately
+      else localStorage.removeItem(STAFF_KEY);
+    } catch (e) {}
+    return isStaffDevice();
+  }
+  // Set the flag from a shared opt-out/opt-in link (runs before boot so this very pageview is excluded).
+  function applyStaffFlagFromUrl() {
+    try {
+      var s = ((location.hash || "") + " " + (location.search || "")).toLowerCase();
+      if (/doodly[-_]staff[-_]optout|staff_optout=1/.test(s)) { setStaffDevice(true); return "out"; }
+      if (/doodly[-_]staff[-_]optin|staff_optout=0/.test(s)) { setStaffDevice(false); return "in"; }
+    } catch (e) {}
+    return "";
+  }
+  function staffToast(excluded) {
+    try {
+      if (document.getElementById("doodly-staff-toast")) return;
+      var d = document.createElement("div"); d.id = "doodly-staff-toast"; d.setAttribute("role", "status");
+      d.style.cssText = "position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:2147483000;max-width:92vw;text-align:center;background:#0F3D2E;color:#fff;font:600 14px/1.45 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;padding:12px 18px;border-radius:12px;box-shadow:0 10px 40px rgba(15,61,46,.28)";
+      d.textContent = excluded ? "✓ This device is now excluded from DOODLY session recordings & analytics." : "This device will be included in DOODLY analytics again.";
+      (document.body || document.documentElement).appendChild(d);
+      setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 6000);
+    } catch (e) {}
+  }
+
   /* ---------------- consent (Consent Mode v2 + cookie banner) ----------------
      analytics_storage stays granted (anonymised, first-party); ad_storage /
      ad_user_data / ad_personalization are DENIED until the visitor accepts, so
@@ -105,7 +141,7 @@ window.DOODLY_ANALYTICS = (function () {
     try { bootClarity(); } catch (e) {}   // a consent choice unlocks session replay (analytics-tier)
     if (DEBUG) log("consent update — ads " + (ads ? "granted" : "denied"));
   }
-  function onInternalSurface() { try { return /^\/(admin|driver|delivery)(\/|$)/.test(location.pathname) || isInternalUser(); } catch (e) { return false; } }
+  function onInternalSurface() { try { return /^\/(admin|driver|delivery)(\/|$)/.test(location.pathname) || isInternalUser() || isStaffDevice(); } catch (e) { return false; } }
   function injectConsentStyles() {
     if (document.getElementById("doodly-consent-css")) return;
     var st = document.createElement("style"); st.id = "doodly-consent-css";
@@ -162,7 +198,7 @@ window.DOODLY_ANALYTICS = (function () {
       var conf = { anonymize_ip: true, send_page_view: false };   // ad signals now governed by Consent Mode (banner), not hard-disabled
       if (DEBUG) conf.debug_mode = true;
       gtag("config", id, conf);
-      if (isInternalUser()) gtag("set", { traffic_type: "internal" });   // exclude staff from marketing analytics
+      if (isInternalUser() || isStaffDevice()) gtag("set", { traffic_type: "internal" });   // exclude staff (by role or flagged device) from marketing analytics
       if (DEBUG) log("GA4 enabled → " + id + (DEBUG ? " (debug_mode)" : ""));
     } catch (e) { _enabled = false; }
     bootPixel();
@@ -320,8 +356,10 @@ window.DOODLY_ANALYTICS = (function () {
   function sweepWa() { try { document.querySelectorAll('a[href*="wa.me/"]').forEach(decorateWa); } catch (e) {} }
 
   /* ---------------- boot + page_view ---------------- */
+  var _staffFlagFromUrl = "";
+  try { _staffFlagFromUrl = applyStaffFlagFromUrl(); } catch (e) {}   // set BEFORE boot so this pageview is already excluded
   try { boot(); } catch (e) {}
-  function firePageView() { try { trackPageView(); } catch (e) {} sweepWa(); try { maybeConsentBanner(); } catch (e) {} try { bootClarity(); } catch (e) {} }
+  function firePageView() { try { if (_staffFlagFromUrl) staffToast(_staffFlagFromUrl === "out"); } catch (e) {} try { trackPageView(); } catch (e) {} sweepWa(); try { maybeConsentBanner(); } catch (e) {} try { bootClarity(); } catch (e) {} }
   if (document.readyState !== "loading") setTimeout(firePageView, 0);
   else document.addEventListener("DOMContentLoaded", firePageView);
   // The chrome (incl. the WhatsApp button) mounts async → observe + decorate, debounced.
@@ -351,5 +389,6 @@ window.DOODLY_ANALYTICS = (function () {
     trackReferral: trackReferral, trackCoupon: trackCoupon, trackDelivery: trackDelivery, trackWallet: trackWallet,
     attribution: attribution,
     isEnabled: function () { return _enabled; }, isDebug: function () { return DEBUG; }, isInternal: isInternalUser,
+    isStaffDevice: isStaffDevice, setStaffDevice: setStaffDevice,   // flag/unflag THIS browser as a staff device (excluded from Clarity + tagged internal in GA)
   };
 })();

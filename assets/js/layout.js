@@ -5182,7 +5182,33 @@
       + '<div style="flex:1;min-width:220px"><div class="strong" style="font-size:.85rem;margin-bottom:4px">Build segments in Clarity</div><p class="muted-sm" style="margin:0">Sessions are tagged with DOODLY events (<code>add_to_cart</code>, <code>begin_checkout</code>, <code>purchase</code>…). Filter by them for <b>high-intent</b>, <b>checkout abandoners</b>, <b>trial</b> and <b>referral</b> visitors.</p></div>'
       + "</div>"
       + '<p class="muted-sm" style="margin-top:10px">🔒 Privacy-safe: records the web page only (never the screen), sensitive fields are auto-masked, and no customer name / email / phone / address is sent. Anonymous &amp; consent-gated — recording starts only after the visitor accepts the cookie banner, and never for staff.</p>'
+      + '<div id="behaviourDevice" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line,#e4ede7)"></div>'
       + "</div></div>";
+    try { renderBehaviourDevice(); } catch (e) {}
+  }
+  /* "Keep your team out of the data" — flags THIS browser as a staff device so it is never
+     recorded by Clarity / counted as customer traffic (works on any IP, network or login).
+     Complements Clarity's fixed-IP blocking, which can't cover home & mobile. */
+  function renderBehaviourDevice() {
+    var box = document.getElementById("behaviourDevice"); if (!box) return;
+    var A = window.DOODLY_ANALYTICS;
+    var excluded = false; try { excluded = !!(A && A.isStaffDevice && A.isStaffDevice()); } catch (e) {}
+    var domain = "doodly.in"; try { domain = (window.DOODLY && DOODLY.brand && DOODLY.brand.integrations && DOODLY.brand.integrations.domain) || "doodly.in"; } catch (e) {}
+    var link = "https://" + domain + "/#doodly-staff-optout";
+    box.innerHTML = '<div class="strong" style="font-size:.85rem;margin-bottom:6px">Keep your team out of the data</div>'
+      + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+      +   '<span class="badge ' + (excluded ? "grey" : "green") + '">' + (excluded ? "This device: excluded" : "This device: recording") + "</span>"
+      +   '<button type="button" id="behaviourDeviceBtn" class="btn ' + (excluded ? "btn-ghost" : "btn-primary") + ' sm">' + (excluded ? "Include this device" : "Exclude this device") + "</button>"
+      + "</div>"
+      + '<p class="muted-sm" style="margin:8px 0 0">Excludes this browser from Clarity recordings &amp; customer analytics — no matter the IP, network or login. For a phone or home laptop, open this link on that device once:</p>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">'
+      +   '<code style="background:var(--surface-2,#f3f7f2);border:1px solid var(--line,#dde7e0);border-radius:8px;padding:6px 10px;font-size:.8rem;word-break:break-all">' + link + "</code>"
+      +   '<button type="button" id="behaviourDeviceCopy" class="btn btn-ghost sm">Copy link</button>'
+      + "</div>";
+    var btn = document.getElementById("behaviourDeviceBtn");
+    if (btn) btn.addEventListener("click", function () { try { if (A && A.setStaffDevice) A.setStaffDevice(!excluded); } catch (e) {} renderBehaviourDevice(); });
+    var cp = document.getElementById("behaviourDeviceCopy");
+    if (cp) cp.addEventListener("click", function () { try { navigator.clipboard.writeText(link); cp.textContent = "Copied ✓"; setTimeout(function () { cp.textContent = "Copy link"; }, 1500); } catch (e) {} });
   }
   /* Weekly business-summary email — enable/day/recipients + Preview + Send now.
      reports:view to read, reports:export to change/send (server-enforced). */
