@@ -77,7 +77,8 @@ window.DOODLY = {
     // Integration keys live server-side in production (.env); empty here on purpose.
     // gaMeasurementId = PRODUCTION GA4 id (G-XXXXXXXXXX), used only off localhost.
     // gaMeasurementIdDev = optional GA4 id for localhost testing (keeps dev off the prod property).
-    integrations: { googleMapsKey: "", razorpayKeyId: "", gaMeasurementId: "G-G22MZXRM0H", gaMeasurementIdDev: "", metaPixelId: "", domain: "doodly.in" },
+    // clarityId = Microsoft Clarity project id (session replay + heatmaps), prod only; clarityIdDev for localhost.
+    integrations: { googleMapsKey: "", razorpayKeyId: "", gaMeasurementId: "G-G22MZXRM0H", gaMeasurementIdDev: "", metaPixelId: "", clarityId: "", clarityIdDev: "", domain: "doodly.in" },
   },
 
   /* ---- Delivery scheduling settings (Admin-configurable) ----

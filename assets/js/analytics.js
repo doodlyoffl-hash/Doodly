@@ -102,6 +102,7 @@ window.DOODLY_ANALYTICS = (function () {
     writeConsent(ads);
     try { if (window.gtag) gtag("consent", "update", consentSignals(ads)); } catch (e) {}
     if (ads) { try { bootPixel(); } catch (e) {} }
+    try { bootClarity(); } catch (e) {}   // a consent choice unlocks session replay (analytics-tier)
     if (DEBUG) log("consent update — ads " + (ads ? "granted" : "denied"));
   }
   function onInternalSurface() { try { return /^\/(admin|driver|delivery)(\/|$)/.test(location.pathname) || isInternalUser(); } catch (e) { return false; } }
@@ -178,6 +179,41 @@ window.DOODLY_ANALYTICS = (function () {
   }
   function pixel(name, params) { try { if (window.fbq && !isLocalhost()) fbq("track", name, params || {}); } catch (e) {} }
 
+  /* ---------------- Microsoft Clarity — session replay + heatmaps (privacy-first) ----------------
+     A mature, DOM-based recorder (it records the DOODLY page inside the browser — NEVER the OS
+     screen). Loads ONLY when a project id is configured, the visitor has made a consent choice,
+     and they are not internal staff / on a staff surface. Sensitive fields are force-masked and
+     only NON-PII tags + event NAMES are sent. Recordings live on Clarity's infrastructure — no
+     session-replay data is ever stored in DOODLY's database. */
+  var _clarityBooted = false;
+  function clarityId() { var c = cfg(); return isLocalhost() ? (c.clarityIdDev || "") : (c.clarityId || ""); }
+  function clr() { try { return window.clarity || null; } catch (e) { return null; } }
+  function signedIn() { try { return !!(window.DOODLY_RBAC && DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser()); } catch (e) { return false; } }
+  // Force-mask sensitive inputs so their values are never captured (belt-and-suspenders over
+  // Clarity's own masking). Re-run as the chrome mounts forms (login, checkout, wallet, address).
+  function maskSensitive() {
+    try {
+      var sel = "input[type=password],input[type=tel],input[type=email],input[name*=otp i],input[id*=otp i],input[name*=card i],input[name*=cvv i],input[name*=upi i],input[name*=vpa i],input[name*=phone i],input[name*=mobile i],input[name*=email i],input[autocomplete^=cc-],[data-sensitive]";
+      var els = document.querySelectorAll(sel);
+      for (var i = 0; i < els.length; i++) { if (!els[i].getAttribute("data-clarity-mask")) els[i].setAttribute("data-clarity-mask", "true"); }
+    } catch (e) {}
+  }
+  function bootClarity() {
+    if (_clarityBooted) return;
+    var id = clarityId();
+    if (!id) { if (DEBUG) log("Clarity dormant (no project id" + (isLocalhost() ? " for localhost — set clarityIdDev to test)" : ")")); return; }
+    if (onInternalSurface()) { if (DEBUG) log("Clarity skipped — internal surface/user"); return; }   // staff never recorded
+    if (!readConsent()) { if (DEBUG) log("Clarity waiting for a consent choice"); return; }            // recording needs a consent decision
+    _clarityBooted = true;
+    try {
+      (function (c, l, a, r, i, t, y) { c[a] = c[a] || function () { (c[a].q = c[a].q || []).push(arguments) }; t = l.createElement(r); t.async = 1; t.src = "https://www.clarity.ms/tag/" + i; y = l.getElementsByTagName(r)[0]; y.parentNode.insertBefore(t, y); })(window, document, "clarity", "script", id);
+      maskSensitive();
+      var lc = clr();
+      if (lc) { try { lc("set", "login_status", signedIn() ? "customer" : "anonymous"); var st = sourceTag(); if (st) lc("set", "source", st); } catch (e) {} }
+      if (DEBUG) log("Clarity enabled → " + id);
+    } catch (e) { _clarityBooted = false; }
+  }
+
   /* ---------------- core dispatch ---------------- */
   function log() { try { console.debug.apply(console, ["%c[DOODLY GA]", "color:#1FAE66;font-weight:700"].concat([].slice.call(arguments))); } catch (e) {} }
   function scrub(o) {
@@ -197,6 +233,9 @@ window.DOODLY_ANALYTICS = (function () {
     if (DEBUG) log(name, p);
     try { window.dispatchEvent(new CustomEvent("doodly:analytics", { detail: { event: name, params: p } })); } catch (e) {}
     if (_enabled && window.gtag) { try { gtag("event", name, p); } catch (e) {} }
+    // Tag the Clarity session with the event NAME only (no params → no PII) so replays are
+    // filterable by add_to_cart / begin_checkout / purchase / etc. page_view is auto in Clarity.
+    if (_clarityBooted && name !== "page_view") { try { var _lc = clr(); if (_lc) _lc("event", name); } catch (e) {} }
   }
 
   /* ---------------- item + money helpers ---------------- */
@@ -282,13 +321,13 @@ window.DOODLY_ANALYTICS = (function () {
 
   /* ---------------- boot + page_view ---------------- */
   try { boot(); } catch (e) {}
-  function firePageView() { try { trackPageView(); } catch (e) {} sweepWa(); try { maybeConsentBanner(); } catch (e) {} }
+  function firePageView() { try { trackPageView(); } catch (e) {} sweepWa(); try { maybeConsentBanner(); } catch (e) {} try { bootClarity(); } catch (e) {} }
   if (document.readyState !== "loading") setTimeout(firePageView, 0);
   else document.addEventListener("DOMContentLoaded", firePageView);
   // The chrome (incl. the WhatsApp button) mounts async → observe + decorate, debounced.
   try {
     var pending = false;
-    new MutationObserver(function () { if (pending) return; pending = true; setTimeout(function () { pending = false; sweepWa(); }, 60); })
+    new MutationObserver(function () { if (pending) return; pending = true; setTimeout(function () { pending = false; sweepWa(); if (_clarityBooted) maskSensitive(); }, 60); })
       .observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["href"] });
   } catch (e) {}
   // wa.me click → Lead + whatsapp_click (delegated, survives re-renders)

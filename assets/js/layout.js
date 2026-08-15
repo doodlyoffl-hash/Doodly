@@ -5146,7 +5146,8 @@
       + rpBars("Customer growth (6 mo)", d.charts.customerGrowth, false) + rpBars("Subscription growth (6 mo)", d.charts.subscriptionGrowth, false)
       + rpBreak("Orders by status", d.charts.ordersByStatus) + rpBreak("Subscriptions by status", d.charts.subscriptionsByStatus)
       + "</div>" + rpTable(d)
-      + '<div id="wsCard" style="margin-top:16px"></div>';
+      + '<div id="wsCard" style="margin-top:16px"></div>'
+      + '<div id="behaviourCard" style="margin-top:16px"></div>';
     // preset chips
     host.querySelectorAll("[data-rp]").forEach(function (b) { b.addEventListener("click", function () { _rpState.preset = b.dataset.rp; rpAudit("filtered", { reportName: "Growth Reports", filters: _rpState.preset }); wireReportsBackend(); }); });
     // exports
@@ -5158,6 +5159,30 @@
     // drill-down
     host.querySelectorAll("[data-drill]").forEach(function (c) { c.addEventListener("click", function () { rpDrill(c.dataset.drill, d); }); });
     try { wireWeeklySummaryCard(); } catch (e) {}
+    try { wireBehaviourCard(); } catch (e) {}
+  }
+  /* User Behaviour — Microsoft Clarity session replay + heatmaps. Recordings live on Clarity's
+     infrastructure (never our DB); this card is status + deep-links + privacy notes. */
+  function wireBehaviourCard() {
+    var host = document.getElementById("behaviourCard");
+    if (!host) return;
+    var id = "";
+    try { id = (window.DOODLY && DOODLY.brand && DOODLY.brand.integrations && DOODLY.brand.integrations.clarityId) || ""; } catch (e) {}
+    var base = id ? "https://clarity.microsoft.com/projects/view/" + encodeURIComponent(id) : "";
+    var linkBtn = function (label, path) { return '<a class="btn btn-ghost sm" href="' + base + path + '" target="_blank" rel="noopener">' + label + "</a>"; };
+    host.innerHTML = '<div class="panel"><div class="panel-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">'
+      + "<h3>🎥 User behaviour — session replay &amp; heatmaps</h3><span class=\"badge " + (id ? "green" : "grey") + '">' + (id ? "● Clarity connected" : "Not set up") + "</span></div>"
+      + '<div class="panel-pad">'
+      + '<p class="muted-sm">See exactly what visitors do — where they click, scroll, hesitate and drop off — via <b>Microsoft Clarity</b> session recordings and heatmaps. Recordings are stored by Clarity, never in the DOODLY database.</p>'
+      + (id
+        ? '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">' + linkBtn("Open dashboard", "/dashboard") + linkBtn("Recordings", "/impressions") + linkBtn("Heatmaps", "/heatmaps") + "</div>"
+        : '<p class="muted-sm" style="background:var(--surface-2,#f3f7f2);border:1px dashed var(--line,#dde7e0);border-radius:10px;padding:12px">Not switched on yet. Create a free project at <a href="https://clarity.microsoft.com" target="_blank" rel="noopener">clarity.microsoft.com</a>, then set its <b>project id</b> in the site config to activate — it stays off until then.</p>')
+      + '<div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:6px">'
+      + '<div style="flex:1;min-width:220px"><div class="strong" style="font-size:.85rem;margin-bottom:4px">What you get</div><p class="muted-sm" style="margin:0">Click / scroll / attention heatmaps · rage-click &amp; dead-click detection · scroll depth · full session replays · funnels — for Home, Product, Checkout, Subscriptions and Delivery pages.</p></div>'
+      + '<div style="flex:1;min-width:220px"><div class="strong" style="font-size:.85rem;margin-bottom:4px">Build segments in Clarity</div><p class="muted-sm" style="margin:0">Sessions are tagged with DOODLY events (<code>add_to_cart</code>, <code>begin_checkout</code>, <code>purchase</code>…). Filter by them for <b>high-intent</b>, <b>checkout abandoners</b>, <b>trial</b> and <b>referral</b> visitors.</p></div>'
+      + "</div>"
+      + '<p class="muted-sm" style="margin-top:10px">🔒 Privacy-safe: records the web page only (never the screen), sensitive fields are auto-masked, and no customer name / email / phone / address is sent. Anonymous &amp; consent-gated — recording starts only after the visitor accepts the cookie banner, and never for staff.</p>'
+      + "</div></div>";
   }
   /* Weekly business-summary email — enable/day/recipients + Preview + Send now.
      reports:view to read, reports:export to change/send (server-enforced). */
