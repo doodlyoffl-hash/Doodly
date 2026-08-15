@@ -630,6 +630,53 @@
       set: function (on) { applySimple(!!on); try { if (window.DOODLY_API && (localStorage.getItem("doodly-currentuser") || localStorage.getItem("doodly-token"))) DOODLY_API.patch("/api/account/settings", { simpleMode: !!on }).catch(function () {}); } catch (e) {} },
       toggle: function () { this.set(!this.isOn()); },
     };
+    try { maybeEasyViewPrompt(); } catch (e) {}
+  }
+
+  /* First-visit "Easy view" nudge — a gentle, dismissible, ONE-TIME offer to turn on
+     Simple Mode. Storefront only (never staff/exec surfaces, checkout or auth pages),
+     and deferred while the cookie banner is up so the two never stack. */
+  function injectEasyViewStyles() {
+    if (document.getElementById("doodly-easyview-css")) return;
+    var st = document.createElement("style"); st.id = "doodly-easyview-css";
+    st.textContent = '#doodly-easyview{position:fixed;left:12px;right:12px;bottom:12px;z-index:2147482000;max-width:560px;margin:0 auto;background:#fff;color:#0F3D2E;border:1px solid #DCE7DF;border-radius:16px;box-shadow:0 12px 44px rgba(15,61,46,.18);transform:translateY(170%);transition:transform .34s cubic-bezier(.2,.7,.2,1);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}'
+      + '#doodly-easyview.show{transform:translateY(0)}'
+      + '#doodly-easyview .dev-in{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:16px 18px}'
+      + '#doodly-easyview .dev-ic{font-size:1.6rem;flex:none}'
+      + '#doodly-easyview .dev-t{margin:0;flex:1;min-width:200px;font-size:1rem;line-height:1.5;color:#33413a}'
+      + '#doodly-easyview .dev-b{display:flex;gap:10px;flex-wrap:wrap}'
+      + '#doodly-easyview .dev-btn{font:inherit;font-size:.98rem;font-weight:700;border-radius:12px;padding:12px 20px;cursor:pointer;border:1px solid transparent;min-height:48px}'
+      + '#doodly-easyview .dev-yes{background:#1FAE66;color:#fff}#doodly-easyview .dev-yes:hover{background:#16824F}'
+      + '#doodly-easyview .dev-no{background:transparent;color:#33413a;border-color:#DCE7DF}#doodly-easyview .dev-no:hover{background:#F3F7F2}'
+      + '#doodly-easyview .dev-btn:focus-visible{outline:2px solid #16824F;outline-offset:2px}'
+      + '@media (prefers-color-scheme:dark){#doodly-easyview{background:#132420;color:#E9F2EB;border-color:#213730}#doodly-easyview .dev-t{color:#A9BDB1}#doodly-easyview .dev-no{color:#A9BDB1;border-color:#213730}#doodly-easyview .dev-no:hover{background:#182A22}}'
+      + '@media (prefers-reduced-motion:reduce){#doodly-easyview{transition:none}}';
+    (document.head || document.documentElement).appendChild(st);
+  }
+  function maybeEasyViewPrompt() {
+    try {
+      if (/^\/(admin|driver|delivery)(\/|$)/.test(location.pathname)) return;      // staff/exec surfaces
+      if (/(checkout|login|signup|otp|forgot|reset|password)/i.test(location.pathname)) return;   // don't interrupt purchase/auth
+      if (localStorage.getItem("doodly-easyview-prompt")) return;                  // shown before → never again
+      injectEasyViewStyles();
+      setTimeout(function () {
+        try {
+          if (localStorage.getItem("doodly-easyview-prompt")) return;
+          if (document.documentElement.dataset.simple === "1") return;             // already on
+          if (document.getElementById("doodly-consent")) return;                   // cookie banner is up → defer to a later visit
+          if (document.getElementById("doodly-easyview")) return;
+          localStorage.setItem("doodly-easyview-prompt", "1");                     // one-time
+          var bar = document.createElement("div");
+          bar.id = "doodly-easyview"; bar.setAttribute("role", "dialog"); bar.setAttribute("aria-label", "Easy view suggestion");
+          bar.innerHTML = '<div class="dev-in"><span class="dev-ic" aria-hidden="true">🔎</span><p class="dev-t">Prefer <b>larger text and simpler screens</b>? Turn on <b>Easy view</b> — you can switch it off anytime in Settings.</p><div class="dev-b"><button type="button" class="dev-btn dev-no">No thanks</button><button type="button" class="dev-btn dev-yes">Turn on Easy view</button></div></div>';
+          document.body.appendChild(bar);
+          var close = function () { bar.classList.remove("show"); setTimeout(function () { if (bar.parentNode) bar.parentNode.removeChild(bar); }, 340); };
+          bar.querySelector(".dev-yes").addEventListener("click", function () { try { if (window.DOODLY_SIMPLE) DOODLY_SIMPLE.set(true); } catch (e) {} close(); });
+          bar.querySelector(".dev-no").addEventListener("click", close);
+          setTimeout(function () { bar.classList.add("show"); }, 60);
+        } catch (e) {}
+      }, 1500);   // let the page settle first
+    } catch (e) {}
   }
 
   function wireReveals() {
