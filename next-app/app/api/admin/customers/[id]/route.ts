@@ -6,8 +6,9 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, parseBody, route, Errors } from "@/lib/http";
-import { requirePermission } from "@/lib/auth/authorize";
-import { readUserId } from "@/lib/auth/identity";
+import { requireAnyPermission } from "@/lib/auth/authorize";
+import { readUserId, readRole } from "@/lib/auth/identity";
+import { can } from "@/lib/rbac";
 import { reqIp } from "@/lib/customers/req";
 import { audit } from "@/lib/auth/audit";
 import { reqContext } from "@/lib/auth/request";
@@ -22,7 +23,8 @@ export const dynamic = "force-dynamic";
 type Ctx = { params: { id: string } };
 
 export const GET = route("admin.customers.profile", async (req: NextRequest, { params }: Ctx) => {
-  requirePermission(req, "customers", "view");
+  // customers:view for the CRM, OR an assisted-order agent loading the caller's profile.
+  requireAnyPermission(req, [["customers", "view"], ["assistedOrders", "create"]]);
   const profile = await getCustomerProfile(params.id);
   if (!profile) throw Errors.notFound("Customer not found.");
   return ok({ customer: profile });
@@ -52,8 +54,13 @@ const patchSchema = z.discriminatedUnion("action", [
 ]);
 
 export const PATCH = route("admin.customers.action", async (req: NextRequest, { params }: Ctx) => {
-  const role = requirePermission(req, "customers", "edit");
+  const role = readRole(req);
   const body = await parseBody(req, patchSchema);
+  // Every action needs customers:edit — EXCEPT add-address, which an assisted-order agent
+  // (assistedOrders:create) may do while placing an order. No other CRM action (wallet,
+  // status, reset-password, delete-address…) is reachable without customers:edit.
+  const allowed = can(role, "customers", "edit") || (body.action === "add-address" && can(role, "assistedOrders", "create"));
+  if (!allowed) throw Errors.forbidden();
   const id = params.id;
   const actor: Actor = { actorId: readUserId(req) ?? undefined, actorRole: role, ip: reqIp(req) };
 

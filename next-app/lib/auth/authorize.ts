@@ -23,3 +23,13 @@ export function requirePermission(req: NextRequest, module: string, action = "vi
   if (!can(role, module, action)) throw Errors.forbidden();
   return role;
 }
+
+/** Require ANY of several [module, action] permissions (least-privilege OR). Returns the
+    verified role, or 403 if none match. Used where an endpoint serves more than one feature —
+    e.g. the customer directory is reachable both with `customers` rights AND by an
+    assisted-order agent (`assistedOrders:create`) who must find/create a caller. */
+export function requireAnyPermission(req: NextRequest, perms: Array<[string, string]>): RoleKey {
+  const role = readRole(req);
+  if (perms.some(([m, a]) => can(role, m, a))) return role;
+  throw Errors.forbidden();
+}

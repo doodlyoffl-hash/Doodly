@@ -4,7 +4,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, parseBody, route } from "@/lib/http";
-import { requirePermission } from "@/lib/auth/authorize";
+import { requireAnyPermission } from "@/lib/auth/authorize";
 import { readUserId } from "@/lib/auth/identity";
 import { reqIp } from "@/lib/customers/req";
 import { audit } from "@/lib/auth/audit";
@@ -15,7 +15,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export const GET = route("admin.customers.list", async (req: NextRequest) => {
-  requirePermission(req, "customers", "view");
+  // customers:view for the CRM, OR an assisted-order agent finding a caller.
+  requireAnyPermission(req, [["customers", "view"], ["assistedOrders", "create"]]);
   const p = new URL(req.url).searchParams;
   const num = (k: string) => (p.get(k) ? Number(p.get(k)) : undefined);
   const args: ListArgs = {
@@ -47,7 +48,8 @@ const createSchema = z.object({
 });
 
 export const POST = route("admin.customers.create", async (req: NextRequest) => {
-  const role = requirePermission(req, "customers", "create");
+  // customers:create, OR an assisted-order agent registering a phone-in caller.
+  const role = requireAnyPermission(req, [["customers", "create"], ["assistedOrders", "create"]]);
   const body = await parseBody(req, createSchema);
   const res = await createCustomer(body, { actorId: readUserId(req) ?? undefined, actorRole: role, ip: reqIp(req) });
   await audit({ actorRole: role, action: "customer.create", target: res.id, ctx: reqContext(req) });
