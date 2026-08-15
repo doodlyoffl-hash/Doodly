@@ -147,6 +147,20 @@ window.DOODLY_CHECKOUT = (function () {
       totals: { subtotal: original, savings: discount, deposit: deposit, delivery: delivery, gst: gst, total: total, bottles: bottles },
     };
   }
+
+  /* ---- GA4 helpers: current checkout line items + value (non-PII), reused across the funnel ---- */
+  function gaCheckoutItems() {
+    try {
+      const sd = subDisplay();
+      if (sd && sd.line) { const sub = subContext() || {}; return [{ id: sub.variantId || "", name: sd.line.name, category: sd.trial ? "trial" : (sub.planId || "subscription"), variant: sd.line.ml ? sd.line.ml + "ml" : "", price: sd.line.total || sd.line.unit || 0, qty: sd.line.qty || 1 }]; }
+      if (window.DOODLY_CART && DOODLY_CART.lines) return (DOODLY_CART.lines() || []).map((l) => ({ id: l.id || l.variantId, name: l.name, variant: l.variant, price: l.unit || l.price || 0, qty: l.qty || 1 }));
+    } catch (e) {}
+    return [];
+  }
+  function gaCheckoutValue() {
+    try { const sd = subDisplay(); if (sd && sd.totals) return sd.totals.total || sd.totals.subtotal || 0; if (window.DOODLY_CART && DOODLY_CART.getTotals) return DOODLY_CART.getTotals().total || 0; } catch (e) {}
+    return 0;
+  }
   function renderCoSchedule() {
     const SC = window.DOODLY_SCHEDULE, box = mount.querySelector("#coSchedule");
     if (!SC || !box) return;
@@ -339,6 +353,7 @@ window.DOODLY_CHECKOUT = (function () {
     if (!inp || !btn) return;
     const code = (inp.value || "").trim().toUpperCase();
     if (state.coupon) {   // acting as "Remove"
+      try { if (window.DOODLY_ANALYTICS) DOODLY_ANALYTICS.trackCoupon("removed", { code: state.coupon.code }); } catch (e) {}
       state.coupon = null; inp.value = ""; inp.disabled = false;
       btn.textContent = "Apply"; couponMsg("", true); recalcPromo(); return;
     }
@@ -353,9 +368,11 @@ window.DOODLY_CHECKOUT = (function () {
           state.coupon = { code, discountPaise: r.discountPaise || 0 };
           inp.disabled = true; btn.textContent = "Remove";
           couponMsg(r.message || ("Coupon applied — you save " + inr((r.discountPaise || 0) / 100) + "!"), true);
+          try { if (window.DOODLY_ANALYTICS) DOODLY_ANALYTICS.trackCoupon("applied", { code: code, discount: (r.discountPaise || 0) / 100 }); } catch (e) {}
         } else {
           btn.textContent = "Apply";
           couponMsg((r && (r.message || r.reason)) || "This coupon can't be applied.", false);
+          try { if (window.DOODLY_ANALYTICS) DOODLY_ANALYTICS.trackCoupon("rejected", { code: code }); } catch (e) {}
         }
         recalcPromo();
       })
@@ -427,6 +444,7 @@ window.DOODLY_CHECKOUT = (function () {
     const me = coSignedIn();
     if (me && window.DOODLY_API) {
       if (!realAddrChosen()) { goto(1); showAddrReq(true); return; }   // a SAVED delivery address is mandatory before payment
+      try { if (window.DOODLY_ANALYTICS) { const gi = gaCheckoutItems(), gv = gaCheckoutValue(); DOODLY_ANALYTICS.trackAddShippingInfo(gi, gv); DOODLY_ANALYTICS.trackAddPaymentInfo(gi, gv, (isSubscriptionPlan() && state.autopay) ? "autopay" : "razorpay"); } } catch (e) {}
       state.paying = true; processing(); placeRealOrder(me); return;   // REAL order into the backend
     }
     // No guest / localhost bypass — an order can ONLY be placed by a signed-in customer.
@@ -635,6 +653,17 @@ window.DOODLY_CHECKOUT = (function () {
     // clear the cart now that the order is placed
     try { localStorage.removeItem("doodly-cart"); } catch (e) {}
     if (CART()) CART().refreshBadge(true);
+    // GA4: backend-CONFIRMED purchase only (state.realOrder is set from /api/checkout or after
+    // /api/payments/verify). Idempotent per DOODLY order number — refresh / back / retry / re-render
+    // can never double-count. No PII: only order number + value + non-identifying line items.
+    try {
+      if (window.DOODLY_ANALYTICS && state.realOrder && state.realOrder.number) {
+        const gval = (state.realOrder.totalPaise || 0) / 100;
+        DOODLY_ANALYTICS.trackPurchase({ id: state.realOrder.number, value: gval, coupon: state.coupon ? state.coupon.code : undefined, items: gaCheckoutItems() });
+        if (trialBought) DOODLY_ANALYTICS.trackTrial("purchased", { plan: sub && sub.planId, value: gval });
+        else if (sub && sub.planId) DOODLY_ANALYTICS.trackSubscription("purchased", { plan: sub.planId, days: sub && sub.days, value: gval });
+      }
+    } catch (e) {}
     goto(4);
     if (!reduced()) confetti(pane.querySelector(".co-confetti"));
   }
@@ -881,6 +910,7 @@ window.DOODLY_CHECKOUT = (function () {
     mount.dataset.built = "1";
     state = { step: 0, slot: 0, addr: 0, addrId: null, reached: 0, realOrder: null, coupon: null, useWallet: false, walletPaise: 0, autopay: false, ownership: null, extraBottles: 0, unavailable: 0, unavailableReason: "lost" };
     build(); wire();
+    try { if (window.DOODLY_ANALYTICS) { const gi = gaCheckoutItems(); if (gi.length) DOODLY_ANALYTICS.trackBeginCheckout(gi, gaCheckoutValue(), state.coupon ? state.coupon.code : ""); } } catch (e) {}
     try { hydrateAddresses(); } catch (e) {}   // signed-in customer → real saved addresses + map pin
     try { hydrateOwnership(); } catch (e) {}    // smart bottle deposit — held-aware (existing owners pay ₹0 new)
     // mount the delivery start-date picker into the schedule step

@@ -56,6 +56,7 @@ window.DOODLY_CART = (function () {
     if (img) flyToCart(img); else bounce();
     refreshBadge(true);
     render();
+    try { if (window.DOODLY_ANALYTICS) DOODLY_ANALYTICS.trackAddToCart([{ id: variantId, name: v.displayName || v.label, category: v.type || "milk", variant: v.label, price: priceOf(v), qty: 1 }]); } catch (e) {}
     toast(`${v.displayName || v.label} added to your cart`, v);
   }
   function setQty(variantId, q) {
@@ -63,6 +64,7 @@ window.DOODLY_CART = (function () {
     it.qty = Math.max(1, q); write(cart); refreshBadge(true); render();
   }
   function remove(variantId) {
+    try { const rv = variant(variantId); if (window.DOODLY_ANALYTICS && rv) DOODLY_ANALYTICS.trackRemoveFromCart([{ id: variantId, name: rv.displayName || rv.label, category: rv.type || "milk", variant: rv.label, price: priceOf(rv), qty: 1 }]); } catch (e) {}
     const card = drawer && drawer.querySelector(`.ci[data-v="${variantId}"]`);
     const done = () => { write(read().filter((i) => i.variantId !== variantId)); refreshBadge(true); render(); };
     if (card && !reduced()) { card.classList.add("removing"); setTimeout(done, 320); } else done();
@@ -230,6 +232,12 @@ window.DOODLY_CART = (function () {
   function open() {
     if (!drawer) return;
     render();
+    try {
+      if (window.DOODLY_ANALYTICS) {
+        const its = read().map((i) => { const v = variant(i.variantId) || {}; return { id: i.variantId, name: v.displayName || v.label, category: v.type || "milk", variant: v.label, price: priceOf(v), qty: i.qty || 1 }; });
+        if (its.length) DOODLY_ANALYTICS.trackViewCart(its, totals().subtotal);
+      }
+    } catch (e) {}
     backdrop.classList.add("show"); drawer.classList.add("open");
     drawer.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";

@@ -47,6 +47,7 @@ window.DOODLY_VARIANT = (function () {
     const panel = scope.querySelector("#vpSelected");
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+    let _viewedItem = false;   // GA4: first selection = view_item, later switches = select_item
     function select(id, animate) {
       const v = variant(id);
       if (!v || v.active === false) return;
@@ -61,6 +62,12 @@ window.DOODLY_VARIANT = (function () {
       applyActionState(v);
       // only drive the builder with an orderable variant
       if (orderable(v) && window.DOODLY_BUILDER && window.DOODLY_BUILDER.select) window.DOODLY_BUILDER.select(id, null);
+      try {
+        if (window.DOODLY_ANALYTICS) {
+          const it = { id: id, name: v.displayName || v.label, category: v.type || "milk", variant: v.label, price: v.fixedPrice || v.dailyPrice || v.price || 0 };
+          if (_viewedItem) DOODLY_ANALYTICS.trackSelectItem(it, "product-variants"); else { _viewedItem = true; DOODLY_ANALYTICS.trackProductView(it); }
+        }
+      } catch (e) {}
     }
 
     // swap the purchase actions for a Notify-Me box when the selected

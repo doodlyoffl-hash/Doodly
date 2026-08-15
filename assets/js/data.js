@@ -75,7 +75,9 @@ window.DOODLY = {
     // channels stay "" until their official accounts exist — no broken placeholders).
     social: { instagram: "https://www.instagram.com/doodlyoffl?igsh=MWVvZXk3a3JseXJqYw==", facebook: "https://www.facebook.com/share/18ioyH5qRY/?mibextid=wwXIfr", x: "", youtube: "", linkedin: "" },
     // Integration keys live server-side in production (.env); empty here on purpose.
-    integrations: { googleMapsKey: "", razorpayKeyId: "", gaMeasurementId: "", metaPixelId: "", domain: "doodly.in" },
+    // gaMeasurementId = PRODUCTION GA4 id (G-XXXXXXXXXX), used only off localhost.
+    // gaMeasurementIdDev = optional GA4 id for localhost testing (keeps dev off the prod property).
+    integrations: { googleMapsKey: "", razorpayKeyId: "", gaMeasurementId: "", gaMeasurementIdDev: "", metaPixelId: "", domain: "doodly.in" },
   },
 
   /* ---- Delivery scheduling settings (Admin-configurable) ----

@@ -339,14 +339,14 @@ window.DOODLY_AUTH = (function () {
         if (field) { field.classList.remove("is-error", "is-valid"); if (msg) field.classList.add(ok ? "is-valid" : "is-error"); }
         if (err) { err.textContent = msg || ""; err.style.color = ok ? "#1c6b3a" : ""; }
       };
-      try { const m = new URLSearchParams(location.search).get("ref"); if (m) ref.value = m.trim().toUpperCase(); } catch (e) {}
+      try { const m = new URLSearchParams(location.search).get("ref"); if (m) { ref.value = m.trim().toUpperCase(); if (window.DOODLY_ANALYTICS) DOODLY_ANALYTICS.trackReferral("link_opened", { code: ref.value }); } } catch (e) {}
       let t;
       const check = () => {
         const code = ref.value.trim().toUpperCase(); ref.value = code;
         if (!code) { setMsg(true, ""); return; }
         if (!window.DOODLY_API) return;
         window.DOODLY_API.get("/api/referral/validate?code=" + encodeURIComponent(code)).then((r) => {
-          if (r && r.valid) setMsg(true, "✓ " + (r.referrerName ? r.referrerName + " referred you — you'll both benefit!" : "Valid referral code!"));
+          if (r && r.valid) { setMsg(true, "✓ " + (r.referrerName ? r.referrerName + " referred you — you'll both benefit!" : "Valid referral code!")); try { if (window.DOODLY_ANALYTICS) DOODLY_ANALYTICS.trackReferral("code_applied", { code: code }); } catch (e) {} }
           else setMsg(false, (r && r.reason) || "Invalid referral code.");
         }).catch(() => {});
       };
@@ -825,6 +825,14 @@ window.DOODLY_AUTH = (function () {
   }
   function succeed(form) {
     try { if (window.DOODLY_SOUND) DOODLY_SOUND.playSuccess(); } catch (e) {}   // warm dairy chime on sign-in / sign-up
+    try {
+      if (window.DOODLY_ANALYTICS) {
+        const _route = (document.body && document.body.dataset.route) || "";
+        const _method = (form && form.dataset && form.dataset.authmethod) || "password";
+        if (/signup|register|join/i.test(_route) || (form && form.dataset && form.dataset.mode === "signup")) DOODLY_ANALYTICS.trackSignup(_method);
+        else DOODLY_ANALYTICS.trackLogin(_method);
+      }
+    } catch (e) {}
     const btn = form.querySelector(".btn-auth");
     const dest = form.dataset.dest || "/account/dashboard.html";
     if (btn) { btn.classList.add("is-loading"); }

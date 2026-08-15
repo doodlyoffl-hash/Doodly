@@ -364,6 +364,7 @@ window.DOODLY_PINCODE = (function () {
       window.dataLayer = window.dataLayer || [];
       window.dataLayer.push(Object.assign({ event: "doodly_delivery_" + event }, data || {}));
       document.dispatchEvent(new CustomEvent("doodly:analytics", { detail: Object.assign({ category: "check_delivery", event: event }, data || {}) }));
+      try { if (window.DOODLY_ANALYTICS) DOODLY_ANALYTICS.trackDelivery(event, data || {}); } catch (e) {}
     } catch (e) {}
   }
   function fallbackCopy(text) {

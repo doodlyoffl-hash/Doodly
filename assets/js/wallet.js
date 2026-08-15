@@ -340,6 +340,7 @@ window.DOODLY_WALLET = (function () {
       setTimeout(function () { var res = recharge(amount, { method: state.method }); if (res.ok) renderSuccess(res); else renderFailure(res, amount); }, reduced ? 250 : 1500);
     }
     function renderSuccess(res) {
+      try { if (window.DOODLY_ANALYTICS) DOODLY_ANALYTICS.trackWallet("recharged", { amount: res.amount }); } catch (e) {}
       frame("", '<div class="wal-success"><span class="wal-coin c1" aria-hidden="true">🪙</span><span class="wal-coin c2" aria-hidden="true">💰</span><span class="wal-coin c3" aria-hidden="true">🪙</span>'
         + '<div class="wal-suc-badge">' + CHECK_SVG + '</div>'
         + '<h3>' + inr(res.amount) + ' added!</h3><p>Your wallet balance is now <b>' + inr2(res.balance) + '</b>.</p><p class="muted-sm">Reference ' + esc(res.ref) + '</p></div>',
