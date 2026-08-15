@@ -88,19 +88,66 @@ window.DOODLY_ANALYTICS = (function () {
     } catch (e) { return false; }
   }
 
+  /* ---------------- consent (Consent Mode v2 + cookie banner) ----------------
+     analytics_storage stays granted (anonymised, first-party); ad_storage /
+     ad_user_data / ad_personalization are DENIED until the visitor accepts, so
+     Google Ads remarketing + enhanced conversions only run with consent. */
+  var CONSENT_KEY = "doodly-consent";
+  function readConsent() { try { var c = JSON.parse(localStorage.getItem(CONSENT_KEY) || "null"); return (c && typeof c.ads === "boolean") ? c : null; } catch (e) { return null; } }
+  function writeConsent(ads) { try { localStorage.setItem(CONSENT_KEY, JSON.stringify({ ads: !!ads, analytics: true, ts: Date.now() })); } catch (e) {} }
+  function adConsent() { var c = readConsent(); return !!(c && c.ads); }
+  function consentSignals(ads) { var g = ads ? "granted" : "denied"; return { ad_storage: g, ad_user_data: g, ad_personalization: g, analytics_storage: "granted", functionality_storage: "granted", security_storage: "granted" }; }
+  // Apply the visitor's banner choice: update live consent + load ad tags now if allowed.
+  function grantConsent(ads) {
+    writeConsent(ads);
+    try { if (window.gtag) gtag("consent", "update", consentSignals(ads)); } catch (e) {}
+    if (ads) { try { bootPixel(); } catch (e) {} }
+    if (DEBUG) log("consent update — ads " + (ads ? "granted" : "denied"));
+  }
+  function onInternalSurface() { try { return /^\/(admin|driver|delivery)(\/|$)/.test(location.pathname) || isInternalUser(); } catch (e) { return false; } }
+  function injectConsentStyles() {
+    if (document.getElementById("doodly-consent-css")) return;
+    var st = document.createElement("style"); st.id = "doodly-consent-css";
+    st.textContent = '#doodly-consent{position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483000;max-width:720px;margin:0 auto;background:#fff;color:#0F3D2E;border:1px solid #DCE7DF;border-radius:14px;box-shadow:0 10px 40px rgba(15,61,46,.16);transform:translateY(150%);transition:transform .32s cubic-bezier(.2,.7,.2,1);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}'
+      + '#doodly-consent.show{transform:translateY(0)}'
+      + '#doodly-consent .dcx-in{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:14px 16px}'
+      + '#doodly-consent .dcx-t{margin:0;flex:1;min-width:220px;font-size:.9rem;line-height:1.5;color:#3a4a42}'
+      + '#doodly-consent .dcx-t a{color:#16824F;font-weight:600}'
+      + '#doodly-consent .dcx-btns{display:flex;gap:8px;flex-wrap:wrap}'
+      + '#doodly-consent .dcx-b{font:inherit;font-size:.85rem;font-weight:700;border-radius:9px;padding:9px 16px;cursor:pointer;border:1px solid transparent}'
+      + '#doodly-consent .dcx-ok{background:#1FAE66;color:#fff}#doodly-consent .dcx-ok:hover{background:#16824F}'
+      + '#doodly-consent .dcx-no{background:transparent;color:#3a4a42;border-color:#DCE7DF}#doodly-consent .dcx-no:hover{background:#F3F7F2}'
+      + '#doodly-consent .dcx-b:focus-visible{outline:2px solid #16824F;outline-offset:2px}'
+      + '@media (prefers-color-scheme:dark){#doodly-consent{background:#132420;color:#E9F2EB;border-color:#213730;box-shadow:0 12px 44px rgba(0,0,0,.5)}#doodly-consent .dcx-t{color:#A9BDB1}#doodly-consent .dcx-t a{color:#37C980}#doodly-consent .dcx-no{color:#A9BDB1;border-color:#213730}#doodly-consent .dcx-no:hover{background:#182A22}}'
+      + '@media (prefers-reduced-motion:reduce){#doodly-consent{transition:none}}';
+    document.head.appendChild(st);
+  }
+  function maybeConsentBanner() {
+    if (readConsent() || onInternalSurface()) return;   // shown once until a choice is stored; customer-facing pages only (not staff surfaces)
+    if (document.getElementById("doodly-consent")) return;
+    injectConsentStyles();
+    var bar = document.createElement("div");
+    bar.id = "doodly-consent"; bar.setAttribute("role", "dialog"); bar.setAttribute("aria-label", "Cookie consent");
+    bar.innerHTML = '<div class="dcx-in"><p class="dcx-t">DOODLY uses anonymised analytics to improve the site, and — only with your OK — advertising cookies to show you relevant offers. <a href="/privacy.html">Privacy Policy</a>.</p>'
+      + '<div class="dcx-btns"><button type="button" class="dcx-b dcx-no">Only essentials</button><button type="button" class="dcx-b dcx-ok">Accept all</button></div></div>';
+    document.body.appendChild(bar);
+    var close = function () { bar.classList.remove("show"); setTimeout(function () { if (bar.parentNode) bar.parentNode.removeChild(bar); }, 340); };
+    bar.querySelector(".dcx-ok").addEventListener("click", function () { grantConsent(true); close(); });
+    bar.querySelector(".dcx-no").addEventListener("click", function () { grantConsent(false); close(); });
+    setTimeout(function () { bar.classList.add("show"); }, 60);
+  }
+
   /* ---------------- gtag bootstrap (once, async) ---------------- */
   var _booted = false, _enabled = false;
   function boot() {
     if (_booted) return; _booted = true;
     window.dataLayer = window.dataLayer || [];
     if (!window.gtag) window.gtag = function () { window.dataLayer.push(arguments); };
-    // Consent Mode v2 — privacy-first defaults BEFORE any config/event.
+    // Consent Mode v2 defaults BEFORE config — reflect the visitor's stored choice (a returning
+    // consenter's ads are granted with no flash); privacy-first (ads denied) until they choose.
     try {
-      gtag("consent", "default", {
-        ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied",
-        analytics_storage: "granted", functionality_storage: "granted", security_storage: "granted",
-        wait_for_update: 500,
-      });
+      var _c = readConsent(), _def = consentSignals(_c ? _c.ads : false); _def.wait_for_update = 500;
+      gtag("consent", "default", _def);
     } catch (e) {}
 
     var id = measurementId();
@@ -111,7 +158,7 @@ window.DOODLY_ANALYTICS = (function () {
       s.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(id);
       document.head.appendChild(s);
       gtag("js", new Date());
-      var conf = { anonymize_ip: true, allow_google_signals: false, allow_ad_personalization_signals: false, send_page_view: false };
+      var conf = { anonymize_ip: true, send_page_view: false };   // ad signals now governed by Consent Mode (banner), not hard-disabled
       if (DEBUG) conf.debug_mode = true;
       gtag("config", id, conf);
       if (isInternalUser()) gtag("set", { traffic_type: "internal" });   // exclude staff from marketing analytics
@@ -124,7 +171,7 @@ window.DOODLY_ANALYTICS = (function () {
   function bootPixel() {
     try {
       var px = cfg().metaPixelId;
-      if (!px || isLocalhost()) return;   // never load the prod pixel from localhost either
+      if (!px || isLocalhost() || !adConsent()) return;   // the pixel is an ad tool → needs a configured id + ad consent
       !function (f, b, e, v, n, t, s) { if (f.fbq) return; n = f.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments) }; if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = "2.0"; n.queue = []; t = b.createElement(e); t.async = !0; t.src = v; s = b.getElementsByTagName(e)[0]; s.parentNode.insertBefore(t, s) }(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
       fbq("init", px); fbq("track", "PageView");
     } catch (e) {}
@@ -235,7 +282,7 @@ window.DOODLY_ANALYTICS = (function () {
 
   /* ---------------- boot + page_view ---------------- */
   try { boot(); } catch (e) {}
-  function firePageView() { try { trackPageView(); } catch (e) {} sweepWa(); }
+  function firePageView() { try { trackPageView(); } catch (e) {} sweepWa(); try { maybeConsentBanner(); } catch (e) {} }
   if (document.readyState !== "loading") setTimeout(firePageView, 0);
   else document.addEventListener("DOMContentLoaded", firePageView);
   // The chrome (incl. the WhatsApp button) mounts async → observe + decorate, debounced.
