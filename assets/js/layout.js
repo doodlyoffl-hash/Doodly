@@ -5145,7 +5145,8 @@
       + rpBars("Revenue trend", d.charts.revenueTrend, true) + rpBars("Orders trend", d.charts.ordersTrend, false)
       + rpBars("Customer growth (6 mo)", d.charts.customerGrowth, false) + rpBars("Subscription growth (6 mo)", d.charts.subscriptionGrowth, false)
       + rpBreak("Orders by status", d.charts.ordersByStatus) + rpBreak("Subscriptions by status", d.charts.subscriptionsByStatus)
-      + "</div>" + rpTable(d);
+      + "</div>" + rpTable(d)
+      + '<div id="wsCard" style="margin-top:16px"></div>';
     // preset chips
     host.querySelectorAll("[data-rp]").forEach(function (b) { b.addEventListener("click", function () { _rpState.preset = b.dataset.rp; rpAudit("filtered", { reportName: "Growth Reports", filters: _rpState.preset }); wireReportsBackend(); }); });
     // exports
@@ -5156,6 +5157,56 @@
     if (by("#rp-print")) by("#rp-print").addEventListener("click", function () { rpExport("print", d); });
     // drill-down
     host.querySelectorAll("[data-drill]").forEach(function (c) { c.addEventListener("click", function () { rpDrill(c.dataset.drill, d); }); });
+    try { wireWeeklySummaryCard(); } catch (e) {}
+  }
+  /* Weekly business-summary email — enable/day/recipients + Preview + Send now.
+     reports:view to read, reports:export to change/send (server-enforced). */
+  function wireWeeklySummaryCard() {
+    var host = document.getElementById("wsCard");
+    if (!host || !window.DOODLY_API) return;
+    DOODLY_API.get("/api/admin/reports/weekly-summary?view=config").then(function (r) {
+      var c = (r && r.config) || {};
+      var DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      var dayOpts = DAYS.map(function (n, i) { return '<option value="' + i + '"' + (Number(c.sendDay) === i ? " selected" : "") + ">" + n + "</option>"; }).join("");
+      host.innerHTML = '<div class="panel"><div class="panel-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">'
+        + "<h3>📧 Weekly summary email</h3><span class=\"badge " + (c.enabled ? "green" : "grey") + '">' + (c.enabled ? "● Auto-send on" : "Off") + "</span></div>"
+        + '<div class="panel-pad">'
+        + '<p class="muted-sm">A branded business recap — revenue, orders, customers, deliveries, top products, wallet — emailed once a week to your admin/operations team. Figures come straight from your database.</p>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-top:12px">'
+        + '<label style="display:flex;align-items:center;gap:6px;font-size:.85rem;font-weight:700"><input type="checkbox" id="ws-enabled"' + (c.enabled ? " checked" : "") + "> Send automatically</label>"
+        + '<label style="display:flex;flex-direction:column;gap:3px;font-size:.78rem;font-weight:700;color:var(--ink-2,#37423d)">Send day<select class="input" id="ws-day" style="min-width:130px">' + dayOpts + "</select></label>"
+        + '<label style="display:flex;flex-direction:column;gap:3px;font-size:.78rem;font-weight:700;color:var(--ink-2,#37423d);flex:1;min-width:200px">Extra recipients (optional)<input class="input" id="ws-recipients" placeholder="owner@doodly.in, ops@doodly.in" value="' + esc((c.recipients || []).join(", ")) + '"></label>'
+        + '<button type="button" class="btn btn-primary sm" id="ws-save">Save</button>'
+        + '<button type="button" class="btn btn-ghost sm" id="ws-preview">Preview email</button>'
+        + '<button type="button" class="btn btn-ghost sm" id="ws-send">Send now</button>'
+        + "</div>"
+        + '<p class="muted-sm" style="margin-top:10px">Always sent to active Admin/Operations users’ emails, plus any extras above. Last sent: <b>' + esc(c.lastRunWeek || "never") + "</b>.</p>"
+        + "</div></div>";
+      var parseRecips = function () { return (document.getElementById("ws-recipients").value || "").split(/[,;\s]+/).map(function (s) { return s.trim(); }).filter(Boolean); };
+      document.getElementById("ws-save").addEventListener("click", function () {
+        var btn = this; btn.disabled = true; btn.textContent = "Saving…";
+        DOODLY_API.patch("/api/admin/reports/weekly-summary", { enabled: document.getElementById("ws-enabled").checked, sendDay: Number(document.getElementById("ws-day").value), recipients: parseRecips() })
+          .then(function () { dacToast("Weekly summary settings saved."); wireWeeklySummaryCard(); })
+          .catch(function (e) { btn.disabled = false; btn.textContent = "Save"; dacToast((e && e.message) || (e && e.code === "forbidden" ? "Your role can’t change this (403)." : "Couldn’t save — check the email addresses.")); });
+      });
+      document.getElementById("ws-send").addEventListener("click", function () {
+        if (!window.confirm("Send the weekly summary email now to all configured recipients?")) return;
+        var btn = this; btn.disabled = true; btn.textContent = "Sending…";
+        DOODLY_API.post("/api/admin/reports/weekly-summary", {})
+          .then(function (r) { btn.disabled = false; btn.textContent = "Send now"; dacToast("Sent to " + ((r && r.sent) || 0) + " of " + ((r && r.recipients) || 0) + " recipient(s)."); })
+          .catch(function (e) { btn.disabled = false; btn.textContent = "Send now"; dacToast((e && e.message) || "Couldn’t send."); });
+      });
+      document.getElementById("ws-preview").addEventListener("click", function () {
+        var btn = this; btn.disabled = true; btn.textContent = "Loading…";
+        var a = DOODLY_API.actor ? DOODLY_API.actor() : { role: "", id: "" };
+        var hdr = { "X-Doodly-Actor": a.role, "X-Doodly-Actor-Id": a.id };
+        try { var t = localStorage.getItem("doodly-token"); if (t) hdr["Authorization"] = "Bearer " + t; } catch (e) {}
+        fetch(DOODLY_API.base() + "/api/admin/reports/weekly-summary?format=html", { credentials: "include", headers: hdr })
+          .then(function (res) { return res.ok ? res.text() : Promise.reject(new Error("HTTP " + res.status)); })
+          .then(function (html) { var u = URL.createObjectURL(new Blob([html], { type: "text/html" })); window.open(u, "_blank", "noopener"); setTimeout(function () { URL.revokeObjectURL(u); }, 30000); btn.disabled = false; btn.textContent = "Preview email"; })
+          .catch(function (e) { btn.disabled = false; btn.textContent = "Preview email"; dacToast("Couldn’t load preview" + (e && e.message ? " (" + e.message + ")" : ".")); });
+      });
+    }).catch(function () { /* leave the card empty on a transient error */ });
   }
   async function wireReportsBackend() {
     if ((document.body.dataset.route || "") !== "admin/reports" || !window.DOODLY_API) return;

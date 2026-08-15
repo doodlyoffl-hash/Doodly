@@ -5,12 +5,13 @@
    POST — send the email NOW to the configured recipients (reports:export). Audited.
    No customer PII leaves the backend; figures come from the DB (the source of truth). */
 import { NextRequest, NextResponse } from "next/server";
-import { ok, route } from "@/lib/http";
+import { z } from "zod";
+import { ok, parseBody, route } from "@/lib/http";
 import { requirePermission } from "@/lib/auth/authorize";
 import { readUserId, readRole } from "@/lib/auth/identity";
 import { reqContext } from "@/lib/auth/request";
 import { weeklySummary, toEmailData } from "@/lib/reports/weekly-summary";
-import { deliverWeeklySummary } from "@/lib/reports/weekly-summary-job";
+import { deliverWeeklySummary, getWeeklyConfig, patchWeeklyConfig } from "@/lib/reports/weekly-summary-job";
 import { weeklySummary as weeklyTemplate } from "@/lib/email/templates";
 
 export const runtime = "nodejs";
@@ -19,12 +20,26 @@ export const dynamic = "force-dynamic";
 export const GET = route("admin.reports.weekly.preview", async (req: NextRequest) => {
   requirePermission(req, "reports", "view");
   const sp = new URL(req.url).searchParams;
+  if (sp.get("view") === "config") return ok({ config: await getWeeklyConfig() });   // cheap — no aggregation
   const s = await weeklySummary(sp.get("date") ?? undefined);
   if (sp.get("format") === "html") {
     const email = weeklyTemplate(toEmailData(s));
     return new NextResponse(email.html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   }
   return ok({ summary: s });
+});
+
+const ConfigBody = z.object({
+  enabled: z.boolean().optional(),
+  sendDay: z.number().int().min(0).max(6).optional(),                 // 0=Sun … 1=Mon … 6=Sat
+  recipients: z.array(z.string().trim().email()).max(20).optional(),  // extra recipient emails
+});
+export const PATCH = route("admin.reports.weekly.config", async (req: NextRequest) => {
+  requirePermission(req, "reports", "export");
+  const patch = await parseBody(req, ConfigBody);
+  const config = await patchWeeklyConfig(patch);
+  try { const { audit } = await import("@/lib/auth/audit"); await audit({ userId: readUserId(req), actorRole: readRole(req), action: "reports.weekly.configured", target: `enabled ${config.enabled} · day ${config.sendDay} · ${config.recipients.length} extra recipient(s)`, ctx: reqContext(req) }); } catch { /* non-blocking */ }
+  return ok({ config });
 });
 
 export const POST = route("admin.reports.weekly.send", async (req: NextRequest) => {
