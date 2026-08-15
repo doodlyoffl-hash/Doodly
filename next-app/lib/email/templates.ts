@@ -344,4 +344,39 @@ export function opsDailySummary(d: OpsSummaryData): Email {
   return { subject: `DOODLY — Tomorrow's Delivery Summary (${d.dmy})`, html, text };
 }
 
-export const TEMPLATES = { welcome, verifyEmail, loginOtp, orderConfirmation, paymentSuccess, paymentFailed, subscriptionActivated, trialPack, walletCredit, referralReward, deliveryTomorrow, outForDelivery, delivered, bottleReturn, invoiceEmail, passwordReset, supportTicket, puzzleChallenge, promo, opsDailySummary };
+/* ---------- Reports: weekly business summary (internal, to owner/admin) ---------- */
+export interface WeeklySummaryData {
+  fromLabel: string; toLabel: string;
+  revenue: { totalPaise: number; retailPaise: number; b2bPaise: number; grossProfitPaise: number | null; netProfitPaise: number | null; deltaPct: number };
+  orders: { paidCount: number; paidValuePaise: number; deltaPct: number };
+  customers: { new: number; total: number; deltaPct: number };
+  subscriptions: { new: number; active: number };
+  deliveries: { completed: number; bottlesOut: number; bottlesIn: number };
+  wallet: { rechargeCount: number; rechargePaise: number };
+  topProducts: { name: string; qty: number; revenuePaise: number }[];
+}
+export function weeklySummary(d: WeeklySummaryData): Email {
+  const rs = (p: number) => "₹" + Math.round((p || 0) / 100).toLocaleString("en-IN");
+  const dtag = (pct: number) => (pct > 0 ? ` (▲${pct}% WoW)` : pct < 0 ? ` (▼${Math.abs(pct)}% WoW)` : " (flat WoW)");
+  const r = d.revenue;
+  const profit = r.grossProfitPaise != null
+    ? `${infoRow("Gross profit", rs(r.grossProfitPaise))}${r.netProfitPaise != null ? infoRow("Net profit", rs(r.netProfitPaise), true) : ""}`
+    : "";
+  const top = d.topProducts.length
+    ? card(`${heading("🥛 Top products")}${d.topProducts.map((p) => infoRow(p.name, `${p.qty} sold · ${rs(p.revenuePaise)}`)).join("")}`)
+    : "";
+  const html = compose(`Your week at DOODLY — ${d.fromLabel}–${d.toLabel}`, [
+    hero({ emoji: "📊", title: "Your week at DOODLY", subtitle: `${d.fromLabel} – ${d.toLabel} · business summary` }),
+    card(`${heading("Revenue")}${infoRow("Revenue earned", rs(r.totalPaise) + dtag(r.deltaPct), true)}${r.b2bPaise > 0 ? infoRow("· Retail", rs(r.retailPaise)) + infoRow("· B2B", rs(r.b2bPaise)) : ""}${profit}`),
+    card(`${heading("Sales & customers")}${infoRow("Orders paid", `${d.orders.paidCount} · ${rs(d.orders.paidValuePaise)}${dtag(d.orders.deltaPct)}`)}${infoRow("New customers", `${d.customers.new}${dtag(d.customers.deltaPct)}`)}${infoRow("New subscriptions", String(d.subscriptions.new))}${infoRow("Active subscriptions", String(d.subscriptions.active), true)}`),
+    card(`${heading("Deliveries")}${infoRow("Completed", String(d.deliveries.completed))}${infoRow("Bottles delivered", String(d.deliveries.bottlesOut))}${infoRow("Empties collected", String(d.deliveries.bottlesIn))}`),
+    top,
+    d.wallet.rechargeCount > 0 ? card(`${heading("Wallet")}${infoRow("Recharges", `${d.wallet.rechargeCount} · ${rs(d.wallet.rechargePaise)}`)}`) : "",
+    card(`<div style="text-align:center">${button("Open Admin Dashboard", url("/admin/dashboard.html"))}<div style="margin-top:12px">${button("See full Reports", url("/admin/reports.html"), "ghost")}</div></div>`),
+    card(para(`These figures come straight from your DOODLY backend — the source of truth for revenue, orders and deliveries. Website traffic &amp; acquisition live in Google Analytics.`)),
+  ]);
+  const text = `DOODLY — Weekly Business Summary (${d.fromLabel}–${d.toLabel})\nRevenue ${rs(r.totalPaise)}${dtag(r.deltaPct)} | Orders ${d.orders.paidCount} (${rs(d.orders.paidValuePaise)}) | New customers ${d.customers.new}${dtag(d.customers.deltaPct)}\nSubscriptions: ${d.subscriptions.new} new · ${d.subscriptions.active} active | Deliveries ${d.deliveries.completed} · ${d.deliveries.bottlesOut} bottles delivered\nTop products: ${d.topProducts.map((p) => `${p.name} ${p.qty}`).join(" · ") || "—"}\nDashboard: ${url("/admin/dashboard.html")}`;
+  return { subject: `DOODLY — Weekly Summary (${d.fromLabel}–${d.toLabel})`, html, text };
+}
+
+export const TEMPLATES = { welcome, verifyEmail, loginOtp, orderConfirmation, paymentSuccess, paymentFailed, subscriptionActivated, trialPack, walletCredit, referralReward, deliveryTomorrow, outForDelivery, delivered, bottleReturn, invoiceEmail, passwordReset, supportTicket, puzzleChallenge, promo, opsDailySummary, weeklySummary };

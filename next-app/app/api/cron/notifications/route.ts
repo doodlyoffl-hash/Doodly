@@ -105,7 +105,11 @@ async function handle(req: NextRequest) {
   // (legacy rows, or an inline compute that was skipped). Runs after new deliveries are generated.
   const { backfillDeliveryDistances } = await import("@/lib/warehouse/distance");
   const distances = await backfillDeliveryDistances(500).catch((e) => ({ error: (e as Error)?.message ?? "failed" }));
-  return NextResponse.json({ ok: true, ...result, whatsapp, autopay, addressChanges, addressChangeReminders, subDeliveries, cutoff, cutoffWa, cutoffHealth, loyalty, walletExpiry, rewardExpiry, distances });
+  // Weekly business summary: once per week (configured IST send day, guarded by an AppSetting
+  // marker) email the owner/admins a branded recap. Piggybacks this daily cron — NO new Vercel cron.
+  const { maybeSendWeeklySummary } = await import("@/lib/reports/weekly-summary-job");
+  const weeklySummary = await maybeSendWeeklySummary().catch((e) => ({ ran: false, error: (e as Error)?.message ?? "failed" }));
+  return NextResponse.json({ ok: true, ...result, whatsapp, autopay, addressChanges, addressChangeReminders, subDeliveries, cutoff, cutoffWa, cutoffHealth, loyalty, walletExpiry, rewardExpiry, distances, weeklySummary });
 }
 
 export const GET = handle;
