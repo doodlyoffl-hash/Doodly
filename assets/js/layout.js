@@ -1243,7 +1243,7 @@
     }
     async function pickCustomer(id) {
       S.results = []; S.newCustOpen = false; S.addressId = ""; S.addrOpen = false; S.dup = null;
-      try { var p = await DOODLY_API.get("/api/admin/customers/" + encodeURIComponent(id)); var prof = p.profile || p; S.profile = prof; S.customer = { id: prof.id, name: prof.name, phone: prof.phone, email: prof.email }; var def = (prof.addresses || []).filter(function (a) { return a.isDefault; })[0] || (prof.addresses || [])[0]; if (def) S.addressId = def.id; } catch (e) { S.msg = "Couldn't load customer."; }
+      try { var p = await DOODLY_API.get("/api/admin/customers/" + encodeURIComponent(id)); var prof = p.customer || p.profile || p; S.profile = prof; S.customer = { id: prof.id, name: prof.name, phone: prof.phone, email: prof.email }; var def = (prof.addresses || []).filter(function (a) { return a.isDefault; })[0] || (prof.addresses || [])[0]; if (def) S.addressId = def.id; } catch (e) { S.msg = "Couldn't load customer."; }
       render(); refreshPreview(); refreshDup();
     }
 
