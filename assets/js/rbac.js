@@ -31,7 +31,7 @@ window.DOODLY_RBAC = (function () {
   // key, label, group, specials available at "full"
   const MODULES = [
     ["dashboard", "Dashboard", "Overview"],
-    ["orders", "Orders", "Commerce"], ["subscriptions", "Subscriptions", "Commerce"], ["billing", "Subscription Billing", "Commerce", ["approve"]], ["customers", "Customers", "Commerce"], ["invoiceB2b", "Business Invoices", "Commerce"], ["payments", "Payments", "Finance", ["refund", "approve"]],
+    ["orders", "Orders", "Commerce"], ["assistedOrders", "Assisted Order", "Commerce"], ["subscriptions", "Subscriptions", "Commerce"], ["billing", "Subscription Billing", "Commerce", ["approve"]], ["customers", "Customers", "Commerce"], ["invoiceB2b", "Business Invoices", "Commerce"], ["payments", "Payments", "Finance", ["refund", "approve"]],
     ["revenue", "Revenue", "Finance"], ["expenses", "Daily Expenses", "Finance", ["approve"]], ["wallet", "Wallet Management", "Finance", ["reverse"]], ["b2b", "B2B Orders", "Commerce", ["config", "delete"]], ["b2bPricing", "B2B Pricing", "Commerce", ["override", "approve"]], ["lateDeliveries", "Late Deliveries", "Operations", ["override"]], ["coupons", "Coupons", "Marketing"], ["offers", "Offers", "Marketing"],
     ["products", "Products", "Catalogue"], ["categories", "Categories", "Catalogue"], ["inventory", "Inventory", "Inventory", ["adjust"]], ["bottleInventory", "Bottle Inventory", "Inventory", ["adjust"]], ["deliverySettings", "Delivery Settings", "Operations"],
     ["deliveries", "Delivery Mgmt", "Operations", ["assign"]], ["assignment", "Auto Assignment", "Operations", ["override"]], ["serviceableAreas", "Serviceable Areas", "Operations"], ["geoCorrection", "Update Customer Geo Location", "Operations"], ["drivers", "Drivers", "Operations"], ["routes", "Routes", "Operations"],
@@ -51,8 +51,8 @@ window.DOODLY_RBAC = (function () {
   const DEFAULT_MATRIX = {
     super_admin: "*",
     admin: ADMIN_FULL,
-    support: { dashboard: "view", customers: "view", orders: "manage", subscriptions: "view", support: "full" },
-    operations: { dashboard: "view", deliveries: "full", drivers: "manage", routes: "manage", serviceableAreas: "manage", deliverySettings: "manage", geoCorrection: "manage", inventory: "view", reports: "view" },
+    support: { dashboard: "view", customers: "view", orders: "manage", assistedOrders: "manage", subscriptions: "view", support: "full" },
+    operations: { dashboard: "view", deliveries: "full", drivers: "manage", routes: "manage", serviceableAreas: "manage", deliverySettings: "manage", geoCorrection: "manage", inventory: "view", assistedOrders: "manage", reports: "view" },
     procurement: { dashboard: "view", farmers: "manage", procurement: "full", quality: "view", reports: "view" },
     accountant: { dashboard: "view", revenue: "view", expenses: "manage", wallet: "full", payments: "full", billing: "manage", reports: "manage", coupons: "view", employees: "view", hrDashboard: "view", attendance: "view", payroll: "full", advances: "full", leave: "view" },
     inventory: { dashboard: "view", inventory: "full", bottleInventory: "full", reports: "view" },

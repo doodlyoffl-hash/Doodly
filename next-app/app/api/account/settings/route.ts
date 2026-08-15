@@ -21,6 +21,7 @@ const DEFAULTS = {
   marketingOptIn: true,
   language: "en",
   preferredSlot: null as string | null,
+  simpleMode: false,   // senior-friendly Simple Ordering Mode
 };
 
 function shape(p: Partial<typeof DEFAULTS> | null) {
@@ -29,7 +30,7 @@ function shape(p: Partial<typeof DEFAULTS> | null) {
   return {
     emailOptIn: m.emailOptIn, smsOptIn: m.smsOptIn, whatsappOptIn: m.whatsappOptIn,
     pushOptIn: m.pushOptIn, marketingOptIn: m.marketingOptIn,
-    language: m.language, preferredSlot: m.preferredSlot,
+    language: m.language, preferredSlot: m.preferredSlot, simpleMode: m.simpleMode,
   };
 }
 
@@ -47,6 +48,7 @@ const patchSchema = z.object({
   marketingOptIn: z.boolean().optional(),
   language: z.enum(["en", "te", "hi"]).optional(),
   preferredSlot: z.string().trim().max(40).optional().or(z.literal("").transform(() => null)),
+  simpleMode: z.boolean().optional(),
 });
 
 export const PATCH = route("account.settings.update", async (req: NextRequest) => {

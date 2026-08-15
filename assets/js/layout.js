@@ -435,6 +435,7 @@
 
     root.outerHTML = `<div class="auth auth-v2">${stage}<div class="auth-main">${bubbles}${a.chooser ? chooser : card}</div></div>`;
     wireTheme();
+    try { wireSimpleMode(); } catch (e) {}
     wireOtp();
     if (window.DOODLY_AUTH) window.DOODLY_AUTH.init(document);
     if (window.DOODLY_MOTION) window.DOODLY_MOTION.init(document);
@@ -589,6 +590,46 @@
     const apply = (t) => { document.documentElement.dataset.theme = t; btn.innerHTML = t === "dark" ? moon : sun; localStorage.setItem("doodly-theme", t); };
     if (localStorage.getItem("doodly-theme") === "dark") apply("dark");
     btn.addEventListener("click", () => apply(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+  }
+
+  /* Senior-friendly Simple Ordering Mode — an ADDITIVE opt-in skin: larger text,
+     larger buttons/targets, higher contrast and calmer motion, applied ONLY when
+     the visitor has turned it on (data-simple="1"). Default screens are byte-identical.
+     Persisted per-customer (CustomerPreference.simpleMode) + mirrored to localStorage
+     so it follows the customer and applies before first paint. Toggle in Account →
+     Settings, or via DOODLY_SIMPLE.set(true/false). */
+  function simpleModeCss() {
+    if (document.getElementById("doodly-simple-css")) return;
+    var st = document.createElement("style"); st.id = "doodly-simple-css";
+    st.textContent =
+      ':root[data-simple="1"]{font-size:112.5%}'
+      + ':root[data-simple="1"] body{line-height:1.7;letter-spacing:.1px}'
+      + ':root[data-simple="1"] .btn,:root[data-simple="1"] button.btn,:root[data-simple="1"] .btn-auth{font-size:1.06rem;min-height:54px;padding:14px 24px;border-radius:14px;font-weight:700}'
+      + ':root[data-simple="1"] .input,:root[data-simple="1"] input,:root[data-simple="1"] select,:root[data-simple="1"] textarea{font-size:1.06rem;min-height:54px;padding:13px 15px;border-radius:12px}'
+      + ':root[data-simple="1"] label{font-size:.95rem;font-weight:600}'
+      + ':root[data-simple="1"] .co-steps{gap:6px}:root[data-simple="1"] .co-step,:root[data-simple="1"] .co-steps [role="listitem"]{font-size:1rem;font-weight:700}'
+      + ':root[data-simple="1"] .co-card,:root[data-simple="1"] .co-cards>*{padding:16px!important}'
+      + ':root[data-simple="1"] a{text-underline-offset:3px}'
+      + '@media (prefers-reduced-motion:no-preference){:root[data-simple="1"] *{animation-duration:.001ms!important;transition-duration:120ms!important}}';
+    (document.head || document.documentElement).appendChild(st);
+  }
+  function applySimple(on) {
+    try { if (on) document.documentElement.dataset.simple = "1"; else document.documentElement.removeAttribute("data-simple"); localStorage.setItem("doodly-simple", on ? "1" : "0"); } catch (e) {}
+  }
+  function wireSimpleMode() {
+    simpleModeCss();
+    try { applySimple(localStorage.getItem("doodly-simple") === "1"); } catch (e) {}
+    // Hydrate from the customer's saved preference once per load (so it follows them across devices).
+    var signedIn = false; try { signedIn = !!(localStorage.getItem("doodly-currentuser") || localStorage.getItem("doodly-token")); } catch (e) {}
+    if (signedIn && !window.__smHydrated && window.DOODLY_API) {
+      window.__smHydrated = true;
+      try { DOODLY_API.get("/api/account/settings").then(function (d) { var sm = d && d.settings && d.settings.simpleMode; if (typeof sm === "boolean") applySimple(sm); }).catch(function () {}); } catch (e) {}
+    }
+    if (!window.DOODLY_SIMPLE) window.DOODLY_SIMPLE = {
+      isOn: function () { try { return document.documentElement.dataset.simple === "1"; } catch (e) { return false; } },
+      set: function (on) { applySimple(!!on); try { if (window.DOODLY_API && (localStorage.getItem("doodly-currentuser") || localStorage.getItem("doodly-token"))) DOODLY_API.patch("/api/account/settings", { simpleMode: !!on }).catch(function () {}); } catch (e) {} },
+      toggle: function () { this.set(!this.isOn()); },
+    };
   }
 
   function wireReveals() {
@@ -777,7 +818,7 @@
   }
 
   function wirePublic() {
-    wireTheme(); wireReveals(); wireFaq(); wireTabs(); wireForms(); wireBuilder();
+    wireTheme(); try { wireSimpleMode(); } catch (e) {} wireReveals(); wireFaq(); wireTabs(); wireForms(); wireBuilder();
     try { wireBlog(); } catch (e) {}
     try { if (window.DOODLY_CMS && DOODLY_CMS.hydratePage) DOODLY_CMS.hydratePage(); } catch (e) {}
     const burger = $("#navBurger"), menu = $("#mobileMenu");
@@ -1096,7 +1137,7 @@
     return {
       _id: o.id,
       id: "DOO-" + String(o.id || "").slice(-6).toUpperCase(),
-      cust: (o.user && o.user.name) || "—",
+      cust: ((o.user && o.user.name) || "—") + (o.source === "assisted" ? "  ·  ☎ Assisted" : o.source === "simple_mode" ? "  ·  ★ Easy view" : ""),
       item: titleize(o.type),
       amount: Math.round((o.totalPaise || 0) / 100),
       pay: ORD_PAY[o.status] || ["grey", titleize(o.status)],
@@ -1115,6 +1156,290 @@
     } catch (e) {
       bkBanner(host, e.code === "offline" ? "⚠ Backend offline — couldn't load live data." : e.code === "forbidden" ? "⚠ No permission to view orders (403)." : "⚠ " + e.message, "err");
     }
+  }
+
+  /* ============================================================
+     Assisted Order builder (admin/assisted-orders) — staff place a REAL order
+     for a customer who called in. Same production engine as the website
+     (POST /api/admin/orders → placeOrder), a live dry-run summary (/preview,
+     no writes), duplicate guard, mandatory consent, and wallet / Razorpay
+     payment-link settlement. Reuses DOODLY_API + the customer/catalogue APIs.
+     ============================================================ */
+  async function wireAssistedOrderBuilder() {
+    var mount = document.getElementById("aoMount");
+    if (!mount || !window.DOODLY_API) return;
+    try { if (window.DOODLY_RBAC && DOODLY_RBAC.can && !DOODLY_RBAC.can("assistedOrders", "create")) { mount.innerHTML = '<div class="panel panel-pad muted-sm">Your role can\'t place assisted orders (needs the Assisted Order permission).</div>'; return; } } catch (e) {}
+    var money = function (p) { try { return rup(p); } catch (e) { return "₹" + Math.round((Number(p) || 0) / 100).toLocaleString("en-IN"); } };
+    var esc2 = function (s) { try { return e2(s); } catch (e) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]); }); } };
+    var S = mount.__ao || (mount.__ao = { customer: null, profile: null, addressId: "", variantId: "", planId: "", bottles: 1, coupon: "", useWallet: false, preview: null, dup: null, cat: null, consent: false, busy: false, result: null, addrOpen: false, newCustOpen: false, results: [], msg: "" });
+    if (!S.cat) { try { S.cat = await DOODLY_API.get("/api/catalogue"); } catch (e) { S.cat = { variants: [], plans: [] }; } }
+
+    var pvTimer = null;
+    function schedulePreview() { clearTimeout(pvTimer); pvTimer = setTimeout(refreshPreview, 350); }
+    async function refreshPreview() {
+      if (!S.variantId) { S.preview = null; renderSummary(); return; }
+      var body = { variantId: S.variantId, bottles: S.bottles };
+      if (S.planId) body.planId = S.planId;
+      if (S.customer) body.customerId = S.customer.id;
+      if (S.addressId) body.addressId = S.addressId;
+      if (S.coupon) body.couponCode = S.coupon;
+      if (S.useWallet) body.walletAmountPaise = 100000000;   // apply as much as possible; server caps to balance
+      try { var d = await DOODLY_API.post("/api/admin/orders/preview", body); S.preview = d.preview; S.msg = ""; }
+      catch (e) { S.preview = null; S.msg = e.code === "forbidden" ? "No permission (403)." : (e.message || "Preview failed."); }
+      renderSummary();
+    }
+    async function refreshDup() {
+      S.dup = null;
+      if (!S.customer || !S.variantId) { renderSummary(); return; }
+      try { S.dup = await DOODLY_API.get("/api/admin/orders/duplicate-check?customerId=" + encodeURIComponent(S.customer.id) + "&variantId=" + encodeURIComponent(S.variantId)); } catch (e) { S.dup = null; }
+      renderSummary();
+    }
+    async function pickCustomer(id) {
+      S.results = []; S.newCustOpen = false; S.addressId = ""; S.addrOpen = false; S.dup = null;
+      try { var p = await DOODLY_API.get("/api/admin/customers/" + encodeURIComponent(id)); var prof = p.profile || p; S.profile = prof; S.customer = { id: prof.id, name: prof.name, phone: prof.phone, email: prof.email }; var def = (prof.addresses || []).filter(function (a) { return a.isDefault; })[0] || (prof.addresses || [])[0]; if (def) S.addressId = def.id; } catch (e) { S.msg = "Couldn't load customer."; }
+      render(); refreshPreview(); refreshDup();
+    }
+
+    function summaryHTML() {
+      var p = S.preview;
+      if (S.msg && !p) return '<div class="ao-warn">⚠ ' + esc2(S.msg) + "</div>";
+      if (!p) return '<p class="muted-sm">Pick a product to see the live price, deposit, wallet and total.</p>';
+      var dep = p.deposit || {}, row = function (l, v, strong) { return '<div class="ao-row"><span>' + l + "</span><span" + (strong ? ' class="strong"' : "") + ">" + v + "</span></div>"; };
+      var depWhy = { new_customer: "new bottles", reuse_existing: "reused your bottles — ₹0", top_up: "top-up bottles", voluntary_extra: "extra bottles", replacement: "replacement bottles" }[dep.reason] || "";
+      var h = "";
+      h += row("Product (" + esc2(String(p.bottles)) + "× " + esc2(p.variant.label) + (p.plan ? " · " + esc2(p.plan.name) : " · one-time") + ")", money(p.product.productPaise));
+      if (p.couponDiscountPaise > 0) h += row("Coupon " + esc2(S.coupon), "− " + money(p.couponDiscountPaise));
+      h += row("Bottle deposit" + (depWhy ? ' <span class="muted-sm">(' + depWhy + ")</span>" : ""), p.deposit.depositPaise > 0 ? money(p.deposit.depositPaise) : "₹0");
+      if (p.walletAppliedPaise > 0) h += row("Wallet applied", "− " + money(p.walletAppliedPaise));
+      h += '<div class="ao-hr"></div>';
+      h += row("Order total", money(p.totalPaise), true);
+      h += row(p.payablePaise > 0 ? "To pay (wallet + link)" : "Fully covered by wallet", "<b>" + money(p.payablePaise) + "</b>", true);
+      if (p.couponMessage && !p.couponOk) h += '<div class="ao-warn" style="margin-top:8px">Coupon: ' + esc2(p.couponMessage) + "</div>";
+      // serviceability
+      var sv = p.serviceability || {};
+      if (S.addressId) {
+        if (!sv.checked) h += "";
+        else if (sv.serviceable && sv.complete) h += '<div class="ao-ok">✓ Address is serviceable' + (sv.needsPin ? " (pin will be geocoded at placement)" : "") + "</div>";
+        else h += '<div class="ao-warn" style="margin-top:8px">⚠ ' + (!sv.complete ? "Address is incomplete." : "This pincode isn\'t serviceable — the order can\'t be placed.") + "</div>";
+      }
+      if (p.needsPlan) h += '<div class="ao-warn" style="margin-top:8px">Choose a subscription plan to price this bottle.</div>';
+      return h;
+    }
+    function dupHTML() {
+      if (!S.dup || !S.dup.duplicate) return "";
+      var list = (S.dup.recent || []).slice(0, 3).map(function (o) { return '<li>' + esc2(new Date(o.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })) + " · " + money(o.totalPaise) + " · " + esc2(o.status) + " · " + esc2((o.items && o.items[0] && o.items[0].productName) || o.type) + "</li>"; }).join("");
+      return '<div class="ao-dup"><b>⚠ Possible duplicate</b> — this customer already has a recent order for this product in the last ' + esc2(String(S.dup.windowDays)) + ' day(s):<ul>' + list + "</ul>Only continue if this is a genuinely new order.</div>";
+    }
+    function renderSummary() {
+      var el = mount.querySelector("#aoSummary"); if (el) el.innerHTML = summaryHTML();
+      var dz = mount.querySelector("#aoDup"); if (dz) dz.innerHTML = dupHTML();
+      var pb = mount.querySelector("#aoPlace"); if (pb) pb.disabled = !canPlace();
+    }
+    function canPlace() {
+      return !!(S.customer && S.addressId && S.variantId && S.consent && !S.busy && S.preview && (S.preview.ok || S.preview.needsPlan === false) && !(S.preview.serviceability && S.preview.serviceability.checked && (!S.preview.serviceability.serviceable || !S.preview.serviceability.complete)));
+    }
+
+    function render() {
+      if (S.result) { mount.innerHTML = resultHTML(); return; }
+      var subVariants = (S.cat.variants || []);
+      var plans = (S.cat.plans || []);
+      var custBlock;
+      if (S.customer) {
+        var pr = S.profile || {};
+        custBlock = '<div class="ao-cust"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">'
+          + "<div><div class=\"strong\">" + esc2(S.customer.name || "Customer") + "</div><div class=\"muted-sm\">" + esc2(S.customer.phone || "") + (S.customer.email ? " · " + esc2(S.customer.email) : "") + "</div></div>"
+          + '<button type="button" class="btn btn-ghost sm" data-ao="clearcust">Change</button></div>'
+          + '<div class="ao-facts">'
+          + "<span>👛 Wallet <b>" + money((pr.wallet && pr.wallet.balancePaise) || pr.walletPaise || 0) + "</b></span>"
+          + "<span>🍾 Bottles held <b>" + esc2(String((pr.bottles && pr.bottles.pending) || 0)) + "</b></span>"
+          + "<span>📦 Orders <b>" + esc2(String(pr.ordersTotal || (pr.orders || []).length || 0)) + "</b></span>"
+          + "<span>🔁 Active subs <b>" + esc2(String(((pr.subscriptions || []).filter(function (s) { return s.status === "ACTIVE"; })).length)) + "</b></span>"
+          + "</div></div>";
+      } else {
+        var results = S.results.length ? '<div class="ao-results">' + S.results.map(function (c) { return '<button type="button" class="ao-result" data-ao="pick" data-id="' + esc2(c.id) + '">' + esc2(c.name || "(no name)") + ' <span class="muted-sm">' + esc2(c.phone || c.email || "") + "</span></button>"; }).join("") + "</div>" : "";
+        var newForm = S.newCustOpen ? '<div class="ao-form"><div class="ao-grid">'
+          + '<label>Full name<input class="input" data-aof="name" placeholder="Customer name"></label>'
+          + '<label>Mobile<input class="input" data-aof="phone" placeholder="10-digit mobile"></label>'
+          + '<label>Email (optional)<input class="input" data-aof="email" placeholder="name@email.com"></label>'
+          + '</div><button type="button" class="btn btn-primary sm" data-ao="createcust">Create customer</button> <button type="button" class="btn btn-ghost sm" data-ao="cancelcust">Cancel</button></div>' : "";
+        custBlock = '<div class="ao-search"><input class="input" data-ao="search" placeholder="Search by mobile, name, email or customer id…" value="' + esc2(S.searchVal || "") + '">'
+          + results
+          + '<div style="margin-top:8px">' + (S.newCustOpen ? "" : '<button type="button" class="btn btn-ghost sm" data-ao="newcust">+ New customer (with consent)</button>') + newForm + "</div></div>";
+      }
+
+      // address block
+      var addrBlock = "";
+      if (S.customer) {
+        var addrs = (S.profile && S.profile.addresses) || [];
+        var opts = addrs.map(function (a) {
+          var line = [a.houseNo, a.buildingName, a.line1, a.area, a.landmark, a.city, a.pincode].filter(Boolean).join(", ");
+          return '<label class="ao-addr"><input type="radio" name="aoAddr" value="' + esc2(a.id) + '"' + (S.addressId === a.id ? " checked" : "") + '> <span>' + esc2(line || a.label || "Address") + (a.isDefault ? ' <span class="badge grey">default</span>' : "") + "</span></label>";
+        }).join("");
+        var addrForm = S.addrOpen ? '<div class="ao-form"><div class="ao-grid">'
+          + '<label>Flat / House<input class="input" data-aaf="houseNo"></label>'
+          + '<label>Building / Apartment<input class="input" data-aaf="buildingName"></label>'
+          + '<label>Floor<input class="input" data-aaf="floor"></label>'
+          + '<label>Area / Locality<input class="input" data-aaf="area"></label>'
+          + '<label>Landmark<input class="input" data-aaf="landmark"></label>'
+          + '<label>Street / Line<input class="input" data-aaf="line1"></label>'
+          + '<label>City<input class="input" data-aaf="city"></label>'
+          + '<label>State<input class="input" data-aaf="state"></label>'
+          + '<label>PIN code<input class="input" data-aaf="pincode" maxlength="6" placeholder="6 digits"></label>'
+          + '</div><p class="muted-sm">The exact map pin is geocoded from the address at placement; serviceability is checked against the PIN code.</p>'
+          + '<button type="button" class="btn btn-primary sm" data-ao="saveaddr">Save address</button> <button type="button" class="btn btn-ghost sm" data-ao="canceladdr">Cancel</button></div>' : "";
+        addrBlock = '<div class="ao-sec"><div class="ao-sec-h">2 · Delivery address <span class="req">*</span></div>'
+          + (opts || '<p class="muted-sm">No saved address yet — add one below.</p>')
+          + '<div style="margin-top:8px">' + (S.addrOpen ? "" : '<button type="button" class="btn btn-ghost sm" data-ao="newaddr">+ Add address</button>') + addrForm + "</div></div>";
+      }
+
+      // product block
+      var prodBlock = S.customer ? '<div class="ao-sec"><div class="ao-sec-h">3 · Product &amp; plan <span class="req">*</span></div><div class="ao-grid">'
+        + '<label>Product<select class="input" data-ao="variant"><option value="">Select…</option>' + subVariants.map(function (v) { return '<option value="' + esc2(v.id) + '"' + (S.variantId === v.id ? " selected" : "") + ">" + esc2(v.label) + " (" + esc2(String(v.ml)) + "ml" + (v.type === "trial" ? " · trial" : "") + ")</option>"; }).join("") + "</select></label>"
+        + '<label>Plan<select class="input" data-ao="plan"><option value="">One-time</option>' + plans.map(function (pl) { return '<option value="' + esc2(pl.slug) + '"' + (S.planId === pl.slug ? " selected" : "") + ">" + esc2(pl.name || pl.label || pl.slug) + " (" + esc2(String(pl.days)) + "d)</option>"; }).join("") + "</select></label>"
+        + '<label>Bottles / delivery<input class="input" type="number" min="1" max="20" data-ao="bottles" value="' + esc2(String(S.bottles)) + '"></label>'
+        + '</div></div>' : "";
+
+      // adjustments
+      var adjBlock = S.customer ? '<div class="ao-sec"><div class="ao-sec-h">4 · Coupon &amp; wallet</div><div class="ao-grid">'
+        + '<label>Coupon code<input class="input" data-ao="coupon" placeholder="Optional" value="' + esc2(S.coupon) + '"></label>'
+        + '<label class="ao-chk"><input type="checkbox" data-ao="wallet"' + (S.useWallet ? " checked" : "") + '> Use wallet balance</label>'
+        + '</div></div>' : "";
+
+      mount.innerHTML = '<style>' + aoCss() + "</style>"
+        + '<div class="ao-wrap"><div class="ao-main">'
+        + '<div class="ao-sec"><div class="ao-sec-h">1 · Customer <span class="req">*</span></div>' + custBlock + "</div>"
+        + addrBlock + prodBlock + adjBlock
+        + (S.customer ? '<div class="ao-sec"><label class="ao-chk"><input type="checkbox" data-ao="consent"' + (S.consent ? " checked" : "") + '> <b>The customer has confirmed these details and consents to this order (placed over the phone).</b></label>'
+          + '<div id="aoDup">' + dupHTML() + '</div>'
+          + '<button type="button" class="btn btn-primary" id="aoPlace" data-ao="place"' + (canPlace() ? "" : " disabled") + '>Place order for customer</button></div>' : "")
+        + '</div><aside class="ao-side"><div class="ao-side-h">Order summary</div><div id="aoSummary">' + summaryHTML() + "</div>"
+        + '<p class="muted-sm ao-note">🔒 Same production order engine as the website — real pricing, deposit, wallet, coupon, subscription, inventory, delivery, invoice &amp; audit. Nothing is charged until the customer pays (wallet or link).</p></aside></div>';
+    }
+
+    function resultHTML() {
+      var r = S.result;
+      var paid = r.paid;
+      var link = r.paymentLink;
+      return '<style>' + aoCss() + "</style><div class=\"ao-wrap\"><div class=\"ao-main\"><div class=\"ao-sec\">"
+        + '<div class="ao-done">' + (paid ? "✅ Order placed &amp; paid" : "✅ Order placed — awaiting payment") + "</div>"
+        + '<div class="ao-facts" style="margin-top:6px"><span>Order <b>' + esc2(r.number || r.orderId || "") + "</b></span><span>Total <b>" + money(r.totalPaise) + "</b></span>" + (r.payablePaise > 0 ? "<span>To pay <b>" + money(r.payablePaise) + "</b></span>" : "") + "</div>"
+        + (link ? '<div class="ao-linkbox"><div class="strong">Payment link sent to the customer</div><div class="muted-sm">Also sent via their email / SMS / WhatsApp. Order confirms automatically once paid.</div><div class="ao-linkrow"><code>' + esc2(link) + '</code><button type="button" class="btn btn-ghost sm" data-ao="copylink" data-link="' + esc2(link) + '">Copy</button><a class="btn btn-ghost sm" href="' + esc2(link) + '" target="_blank" rel="noopener">Open</a></div></div>'
+          : '<p class="muted-sm" style="margin-top:8px">Fully covered by wallet — the order is confirmed and now flows into deliveries, invoice and reports.</p>')
+        + '<div style="margin-top:12px"><button type="button" class="btn btn-primary sm" data-ao="another">+ New assisted order</button> <a class="btn btn-ghost sm" href="/admin/orders.html">View all orders</a></div>'
+        + "</div></div></div>";
+    }
+
+    function aoCss() {
+      return '.ao-wrap{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}.ao-main{flex:1;min-width:320px;display:flex;flex-direction:column;gap:14px}.ao-side{width:320px;max-width:100%;position:sticky;top:16px;background:var(--surface-2,#f3f7f2);border:1px solid var(--line,#dde7e0);border-radius:14px;padding:14px}'
+        + '.ao-sec{background:var(--surface,#fff);border:1px solid var(--line,#e4ede7);border-radius:14px;padding:14px}.ao-sec-h{font-weight:700;font-size:.95rem;margin-bottom:10px}.req{color:#d33;font-weight:400}'
+        + '.ao-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.ao-grid label,.ao-form label{display:flex;flex-direction:column;font-size:.8rem;gap:4px;font-weight:600}.ao-chk{display:flex;flex-direction:row!important;align-items:center;gap:8px;font-weight:500}.ao-chk input{width:auto}'
+        + '.ao-results{margin-top:8px;display:flex;flex-direction:column;gap:4px}.ao-result{text-align:left;background:var(--surface-2,#f3f7f2);border:1px solid var(--line,#dde7e0);border-radius:9px;padding:8px 10px;cursor:pointer}.ao-result:hover{border-color:#16824F}'
+        + '.ao-cust{background:var(--surface-2,#f3f7f2);border:1px solid var(--line,#dde7e0);border-radius:12px;padding:12px}.ao-facts{display:flex;flex-wrap:wrap;gap:10px 16px;margin-top:8px;font-size:.82rem}'
+        + '.ao-addr{display:flex;align-items:center;gap:8px;padding:7px 0;font-size:.85rem}.ao-addr input{width:auto}.ao-form{margin-top:8px;background:var(--surface-2,#f3f7f2);border:1px solid var(--line,#dde7e0);border-radius:12px;padding:12px}'
+        + '.ao-row{display:flex;justify-content:space-between;gap:12px;font-size:.85rem;padding:3px 0}.ao-hr{border-top:1px solid var(--line,#dde7e0);margin:8px 0}.ao-side-h{font-weight:700;margin-bottom:10px}.ao-note{margin-top:12px}'
+        + '.ao-ok{margin-top:8px;color:#16824F;font-size:.82rem;font-weight:600}.ao-warn{margin-top:4px;color:#b45309;font-size:.82rem;font-weight:600}.ao-dup{margin-top:10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:10px;font-size:.82rem}.ao-dup ul{margin:6px 0 0 16px}'
+        + '.ao-done{font-size:1.05rem;font-weight:800;color:#16824F}.ao-linkbox{margin-top:12px;background:var(--surface-2,#f3f7f2);border:1px solid var(--line,#dde7e0);border-radius:12px;padding:12px}.ao-linkrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}.ao-linkrow code{background:#fff;border:1px solid var(--line,#dde7e0);border-radius:8px;padding:6px 10px;font-size:.78rem;word-break:break-all}';
+    }
+
+    // ---- one delegated set of listeners (survives re-renders) ----
+    if (!mount.__aoBound) {
+      mount.__aoBound = true;
+      mount.addEventListener("input", function (e) {
+        var t = e.target, k = t.getAttribute && t.getAttribute("data-ao");
+        if (k === "search") { S.searchVal = t.value; clearTimeout(S._st); S._st = setTimeout(async function () { var q = (S.searchVal || "").trim(); if (q.length < 2) { S.results = []; render(); t2focus(); return; } try { var d = await DOODLY_API.get("/api/admin/customers?q=" + encodeURIComponent(q) + "&pageSize=8"); S.results = d.customers || d.rows || d.items || (Array.isArray(d) ? d : []); } catch (err) { S.results = []; } render(); t2focus(); }, 300); }
+        else if (k === "bottles") { S.bottles = Math.min(20, Math.max(1, parseInt(t.value, 10) || 1)); schedulePreview(); }
+        else if (k === "coupon") { S.coupon = t.value.trim().toUpperCase(); schedulePreview(); }
+      });
+      mount.addEventListener("change", function (e) {
+        var t = e.target, k = t.getAttribute && t.getAttribute("data-ao");
+        if (t.name === "aoAddr") { S.addressId = t.value; refreshPreview(); }
+        else if (k === "variant") { S.variantId = t.value; var v = (S.cat.variants || []).filter(function (x) { return x.id === S.variantId; })[0]; if (v && v.type === "trial") S.planId = ""; refreshPreview(); refreshDup(); render(); }
+        else if (k === "plan") { S.planId = t.value; refreshPreview(); }
+        else if (k === "wallet") { S.useWallet = t.checked; refreshPreview(); }
+        else if (k === "consent") { S.consent = t.checked; renderSummary(); }
+      });
+      mount.addEventListener("click", function (e) {
+        var b = e.target.closest && e.target.closest("[data-ao]"); if (!b) return;
+        var k = b.getAttribute("data-ao");
+        if (k === "pick") { pickCustomer(b.getAttribute("data-id")); }
+        else if (k === "clearcust") { S.customer = null; S.profile = null; S.addressId = ""; S.variantId = ""; S.planId = ""; S.preview = null; S.dup = null; S.consent = false; render(); }
+        else if (k === "newcust") { S.newCustOpen = true; render(); }
+        else if (k === "cancelcust") { S.newCustOpen = false; render(); }
+        else if (k === "createcust") { createCustomer(); }
+        else if (k === "newaddr") { S.addrOpen = true; render(); }
+        else if (k === "canceladdr") { S.addrOpen = false; render(); }
+        else if (k === "saveaddr") { saveAddress(); }
+        else if (k === "place") { placeOrder(); }
+        else if (k === "another") { mount.__ao = null; wireAssistedOrderBuilder(); }
+        else if (k === "copylink") { try { navigator.clipboard.writeText(b.getAttribute("data-link")); b.textContent = "Copied ✓"; setTimeout(function () { b.textContent = "Copy"; }, 1500); } catch (err) {} }
+      });
+    }
+    function t2focus() { var s = mount.querySelector('[data-ao="search"]'); if (s && document.activeElement !== s) { var v = s.value; s.focus(); s.setSelectionRange(v.length, v.length); } }
+
+    async function createCustomer() {
+      var g = function (f) { var el = mount.querySelector('[data-aof="' + f + '"]'); return el ? el.value.trim() : ""; };
+      var name = g("name"), phone = g("phone"), email = g("email");
+      if (!name || !phone) { alert("Name and mobile are required."); return; }
+      try { var d = await DOODLY_API.post("/api/admin/customers", { name: name, phone: phone, email: email || undefined }); var c = (d.customer || d); await pickCustomer(c.id); }
+      catch (e) { alert(e.message || "Couldn't create the customer."); }
+    }
+    async function saveAddress() {
+      if (!S.customer) return;
+      var g = function (f) { var el = mount.querySelector('[data-aaf="' + f + '"]'); return el ? el.value.trim() : ""; };
+      var line1 = g("line1") || [g("houseNo"), g("buildingName"), g("area")].filter(Boolean).join(", ");
+      var pincode = g("pincode"), city = g("city");
+      if (!pincode || pincode.length !== 6) { alert("A 6-digit PIN code is required."); return; }
+      if (!city) { alert("City is required."); return; }
+      var body = { action: "add-address", label: "Home", line1: line1 || (g("area") || city), city: city, pincode: pincode, houseNo: g("houseNo") || undefined, buildingName: g("buildingName") || undefined, floor: g("floor") || undefined, area: g("area") || undefined, landmark: g("landmark") || undefined, state: g("state") || undefined, isDefault: true };
+      try { await DOODLY_API.patch("/api/admin/customers/" + encodeURIComponent(S.customer.id), body); S.addrOpen = false; await pickCustomer(S.customer.id); }
+      catch (e) { alert(e.message || "Couldn't save the address."); }
+    }
+    async function placeOrder() {
+      if (!canPlace()) return;
+      S.busy = true; renderSummary();
+      var body = { customerId: S.customer.id, consent: true, variantId: S.variantId, bottles: S.bottles, address: { id: S.addressId } };
+      if (S.planId) body.planId = S.planId;
+      if (S.coupon) body.couponCode = S.coupon;
+      if (S.useWallet) body.walletAmountPaise = 100000000;
+      try { var d = await DOODLY_API.post("/api/admin/orders", body); S.result = d; render(); }
+      catch (e) { S.busy = false; alert(e.message || "Couldn't place the order."); renderSummary(); }
+    }
+
+    render();
+  }
+
+  /* Assisted-order report + channel analytics (below the builder) — website vs assisted
+     vs Easy-view orders (Part 9/10), a recent-assisted list, and CSV / Print export. */
+  async function wireAssistedReport() {
+    var host = document.getElementById("aoReport");
+    if (!host || !window.DOODLY_API) return;
+    try { if (window.DOODLY_RBAC && DOODLY_RBAC.can && !DOODLY_RBAC.can("assistedOrders", "view")) { host.innerHTML = ""; return; } } catch (e) {}
+    var money = function (p) { try { return rup(p); } catch (e) { return "₹" + Math.round((Number(p) || 0) / 100).toLocaleString("en-IN"); } };
+    var esc2 = function (s) { try { return e2(s); } catch (e) { return String(s == null ? "" : s); } };
+    host.innerHTML = '<div class="panel panel-pad muted-sm">Loading order channels…</div>';
+    var rep;
+    try { rep = await DOODLY_API.get("/api/admin/orders/reports"); }
+    catch (e) { host.innerHTML = '<div class="panel panel-pad muted-sm">Couldn\'t load the channel report' + (e.code === "forbidden" ? " (403)." : ".") + "</div>"; return; }
+    var list = [];
+    try { var d = await DOODLY_API.get("/api/admin/orders?source=assisted&pageSize=50"); list = d.orders || []; } catch (e) { list = []; }
+    var LABEL = { website: "🌐 Website", assisted: "☎ Assisted", simple_mode: "★ Easy view" };
+    var kpi = '<div class="ao-rep-kpis">' + (rep.channels || []).map(function (c) { return '<div class="ao-rep-kpi"><div class="k-l">' + (LABEL[c.source] || c.source) + '</div><div class="k-n">' + esc2(String(c.orders)) + '</div><div class="k-s">' + money(c.revenuePaise) + " · " + esc2(String(c.paidOrders)) + " paid</div></div>"; }).join("") + "</div>";
+    var rows = list.map(function (o) { return { date: new Date(o.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }), order: "DOO-" + String(o.id || "").slice(-6).toUpperCase(), customer: (o.user && o.user.name) || "—", role: o.placedByRole || "", amount: Math.round((o.totalPaise || 0) / 100), status: o.status }; });
+    function tableHtml() {
+      return '<table class="ao-rep-tbl"><thead><tr><th>Date</th><th>Order</th><th>Customer</th><th>Placed by</th><th>Amount</th><th>Status</th></tr></thead><tbody>'
+        + (rows.length ? rows.map(function (r) { return "<tr><td>" + esc2(r.date) + "</td><td>" + esc2(r.order) + "</td><td>" + esc2(r.customer) + "</td><td>" + esc2(r.role) + "</td><td>₹" + esc2(String(r.amount)) + "</td><td>" + esc2(r.status) + "</td></tr>"; }).join("") : '<tr><td colspan="6" class="muted-sm">No assisted orders yet.</td></tr>')
+        + "</tbody></table>";
+    }
+    function aoRepCss() { return '.ao-rep-kpis{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}.ao-rep-kpi{flex:1;min-width:150px;background:var(--surface-2,#f3f7f2);border:1px solid var(--line,#dde7e0);border-radius:12px;padding:12px}.ao-rep-kpi .k-l{font-size:.8rem;font-weight:700}.ao-rep-kpi .k-n{font-size:1.5rem;font-weight:800;color:#16824F}.ao-rep-kpi .k-s{font-size:.75rem;color:#6b7c72}.ao-rep-scroll{overflow-x:auto}.ao-rep-tbl{width:100%;border-collapse:collapse;font-size:.85rem}.ao-rep-tbl th,.ao-rep-tbl td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line,#eef2ef)}.ao-rep-tbl th{font-size:.72rem;text-transform:uppercase;color:#6b7c72}'; }
+    host.innerHTML = "<style>" + aoRepCss() + '</style><div class="panel"><div class="panel-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h3>📊 Order channels — last 30 days</h3><div style="display:flex;gap:6px"><button class="btn btn-ghost sm" id="aoRepCsv">CSV</button><button class="btn btn-ghost sm" id="aoRepPrint">🖨 Print</button></div></div><div class="panel-pad">' + kpi + '<div class="ao-rep-scroll">' + tableHtml() + '</div><p class="muted-sm" style="margin-top:8px">Website vs staff-assisted vs Easy-view — all placed through the same production engine.</p></div></div>';
+    var csvBtn = document.getElementById("aoRepCsv");
+    if (csvBtn) csvBtn.addEventListener("click", function () {
+      var head = ["Date", "Order", "Customer", "Placed by", "Amount (INR)", "Status"];
+      var lines = [head.join(",")].concat(rows.map(function (r) { return [r.date, r.order, '"' + String(r.customer).replace(/"/g, '""') + '"', r.role, r.amount, r.status].join(","); }));
+      var blob = new Blob([lines.join("\n")], { type: "text/csv" }); var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "assisted-orders.csv"; a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    });
+    var prBtn = document.getElementById("aoRepPrint");
+    if (prBtn) prBtn.addEventListener("click", function () { var w = window.open("", "_blank"); if (w) { w.document.write("<h2>DOODLY — Assisted orders</h2>" + tableHtml() + "<style>table{border-collapse:collapse;font-family:sans-serif}th,td{border:1px solid #ccc;padding:6px 10px;text-align:left}</style>"); w.document.close(); w.print(); } });
   }
 
   // ---- Subscriptions (admin/subscriptions → adminOrders dataset + KPIs) ----
@@ -8173,6 +8498,7 @@
     if (route === "admin/customers") return wireCustomersBackend();
     if (route === "admin/payments") return wirePaymentsBackend();
     if (route === "admin/orders") return wireOrdersBackend();
+    if (route === "admin/assisted-orders") { wireAssistedOrderBuilder(); try { wireAssistedReport(); } catch (e) {} return; }
     if (route === "admin/subscriptions") return wireSubscriptionsBackend();
     if (route === "admin/b2b") return wireB2BBackend();
     if (route === "admin/invoice-b2b") return wireB2BInvoiceBackend();
@@ -8182,7 +8508,7 @@
   window.DOODLY_ADMIN.bkWire = bkWire;
 
   function wireDashboard() {
-    wireTheme(); wireReveals(); wireFaq(); wireTabs(); wireForms(); wireBuilder();
+    wireTheme(); try { wireSimpleMode(); } catch (e) {} wireReveals(); wireFaq(); wireTabs(); wireForms(); wireBuilder();
     const burger = $("#sbBurger"), sb = $("#sidebar"), scrim = $("#scrim");
     const toggle = (open) => { sb.classList.toggle("open", open); scrim.classList.toggle("show", open); };
     if (burger) burger.addEventListener("click", () => toggle(!sb.classList.contains("open")));

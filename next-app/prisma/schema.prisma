@@ -842,6 +842,13 @@ model Order {
   status        PaymentStatus @default(PENDING)
   cancelledAt  DateTime?                              // customer/admin cancellation
   createdAt    DateTime      @default(now())
+  // --- order provenance / channel (assisted ordering + simple mode). Default "website"
+  //     so every existing + self-serve order is unchanged. placedBy* are PLAIN strings
+  //     (never a User FK — the staff actor may be a dev-bridge id, not a real User). ---
+  source          String    @default("website")       // website | assisted | simple_mode
+  placedById      String?                              // staff actor id when source=assisted (plain, no relation)
+  placedByRole    String?                              // staff role when source=assisted
+  assistConsentAt DateTime?                            // when the customer's verbal consent was recorded
   // --- delivery details captured at checkout (so a one-time order can become a
   //     Delivery on payment; Order previously had no address/date/slot of its own) ---
   addressId     String?                               // the delivery address chosen at checkout
@@ -860,6 +867,7 @@ model Order {
   events       OrderEvent[]
   @@index([userId, createdAt])
   @@index([userId, status])
+  @@index([source, createdAt])
 }
 
 // Line items for a customer order (snapshot of product/variant/price at order time).
@@ -1336,6 +1344,7 @@ model Payment {
   status          PaymentStatus @default(PENDING)
   razorpayOrderId String?
   razorpayPayId   String?
+  razorpayLinkId  String?                              // Razorpay Payment Link id (plink_…) for assisted-order link payments
   createdAt       DateTime      @default(now())
 }
 
@@ -2200,6 +2209,7 @@ model CustomerPreference {
   language          String   @default("en")
   preferredSlot     String?
   assignedExecutive String?                        // CRM delivery-executive assignment (name snapshot)
+  simpleMode        Boolean  @default(false)       // senior-friendly Simple Ordering Mode (larger text, fewer steps)
   updatedAt         DateTime @default(now()) @updatedAt
 }
 

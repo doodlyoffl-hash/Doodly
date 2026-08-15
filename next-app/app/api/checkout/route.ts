@@ -28,6 +28,7 @@ const Body = z.object({
   walletAmountPaise: z.number().int().min(0).max(100_000_000).optional(), // capped server-side
   startDate: z.string().max(40).optional(),
   slot: z.string().max(40).optional(),
+  source: z.enum(["website", "simple_mode"]).optional(),   // self-serve channel only; "assisted" is server-set, never client-trusted
   address: z.object({
     id: z.string().max(40).optional(),
     label: z.string().max(30).optional(),
@@ -44,5 +45,7 @@ export const POST = route("checkout.place", async (req: NextRequest) => {
   const rl = rateLimit(`checkout:${userId}`, 6, 60_000);
   if (!rl.ok) throw Errors.tooMany();
   const body = await parseBody(req, Body);
-  return ok(await placeOrder(userId, body, reqContext(req)));
+  // self-serve channel: honour only website|simple_mode from the client; "assisted" can never come from here.
+  const source = body.source === "simple_mode" ? "simple_mode" : "website";
+  return ok(await placeOrder(userId, body, reqContext(req), { source }));
 });

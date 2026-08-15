@@ -17,7 +17,7 @@ import { db } from "@/lib/db";
 import { ApiError, Errors } from "@/lib/http";
 import { quote } from "@/lib/pricing";
 import { resolveCheckoutPricing } from "@/lib/catalogue/service";
-import { createOrder as createRzpOrder, razorpayConfigured } from "@/lib/razorpay";
+import { createOrder as createRzpOrder, razorpayConfigured, createPaymentLink } from "@/lib/razorpay";
 import { applyWalletAtCheckout, creditTrialCashback, getWallet, reverseTxn } from "@/lib/wallet/service";
 import { computeWalletApply } from "@/lib/wallet/engine";
 import { validateCouponForCart, redeemCoupon } from "@/lib/coupons/service";
@@ -58,7 +58,21 @@ export interface CheckoutInput {
 
 const GATEWAY_METHODS: Record<string, PaymentMethod> = { upi: "UPI", card: "CARD", netbanking: "NETBANKING" };
 
-export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqContext) {
+/** Provenance for an order placed through a channel other than plain self-serve web.
+ *  Purely additive — when omitted the order is a normal `website` customer order and
+ *  behaviour is byte-identical. `actorId`/`actorRole` are the STAFF who placed an
+ *  assisted order; they are only ever stored in plain string columns (Order.placedBy*,
+ *  audit target) — never in a User-FK column (the actor id may be a dev-bridge id). */
+export interface AssistContext {
+  source?: "website" | "assisted" | "simple_mode";
+  actorId?: string;
+  actorRole?: string;
+  consentAt?: Date;      // when the customer's verbal consent was recorded (assisted only)
+}
+
+export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqContext, assist?: AssistContext) {
+  const source = assist?.source ?? "website";
+  const isAssisted = source === "assisted";
   /* ---- 1. server-trusted pricing — DB-authoritative (admin-editable) ---- */
   const pricing = await resolveCheckoutPricing(input.variantId, input.planId);
   if (!pricing) throw Errors.badRequest("Unknown product variant.");
@@ -176,6 +190,8 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
         subtotalPaise, discountPaise: productDiscountPaise, depositPaise, taxPaise: 0, deliveryPaise: 0, totalPaise,
         couponCode: couponCode || null, couponDiscountPaise, walletAppliedPaise,
         status: "PENDING",
+        // provenance/channel — default "website"; staff fields set only for assisted orders (plain strings, no FK)
+        source, placedById: assist?.actorId ?? null, placedByRole: assist?.actorRole ?? null, assistConsentAt: assist?.consentAt ?? null,
         addressId, deliveryDate: startDate, deliverySlot: slot,   // delivery details → become a Delivery on payment
         // Reserve only NEWLY-ISSUED bottles (deposit-bearing) for a subscription — the customer's
         // existing bottles aren't re-reserved. Deliveries read SubscriptionItem.qty, so this
@@ -240,7 +256,7 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
           },
         });
         await tx.subscriptionEvent.create({
-          data: { subscriptionId: sub.id, type: "CREATED", summary: `${isTrial ? "Trial started" : "Subscribed"} via checkout — ${subPlanName}, ${variant.label}`, byId: userId, byRole: "customer", ip: ctx.ip },
+          data: { subscriptionId: sub.id, type: "CREATED", summary: `${isTrial ? "Trial started" : "Subscribed"} via checkout — ${subPlanName}, ${variant.label}${isAssisted ? ` (assisted by ${assist?.actorRole ?? "staff"})` : ""}`, byId: userId, byRole: "customer", ip: ctx.ip },
         });
         subscriptionId = sub.id;
       }
@@ -257,7 +273,18 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     await recordBottleUnavailability({ userId, qty: dep.unavailableBottles, reason: dep.unavailableReason, orderId: order.id, subscriptionId, actorId: userId, actorRole: "customer" }).catch(() => {});
   }
 
-  const base = { orderId: order.id, number: num(order.id), totalPaise, depositPaise, subscriptionId, type: orderType, couponDiscountPaise, walletAppliedPaise, payablePaise, bottleOwnership: { owned: dep.ownedBottles, newBottles: dep.depositBottles, reason: dep.reason } };
+  const base = { orderId: order.id, number: num(order.id), totalPaise, depositPaise, subscriptionId, type: orderType, couponDiscountPaise, walletAppliedPaise, payablePaise, source, bottleOwnership: { owned: dep.ownedBottles, newBottles: dep.depositBottles, reason: dep.reason } };
+
+  // Assisted-order provenance trail (Part 5): who placed it for whom, with consent — the
+  // authoritative audit record. userId stays the CUSTOMER (a real User FK); the staff actor
+  // lives only in the target string (may be a dev-bridge id, never written to a FK column).
+  if (isAssisted) {
+    await audit({
+      userId, actorRole: assist?.actorRole ?? "staff", action: "order.assisted.placed",
+      target: `${base.number} · customer ${userId} · staff ${assist?.actorId ?? "?"} (${assist?.actorRole ?? "?"}) · consent ${assist?.consentAt ? assist.consentAt.toISOString() : "n/a"} · ₹${Math.round(totalPaise / 100)} · ${orderType}${couponCode ? ` · coupon ${couponCode}` : ""}${walletAppliedPaise > 0 ? ` · wallet ₹${Math.round(walletAppliedPaise / 100)}` : ""}`,
+      ctx,
+    }).catch(() => {});
+  }
 
   /* ---- 4b. AUTOPAY — create the Razorpay recurring mandate for the plan and hand
        the client the subscription id to authorise in Checkout. Falls back cleanly
@@ -332,6 +359,44 @@ export async function placeOrder(userId: string, input: CheckoutInput, ctx: ReqC
     // Ops WhatsApp: tell the team an order landed (this path never reaches the gateway).
     try { const { notifyNewOrder } = await import("@/lib/ops/events"); await notifyNewOrder(order.id); } catch (e) { console.error("ops.newOrder", (e as Error)?.message); }
     return { ...base, paid: true, method: "wallet", cashback };
+  }
+
+  /* ---- 6a-assisted. An assisted order with a balance due settles via a Razorpay
+       Payment Link (customer taps + pays, NO login) — sent on their channels. The order
+       stays PENDING until the payment_link.paid webhook settles it (never marked paid
+       early). Assisted orders never use an interactive gateway popup or COD. ---- */
+  if (isAssisted && payablePaise > 0) {
+    if (!razorpayConfigured()) {
+      await releaseCheckoutHolds(order.id, "Payment gateway not configured", subscriptionId);
+      throw new ApiError(503, "Online payments aren't configured — can't send a payment link.", "gateway_unconfigured");
+    }
+    try {
+      const cust = await db.user.findUnique({ where: { id: userId }, select: { name: true, email: true, phone: true } });
+      const link = await createPaymentLink({
+        amountPaise: payablePaise,
+        referenceId: base.number,
+        description: `DOODLY order ${base.number}`,
+        customer: { name: cust?.name ?? undefined, email: cust?.email ?? undefined, contact: cust?.phone ?? undefined },
+        notify: { sms: !!cust?.phone, email: !!cust?.email },
+        notes: { purpose: "assisted", orderId: order.id, userId },
+      });
+      const shortUrl = (link as { short_url: string }).short_url;
+      const linkId = (link as { id: string }).id;
+      await db.payment.create({ data: { userId, orderId: order.id, method: "UPI", amountPaise: payablePaise, status: "PENDING", razorpayLinkId: linkId } });
+      await db.orderEvent.create({ data: { orderId: order.id, type: "NOTE", title: "Payment link sent", note: `Assisted order — awaiting payment via link${noteBits ? ` (${noteBits})` : ""}` } });
+      await audit({ userId, actorRole: assist?.actorRole ?? "staff", action: "order.assisted.link", target: `${base.number} link ${linkId} ₹${payablePaise / 100}`, ctx }).catch(() => {});
+      // Send the pay link to the customer (the URL is in the body → reaches email + in-app for sure).
+      await notify(userId, {
+        title: "Complete your DOODLY order 🥛",
+        body: `Tap to pay ₹${(payablePaise / 100).toLocaleString("en-IN")} for order ${base.number}:\n${shortUrl}`,
+        email: true, sms: true, whatsapp: true,
+      }).catch(() => {});
+      return { ...base, paid: false, method: "link", paymentLink: shortUrl, paymentLinkId: linkId };
+    } catch (e) {
+      console.error("checkout.assisted.link", (e as Error)?.message);
+      await releaseCheckoutHolds(order.id, "Could not create payment link", subscriptionId);
+      throw Errors.badRequest("Could not create the payment link. Please try again.");
+    }
   }
 
   /* ---- 6b. cash on delivery (remaining due on delivery) ---- */

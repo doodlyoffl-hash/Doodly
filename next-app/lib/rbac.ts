@@ -19,14 +19,14 @@ const LEVEL_ACTIONS: Record<string, string[]> = {
 const SPECIALS: Record<string, string[]> = { payments: ["refund", "approve"], billing: ["approve"], inventory: ["adjust"], bottleInventory: ["adjust"], deliveries: ["assign"] };
 
 const ADMIN_FULL: Record<string, Level> = {};
-["dashboard", "orders", "subscriptions", "billing", "customers", "payments", "revenue", "expenses", "wallet", "loyalty", "rewards", "coupons", "offers", "products", "categories", "inventory", "bottleInventory", "deliverySettings", "deliveries", "serviceableAreas", "geoCorrection", "drivers", "routes", "farmers", "procurement", "quality", "reports", "blogs", "cms", "notifications", "support", "users", "roles", "auditLogs", "settings", "careers", "employees", "attendance", "payroll", "leave", "advances"].forEach((m) => (ADMIN_FULL[m] = "full"));
+["dashboard", "orders", "assistedOrders", "subscriptions", "billing", "customers", "payments", "revenue", "expenses", "wallet", "loyalty", "rewards", "coupons", "offers", "products", "categories", "inventory", "bottleInventory", "deliverySettings", "deliveries", "serviceableAreas", "geoCorrection", "drivers", "routes", "farmers", "procurement", "quality", "reports", "blogs", "cms", "notifications", "support", "users", "roles", "auditLogs", "settings", "careers", "employees", "attendance", "payroll", "leave", "advances"].forEach((m) => (ADMIN_FULL[m] = "full"));
 Object.assign(ADMIN_FULL, { permissions: "", settings: "view", roles: "view", auditLogs: "view" });
 
 export const DEFAULT_MATRIX: Record<RoleKey, "*" | Record<string, Level>> = {
   super_admin: "*",
   admin: ADMIN_FULL,
-  support: { dashboard: "view", customers: "view", orders: "manage", subscriptions: "view", support: "full" },
-  operations: { dashboard: "view", deliveries: "full", drivers: "manage", routes: "manage", serviceableAreas: "manage", deliverySettings: "manage", geoCorrection: "manage", inventory: "view", reports: "view" },
+  support: { dashboard: "view", customers: "view", orders: "manage", assistedOrders: "manage", subscriptions: "view", support: "full" },
+  operations: { dashboard: "view", deliveries: "full", drivers: "manage", routes: "manage", serviceableAreas: "manage", deliverySettings: "manage", geoCorrection: "manage", inventory: "view", assistedOrders: "manage", reports: "view" },
   procurement: { dashboard: "view", farmers: "manage", procurement: "full", quality: "view", reports: "view" },
   accountant: { dashboard: "view", revenue: "view", payments: "full", billing: "manage", expenses: "full", wallet: "full", reports: "manage", coupons: "view", employees: "view", attendance: "view", payroll: "full", advances: "full", leave: "view" },
   inventory: { dashboard: "view", inventory: "full", bottleInventory: "full", reports: "view" },

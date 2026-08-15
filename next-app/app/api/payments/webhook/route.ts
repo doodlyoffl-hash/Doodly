@@ -8,13 +8,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhookSignature } from "@/lib/razorpay";
 import { db } from "@/lib/db";
 import { syncFromOrderPayment, recordWebhook } from "@/lib/payments/service";
-import { maybeAwardReferralForUser } from "@/lib/referrals/service";
 import { releaseCheckoutHolds } from "@/lib/checkout/service";
-import { notify, notifyOrderConfirmed } from "@/lib/notifications/dispatch";
-import { awardOrderPaid, earn } from "@/lib/loyalty/service";
-import { ensureInvoiceForOrder } from "@/lib/orders/service";
-import { ensureDeliveryForOrder } from "@/lib/orders/delivery-bridge";
-import { commitOrderStock } from "@/lib/inventory/order-stock";
+import { settleOrderPaid } from "@/lib/orders/settle";
+import { notify } from "@/lib/notifications/dispatch";
+import { earn } from "@/lib/loyalty/service";
 
 export const runtime = "nodejs";
 
@@ -35,7 +32,7 @@ export async function POST(req: NextRequest) {
   // is processed exactly once; duplicates are acknowledged without re-running
   // the ledger sync (prevents double bookkeeping on webhook replays).
   const dedupeRef: string | null =
-    event?.payload?.payment?.entity?.id ?? event?.payload?.subscription?.entity?.id ?? null;
+    event?.payload?.payment?.entity?.id ?? event?.payload?.subscription?.entity?.id ?? event?.payload?.payment_link?.entity?.id ?? null;
   if (dedupeRef) {
     const dup = await db.gatewayWebhook.findFirst({
       where: { eventType: event.event, paymentRef: dedupeRef, processed: true },
@@ -50,32 +47,41 @@ export async function POST(req: NextRequest) {
         const p = event.payload.payment.entity;   // pay_xxx + order_id
         await db.payment.updateMany({ where: { razorpayOrderId: p.order_id }, data: { status: "PAID", razorpayPayId: p.id } });
         const op = await db.payment.findFirst({ where: { razorpayOrderId: p.order_id }, select: { id: true, userId: true, orderId: true } });
-        // Flip the order to PAID (idempotent) and confirm the customer exactly once —
-        // whichever of webhook / verify wins the race fires the notification.
-        if (op?.orderId) {
-          const flip = await db.order.updateMany({ where: { id: op.orderId, status: { not: "PAID" } }, data: { status: "PAID" } }).catch(() => ({ count: 0 }));
-          if (flip.count > 0) {
-            try { await notifyOrderConfirmed(op.userId, { number: num(op.orderId) }); } catch { /* non-blocking */ }
-            // Ops WhatsApp — inside the flip guard so webhook+verify can't double-send.
-            try { const { notifyNewOrder } = await import("@/lib/ops/events"); await notifyNewOrder(op.orderId); } catch { /* non-blocking */ }
-          }
-          // referral reward — credit the referrer if this buyer now has a qualifying subscription (idempotent, non-blocking)
-          await maybeAwardReferralForUser(op.userId, { actorRole: "system" });
-          // Trial-Pack → subscription cashback — webhook parity with /verify (idempotent; only
-          // credits if the buyer upgraded to an eligible plan). Without this, a customer whose
-          // browser never hit /verify wouldn't get their ₹200 until an admin did it by hand.
-          try { const { creditTrialCashback } = await import("@/lib/wallet/service"); await creditTrialCashback({ userId: op.userId, actorRole: "system" }); } catch (e) { console.error("trial.cashback.webhook", (e as Error)?.message); }
-          // DOODLY Pure Rewards: order + subscription points (idempotent; verify may also call this)
-          await awardOrderPaid(op.userId, op.orderId);
-          // Auto-generate + email the B2C invoice now that the order is PAID (idempotent).
-          try { await ensureInvoiceForOrder(op.orderId); } catch (e) { console.error("invoice.ensure", (e as Error)?.message); }
-          // Order → Delivery bridge: create the delivery so it enters the assignment flow (idempotent).
-          try { await ensureDeliveryForOrder(op.orderId); } catch (e) { console.error("delivery.ensure", (e as Error)?.message); }
-          // Inventory: decrement the filled-bottle stock (idempotent).
-          try { await commitOrderStock(op.orderId); } catch (e) { console.error("stock.commit", (e as Error)?.message); }
-        }
-        const ledgerId = op ? await syncFromOrderPayment(op.id).catch(() => null) : null;
+        // Single shared settlement path (flip order + confirm + referral/cashback/loyalty/
+        // invoice/delivery/stock/ledger) — identical + idempotent with the webhook race.
+        const ledgerId = op ? await settleOrderPaid(op) : null;
         await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: p.id, paymentId: ledgerId ?? undefined, processed: true }).catch(() => {});
+        break;
+      }
+      case "payment_link.paid": {
+        // Assisted-order Payment Link paid → mark our Payment PAID + run the SAME settlement.
+        const link = event.payload.payment_link?.entity;    // { id: plink_, notes: { orderId, userId } }
+        const pay = event.payload.payment?.entity;           // { id: pay_, order_id }
+        const linkId: string | undefined = link?.id;
+        const notesOrderId: string | undefined = link?.notes?.orderId;
+        if (linkId || notesOrderId) {
+          const where = linkId ? { razorpayLinkId: linkId } : { orderId: notesOrderId! };
+          await db.payment.updateMany({ where, data: { status: "PAID", razorpayPayId: pay?.id ?? undefined, razorpayOrderId: pay?.order_id ?? undefined } });
+          const op = await db.payment.findFirst({ where, select: { id: true, userId: true, orderId: true } });
+          const ledgerId = op ? await settleOrderPaid(op) : null;
+          await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: pay?.id ?? linkId, paymentId: ledgerId ?? undefined, processed: true }).catch(() => {});
+        } else {
+          await recordWebhook({ eventType: event.event, signatureValid: true, processed: false }).catch(() => {});
+        }
+        break;
+      }
+      case "payment_link.cancelled":
+      case "payment_link.expired": {
+        // The link lapsed before payment → release any coupon/wallet held against the order
+        // (credits the wallet back; never touches a PAID order).
+        const link = event.payload.payment_link?.entity;
+        const linkId: string | undefined = link?.id;
+        const notesOrderId: string | undefined = link?.notes?.orderId;
+        const op = (linkId || notesOrderId)
+          ? await db.payment.findFirst({ where: linkId ? { razorpayLinkId: linkId } : { orderId: notesOrderId! }, select: { orderId: true } })
+          : null;
+        if (op?.orderId) { try { await releaseCheckoutHolds(op.orderId, `Payment link ${event.event === "payment_link.expired" ? "expired" : "cancelled"}`); } catch (e) { console.error("webhook.link.release", (e as Error)?.message); } }
+        await recordWebhook({ eventType: event.event, signatureValid: true, paymentRef: linkId, processed: true }).catch(() => {});
         break;
       }
       case "payment.failed": {

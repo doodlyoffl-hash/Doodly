@@ -57,6 +57,38 @@ export function razorpayConfigured(): boolean {
   return Boolean(KEY_ID && KEY_SECRET);
 }
 
+/** Hosted Payment Link (assisted orders): the customer taps `short_url` and pays with
+    no login. Razorpay notifies (sms/email); on success it fires the `payment_link.paid`
+    webhook, which we settle back to our order via `notes.orderId`. Returns { id: "plink_…",
+    short_url, … }. `referenceId` = our order number (unique per link). */
+export async function createPaymentLink(opts: {
+  amountPaise: number;
+  referenceId: string;
+  description: string;
+  customer?: { name?: string; email?: string; contact?: string };
+  notify?: { sms?: boolean; email?: boolean };
+  notes?: Record<string, string>;
+  callbackUrl?: string;
+}) {
+  return getRazorpay().paymentLink.create({
+    amount: opts.amountPaise,
+    currency: "INR",
+    accept_partial: false,
+    reference_id: opts.referenceId,
+    description: opts.description,
+    ...(opts.customer ? { customer: opts.customer } : {}),
+    notify: { sms: opts.notify?.sms ?? false, email: opts.notify?.email ?? false },
+    reminder_enable: true,
+    notes: opts.notes,
+    ...(opts.callbackUrl ? { callback_url: opts.callbackUrl, callback_method: "get" } : {}),
+  } as any);
+}
+
+/** Fetch a payment link back from Razorpay (status reconciliation). */
+export async function fetchPaymentLink(id: string) {
+  return getRazorpay().paymentLink.fetch(id);
+}
+
 /** Recurring auto-pay mandate. `totalCount` = number of billing cycles. */
 export async function createSubscription(planSlug: string, opts: { totalCount: number; variantId?: string; customerNotify?: boolean; notes?: Record<string, string> }) {
   const planId = planIdFor(planSlug, opts.variantId);
