@@ -729,11 +729,23 @@ window.DOODLY_ACCOUNT = (function () {
         };
         if (geo.lat != null && geo.lng != null) { b.lat = geo.lat; b.lng = geo.lng; }
         var btn = this; btn.disabled = true;
-        var reqP = editing ? API().patch("/api/addresses/" + editing.id, b) : API().post("/api/addresses", b);
+        // adminUserId (assisted-order / admin builder): save the SAME verified payload to the
+        // TARGET customer via the admin endpoint (which reuses the one deliverable-address path),
+        // instead of the signed-in customer's /api/addresses. Everything else is identical.
+        var reqP;
+        if (opts.adminUserId) {
+          reqP = editing
+            ? API().patch("/api/admin/customers/" + opts.adminUserId, Object.assign({ action: "update-address", addressId: editing.id }, b))
+            : API().patch("/api/admin/customers/" + opts.adminUserId, Object.assign({ action: "add-address" }, b));
+        } else {
+          reqP = editing ? API().patch("/api/addresses/" + editing.id, b) : API().post("/api/addresses", b);
+        }
         reqP.then(function (res) {
-          // Shared component: when a caller (e.g. checkout) provides onSaved, hand
-          // it the saved address instead of reloading the account list.
-          if (typeof opts.onSaved === "function") { close(); opts.onSaved(res && res.address ? res.address : res); return; }
+          // Normalise the saved address across the customer ({address}) and admin ({result:{address}}) shapes.
+          var saved = (res && res.address) ? res.address : (res && res.result && res.result.address) ? res.result.address : res;
+          // Shared component: when a caller (e.g. checkout / assisted builder) provides onSaved,
+          // hand it the saved address instead of reloading the account list.
+          if (typeof opts.onSaved === "function") { close(); opts.onSaved(saved); return; }
           toast(editing ? "Address updated ✓" : "Address saved ✓"); close(); loadAddresses(host);
         })
           .catch(function (er) { btn.disabled = false; showErr(er.message || "Please check the address fields."); });

@@ -343,41 +343,25 @@ export interface AddrArgs {
   lat?: number; lng?: number; deliveryNote?: string; isDefault?: boolean;
 }
 
-async function resolvePincode(pincode: string) {
-  const sp = await db.serviceablePincode.findUnique({ where: { pincode }, select: { zoneId: true, enabled: true } });
-  return { zoneId: sp?.zoneId ?? null, serviceable: !!sp?.enabled };
-}
-
 export async function addAddress(id: string, a: AddrArgs, actor: Actor) {
   await ensureCustomer(id);
-  const { zoneId, serviceable } = await resolvePincode(a.pincode);
-  const addr = await db.$transaction(async (tx) => {
-    if (a.isDefault) await tx.address.updateMany({ where: { userId: id }, data: { isDefault: false } });
-    const created = await tx.address.create({ data: {
-      userId: id, label: a.label ?? "Home", line1: a.line1, line2: a.line2, city: a.city, state: a.state, area: a.area, pincode: a.pincode,
-      contactName: a.contactName, contactPhone: a.contactPhone, altPhone: a.altPhone,
-      houseNo: a.houseNo, buildingName: a.buildingName, floor: a.floor, street: a.street, landmark: a.landmark,
-      block: a.block, wing: a.wing, gateNumber: a.gateNumber, doorColor: a.doorColor,
-      lat: a.lat, lng: a.lng, deliveryNote: a.deliveryNote, isDefault: a.isDefault ?? false, zoneId,
-    } });
-    await logCustomerEvent(tx, id, "ADDRESS", `Address added (${a.pincode}${serviceable ? "" : " — not serviceable"})`, { pincode: a.pincode, serviceable }, actor);
-    return created;
-  });
-  return { id: addr.id, serviceable };
+  // Reuse the ONE deliverable-address path (serviceable + coords + pin-verify + warehouse
+  // radius) so an assisted/admin-created address obeys the SAME rules as the customer flow.
+  const { createDeliverableAddress } = await import("@/lib/addresses/create");
+  const address = await createDeliverableAddress(id, a as unknown as { pincode: string }, { actorRole: actor.actorRole ?? "admin", actorUserId: actor.actorId, ctx: actor.ip ? { ip: actor.ip, device: null, browser: null } : undefined });
+  await logCustomerEvent(db, id, "ADDRESS", `Address added (${address.pincode})`, { pincode: address.pincode, serviceable: address.serviceable, verified: address.verified, addressId: address.id }, actor);
+  return { id: address.id, serviceable: address.serviceable, verified: address.verified, address };
 }
 
 export async function updateAddress(id: string, addressId: string, a: Partial<AddrArgs>, actor: Actor) {
   await ensureCustomer(id);
-  const existing = await db.address.findFirst({ where: { id: addressId, userId: id }, select: { id: true } });
-  if (!existing) throw Errors.notFound("Address not found.");
-  let zoneId: string | undefined; let serviceable = true;
-  if (a.pincode) { const r = await resolvePincode(a.pincode); zoneId = r.zoneId ?? undefined; serviceable = r.serviceable; }
-  await db.$transaction(async (tx) => {
-    if (a.isDefault) await tx.address.updateMany({ where: { userId: id }, data: { isDefault: false } });
-    await tx.address.update({ where: { id: addressId }, data: { ...a, ...(zoneId !== undefined ? { zoneId } : {}) } });
-    await logCustomerEvent(tx, id, "ADDRESS", "Address updated", { addressId, serviceable }, actor);
-  });
-  return { id: addressId, serviceable };
+  // Reuse the ONE deliverable-address edit path: a location change re-verifies serviceability +
+  // pin↔pincode + warehouse radius, recomputes future deliveries, and (staff edit) records the
+  // old→new coordinate history append-only.
+  const { updateDeliverableAddress } = await import("@/lib/addresses/create");
+  const address = await updateDeliverableAddress(id, addressId, a as Record<string, unknown>, { actorRole: actor.actorRole ?? "admin", actorUserId: actor.actorId, ctx: actor.ip ? { ip: actor.ip, device: null, browser: null } : undefined }, { recordHistory: true });
+  await logCustomerEvent(db, id, "ADDRESS", "Address updated", { addressId, serviceable: address.serviceable, verified: address.verified }, actor);
+  return { id: address.id, serviceable: address.serviceable, verified: address.verified, address };
 }
 
 export async function deleteAddress(id: string, addressId: string, actor: Actor) {

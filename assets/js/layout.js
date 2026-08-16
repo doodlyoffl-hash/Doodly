@@ -1323,23 +1323,15 @@
         var addrs = (S.profile && S.profile.addresses) || [];
         var opts = addrs.map(function (a) {
           var line = [a.houseNo, a.buildingName, a.line1, a.area, a.landmark, a.city, a.pincode].filter(Boolean).join(", ");
-          return '<label class="ao-addr"><input type="radio" name="aoAddr" value="' + esc2(a.id) + '"' + (S.addressId === a.id ? " checked" : "") + '> <span>' + esc2(line || a.label || "Address") + (a.isDefault ? ' <span class="badge grey">default</span>' : "") + "</span></label>";
+          // per-address serviceability + pin-verified badges + a map preview link (same data the customer flow captures)
+          var sv = a.serviceable === true ? ' <span class="badge green">🟢 Deliverable</span>' : a.serviceable === false ? ' <span class="badge red">🔴 Not serviceable</span>' : "";
+          var vrf = a.verified ? ' <span class="badge blue">✓ pin verified</span>' : "";
+          var mapLink = (a.lat != null && a.lng != null) ? ' · <a href="https://www.google.com/maps?q=' + a.lat + "," + a.lng + '" target="_blank" rel="noopener" class="muted-sm">📍 map</a>' : "";
+          return '<label class="ao-addr"><input type="radio" name="aoAddr" value="' + esc2(a.id) + '"' + (S.addressId === a.id ? " checked" : "") + '> <span>' + esc2(line || a.label || "Address") + (a.isDefault ? ' <span class="badge grey">default</span>' : "") + sv + vrf + mapLink + ' <button type="button" class="link sm" data-ao="editaddr" data-id="' + esc2(a.id) + '" style="font-size:12px">Edit</button></span></label>';
         }).join("");
-        var addrForm = S.addrOpen ? '<div class="ao-form"><div class="ao-grid">'
-          + '<label>Flat / House<input class="input" data-aaf="houseNo"></label>'
-          + '<label>Building / Apartment<input class="input" data-aaf="buildingName"></label>'
-          + '<label>Floor<input class="input" data-aaf="floor"></label>'
-          + '<label>Area / Locality<input class="input" data-aaf="area"></label>'
-          + '<label>Landmark<input class="input" data-aaf="landmark"></label>'
-          + '<label>Street / Line<input class="input" data-aaf="line1"></label>'
-          + '<label>City<input class="input" data-aaf="city"></label>'
-          + '<label>State<input class="input" data-aaf="state"></label>'
-          + '<label>PIN code<input class="input" data-aaf="pincode" maxlength="6" placeholder="6 digits"></label>'
-          + '</div><p class="muted-sm">The exact map pin is geocoded from the address at placement; serviceability is checked against the PIN code.</p>'
-          + '<button type="button" class="btn btn-primary sm" data-ao="saveaddr">Save address</button> <button type="button" class="btn btn-ghost sm" data-ao="canceladdr">Cancel</button></div>' : "";
         addrBlock = '<div class="ao-sec"><div class="ao-sec-h">2 · Delivery address <span class="req">*</span></div>'
-          + (opts || '<p class="muted-sm">No saved address yet — add one below.</p>')
-          + '<div style="margin-top:8px">' + (S.addrOpen ? "" : '<button type="button" class="btn btn-ghost sm" data-ao="newaddr">+ Add address</button>') + addrForm + "</div></div>";
+          + (opts || '<p class="muted-sm">No saved address yet — add one with the map below (search / drop a pin / use current location).</p>')
+          + '<div style="margin-top:8px"><button type="button" class="btn btn-ghost sm" data-ao="newaddr">' + icon("pin", 14) + ' + Add new address (map &amp; serviceability check)</button></div></div>';
       }
 
       // product block
@@ -1416,9 +1408,8 @@
         else if (k === "newcust") { S.newCustOpen = true; render(); }
         else if (k === "cancelcust") { S.newCustOpen = false; render(); }
         else if (k === "createcust") { createCustomer(); }
-        else if (k === "newaddr") { S.addrOpen = true; render(); }
-        else if (k === "canceladdr") { S.addrOpen = false; render(); }
-        else if (k === "saveaddr") { saveAddress(); }
+        else if (k === "newaddr") { openAssistedAddressForm(null); }
+        else if (k === "editaddr") { var _ea = ((S.profile && S.profile.addresses) || []).filter(function (x) { return x.id === b.getAttribute("data-id"); })[0]; openAssistedAddressForm(_ea || null); }
         else if (k === "place") { placeOrder(); }
         else if (k === "another") { mount.__ao = null; wireAssistedOrderBuilder(); }
         else if (k === "copylink") { try { navigator.clipboard.writeText(b.getAttribute("data-link")); b.textContent = "Copied ✓"; setTimeout(function () { b.textContent = "Copy"; }, 1500); } catch (err) {} }
@@ -1433,16 +1424,24 @@
       try { var d = await DOODLY_API.post("/api/admin/customers", { name: name, phone: phone, email: email || undefined }); var c = (d.customer || d); await pickCustomer(c.id); }
       catch (e) { alert(e.message || "Couldn't create the customer."); }
     }
-    async function saveAddress() {
+    // Assisted address capture — reuse the ONE shared customer address component (Google Places
+    // search + draggable map pin + Use-current-location + reverse-geocode auto-fill + live
+    // serviceability + pin↔pincode verify). It saves the verified payload (incl. lat/lng) to the
+    // TARGET customer via the admin endpoint, which enforces the same deliverable-address rules.
+    function openAssistedAddressForm(editing) {
       if (!S.customer) return;
-      var g = function (f) { var el = mount.querySelector('[data-aaf="' + f + '"]'); return el ? el.value.trim() : ""; };
-      var line1 = g("line1") || [g("houseNo"), g("buildingName"), g("area")].filter(Boolean).join(", ");
-      var pincode = g("pincode"), city = g("city");
-      if (!pincode || pincode.length !== 6) { alert("A 6-digit PIN code is required."); return; }
-      if (!city) { alert("City is required."); return; }
-      var body = { action: "add-address", label: "Home", line1: line1 || (g("area") || city), city: city, pincode: pincode, houseNo: g("houseNo") || undefined, buildingName: g("buildingName") || undefined, floor: g("floor") || undefined, area: g("area") || undefined, landmark: g("landmark") || undefined, state: g("state") || undefined, isDefault: true };
-      try { await DOODLY_API.patch("/api/admin/customers/" + encodeURIComponent(S.customer.id), body); S.addrOpen = false; await pickCustomer(S.customer.id); }
-      catch (e) { alert(e.message || "Couldn't save the address."); }
+      if (!window.DOODLY_ACCOUNT || !DOODLY_ACCOUNT.openAddressForm) { dacToast("Address form is still loading — please try again."); return; }
+      try { if (window.DOODLY_ANALYTICS && DOODLY_ANALYTICS.track) DOODLY_ANALYTICS.track(editing ? "assisted_address_edit_open" : "assisted_address_add_open", { channel: "assisted" }); } catch (e) {}
+      DOODLY_ACCOUNT.openAddressForm({
+        adminUserId: S.customer.id,
+        existing: (S.profile && S.profile.addresses) || [],
+        editing: editing || null,
+        onSaved: function (addr) {
+          dacToast("Delivery address saved & verified ✓");
+          try { if (window.DOODLY_ANALYTICS && DOODLY_ANALYTICS.track) DOODLY_ANALYTICS.track("assisted_address_confirmed", { channel: "assisted", serviceable: !!(addr && addr.serviceable) }); } catch (e) {}
+          pickCustomer(S.customer.id).then(function () { if (addr && addr.id) { S.addressId = addr.id; render(); } });
+        }
+      });
     }
     async function placeOrder() {
       if (!canPlace()) return;
