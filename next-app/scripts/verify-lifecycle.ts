@@ -6,7 +6,7 @@ import {
   reconcileSchedule, skipOrCancelDates, adjustMissedDelivery, reinstateDelivery,
   extendSubscription, cancelAllFutureDeliveries, maybeCompleteSubscription,
 } from "../lib/subscriptions/deliveries";
-import { cancelSubscription, computeRemainingValue } from "../lib/subscriptions/admin";
+import { cancelSubscription, computeRemainingValue, changeFrequency, changeQuantity, changeProduct, previewSubscriptionChange } from "../lib/subscriptions/admin";
 
 const db = new PrismaClient();
 const R: { name: string; pass: boolean; detail?: string }[] = [];
@@ -115,6 +115,57 @@ async function run() {
   const walletAfter = (await db.user.findUnique({ where: { id: userId }, select: { walletPaise: true } }))!.walletPaise;
   ok("S2 full cancel: CANCELLED + no future stops", s2row?.status === "CANCELLED" && futureLeft === 0, `future ${futureLeft}`);
   ok("S2 full cancel: wallet credited by refund", walletAfter - walletBefore === quote.amountPaise, `+${walletAfter - walletBefore}`);
+
+  // Scenario 6 — daily → alternate-day frequency change (future re-spaced, entitlement preserved)
+  const s7 = await mkSub(8);
+  await changeFrequency(s7, 2, actor);
+  d = await dels(s7);
+  ok("S6 change-frequency: still 8 counted (entitlement preserved)", counted(d) === 8, `counted ${counted(d)}`);
+  const cdays = d.filter((x) => !["SKIPPED", "FAILED"].includes(x.status)).map((x) => startOfDay(x.date).getTime()).sort((a, b) => a - b);
+  const cgaps = cdays.slice(1).map((t, i) => Math.round((t - cdays[i]) / 864e5));
+  ok("S6 change-frequency: future re-spaced to alternate-day (all gaps 2)", cgaps.length > 0 && cgaps.every((g) => g === 2), `gaps ${cgaps.join(",")}`);
+
+  // Cadence create — an alternate-day sub materialises with 2-day gaps from the start
+  const s8 = (await db.subscription.create({ data: { userId, planId: p7, addressId: addrId, status: "ACTIVE", startDate: startOfDay(new Date(Date.now() + 864e5)), deliverySlot: "06:00-08:00", cadence: 2, targetDeliveries: 6, autoRenew: false, items: { create: [{ variantId, qty: 1 }] } }, select: { id: true } })).id;
+  subs.push(s8);
+  await reconcileSchedule(s8);
+  const ad = (await dels(s8)).map((x) => startOfDay(x.date).getTime()).sort((a, b) => a - b);
+  const agaps = ad.slice(1).map((t, i) => Math.round((t - ad[i]) / 864e5));
+  ok("Cadence create: alternate-day materialises 6 deliveries", ad.length === 6, `got ${ad.length}`);
+  ok("Cadence create: every gap is 2 days", agaps.length > 0 && agaps.every((g) => g === 2), `gaps ${agaps.join(",")}`);
+  ok("Cadence create: no duplicate days", new Set(ad).size === ad.length);
+
+  // Change quantity — future SCHEDULED bottleCount backfilled, count unchanged
+  const s9 = await mkSub(5);
+  await changeQuantity(s9, 3, actor);
+  const q9 = await dels(s9);
+  const qItem = await db.subscriptionItem.findFirst({ where: { subscriptionId: s9 }, select: { qty: true } });
+  const futBottles = await db.delivery.findMany({ where: { subscriptionId: s9, status: "SCHEDULED" }, select: { bottleCount: true } });
+  ok("Change-qty: item qty = 3", qItem?.qty === 3);
+  ok("Change-qty: future bottleCount = 3, still 5 counted", counted(q9) === 5 && futBottles.length > 0 && futBottles.every((b) => b.bottleCount === 3), `n=${futBottles.length}`);
+
+  // Change product — from-now variant swap (needs a 2nd subscription variant), count unchanged
+  const v2 = await db.variant.findFirst({ where: { active: true, type: "SUBSCRIPTION", id: { not: variantId } }, select: { id: true } });
+  if (v2) {
+    const s10 = await mkSub(4);
+    const before10 = counted(await dels(s10));
+    await changeProduct(s10, v2.id, actor);
+    const it10 = await db.subscriptionItem.findFirst({ where: { subscriptionId: s10 }, select: { variantId: true } });
+    ok("Change-product: variant swapped + count unchanged", it10?.variantId === v2.id && counted(await dels(s10)) === before10);
+  } else ok("Change-product: skipped (only one subscription variant in DB)", true);
+
+  // Preview — dry-run writes NOTHING and reports the diff
+  const s11 = await mkSub(6);
+  const rowsBefore = (await dels(s11)).length;
+  const pv = await previewSubscriptionChange(s11, { cadence: 2 });
+  const rowsAfter = (await dels(s11)).length;
+  ok("Preview: dry-run writes nothing + reports daily→alternate", rowsBefore === rowsAfter && pv.current.cadence === 1 && pv.proposed.cadence === 2 && pv.changed);
+
+  // Invariant — SKIP + MISS never produce a DELIVERED row, so inventory is never deducted by them
+  const s12 = await mkSub(5);
+  await skipOrCancelDates(s12, [(await dels(s12))[0].date], actor);
+  await adjustMissedDelivery((await dels(s12)).filter((x) => x.status === "SCHEDULED")[0].id, "ADMIN_ADJUSTMENT", null, actor);  // non-ops reason → no admin alert email
+  ok("Invariant: skip+miss produce NO delivered rows (no inventory deduction)", (await dels(s12)).filter((x) => x.status === "DELIVERED").length === 0);
 }
 
 async function cleanup() {

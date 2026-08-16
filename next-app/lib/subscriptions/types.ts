@@ -83,6 +83,8 @@ export interface SubDetail {
   endDate: string | null;
   nextDeliveryAt: string | null;
   deliverySlot: string;
+  cadence: number;                 // 1 = daily, 2 = alternate-day
+  targetDeliveries: number | null; // paid delivery count
   autoRenew: boolean;
   pausedFrom: string | null;
   pausedUntil: string | null;

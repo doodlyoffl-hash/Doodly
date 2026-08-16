@@ -595,6 +595,7 @@ model Subscription {
   deliverySlot    String     @default("06:00-08:00")
   nextDeliveryAt  DateTime?
   targetDeliveries Int?                             // paid delivery count; make-ups (skip/miss) extend endDate, manual Extend raises this. null ⇒ fall back to plan.days
+  cadence         Int        @default(1)            // delivery interval in eligible days: 1 = daily, 2 = alternate-day (every-N). Existing subs default to daily.
   autoRenew       Boolean    @default(true)
   pausedFrom      DateTime?
   pausedUntil     DateTime?                        // Vacation Mode window

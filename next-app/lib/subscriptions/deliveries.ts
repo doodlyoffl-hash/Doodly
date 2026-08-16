@@ -64,6 +64,51 @@ export async function reoptimizeAffected(pairs: { driverId: string | null | unde
   } catch { /* non-blocking — the next sweep recovers */ }
 }
 
+/** A materialised delivery row as the planner sees it. */
+type PlanRow = { id?: string; date: Date; status: string; driverId: string | null; routeId: string | null; assignment: { id: string } | null; queueEntry: { id: string } | null };
+
+/**
+ * PURE planner (no DB) — the ONE source of truth for the "top-up to target" maths, shared by
+ * reconcileSchedule (which writes the result) and simulateFutureDates (dry-run preview). Given
+ * the current rows + rule + cadence + target it returns either the make-up days to append
+ * (counted < target) or the surplus SAFE future row-ids to drop (counted > target). Never both.
+ */
+function planReconcile(rows: PlanRow[], rule: SubRule, cadence: number, target: number): { append: Date[]; dropIds: string[] } {
+  const counted = rows.filter((d) => COUNTING_SET.has(d.status)).length;
+  const needed = target - counted;
+  const haveDays = new Set(rows.map((d) => dayKey(d.date)));
+  if (needed > 0) {
+    const latest = rows.reduce((m, d) => Math.max(m, dayKey(d.date)), 0);
+    const base = latest ? addDays(new Date(latest), cadence) : startOfDay(rule.startDate);
+    const today = startOfDay(new Date());
+    const anchor = base.getTime() >= today.getTime() ? base : today;
+    const append: Date[] = [];
+    // Take an eligible, non-duplicate day, then JUMP `cadence` days to the next intended slot.
+    // Pauses/skips advance the cursor one day at a time (shifting the rhythm forward, never
+    // dropping a delivery). cadence=1 ⇒ every eligible day, identical to the daily behaviour.
+    let cursor = anchor;
+    for (let guard = 0; append.length < needed && guard < needed * cadence + 400; guard++) {
+      if (!shouldDeliver(rule, cursor) || haveDays.has(dayKey(cursor))) { cursor = addDays(cursor, 1); continue; }
+      const day = startOfDay(cursor);
+      append.push(day); haveDays.add(dayKey(day));
+      cursor = addDays(cursor, cadence);
+    }
+    return { append, dropIds: [] };
+  }
+  if (needed < 0) {
+    // surplus (e.g. after reinstate / lowered target) → drop the LAST |needed| SAFE future rows
+    const today = startOfDay(new Date());
+    const dropIds = rows
+      .filter((d) => d.status === "SCHEDULED" && !d.driverId && !d.routeId && !d.assignment && !d.queueEntry && startOfDay(d.date).getTime() >= today.getTime())
+      .sort((a, b) => dayKey(b.date) - dayKey(a.date))
+      .slice(0, -needed)
+      .map((d) => d.id)
+      .filter((x): x is string => !!x);
+    return { append: [], dropIds };
+  }
+  return { append: [], dropIds: [] };
+}
+
 /* =============================================================
    reconcileSchedule — the engine. Ensures counted deliveries == target.
    ============================================================= */
@@ -72,7 +117,7 @@ export async function reconcileSchedule(subscriptionId: string): Promise<{ creat
     where: { id: subscriptionId },
     select: {
       id: true, status: true, startDate: true, endDate: true, pausedFrom: true, pausedUntil: true,
-      skipDates: true, deliverySlot: true, addressId: true, targetDeliveries: true,
+      skipDates: true, deliverySlot: true, addressId: true, targetDeliveries: true, cadence: true,
       plan: { select: { days: true } },
       items: { select: { qty: true } },
       deliveries: { select: { id: true, date: true, status: true, driverId: true, routeId: true, assignment: { select: { id: true } }, queueEntry: { select: { id: true } } } },
@@ -81,46 +126,20 @@ export async function reconcileSchedule(subscriptionId: string): Promise<{ creat
   if (!sub || sub.status !== "ACTIVE") return { created: 0, removed: 0, endDate: sub?.endDate ?? null };
 
   const target = Math.max(0, Math.min(CAP, sub.targetDeliveries ?? sub.plan.days ?? 0));
+  const cadence = Math.max(1, sub.cadence ?? 1);     // 1 = daily, 2 = alternate-day, every-N eligible days
   const rule: SubRule = { status: "ACTIVE", startDate: startOfDay(sub.startDate), pausedFrom: sub.pausedFrom, pausedUntil: sub.pausedUntil, skipDates: sub.skipDates };
   const bottleCount = Math.max(1, sub.items.reduce((s, i) => s + (i.qty || 0), 0));
 
-  const counted = sub.deliveries.filter((d) => COUNTING_SET.has(d.status)).length;
-  const needed = target - counted;
-  const haveDays = new Set(sub.deliveries.map((d) => dayKey(d.date)));
-
+  // Append make-up days AFTER the latest existing day (never in the PAST — a lapsed sub is
+  // clamped to today so make-ups stay deliverable), or drop surplus SAFE future rows. The
+  // date-stepping + surplus maths live in the pure planner (shared with the preview simulator).
+  const plan = planReconcile(sub.deliveries, rule, cadence, target);
   let created = 0, removed = 0;
-
-  if (needed > 0) {
-    // append `needed` deliverable days AFTER the latest existing delivery day — but never
-    // in the PAST. For a lapsed subscription (its latest day already gone) latest+1 would
-    // land make-ups on past dates, re-creating stale undelivered rows; clamp to today so a
-    // make-up is always deliverable. A normal same-day miss already anchors future, so this
-    // only affects lapsed subs.
-    const latest = sub.deliveries.reduce((m, d) => Math.max(m, dayKey(d.date)), 0);
-    const base = latest ? addDays(new Date(latest), 1) : startOfDay(sub.startDate);
-    const today = startOfDay(new Date());
-    const anchor = base.getTime() >= today.getTime() ? base : today;
-    const toCreate: Date[] = [];
-    for (let i = 0; toCreate.length < needed && i < needed + 400; i++) {
-      const day = addDays(anchor, i);
-      if (!shouldDeliver(rule, day)) continue;      // skip paused / skip-dated days
-      if (haveDays.has(day.getTime())) continue;    // never duplicate a calendar day
-      toCreate.push(day); haveDays.add(day.getTime());
-    }
-    if (toCreate.length) {
-      await db.delivery.createMany({ data: toCreate.map((date) => ({ subscriptionId: sub.id, addressId: sub.addressId, date, slot: sub.deliverySlot, status: "SCHEDULED" as const, bottleCount })) });
-      created = toCreate.length;
-    }
-  } else if (needed < 0) {
-    // surplus (e.g. after reinstate / lowered target) → drop the LAST |needed| SAFE future rows
-    const today = startOfDay(new Date());
-    const removable = sub.deliveries
-      .filter((d) => d.status === "SCHEDULED" && !d.driverId && !d.routeId && !d.assignment && !d.queueEntry && startOfDay(d.date).getTime() >= today.getTime())
-      .sort((a, b) => dayKey(b.date) - dayKey(a.date))
-      .slice(0, -needed)
-      .map((d) => d.id);
-    if (removable.length) { const r = await db.delivery.deleteMany({ where: { id: { in: removable } } }); removed = r.count; }
+  if (plan.append.length) {
+    await db.delivery.createMany({ data: plan.append.map((date) => ({ subscriptionId: sub.id, addressId: sub.addressId, date, slot: sub.deliverySlot, status: "SCHEDULED" as const, bottleCount })) });
+    created = plan.append.length;
   }
+  if (plan.dropIds.length) { const r = await db.delivery.deleteMany({ where: { id: { in: plan.dropIds } } }); removed = r.count; }
 
   // Recompute endDate (last counted day) + nextDeliveryAt (earliest future counted day).
   const fresh = await db.delivery.findMany({ where: { subscriptionId: sub.id, status: { in: COUNTING } }, select: { date: true }, orderBy: { date: "asc" } });
@@ -130,6 +149,41 @@ export async function reconcileSchedule(subscriptionId: string): Promise<{ creat
   await db.subscription.update({ where: { id: sub.id }, data: { endDate, nextDeliveryAt: next } }).catch(() => {});
 
   return { created, removed, endDate };
+}
+
+/**
+ * DRY-RUN preview (NO writes) — project a subscription's FUTURE delivery schedule under an
+ * optional cadence/target override, exactly as reconcileSchedule would produce it. For a
+ * cadence change we first virtually drop the future UNASSIGNED SCHEDULED rows (the real op
+ * removes + rebuilds them), so the projection shows the true re-spaced rhythm. Powers the
+ * "your deliveries change from X to Y" confirmation without touching the DB.
+ */
+export async function simulateFutureDates(subscriptionId: string, opts: { cadence?: number; target?: number; respaceFuture?: boolean } = {}): Promise<{ future: Date[]; endDate: Date | null; target: number; cadence: number }> {
+  const sub = await db.subscription.findUnique({
+    where: { id: subscriptionId },
+    select: {
+      status: true, startDate: true, pausedFrom: true, pausedUntil: true, skipDates: true, targetDeliveries: true, cadence: true,
+      plan: { select: { days: true } },
+      deliveries: { select: { id: true, date: true, status: true, driverId: true, routeId: true, assignment: { select: { id: true } }, queueEntry: { select: { id: true } } } },
+    },
+  });
+  if (!sub) return { future: [], endDate: null, target: 0, cadence: 1 };
+  const cadence = Math.max(1, opts.cadence ?? sub.cadence ?? 1);
+  const target = Math.max(0, Math.min(CAP, opts.target ?? sub.targetDeliveries ?? sub.plan.days ?? 0));
+  const rule: SubRule = { status: "ACTIVE", startDate: startOfDay(sub.startDate), pausedFrom: sub.pausedFrom, pausedUntil: sub.pausedUntil, skipDates: sub.skipDates };
+  const today = startOfDay(new Date());
+  // Re-spacing (a cadence change) virtually removes future unassigned SCHEDULED rows so the new
+  // rhythm governs the whole remaining run; quantity/product keep every existing date.
+  const respace = opts.respaceFuture ?? (opts.cadence != null && cadence !== (sub.cadence ?? 1));
+  const kept = respace
+    ? sub.deliveries.filter((d) => !(d.status === "SCHEDULED" && !d.driverId && !d.routeId && !d.assignment && !d.queueEntry && startOfDay(d.date).getTime() >= today.getTime()))
+    : sub.deliveries;
+  const { append } = planReconcile(kept, rule, cadence, target);
+  const keptFuture = kept.filter((d) => COUNTING_SET.has(d.status) && startOfDay(d.date).getTime() >= today.getTime()).map((d) => startOfDay(d.date));
+  const future = [...keptFuture, ...append].sort((a, b) => a.getTime() - b.getTime());
+  const allCounted = [...kept.filter((d) => COUNTING_SET.has(d.status)).map((d) => startOfDay(d.date)), ...append].sort((a, b) => a.getTime() - b.getTime());
+  const endDate = allCounted.length ? allCounted[allCounted.length - 1] : null;
+  return { future, endDate, target, cadence };
 }
 
 /* =============================================================

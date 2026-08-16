@@ -12,7 +12,8 @@ import { reqContext } from "@/lib/auth/request";
 import {
   getSubscriptionDetail, updateSubscription, pauseSubscription, resumeSubscription,
   skipDelivery, cancelSubscription, setAutopay, addNote,
-  cancelDates, adjustDelivery, reinstate, extend, computeRemainingValue, refundSubscription, type Actor,
+  cancelDates, adjustDelivery, reinstate, extend, computeRemainingValue, refundSubscription,
+  changeFrequency, changeQuantity, changeProduct, previewSubscriptionChange, type Actor,
 } from "@/lib/subscriptions/admin";
 import { ADJUST_REASONS } from "@/lib/subscriptions/reasons";
 
@@ -51,6 +52,10 @@ const patchSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("adjust"), deliveryId: z.string().min(1), reason: z.enum(ADJUST_REASONS), note: z.string().max(300).optional() }),
   z.object({ action: z.literal("reinstate"), deliveryId: z.string().min(1) }),
   z.object({ action: z.literal("extend"), days: z.number().int().min(1).max(120), reason: z.string().max(300).optional() }),
+  z.object({ action: z.literal("change-frequency"), cadence: z.number().int().min(1).max(7) }),
+  z.object({ action: z.literal("change-quantity"), qty: z.number().int().min(1).max(50) }),
+  z.object({ action: z.literal("change-product"), variantId: z.string().min(1) }),
+  z.object({ action: z.literal("preview-change"), cadence: z.number().int().min(1).max(7).optional(), quantity: z.number().int().min(1).max(50).optional(), variantId: z.string().min(1).optional() }),
   z.object({ action: z.literal("cancel"), reason: z.string().max(300).optional(), scope: z.enum(["all", "remaining"]).optional(), refund: refundSchema.optional() }),
   z.object({ action: z.literal("refund"), refund: refundSchema }),
   z.object({ action: z.literal("autopay"), on: z.boolean() }),
@@ -73,6 +78,10 @@ export const PATCH = route("admin.subscriptions.action", async (req: NextRequest
     case "adjust": result = await adjustDelivery(body.deliveryId, body.reason, body.note, actor); break;
     case "reinstate": result = await reinstate(body.deliveryId, actor); break;
     case "extend": result = await extend(id, body.days, body.reason, actor); break;
+    case "change-frequency": result = await changeFrequency(id, body.cadence, actor); break;
+    case "change-quantity": result = await changeQuantity(id, body.qty, actor); break;
+    case "change-product": result = await changeProduct(id, body.variantId, actor); break;
+    case "preview-change": result = await previewSubscriptionChange(id, { cadence: body.cadence, quantity: body.quantity, variantId: body.variantId }); break;
     case "cancel": result = await cancelSubscription(id, { reason: body.reason, scope: body.scope, refund: body.refund }, actor); break;
     case "refund": result = await refundSubscription(id, body.refund, actor); break;
     case "autopay": result = await setAutopay(id, body.on, actor); break;

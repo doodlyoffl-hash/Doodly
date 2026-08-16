@@ -1012,6 +1012,7 @@
       ".dac-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line,#e3ece3);flex:0 0 auto}" +
       ".dac-head h3{margin:0;font-family:var(--font-display,inherit);font-size:1.05rem;color:var(--ink,#16241c)}" +
       ".dac-body{padding:16px 18px;overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1 1 auto;min-height:0}" +
+      ".dac-sec{border-top:1px solid var(--line,#e9efe9);padding-top:12px;margin-top:2px}.dac-sec .tbl{font-size:.82rem}" +
       "@keyframes dacFade{from{opacity:0}to{opacity:1}}@keyframes dacPop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}";
     document.head.appendChild(s);
   }
@@ -1506,12 +1507,15 @@
     if (!window.DOODLY_API) return;
     var host = document.querySelector('.dt-host[data-dataset="adminOrders"]');
     try { renderUndeliveredBoard(host); } catch (e) {}
+    try { renderSubReportsBar(host); } catch (e) {}
+    try { wireSubRowClick(host); } catch (e) {}
     try {
       var data = await DOODLY_API.get("/api/admin/subscriptions?pageSize=200");
       var rows = (data.subscriptions || []).map(mapApiSub);
+      _subRows = (data.subscriptions || []).map(function (s) { return { shortId: (s.shortId || String(s.id || "").slice(-6).toUpperCase()), id: s.id }; });
       if (window.DOODLY_DATA) DOODLY_DATA.adminOrders = rows;
       bkRemount("adminOrders");
-      bkBanner(host, "● Live — " + rows.length + " subscription(s) from the DOODLY database (" + DOODLY_API.base() + ").", "ok");
+      bkBanner(host, "● Live — " + rows.length + " subscription(s) · click a row to manage · from " + DOODLY_API.base() + ".", "ok");
     } catch (e) {
       bkBanner(host, e.code === "offline" ? "⚠ Backend offline — couldn't load live data." : e.code === "forbidden" ? "⚠ No permission to view subscriptions (403)." : "⚠ " + e.message, "err");
       return;
@@ -1567,6 +1571,187 @@
         });
       });
     }).catch(function (er) { if (er && er.code === "forbidden") { panel.innerHTML = ""; return; } panel.innerHTML = ""; });
+  }
+
+  /* ============================================================
+     SL3 — Admin Subscription management drawer (wires the existing
+     /api/admin/subscriptions/[id] PATCH vocabulary) + lifecycle report
+     downloads. Row-click on the subscriptions board opens it. State-gated.
+     ============================================================ */
+  var _subRows = [];                 // {shortId, id} lookup for row-click
+  var SUB_ADJ = [["OPS_MISSED", "Operations missed"], ["EXECUTIVE_ISSUE", "Executive issue"], ["VEHICLE_BREAKDOWN", "Vehicle breakdown"], ["WEATHER", "Weather"], ["STOCK_UNAVAILABLE", "Stock unavailable"], ["QUALITY_ISSUE", "Quality issue"], ["ADMIN_ADJUSTMENT", "Admin adjustment"], ["OTHER", "Other"]];
+
+  function downloadSubReport(type, fmt) {
+    var base = window.DOODLY_API ? DOODLY_API.base() : "";
+    var h = {}; try { var tok = localStorage.getItem("doodly-token"); if (tok) h["Authorization"] = "Bearer " + tok; } catch (e) {}
+    try { if (window.DOODLY_RBAC) { h["X-Doodly-Actor"] = DOODLY_RBAC.activeRole(); var cu = DOODLY_RBAC.currentUser && DOODLY_RBAC.currentUser(); if (cu && cu.id) h["X-Doodly-Actor-Id"] = cu.id; } } catch (e) {}
+    var ext = fmt === "xls" ? "xls" : fmt === "csv" ? "csv" : "pdf";
+    dacToast("Preparing the " + type + " report (" + ext.toUpperCase() + ")…");
+    fetch(base + "/api/admin/subscriptions/lifecycle-reports/export?type=" + encodeURIComponent(type) + "&format=" + ext, { headers: h, credentials: "include" })
+      .then(function (r) { if (!r.ok) throw new Error(r.status === 403 ? "Your role can't export this (403)." : "Export failed (" + r.status + ")"); return r.blob(); })
+      .then(function (blob) { var url = URL.createObjectURL(blob); var a = document.createElement("a"); a.href = url; a.download = "DOODLY_" + type + "." + ext; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 60000); dacToast(type + " report downloaded (" + ext.toUpperCase() + ")."); })
+      .catch(function (e) { dacToast(e.message || "Couldn't export the report."); });
+  }
+  function renderSubReportsBar(anchor) {
+    if (!anchor || !anchor.parentNode) return;
+    var bar = document.getElementById("subReportsBar");
+    if (!bar) { bar = document.createElement("div"); bar.id = "subReportsBar"; anchor.parentNode.insertBefore(bar, anchor.nextSibling); }
+    var types = [["cancelled", "Cancellations"], ["adjusted", "Missed &amp; adjusted"], ["extended", "Extensions"], ["customer_requested", "Customer-requested"], ["operational", "DOODLY adjustments"]];
+    bar.innerHTML = '<div class="panel" style="margin:16px 0"><div class="panel-head"><h3>Lifecycle reports</h3></div><div class="panel-pad"><p class="muted-sm" style="margin-top:0">Download subscription lifecycle activity — cancellations, missed/adjusted deliveries, extensions, and the customer-requested vs DOODLY-adjustment split.</p><div style="display:flex;flex-direction:column;gap:8px">' +
+      types.map(function (t) { return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="min-width:170px">' + t[1] + '</b><button class="btn btn-ghost sm" data-subdl="' + t[0] + ',csv">CSV</button><button class="btn btn-ghost sm" data-subdl="' + t[0] + ',xls">Excel</button><button class="btn btn-ghost sm" data-subdl="' + t[0] + ',pdf">PDF</button></div>'; }).join("") +
+      "</div></div></div>";
+    bar.querySelectorAll("[data-subdl]").forEach(function (b) { b.addEventListener("click", function () { var p = b.dataset.subdl.split(","); downloadSubReport(p[0], p[1]); }); });
+  }
+  function subPatch(id, body) { return DOODLY_API.patch("/api/admin/subscriptions/" + id, body); }
+  // Delegated row-click on the subscriptions board → open the manage drawer. Scoped to this
+  // host only (the adminOrders dataset is shared with the Orders page, so we never touch the
+  // shared datatable config). Maps the visible short id back to the real subscription id.
+  function wireSubRowClick(host) {
+    if (!host || host._subClickWired) return;
+    host._subClickWired = true;
+    host.classList.add("sub-clickable");
+    if (!document.getElementById("sub-clickable-css")) { var st = document.createElement("style"); st.id = "sub-clickable-css"; st.textContent = ".sub-clickable tbody tr{cursor:pointer}.sub-clickable tbody tr:hover{background:var(--mint-soft,#f2f8f2)}"; document.head.appendChild(st); }
+    host.addEventListener("click", function (e) {
+      if (e.target.closest("a,button,input,select,label")) return;   // let controls/links work
+      var tr = e.target.closest("tbody tr"); if (!tr) return;
+      var idCell = tr.querySelector(".cell-id"); if (!idCell) return;
+      var shortId = (idCell.textContent || "").trim().toUpperCase();
+      var match = _subRows.filter(function (r) { return r.shortId === shortId; })[0];
+      if (match) openSubscriptionManage(match.id);
+    });
+  }
+
+  function openSubscriptionManage(id) {
+    if (!window.DOODLY_API || document.querySelector(".dac-ov")) return;
+    dacStyles();
+    var ov = document.createElement("div"); ov.className = "dac-ov";
+    ov.innerHTML = '<div class="dac-card" role="dialog" aria-modal="true" aria-label="Manage subscription"><div class="dac-hd"><h3>Subscription</h3><button class="dac-x" type="button" aria-label="Close">&times;</button></div><div class="dac-bd" id="smd-bd"><p class="muted-sm">Loading…</p></div><div class="dac-ft"><button class="btn btn-ghost" type="button" id="smd-close">Close</button></div></div>';
+    document.body.appendChild(ov);
+    function onKey(e) { if (e.key === "Escape") close(); }
+    function close() { ov.remove(); document.removeEventListener("keydown", onKey); }
+    document.addEventListener("keydown", onKey);
+    ov.addEventListener("click", function (e) { if (e.target === ov) close(); });
+    ov.querySelector(".dac-x").addEventListener("click", close);
+    ov.querySelector("#smd-close").addEventListener("click", close);
+    loadSubDrawer(id, ov, close);
+  }
+
+  function loadSubDrawer(id, ov, close) {
+    var bd = ov.querySelector("#smd-bd");
+    var rs = function (p) { return "₹" + Math.round((p || 0) / 100).toLocaleString("en-IN"); };
+    var fd = function (v) { try { return v ? new Date(v).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"; } catch (e) { return "—"; } };
+    var freqLabel = function (c) { return c >= 2 ? (c === 2 ? "Alternate-day" : "Every " + c + " days") : "Daily"; };
+    bd.innerHTML = '<p class="muted-sm">Loading…</p>';
+    DOODLY_API.get("/api/admin/subscriptions/" + id).then(function (r) {
+      var s = r.subscription; if (!s) { bd.innerHTML = '<p class="muted-sm">Subscription not found.</p>'; return; }
+      var isOpen = s.status !== "CANCELLED" && s.status !== "COMPLETED";
+      var isPaused = s.status === "PAUSED" || s.status === "VACATION";
+      var it = (s.items && s.items[0]) || null;
+      var itemLbl = it ? (it.qty + "× " + it.variant + " " + it.product) : "—";
+      var addr = s.address ? [s.address.label, s.address.line1, s.address.city, s.address.pincode].filter(Boolean).join(", ") : "—";
+      var c = s.deliveryCounts || {};
+      var stColor = s.status === "ACTIVE" ? "green" : isPaused ? "amber" : s.status === "CANCELLED" ? "red" : "grey";
+      var chip = '<span class="badge ' + stColor + '">' + esc(titleize(s.status)) + "</span>";
+      var single = (s.items || []).length === 1;                 // qty/product change = single-product only
+      var detail = '<div class="dac-detail" style="background:rgba(0,0,0,.035);border-radius:10px;padding:12px 14px;margin:-2px 0 14px;font-size:.88rem;line-height:1.7">' +
+        '<div><b>Customer</b> — ' + esc(s.customer.name || "—") + (s.customer.phone ? ' · <a href="tel:' + esc(s.customer.phone) + '">' + esc(s.customer.phone) + "</a>" : "") + ' · Wallet ' + rs(s.customer.walletPaise) + "</div>" +
+        '<div><b>Plan</b> — ' + esc(s.plan.name) + " · " + chip + "</div>" +
+        '<div><b>Product</b> — ' + esc(itemLbl) + " · " + rs(s.perDeliveryPaise) + "/delivery</div>" +
+        '<div><b>Frequency</b> — ' + esc(freqLabel(s.cadence || 1)) + "</div>" +
+        '<div><b>Deliveries</b> — ' + (c.delivered || 0) + " delivered · " + (c.skipped || 0) + " skipped · " + (c.failed || 0) + " missed · target " + (s.targetDeliveries != null ? s.targetDeliveries : "—") + "</div>" +
+        '<div><b>Next</b> — ' + fd(s.nextDeliveryAt) + " · " + esc(s.deliverySlot || "") + " · <b>Ends</b> — " + fd(s.endDate) + "</div>" +
+        '<div><b>Address</b> — ' + esc(addr) + (s.address && s.address.executive ? ' · <span class="muted-sm">' + esc(s.address.executive) + "</span>" : "") + "</div>" +
+        '<div><b>Auto-renew</b> — ' + (s.autoRenew ? "On" : "Off") + (s.autopay ? ' · AutoPay ' + esc(s.autopay.status) : "") + (s.pausedUntil ? ' · <b>Paused until</b> ' + fd(s.pausedUntil) : "") + "</div>" +
+        (s.cancelReason ? '<div><b>Cancel reason</b> — ' + esc(s.cancelReason) + "</div>" : "") +
+        "</div>";
+
+      // Lifecycle actions (state-gated)
+      var lifecycle = "";
+      if (isOpen) {
+        lifecycle += '<div class="dac-sec"><div class="strong" style="margin-bottom:8px">Lifecycle</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">';
+        if (s.status === "ACTIVE") lifecycle += '<label class="dac-f" style="max-width:170px"><span>Pause until</span><input class="input" type="date" id="smd-pause-until"></label><button class="btn btn-ghost sm" type="button" id="smd-pause">Pause</button>';
+        if (isPaused) lifecycle += '<button class="btn btn-primary sm" type="button" id="smd-resume">Resume deliveries</button>';
+        lifecycle += '<label class="dac-f" style="max-width:170px"><span>Cancel a date</span><input class="input" type="date" id="smd-canceldate"></label><button class="btn btn-ghost sm" type="button" id="smd-canceldate-btn">Cancel date (make up)</button>';
+        lifecycle += '<label class="dac-f" style="max-width:120px"><span>Extend days</span><input class="input" type="number" min="1" max="120" id="smd-extend-n" placeholder="e.g. 7"></label><button class="btn btn-ghost sm" type="button" id="smd-extend">Extend</button>';
+        lifecycle += "</div></div>";
+      }
+
+      // Change actions (freq / qty / product) — future-only, previewed
+      var change = "";
+      if (isOpen) {
+        change += '<div class="dac-sec"><div class="strong" style="margin-bottom:8px">Change plan (from now)</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">' +
+          '<label class="dac-f" style="max-width:190px"><span>Frequency</span><select class="input" id="smd-freq"><option value="1"' + ((s.cadence || 1) === 1 ? " selected" : "") + '>Daily</option><option value="2"' + ((s.cadence || 1) === 2 ? " selected" : "") + '>Alternate-day</option></select></label><button class="btn btn-ghost sm" type="button" id="smd-freq-btn">Apply frequency</button>' +
+          (single ? '<label class="dac-f" style="max-width:120px"><span>Qty / delivery</span><input class="input" type="number" min="1" max="50" id="smd-qty" value="' + (it ? it.qty : 1) + '"></label><button class="btn btn-ghost sm" type="button" id="smd-qty-btn">Apply qty</button>' : "") +
+          (single ? '<label class="dac-f" style="max-width:220px"><span>Product</span><select class="input" id="smd-prod"><option value="">Loading…</option></select></label><button class="btn btn-ghost sm" type="button" id="smd-prod-btn">Apply product</button>' : "") +
+          "</div><p class=\"muted-sm\" style=\"margin:6px 0 0\">Changes apply to future deliveries; delivered days keep their price. You'll see the effect before it's applied.</p></div>";
+      }
+
+      // Recent deliveries with adjust / reinstate
+      var adjOpts = SUB_ADJ.map(function (a) { return '<option value="' + a[0] + '">' + a[1] + "</option>"; }).join("");
+      var delRows = (s.deliveries || []).map(function (d) {
+        var canReinstate = d.status === "SKIPPED" || d.status === "FAILED";
+        var canMiss = !canReinstate && d.status !== "CANCELLED";
+        var act = canReinstate ? '<button class="btn btn-ghost sm" type="button" data-reinstate="' + d.id + '">Reinstate</button>' : (canMiss ? '<button class="btn btn-ghost sm" type="button" data-miss="' + d.id + '">Mark missed</button>' : "");
+        return "<tr><td>" + fd(d.date) + "</td><td>" + esc(titleize(d.status)) + '</td><td style="text-align:right">' + act + "</td></tr>";
+      }).join("");
+      var deliveries = '<div class="dac-sec"><div class="strong" style="margin-bottom:8px">Recent deliveries</div>' +
+        (isOpen ? '<label class="dac-f" style="max-width:220px;margin-bottom:8px"><span>Missed reason</span><select class="input" id="smd-adj-reason">' + adjOpts + "</select></label>" : "") +
+        '<div class="table-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Status</th><th></th></tr></thead><tbody>' + (delRows || '<tr><td colspan="3" class="muted-sm">No deliveries yet.</td></tr>') + "</tbody></table></div></div>";
+
+      // Cancel + note
+      var footerActs = "";
+      if (isOpen) {
+        footerActs += '<div class="dac-sec"><div class="strong" style="margin-bottom:8px">Add a note</div><div style="display:flex;gap:8px"><input class="input" id="smd-note" placeholder="internal note…"><button class="btn btn-ghost sm" type="button" id="smd-note-btn">Add</button></div></div>';
+        footerActs += '<div class="dac-sec"><div class="strong" style="margin-bottom:8px;color:#b3261e">Cancel subscription</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">' +
+          '<label class="dac-f"><span>Reason</span><input class="input" id="smd-cancel-reason" placeholder="reason (optional)"></label>' +
+          '<label class="dac-f" style="max-width:150px"><span>Refund</span><select class="input" id="smd-cancel-refund"><option value="none">No refund</option><option value="wallet">To wallet</option><option value="manual">Manual</option></select></label>' +
+          '<button class="btn btn-ghost sm" type="button" id="smd-cancel" style="color:#b3261e">Cancel plan</button></div></div>';
+      }
+
+      // Timeline
+      var evRows = (s.events || []).slice(0, 14).map(function (e) { return '<div class="muted-sm" style="padding:2px 0"><b>' + fd(e.createdAt) + "</b> · " + esc(e.summary) + (e.byRole ? ' <span style="opacity:.6">(' + esc(e.byRole) + ")</span>" : "") + "</div>"; }).join("");
+      var timeline = '<div class="dac-sec"><div class="strong" style="margin-bottom:6px">Timeline</div>' + (evRows || '<div class="muted-sm">No events yet.</div>') + "</div>";
+
+      bd.innerHTML = detail + lifecycle + change + deliveries + footerActs + timeline + '<p class="dac-err" id="smd-err"></p>';
+
+      var qs = function (sel) { return bd.querySelector(sel); };
+      var refresh = function () { loadSubDrawer(id, ov, close); try { wireSubscriptionsBackend(); } catch (e) {} };
+      var run = function (p, okMsg) { p.then(function () { dacToast(okMsg || "Done ✓"); refresh(); }).catch(function (e) { var er = qs("#smd-err"); var m = e && e.code === "forbidden" ? "Your role can't do this (403)." : (e && e.message) || "Action failed."; if (er) er.textContent = m; dacToast(m); }); };
+      // preview → confirm → apply (freq/qty/product)
+      var previewApply = function (previewBody, applyBody, okMsg) {
+        subPatch(id, Object.assign({ action: "preview-change" }, previewBody)).then(function (rr) {
+          var p = rr.result; if (!p || !p.changed) { dacToast("No change."); return; }
+          var msg = "Apply this change?\n\nFrequency: " + p.current.cadenceLabel + " → " + p.proposed.cadenceLabel +
+            "\nQty/delivery: " + p.current.quantity + " → " + p.proposed.quantity +
+            (p.proposed.product && p.proposed.product !== p.current.product ? "\nProduct: " + p.current.product + " → " + p.proposed.product : "") +
+            "\nPlan ends: " + fd(p.current.endDate) + " → " + fd(p.proposed.endDate);
+          if (window.confirm(msg)) run(subPatch(id, applyBody), okMsg);
+        }).catch(function (e) { dacToast((e && e.message) || "Couldn't preview."); });
+      };
+
+      if (qs("#smd-pause")) qs("#smd-pause").addEventListener("click", function () { var v = qs("#smd-pause-until").value; run(subPatch(id, { action: "pause", until: v ? new Date(v + "T00:00:00").toISOString() : undefined }), "Paused ✓"); });
+      if (qs("#smd-resume")) qs("#smd-resume").addEventListener("click", function () { run(subPatch(id, { action: "resume" }), "Resumed ✓"); });
+      if (qs("#smd-canceldate-btn")) qs("#smd-canceldate-btn").addEventListener("click", function () { var v = qs("#smd-canceldate").value; if (!v) { dacToast("Pick a date."); return; } run(subPatch(id, { action: "cancel-dates", dates: [new Date(v + "T00:00:00").toISOString()] }), "Date cancelled → made up ✓"); });
+      if (qs("#smd-extend")) qs("#smd-extend").addEventListener("click", function () { var n = Math.round(Number(qs("#smd-extend-n").value)); if (!(n >= 1 && n <= 120)) { dacToast("Enter 1–120 days."); return; } run(subPatch(id, { action: "extend", days: n }), "Extended by " + n + " day(s) ✓"); });
+      if (qs("#smd-freq-btn")) qs("#smd-freq-btn").addEventListener("click", function () { var cad = Number(qs("#smd-freq").value); if (cad === (s.cadence || 1)) { dacToast("Already on that frequency."); return; } previewApply({ cadence: cad }, { action: "change-frequency", cadence: cad }, "Frequency updated ✓"); });
+      if (qs("#smd-qty-btn")) qs("#smd-qty-btn").addEventListener("click", function () { var q = Math.round(Number(qs("#smd-qty").value)); if (!(q >= 1 && q <= 50)) { dacToast("Enter 1–50."); return; } previewApply({ quantity: q }, { action: "change-quantity", qty: q }, "Quantity updated ✓"); });
+      if (qs("#smd-prod-btn")) qs("#smd-prod-btn").addEventListener("click", function () { var v = qs("#smd-prod").value; if (!v) { dacToast("Pick a product."); return; } if (it && v === it.variantId) { dacToast("Already on that product."); return; } previewApply({ variantId: v }, { action: "change-product", variantId: v }, "Product updated ✓"); });
+      if (qs("#smd-note-btn")) qs("#smd-note-btn").addEventListener("click", function () { var t = (qs("#smd-note").value || "").trim(); if (!t) { dacToast("Type a note."); return; } run(subPatch(id, { action: "note", text: t }), "Note added ✓"); });
+      if (qs("#smd-cancel")) qs("#smd-cancel").addEventListener("click", function () { if (!window.confirm("Cancel this subscription? Future deliveries stop.")) return; var reason = (qs("#smd-cancel-reason").value || "").trim() || undefined; var method = qs("#smd-cancel-refund").value; run(subPatch(id, { action: "cancel", reason: reason, refund: method === "none" ? undefined : { method: method } }), "Subscription cancelled."); });
+      bd.querySelectorAll("[data-miss]").forEach(function (b) { b.addEventListener("click", function () { var reason = qs("#smd-adj-reason") ? qs("#smd-adj-reason").value : "ADMIN_ADJUSTMENT"; run(subPatch(id, { action: "adjust", deliveryId: b.dataset.miss, reason: reason }), "Marked missed → made up ✓"); }); });
+      bd.querySelectorAll("[data-reinstate]").forEach(function (b) { b.addEventListener("click", function () { run(subPatch(id, { action: "reinstate", deliveryId: b.dataset.reinstate }), "Reinstated ✓"); }); });
+
+      // product options (DB variant ids) — best-effort; hidden gracefully if no products perm
+      var prodSel = qs("#smd-prod");
+      if (prodSel) {
+        DOODLY_API.get("/api/admin/products").then(function (pr) {
+          var opts = [];
+          (pr.products || []).forEach(function (p) { (p.variants || []).forEach(function (v) { if (v.type === "SUBSCRIPTION") opts.push({ id: v.id, label: (p.name || "") + " · " + (v.displayName || v.label) }); }); });
+          if (!opts.length) { prodSel.innerHTML = '<option value="">No products</option>'; return; }
+          prodSel.innerHTML = opts.map(function (o) { return '<option value="' + o.id + '"' + (it && o.id === it.variantId ? " selected" : "") + ">" + esc(o.label) + "</option>"; }).join("");
+        }).catch(function () { prodSel.innerHTML = '<option value="">(products unavailable)</option>'; });
+      }
+    }).catch(function (e) { bd.innerHTML = '<p class="dac-err">' + esc(e && e.code === "forbidden" ? "Your role can't view this subscription (403)." : (e && e.message) || "Couldn't load subscription.") + "</p>"; });
   }
 
   // ---- B2B Orders (admin/b2b → mirror the DB into b2b.js's localStorage, then re-mount) ----
@@ -3778,6 +3963,7 @@
     document.addEventListener("keydown", onKey);
   }
   window.DOODLY_ADMIN.manageDelivery = openDeliveryManage;
+  window.DOODLY_ADMIN.manageSubscription = openSubscriptionManage;
 
   async function generateDeliveries() {
     if (!window.DOODLY_API) return;

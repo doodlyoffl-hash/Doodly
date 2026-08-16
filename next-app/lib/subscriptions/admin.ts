@@ -272,6 +272,8 @@ export async function getSubscriptionDetail(id: string): Promise<SubDetail | nul
     endDate: s.endDate?.toISOString() ?? null,
     nextDeliveryAt: s.nextDeliveryAt?.toISOString() ?? null,
     deliverySlot: s.deliverySlot,
+    cadence: Math.max(1, s.cadence ?? 1),
+    targetDeliveries: s.targetDeliveries ?? null,
     autoRenew: s.autoRenew,
     pausedFrom: s.pausedFrom?.toISOString() ?? null,
     pausedUntil: s.pausedUntil?.toISOString() ?? null,
@@ -296,6 +298,7 @@ export interface CreateArgs {
   userId: string; planId: string; addressId: string;
   items: { variantId: string; qty: number }[];
   startDate?: string; deliverySlot?: string; autoRenew?: boolean;
+  cadence?: number;    // 1 = daily (default), 2 = alternate-day, general every-N eligible days
   override?: boolean;   // super-admin bypass of the deliverable-address gate (audited)
 }
 
@@ -315,16 +318,18 @@ export async function createSubscription(args: CreateArgs, actor: Actor) {
   const known = new Set(variants.map((v) => v.id));
   if (!args.items.length || args.items.some((i) => !known.has(i.variantId) || i.qty < 1)) throw Errors.badRequest("Invalid subscription items.");
 
+  const cadence = Math.max(1, Math.min(7, Math.round(args.cadence ?? 1)));
   const startDate = args.startDate ? startOfDay(new Date(args.startDate)) : earliestByCutoff(new Date());
   const candidate = startDate > earliestByCutoff(new Date()) ? startDate : earliestByCutoff(new Date());
   const nextDeliveryAt = nextDeliverableFrom({ status: "ACTIVE", startDate, pausedFrom: null, pausedUntil: null, skipDates: [] }, candidate);
-  const endDate = addDays(startDate, plan.days);
+  // placeholder end date (cadence-aware) — reconcile re-derives the true last-day on materialisation
+  const endDate = addDays(startDate, Math.max(0, plan.days - 1) * cadence);
 
   const created = await db.subscription.create({
     data: {
       userId: args.userId, planId: args.planId, addressId: args.addressId, status: "ACTIVE",
       startDate, endDate, nextDeliveryAt, deliverySlot: args.deliverySlot || "06:00-08:00",
-      autoRenew: args.autoRenew ?? true,
+      autoRenew: args.autoRenew ?? true, cadence,
       items: { create: args.items.map((i) => ({ variantId: i.variantId, qty: i.qty })) },
     },
     select: { id: true },
@@ -357,7 +362,7 @@ export async function updateSubscription(id: string, args: UpdateArgs, actor: Ac
     const plan = await db.plan.findUnique({ where: { id: args.planId }, select: { id: true, name: true, days: true } });
     if (!plan) throw Errors.notFound("Plan not found.");
     data.plan = { connect: { id: plan.id } };
-    data.endDate = addDays(startOfDay(cur.startDate), plan.days);
+    data.endDate = addDays(startOfDay(cur.startDate), Math.max(0, plan.days - 1) * Math.max(1, cur.cadence ?? 1));
     diff.plan = { from: cur.plan.name, to: plan.name };
   }
   if (args.addressId && args.addressId !== cur.addressId) {
@@ -429,6 +434,140 @@ export async function updateSubscription(id: string, args: UpdateArgs, actor: Ac
   return { id, changed: true };
 }
 
+// ------------------------------------------------ change actions (freq / qty / product)
+
+/** Human label for a cadence value (1 = daily, 2 = alternate-day, general every-N). */
+export const cadenceLabel = (c: number) => (c <= 1 ? "Daily" : c === 2 ? "Alternate-day (every 2 days)" : `Every ${c} days`);
+
+/** A subscription must be open (not CANCELLED/COMPLETED) to accept a change. */
+function assertEditable(status: string) {
+  if (status === "CANCELLED" || status === "COMPLETED") throw Errors.conflict("Cannot edit a closed subscription.");
+}
+
+/**
+ * Change delivery frequency (1 = daily, 2 = alternate-day, general every-N eligible days).
+ * FUTURE-ONLY: the paid entitlement (targetDeliveries) is unchanged — same delivery COUNT, new
+ * rhythm. Assigned/past rows stay put; future UNASSIGNED scheduled rows are dropped and rebuilt
+ * at the new cadence by reconcile, so endDate re-derives to the true (~2×) span.
+ */
+export async function changeFrequency(id: string, cadence: number, actor: Actor) {
+  const c = Math.round(Number(cadence));
+  if (!Number.isFinite(c) || c < 1 || c > 7) throw Errors.badRequest("Frequency must be between daily (1) and every 7 days.");
+  const cur = await db.subscription.findUnique({ where: { id }, select: { status: true, cadence: true, userId: true } });
+  if (!cur) throw Errors.notFound("Subscription not found.");
+  assertEditable(cur.status);
+  const from = cur.cadence ?? 1;
+  if (from === c) return { id, changed: false, cadence: c };
+  await db.$transaction(async (tx) => {
+    await tx.subscription.update({ where: { id }, data: { cadence: c } });
+    await logSubEvent(tx, id, "FREQUENCY_CHANGED", `Delivery frequency changed: ${cadenceLabel(from)} → ${cadenceLabel(c)}`, { from, to: c, fromLabel: cadenceLabel(from), toLabel: cadenceLabel(c) }, actor);
+  });
+  let endDate: Date | null = null, next: Date | null = null;
+  try {
+    const { removeScheduledDeliveries, reconcileSchedule } = await import("./deliveries");
+    await removeScheduledDeliveries(id);       // drop FUTURE unassigned SCHEDULED rows (rebuilt below at new cadence)
+    const rec = await reconcileSchedule(id);   // top-up to target at the new rhythm
+    endDate = rec.endDate;
+  } catch { /* non-blocking */ }
+  try {
+    next = (await db.subscription.findUnique({ where: { id }, select: { nextDeliveryAt: true } }))?.nextDeliveryAt ?? null;
+    const { notifySubscriptionFrequencyChanged } = await import("@/lib/notifications/dispatch");
+    await notifySubscriptionFrequencyChanged(cur.userId, { label: cadenceLabel(c), nextDate: next, newEndDate: endDate });
+  } catch { /* non-blocking */ }
+  return { id, changed: true, cadence: c, endDate };
+}
+
+/**
+ * Change quantity per delivery (single-product subs). FUTURE-ONLY: sets the item qty, backfills
+ * the bottleCount snapshot on FUTURE scheduled rows, then reconciles. Packing/litres/revenue read
+ * the live item qty, so past DELIVERED days keep their frozen figures.
+ */
+export async function changeQuantity(id: string, qty: number, actor: Actor) {
+  const q = Math.round(Number(qty));
+  if (!Number.isFinite(q) || q < 1 || q > 50) throw Errors.badRequest("Quantity must be between 1 and 50 per delivery.");
+  const cur = await db.subscription.findUnique({ where: { id }, select: { status: true, userId: true, items: { select: { id: true, qty: true, variant: { select: { label: true, displayName: true } } } } } });
+  if (!cur) throw Errors.notFound("Subscription not found.");
+  assertEditable(cur.status);
+  if (cur.items.length !== 1) throw Errors.badRequest("Quantity change supports single-product subscriptions; edit items directly for multi-product plans.");
+  const item = cur.items[0];
+  if (item.qty === q) return { id, changed: false, qty: q };
+  await db.$transaction(async (tx) => {
+    await tx.subscriptionItem.update({ where: { id: item.id }, data: { qty: q } });
+    await logSubEvent(tx, id, "QUANTITY_CHANGED", `Quantity per delivery changed: ${item.qty} → ${q}`, { from: item.qty, to: q }, actor);
+  });
+  try {
+    const today = startOfDay(new Date());
+    await db.delivery.updateMany({ where: { subscriptionId: id, status: "SCHEDULED", date: { gte: today } }, data: { bottleCount: q } });
+    const { reconcileSchedule } = await import("./deliveries");
+    await reconcileSchedule(id);
+  } catch { /* non-blocking */ }
+  try { const { notifySubscriptionQuantityChanged } = await import("@/lib/notifications/dispatch"); await notifySubscriptionQuantityChanged(cur.userId, { qty: q, product: item.variant?.displayName || item.variant?.label || null }); } catch { /* non-blocking */ }
+  return { id, changed: true, qty: q };
+}
+
+/**
+ * Change product/variant — from-now whole-sub swap (single-product subs). Sets the item's
+ * variantId; dates + counts are unchanged (deliveries carry no variant — packing/litres/revenue
+ * read the live item). Past DELIVERED days keep their frozen figures. Admin-only at the route.
+ */
+export async function changeProduct(id: string, variantId: string, actor: Actor) {
+  const cur = await db.subscription.findUnique({ where: { id }, select: { status: true, userId: true, items: { select: { id: true, variantId: true } } } });
+  if (!cur) throw Errors.notFound("Subscription not found.");
+  assertEditable(cur.status);
+  if (cur.items.length !== 1) throw Errors.badRequest("Product change supports single-product subscriptions; edit items directly for multi-product plans.");
+  const item = cur.items[0];
+  const variant = await db.variant.findUnique({ where: { id: variantId }, select: { id: true, active: true, label: true, displayName: true, type: true } });
+  if (!variant) throw Errors.notFound("Product not found.");
+  if (variant.type !== "SUBSCRIPTION") throw Errors.badRequest("Only subscription products can be set on a subscription.");
+  if (!variant.active) throw Errors.badRequest("That product is not available.");
+  if (variant.id === item.variantId) return { id, changed: false };
+  const label = variant.displayName || variant.label;
+  await db.$transaction(async (tx) => {
+    await tx.subscriptionItem.update({ where: { id: item.id }, data: { variantId: variant.id } });
+    await logSubEvent(tx, id, "PRODUCT_CHANGED", `Product changed to ${label} (from-now)`, { from: item.variantId, to: variant.id, label }, actor);
+  });
+  try { const { reconcileSchedule } = await import("./deliveries"); await reconcileSchedule(id); } catch { /* non-blocking */ }
+  try { const { notifySubscriptionProductChanged } = await import("@/lib/notifications/dispatch"); await notifySubscriptionProductChanged(cur.userId, { product: label }); } catch { /* non-blocking */ }
+  return { id, changed: true, variantId: variant.id, label };
+}
+
+/**
+ * DRY-RUN preview of a freq / qty / product change — returns current vs proposed schedule &
+ * summary WITHOUT committing (mirrors the real reconcile via simulateFutureDates). Powers the
+ * "your deliveries change from X to Y" confirmation. Only a cadence change re-spaces the dates;
+ * quantity/product keep every existing date.
+ */
+export async function previewSubscriptionChange(id: string, args: { cadence?: number; quantity?: number; variantId?: string }) {
+  const cur = await db.subscription.findUnique({
+    where: { id },
+    select: { status: true, cadence: true, items: { select: { qty: true, variant: { select: { id: true, label: true, displayName: true } } } } },
+  });
+  if (!cur) throw Errors.notFound("Subscription not found.");
+  const { simulateFutureDates } = await import("./deliveries");
+  const curCadence = cur.cadence ?? 1;
+  const curQty = cur.items.reduce((s, i) => s + (i.qty || 0), 0);
+  const curVariant = cur.items[0]?.variant;
+  const curProduct = curVariant ? (curVariant.displayName || curVariant.label) : null;
+
+  const base = await simulateFutureDates(id, {});
+  const proposed = await simulateFutureDates(id, args.cadence != null ? { cadence: Math.round(args.cadence) } : {});
+
+  let newProduct = curProduct;
+  if (args.variantId && args.variantId !== curVariant?.id) {
+    const v = await db.variant.findUnique({ where: { id: args.variantId }, select: { label: true, displayName: true } });
+    newProduct = v ? (v.displayName || v.label) : curProduct;
+  }
+  const newQty = args.quantity != null ? Math.round(args.quantity) : curQty;
+  const newCadence = args.cadence != null ? Math.round(args.cadence) : curCadence;
+  const fmt = (ds: Date[]) => ds.slice(0, 12).map((d) => d.toISOString());
+
+  return {
+    current:  { cadence: curCadence, cadenceLabel: cadenceLabel(curCadence), quantity: curQty, product: curProduct, endDate: base.endDate?.toISOString() ?? null, next: fmt(base.future) },
+    proposed: { cadence: newCadence, cadenceLabel: cadenceLabel(newCadence), quantity: newQty, product: newProduct, endDate: proposed.endDate?.toISOString() ?? null, next: fmt(proposed.future) },
+    changed: newCadence !== curCadence || newQty !== curQty || (!!args.variantId && args.variantId !== curVariant?.id),
+  };
+}
+
 // ---------------------------------------------------------------- lifecycle
 
 export async function pauseSubscription(id: string, opts: { until?: string; reason?: string }, actor: Actor) {
@@ -454,15 +593,17 @@ export async function pauseSubscription(id: string, opts: { until?: string; reas
 }
 
 export async function resumeSubscription(id: string, actor: Actor) {
-  const cur = await db.subscription.findUnique({ where: { id }, select: { status: true, userId: true, startDate: true, endDate: true, skipDates: true, plan: { select: { name: true } } } });
+  const cur = await db.subscription.findUnique({ where: { id }, select: { status: true, userId: true, startDate: true, endDate: true, skipDates: true, targetDeliveries: true, plan: { select: { name: true, days: true } } } });
   if (!cur) throw Errors.notFound("Subscription not found.");
   const next = nextDeliverableFrom({ status: "ACTIVE", startDate: cur.startDate, pausedFrom: null, pausedUntil: null, skipDates: cur.skipDates }, earliestByCutoff(new Date()));
   await db.$transaction(async (tx) => {
     await tx.subscription.update({ where: { id }, data: { status: "ACTIVE", pausedFrom: null, pausedUntil: null, nextDeliveryAt: next } });
     await logSubEvent(tx, id, "RESUMED", "Subscription resumed", { nextDeliveryAt: next?.toISOString() ?? null }, actor);
   });
-  // Refill the upcoming schedule that was cleared on pause.
-  try { const { generateAllForSubscription } = await import("./deliveries"); const planDays = cur.endDate ? Math.max(1, Math.round((cur.endDate.getTime() - cur.startDate.getTime()) / 86_400_000)) : 1; await generateAllForSubscription(id, planDays); } catch { /* non-blocking */ }
+  // Refill the upcoming schedule that was cleared on pause. Reconcile off the actual delivery
+  // COUNT (targetDeliveries ?? plan.days), NOT the calendar span — an alternate-day sub's span
+  // is ~2× its delivery count, so span-inference would over-generate.
+  try { const { generateAllForSubscription } = await import("./deliveries"); const target = cur.targetDeliveries ?? cur.plan?.days ?? 1; await generateAllForSubscription(id, target); } catch { /* non-blocking */ }
   // Confirm the customer is back on, with their next delivery date.
   try {
     if (cur.userId) {

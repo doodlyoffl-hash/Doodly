@@ -368,4 +368,42 @@ export async function notifySubscriptionCancelled(userId: string, d: { refundPai
   return notify(userId, { title, body, email: true, emailSubject: "Your DOODLY subscription was cancelled", emailHtml: T.notificationHtml(title, body, { label: "Reorder", href: "/subscriptions.html" }, "🥛") });
 }
 
+/** Delivery frequency changed (daily ↔ alternate-day). */
+export async function notifySubscriptionFrequencyChanged(userId: string, d: { label?: string; nextDate?: Date | string | null; newEndDate?: Date | string | null } = {}) {
+  const next = fmtDate(d.nextDate); const end = fmtDate(d.newEndDate);
+  const title = "Delivery frequency updated 🗓️";
+  const body = `Your deliveries are now ${d.label || "on a new schedule"}. You keep every paid delivery${next ? ` — next delivery ${next}` : ""}${end ? `, plan now runs to ${end}` : ""}.`;
+  return notify(userId, { title, body, email: true, emailSubject: "Your DOODLY delivery frequency was updated 🗓️", emailHtml: T.notificationHtml(title, body, { label: "View schedule", href: "/account/subscription.html" }, "🗓️") });
+}
+
+/** Quantity per delivery changed. */
+export async function notifySubscriptionQuantityChanged(userId: string, d: { qty?: number; product?: string | null } = {}) {
+  const title = "Delivery quantity updated 🥛";
+  const body = `From your next delivery you'll receive ${d.qty ? `${d.qty} ` : ""}${d.product || "bottle(s)"} per delivery. Your upcoming dates are unchanged.`;
+  return notify(userId, { title, body, email: true, emailSubject: "Your DOODLY delivery quantity was updated 🥛", emailHtml: T.notificationHtml(title, body, { label: "View subscription", href: "/account/subscription.html" }, "🥛") });
+}
+
+/** Product / variant swapped (from-now). */
+export async function notifySubscriptionProductChanged(userId: string, d: { product?: string | null } = {}) {
+  const title = "Subscription product updated 🔁";
+  const body = `From your next delivery your subscription switches to ${d.product || "your new selection"}. Your delivery dates stay the same.`;
+  return notify(userId, { title, body, email: true, emailSubject: "Your DOODLY subscription product was updated 🔁", emailHtml: T.notificationHtml(title, body, { label: "View subscription", href: "/account/subscription.html" }, "🔁") });
+}
+
+/** Subscription paused (deliveries held). */
+export async function notifySubscriptionPaused(userId: string, d: { until?: Date | string | null; nextDate?: Date | string | null } = {}) {
+  const until = fmtDate(d.until); const next = fmtDate(d.nextDate);
+  const title = "Subscription paused ⏸️";
+  const body = `Your DOODLY deliveries are paused${until ? ` until ${until}` : ""}. You won't be charged for held days and you keep every paid delivery${next ? ` — deliveries resume ${next}` : ""}.`;
+  return notify(userId, { title, body, email: true, emailSubject: "Your DOODLY subscription is paused ⏸️", emailHtml: T.notificationHtml(title, body, { label: "Manage subscription", href: "/account/subscription.html" }, "⏸️") });
+}
+
+/** Subscription resumed (deliveries back on). */
+export async function notifySubscriptionResumed(userId: string, d: { nextDate?: Date | string | null } = {}) {
+  const next = fmtDate(d.nextDate);
+  const title = "Your subscription is back on ▶️";
+  const body = `Welcome back! Your DOODLY deliveries have resumed${next ? ` — next delivery ${next}` : ""}.`;
+  return notify(userId, { title, body, email: true, emailSubject: "Your DOODLY subscription resumed ▶️", emailHtml: T.notificationHtml(title, body, { label: "View schedule", href: "/account/subscription.html" }, "▶️") });
+}
+
 export { channelStatus };

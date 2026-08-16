@@ -131,6 +131,72 @@ window.DOODLY_ACCOUNT = (function () {
       renderSubManager();
     }).catch(function (e) { toast(e.message || "Couldn't update the subscription."); });
   }
+  /* ---- Subscription Dashboard calendar (real schedule, no mocks) ---- */
+  var _calMonth = null;                         // first-of-month currently shown
+  function subCalStyles() {
+    if (document.getElementById("sm-cal-css")) return;
+    var st = document.createElement("style"); st.id = "sm-cal-css";
+    st.textContent =
+      ".sm-cal{margin-top:12px}.sm-cal-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}" +
+      ".sm-cal-nav b{font-size:15px}.sm-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}" +
+      ".sm-cal-dow{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#8a8a8a;text-align:center;padding:2px 0}" +
+      ".sm-cal-cell{min-height:38px;border-radius:8px;padding:3px 4px;font-size:12px;border:1px solid transparent;background:#f6f6f4;color:#333}" +
+      ".sm-cal-cell .d{font-weight:600;font-size:11px;opacity:.7}.sm-cal-cell.empty{background:transparent}" +
+      ".sm-cal-cell.done{background:#e7f6ec;color:#1a7f37;border-color:#bfe6ca}" +
+      ".sm-cal-cell.upcoming{background:#eef3ff;color:#1d4ed8;border-color:#cfdcff}" +
+      ".sm-cal-cell.skipped{background:#fff4e5;color:#a35200;border-color:#f3d9b5}" +
+      ".sm-cal-cell.missed{background:#fdecec;color:#b3261e;border-color:#f4c7c3}" +
+      ".sm-cal-cell.paused{background:#efefef;color:#777}.sm-cal-cell.today{outline:2px solid #0b6b3a;outline-offset:1px}" +
+      ".sm-cal-cell .t{display:block;font-size:10px;line-height:1.15;margin-top:1px}" +
+      ".sm-legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;font-size:11px;color:#666}" +
+      ".sm-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:middle}" +
+      ".sm-prog{height:8px;border-radius:6px;background:#eee;overflow:hidden;margin:6px 0}.sm-prog>i{display:block;height:100%;background:#0b6b3a}" +
+      ".sm-extend{background:#eef7f0;border:1px solid #cfe8d6;color:#1a5e34;border-radius:8px;padding:8px 10px;font-size:13px;margin:10px 0}";
+    document.head.appendChild(st);
+  }
+  var DKEY = function (d) { d = new Date(d); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  // Map each scheduled/served day → a calendar state.
+  function scheduleStateMap(s) {
+    var m = {};
+    (s.schedule || []).forEach(function (d) {
+      var st = d.status, k = DKEY(d.date), state;
+      if (st === "DELIVERED" || st === "PARTIALLY_DELIVERED") state = "done";
+      else if (st === "SKIPPED") state = "skipped";
+      else if (st === "FAILED" || st === "CUSTOMER_UNAVAILABLE" || st === "RESCHEDULED") state = "missed";
+      else if (st === "CANCELLED") state = "missed";
+      else state = "upcoming";
+      m[k] = state;                              // last write wins (one row per day)
+    });
+    // paused window (no delivery rows there) → grey
+    if (s.pausedFrom) {
+      var from = new Date(s.pausedFrom), to = s.pausedUntil ? new Date(s.pausedUntil) : null;
+      for (var dd = new Date(from); !to || dd <= to; dd.setDate(dd.getDate() + 1)) {
+        var kk = DKEY(dd); if (!m[kk]) m[kk] = "paused";
+        if (!to && dd > new Date(Date.now() + 60 * 86400000)) break;   // open-ended pause: cap the fill
+      }
+    }
+    return m;
+  }
+  function renderCalendarHTML(s) {
+    var base = _calMonth || (s.nextDeliveryAt ? new Date(s.nextDeliveryAt) : new Date());
+    var first = new Date(base.getFullYear(), base.getMonth(), 1);
+    var monthLabel = first.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+    var map = scheduleStateMap(s), todayK = DKEY(new Date());
+    var lead = (first.getDay() + 6) % 7;         // Mon-start offset
+    var days = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+    var dows = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(function (d) { return '<div class="sm-cal-dow">' + d + "</div>"; }).join("");
+    var cells = "";
+    for (var i = 0; i < lead; i++) cells += '<div class="sm-cal-cell empty"></div>';
+    for (var day = 1; day <= days; day++) {
+      var dt = new Date(base.getFullYear(), base.getMonth(), day), k = DKEY(dt), stt = map[k] || "";
+      var lbl = stt === "done" ? "Delivered" : stt === "upcoming" ? "Upcoming" : stt === "skipped" ? "Skipped" : stt === "missed" ? "Made up" : stt === "paused" ? "Paused" : "";
+      cells += '<div class="sm-cal-cell ' + stt + (k === todayK ? " today" : "") + '"><span class="d">' + day + "</span>" + (lbl ? '<span class="t">' + lbl + "</span>" : "") + "</div>";
+    }
+    return '<div class="sm-cal"><div class="sm-cal-nav"><button class="btn btn-ghost sm" id="sm-cal-prev" aria-label="Previous month">‹</button><b>' + monthLabel + '</b><button class="btn btn-ghost sm" id="sm-cal-next" aria-label="Next month">›</button></div>' +
+      '<div class="sm-cal-grid">' + dows + cells + "</div>" +
+      '<div class="sm-legend"><span><i style="background:#1a7f37"></i>Delivered</span><span><i style="background:#1d4ed8"></i>Upcoming</span><span><i style="background:#a35200"></i>Skipped</span><span><i style="background:#b3261e"></i>Made up</span><span><i style="background:#bbb"></i>Paused</span></div></div>';
+  }
+
   function renderSubManager() {
     var s = primarySub();
     var hostAnchor = document.querySelector(".page-head") || document.querySelector(".ph");
@@ -141,39 +207,61 @@ window.DOODLY_ACCOUNT = (function () {
       else return;
     }
     if (!s) { host.innerHTML = '<div class="notice">You don\'t have a subscription yet — <a href="/subscriptions.html">start one</a> and your mornings are sorted.</div>'; return; }
+    subCalStyles();
     var chip = s.status === "ACTIVE" ? '<span class="tp-yn yes">● Active</span>' : s.status === "VACATION" ? '<span class="tp-yn" style="background:#fff6e0;color:#8a6100">⏸ Paused' + (s.pausedUntil ? " until " + fmtD(s.pausedUntil) : "") + "</span>" : '<span class="tp-yn no">' + esc(s.status) + "</span>";
     var item = (s.items && s.items[0]) ? s.items[0].qty + "× " + s.items[0].label + " " + s.items[0].product : "—";
+    var target = s.targetDeliveries || 0, done = s.completedDeliveries || 0;
+    var pct = target ? Math.min(100, Math.round((done / target) * 100)) : 0;
+    var extended = s.endDate && s.originalEndDate && new Date(s.endDate) > new Date(new Date(s.originalEndDate).getTime() + 43200000);
+    var own = s.bottleOwnership;
     host.innerHTML =
       '<div class="panel" style="margin:14px 0"><div class="panel-head"><h3>Your live plan</h3>' + chip + '</div><div class="panel-pad">' +
+      (extended ? '<div class="sm-extend">🎁 Your plan was extended — it now runs to <b>' + fmtD(s.endDate) + "</b> (originally " + fmtD(s.originalEndDate) + "). You keep every paid delivery.</div>" : "") +
       '<div class="deflist">' +
       '<div class="row"><span class="k">Plan</span><span class="v">' + esc(s.plan.name) + "</span></div>" +
       '<div class="row"><span class="k">Bottle</span><span class="v">' + esc(item) + "</span></div>" +
+      '<div class="row"><span class="k">Frequency</span><span class="v">' + esc(s.frequency || "Daily") + "</span></div>" +
       '<div class="row"><span class="k">Next delivery</span><span class="v">' + (s.nextDeliveryAt ? fmtD(s.nextDeliveryAt) : "—") + " · " + esc(s.deliverySlot || "") + "</span></div>" +
       '<div class="row"><span class="k">Delivery address</span><span class="v">' + (s.address ? esc([s.address.label, s.address.line1, s.address.city, s.address.pincode].filter(Boolean).join(", ")) : "—") + "</span></div>" +
       '<div class="row"><span class="k">Per delivery</span><span class="v">' + inr(s.perDeliveryPaise) + "</span></div>" +
+      '<div class="row"><span class="k">Deliveries</span><span class="v">' + done + " of " + target + " done · " + (s.remainingDeliveries || 0) + " to go</span></div>" +
       '<div class="row"><span class="k">Ends</span><span class="v">' + (s.endDate ? fmtD(s.endDate) : "—") + "</span></div>" +
-      '<div class="row"><span class="k">Auto-renew</span><span class="v">' + (s.autoRenew ? "On" : "Off") + "</span></div>" +
-      (s.skipDates && s.skipDates.length ? '<div class="row"><span class="k">Skipped days</span><span class="v">' + s.skipDates.length + "</span></div>" : "") +
+      '<div class="row"><span class="k">Payment</span><span class="v">' + esc((s.paymentStatus && s.paymentStatus.label) || (s.autoRenew ? "AutoPay on" : "Manual renewal")) + "</span></div>" +
+      (own ? '<div class="row"><span class="k">Bottles with you</span><span class="v">' + own.owned + (own.depositHeldPaise ? " · deposit " + inr(own.depositHeldPaise) + " held" : "") + "</span></div>" : "") +
+      (s.skipDates && s.skipDates.length ? '<div class="row"><span class="k">Skipped days</span><span class="v">' + s.skipDates.length + " (made up at the end)</span></div>" : "") +
       "</div>" +
+      '<div class="sm-prog" title="' + pct + '% delivered"><i style="width:' + pct + '%"></i></div>' +
+      renderCalendarHTML(s) +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">' +
       (s.status === "ACTIVE"
-        ? '<button class="btn btn-ghost sm" id="sm-pause">' + icon("pause", 14) + ' Pause</button><button class="btn btn-ghost sm" id="sm-skip">Skip next delivery</button>'
+        ? '<button class="btn btn-ghost sm" id="sm-pause">' + icon("pause", 14) + ' Pause</button>' +
+          '<button class="btn btn-ghost sm" id="sm-skip">Skip next delivery</button>' +
+          '<button class="btn btn-ghost sm" id="sm-skipmulti">Skip specific dates</button>' +
+          '<button class="btn btn-ghost sm" id="sm-freq">Change frequency</button>' +
+          '<button class="btn btn-ghost sm" id="sm-qty">Change quantity</button>'
         : s.status === "VACATION" ? '<button class="btn btn-primary sm" id="sm-resume">' + icon("play", 14) + " Resume deliveries</button>" : "") +
-      '<button class="btn btn-ghost sm" id="sm-autopay">' + (s.autoRenew ? "Turn auto-renew off" : "Turn auto-renew on") + "</button>" +
-      (s.status !== "CANCELLED" ? '<button class="btn btn-ghost sm" id="sm-address">' + icon("pin", 14) + " Change delivery address</button>" : "") +
-      (s.status !== "CANCELLED" ? '<button class="btn btn-ghost sm" id="sm-cancel" style="color:#b3261e">Cancel plan</button>' : "") +
+      (s.status === "ACTIVE" || s.status === "VACATION" ? '<button class="btn btn-ghost sm" id="sm-autopay">' + (s.autoRenew ? "Turn auto-renew off" : "Turn auto-renew on") + "</button>" : "") +
+      (s.status === "ACTIVE" || s.status === "VACATION" ? '<button class="btn btn-ghost sm" id="sm-address">' + icon("pin", 14) + " Change delivery address</button>" : "") +
+      (s.status === "ACTIVE" || s.status === "VACATION" ? '<button class="btn btn-ghost sm" id="sm-cancel" style="color:#b3261e">Cancel plan</button>' : "") +
+      (s.status === "CANCELLED" || s.status === "COMPLETED" ? '<a class="btn btn-primary sm" href="/subscriptions.html">Start a new plan</a>' : "") +
       "</div></div></div>";
     var q = function (sel) { return host.querySelector(sel); };
+    if (q("#sm-cal-prev")) q("#sm-cal-prev").addEventListener("click", function () { var b = _calMonth || (s.nextDeliveryAt ? new Date(s.nextDeliveryAt) : new Date()); _calMonth = new Date(b.getFullYear(), b.getMonth() - 1, 1); renderSubManager(); });
+    if (q("#sm-cal-next")) q("#sm-cal-next").addEventListener("click", function () { var b = _calMonth || (s.nextDeliveryAt ? new Date(s.nextDeliveryAt) : new Date()); _calMonth = new Date(b.getFullYear(), b.getMonth() + 1, 1); renderSubManager(); });
     if (q("#sm-pause")) q("#sm-pause").addEventListener("click", function () {
-      var days = prompt("Pause for how many days? (deliveries resume automatically)", "7");
+      var days = prompt("Pause for how many days? (deliveries resume automatically — you keep every paid delivery)", "7");
+      if (days == null) return;
       var n = Math.round(Number(days)); if (!(n >= 1 && n <= 90)) return toast("Enter 1–90 days.");
       var until = new Date(Date.now() + n * 86400000).toISOString();
-      subAction("pause", { until: until }, "Paused ✓ — deliveries resume " + fmtD(until));
+      subAction("pause", { until: until }, "Paused ✓ — deliveries resume " + fmtD(until) + "; no paid day lost");
     });
     if (q("#sm-resume")) q("#sm-resume").addEventListener("click", function () { subAction("resume", null, "Welcome back — deliveries resume ✓"); });
     if (q("#sm-skip")) q("#sm-skip").addEventListener("click", function () {
-      if (confirm("Skip your next delivery? Skipped days are never charged.")) subAction("skip", null, "Next delivery skipped ✓");
+      if (confirm("Skip your next delivery? Skipped days are never charged and are added back at the end.")) subAction("skip", null, "Next delivery skipped ✓ — added back at the end");
     });
+    if (q("#sm-skipmulti")) q("#sm-skipmulti").addEventListener("click", function () { openSkipMultiple(s); });
+    if (q("#sm-freq")) q("#sm-freq").addEventListener("click", function () { openFrequencyPicker(s); });
+    if (q("#sm-qty")) q("#sm-qty").addEventListener("click", function () { openQuantityPicker(s); });
     if (q("#sm-autopay")) q("#sm-autopay").addEventListener("click", function () {
       var s2 = primarySub(); subAction(s2.autoRenew ? "autopay_off" : "autopay_on", null, s2.autoRenew ? "Auto-renew off" : "Auto-renew on ✓");
     });
@@ -181,7 +269,77 @@ window.DOODLY_ACCOUNT = (function () {
       startAddressChange({ subscription: primarySub(), onDone: function () { wireSubscription(); } });
     });
     if (q("#sm-cancel")) q("#sm-cancel").addEventListener("click", function () {
-      if (confirm("Cancel your subscription? You can start a new plan anytime.")) subAction("cancel", null, "Subscription cancelled.");
+      if (confirm("Cancel your subscription? Future deliveries stop. You can start a new plan anytime.")) subAction("cancel", null, "Subscription cancelled.");
+    });
+  }
+
+  /* Small helper: a current → proposed summary block for change confirmations. */
+  function previewRowsHTML(p) {
+    var nextList = function (arr) { return (arr || []).slice(0, 4).map(function (iso) { return fmtD(iso); }).join(", ") || "—"; };
+    return '<div class="deflist" style="margin-top:6px">' +
+      '<div class="row"><span class="k">Frequency</span><span class="v">' + esc(p.current.cadenceLabel) + " → <b>" + esc(p.proposed.cadenceLabel) + "</b></span></div>" +
+      '<div class="row"><span class="k">Per delivery</span><span class="v">' + p.current.quantity + " → <b>" + p.proposed.quantity + "</b></span></div>" +
+      (p.current.product ? '<div class="row"><span class="k">Product</span><span class="v">' + esc(p.current.product) + (p.proposed.product && p.proposed.product !== p.current.product ? " → <b>" + esc(p.proposed.product) + "</b>" : "") + "</span></div>" : "") +
+      '<div class="row"><span class="k">Next deliveries</span><span class="v">' + esc(nextList(p.proposed.next)) + "…</span></div>" +
+      '<div class="row"><span class="k">Plan ends</span><span class="v">' + (p.current.endDate ? fmtD(p.current.endDate) : "—") + (p.proposed.endDate && p.proposed.endDate !== p.current.endDate ? " → <b>" + fmtD(p.proposed.endDate) + "</b>" : "") + "</span></div>" +
+      "</div>";
+  }
+  function openFrequencyPicker(s) {
+    var cur = s.cadence || 1;
+    var body = '<p class="muted-sm">Choose how often we deliver. You keep the same number of paid deliveries — only the rhythm changes.</p>' +
+      '<div style="display:flex;gap:8px;margin:10px 0">' +
+      '<button class="btn ' + (cur === 1 ? "btn-primary" : "btn-ghost") + ' sm" data-cad="1">Daily</button>' +
+      '<button class="btn ' + (cur === 2 ? "btn-primary" : "btn-ghost") + ' sm" data-cad="2">Alternate-day (every 2 days)</button>' +
+      "</div><div id=\"freq-preview\"></div>";
+    modal("Change delivery frequency", body, function (mo, close) {
+      mo.querySelectorAll("button[data-cad]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          var cad = Number(b.dataset.cad);
+          if (cad === (s.cadence || 1)) { close(); return; }
+          var pv = mo.querySelector("#freq-preview"); pv.innerHTML = '<p class="muted-sm">Checking your new schedule…</p>';
+          API().post("/api/account/subscription", { id: s.id, action: "preview_change", cadence: cad }).then(function (r) {
+            pv.innerHTML = previewRowsHTML(r.preview) + '<button class="btn btn-primary sm" id="freq-apply" style="margin-top:10px">Apply — deliver ' + (cad === 2 ? "every 2 days" : "daily") + "</button>";
+            pv.querySelector("#freq-apply").addEventListener("click", function () { close(); subAction("change_frequency", { cadence: cad }, "Frequency updated ✓"); });
+          }).catch(function (e) { pv.innerHTML = '<p class="muted-sm">' + esc(e.message || "Couldn't preview.") + "</p>"; });
+        });
+      });
+    });
+  }
+  function openQuantityPicker(s) {
+    var cur = (s.items && s.items[0]) ? s.items[0].qty : 1;
+    var body = '<p class="muted-sm">How many bottles per delivery? Change applies from your next delivery; past deliveries are unchanged.</p>' +
+      '<div style="display:flex;align-items:center;gap:8px;margin:10px 0"><label>Bottles per delivery</label>' +
+      '<input id="qty-in" type="number" min="1" max="50" value="' + cur + '" style="width:80px;padding:6px 8px;border:1px solid #ddd;border-radius:8px"></div>' +
+      '<button class="btn btn-ghost sm" id="qty-prev">Preview change</button><div id="qty-preview" style="margin-top:8px"></div>';
+    modal("Change quantity per delivery", body, function (mo, close) {
+      var run = function () {
+        var q = Math.round(Number(mo.querySelector("#qty-in").value));
+        if (!(q >= 1 && q <= 50)) { toast("Enter 1–50 bottles."); return; }
+        if (q === cur) { close(); return; }
+        var pv = mo.querySelector("#qty-preview"); pv.innerHTML = '<p class="muted-sm">Checking…</p>';
+        API().post("/api/account/subscription", { id: s.id, action: "preview_change", qty: q }).then(function (r) {
+          pv.innerHTML = previewRowsHTML(r.preview) + '<button class="btn btn-primary sm" id="qty-apply" style="margin-top:10px">Apply — ' + q + " per delivery</button>";
+          pv.querySelector("#qty-apply").addEventListener("click", function () { close(); subAction("change_quantity", { qty: q }, "Quantity updated ✓"); });
+        }).catch(function (e) { pv.innerHTML = '<p class="muted-sm">' + esc(e.message || "Couldn't preview.") + "</p>"; });
+      };
+      mo.querySelector("#qty-prev").addEventListener("click", run);
+    });
+  }
+  function openSkipMultiple(s) {
+    var upcoming = (s.schedule || []).filter(function (d) {
+      var st = d.status; return (st !== "DELIVERED" && st !== "PARTIALLY_DELIVERED" && st !== "SKIPPED" && st !== "CANCELLED" && st !== "FAILED") && new Date(d.date) >= new Date(new Date().setHours(0, 0, 0, 0));
+    }).slice(0, 30);
+    if (!upcoming.length) { toast("No upcoming deliveries to skip."); return; }
+    var body = '<p class="muted-sm">Tick the deliveries to skip. Each skipped day is never charged and is added back at the end — you keep every paid delivery.</p>' +
+      '<div style="max-height:260px;overflow:auto;margin:8px 0;display:grid;grid-template-columns:1fr 1fr;gap:4px">' +
+      upcoming.map(function (d) { return '<label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 6px;border:1px solid #eee;border-radius:8px"><input type="checkbox" value="' + d.date + '">' + fmtD(d.date) + "</label>"; }).join("") +
+      '</div><button class="btn btn-primary sm" id="skip-apply">Skip selected dates</button>';
+    modal("Skip specific delivery dates", body, function (mo, close) {
+      mo.querySelector("#skip-apply").addEventListener("click", function () {
+        var dates = [...mo.querySelectorAll('input[type="checkbox"]:checked')].map(function (c) { return c.value; });
+        if (!dates.length) { toast("Pick at least one date."); return; }
+        close(); subAction("cancel_date", { dates: dates }, dates.length + " date(s) skipped ✓ — added back at the end");
+      });
     });
   }
   function wireVacationForm() {
