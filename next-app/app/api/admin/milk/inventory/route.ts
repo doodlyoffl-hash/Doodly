@@ -25,6 +25,12 @@ export const GET = route("admin.milk.inventory", async (req: NextRequest) => {
   const from = sp.get("from") ?? undefined, to = sp.get("to") ?? undefined, date = sp.get("date") ?? undefined;
   const format = (sp.get("format") ?? "").toLowerCase();
 
+  if (format === "json") {
+    // in-site Report Viewer — the SAME MilkReport the file exports render, so View == CSV/PDF/Excel
+    const report: MilkReport = view === "summary" || view === "dashboard" ? await milkDailyStockReport(date) : await milkInventoryLedgerReport({ from, to });
+    await audit({ userId: readUserId(req) ?? null, actorRole: role, action: "milk.inventory.view", target: `${view || "ledger"} · ${report.rowCount} row(s)`, ctx: reqContext(req) }).catch(() => {});
+    return NextResponse.json(report);
+  }
   if (format === "pdf" || format === "xls" || format === "csv") {
     const report: MilkReport = view === "summary" || view === "dashboard" ? await milkDailyStockReport(date) : await milkInventoryLedgerReport({ from, to });
     await audit({ userId: readUserId(req) ?? null, actorRole: role, action: "milk.inventory.export", target: `${view || "ledger"} · ${format.toUpperCase()} · ${report.rowCount} row(s)`, ctx: reqContext(req) }).catch(() => {});

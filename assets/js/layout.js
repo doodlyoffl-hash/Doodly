@@ -2114,7 +2114,8 @@
           '<select class="input" id="b2o-status" style="max-width:150px">' + opt(statuses, s.status) + "</select>" +
           '<label class="muted-sm"><input type="checkbox" id="b2o-all"' + (s.all ? " checked" : "") + "> Include paid</label>" +
           '<button class="btn btn-ghost sm" id="b2o-reset">Reset</button>' +
-          '<div style="margin-left:auto;display:flex;gap:6px">' +
+          '<div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">' +
+            '<button class="btn btn-ghost sm" data-b2oview="outstanding">👁 Outstanding</button><button class="btn btn-ghost sm" data-b2oview="aging">👁 Aging</button><button class="btn btn-ghost sm" data-b2oview="collection">👁 Collection</button><button class="btn btn-ghost sm" data-b2oview="payments">👁 Payments</button>' +
             '<button class="btn btn-ghost sm" id="b2o-x-out">⬇ Outstanding</button><button class="btn btn-ghost sm" id="b2o-x-aging">Aging</button><button class="btn btn-ghost sm" id="b2o-x-coll">Collection</button><button class="btn btn-ghost sm" id="b2o-x-pay">Payments</button>' +
           "</div>" +
         "</div>" +
@@ -2132,6 +2133,7 @@
     host.querySelector("#b2o-reset").addEventListener("click", function () { _b2oState = b2oFreshState(); renderB2BOutstanding(host); });
     host.querySelector("#b2o-tab-inv").addEventListener("click", function () { renderB2BInvoices(host); });
     [["out", "outstanding"], ["aging", "aging"], ["coll", "collection"], ["pay", "payments"]].forEach(function (m) { host.querySelector("#b2o-x-" + m[0]).addEventListener("click", function () { b2oExport(m[1]); }); });
+    host.querySelectorAll("[data-b2oview]").forEach(function (b) { b.addEventListener("click", function () { if (!window.DOODLY_REPORTVIEWER) { dacToast("Report viewer is still loading — try again."); return; } DOODLY_REPORTVIEWER.openServer({ module: (window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : "invoices"), path: "/api/b2b/invoices/export", query: "report=" + encodeURIComponent(b.dataset.b2oview) + "&" + b2oQuery(), filename: "DOODLY_B2B_" + b.dataset.b2oview }); }); });
     b2oReload(host);
   }
   function b2oReload(host) {
@@ -2469,6 +2471,7 @@
             '<div style="font-weight:700;align-self:center">B2B Sales Report <span class="muted-sm" style="font-weight:600">· by unit · revenue · ASP · milk profit</span></div>' +
             fld("From", '<input class="input" id="upRepFrom" type="date">') +
             fld("To", '<input class="input" id="upRepTo" type="date">') +
+            '<button class="btn btn-ghost sm" id="upRepView">👁 View</button>' +
             '<button class="btn btn-ghost sm" id="upRepPdf">⬇ PDF</button>' +
             '<button class="btn btn-ghost sm" id="upRepXls">Excel</button>' +
             '<button class="btn btn-ghost sm" id="upRepCsv">CSV</button>' +
@@ -2493,6 +2496,7 @@
       host.querySelector("#upRepPdf").addEventListener("click", function () { downloadReport("pdf"); });
       host.querySelector("#upRepXls").addEventListener("click", function () { downloadReport("xls"); });
       host.querySelector("#upRepCsv").addEventListener("click", function () { downloadReport("csv"); });
+      var upv = host.querySelector("#upRepView"); if (upv) upv.addEventListener("click", function () { if (!window.DOODLY_REPORTVIEWER) { dacToast("Report viewer is still loading — try again."); return; } var from = (host.querySelector("#upRepFrom") || {}).value || "", to = (host.querySelector("#upRepTo") || {}).value || ""; DOODLY_REPORTVIEWER.openServer({ module: (window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : "b2b"), path: "/api/b2b/reports/export", query: "from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to), title: "B2B Sales Report", filename: "DOODLY_B2B_Sales" }); });
     }
     DOODLY_API.get("/api/b2b/businesses").then(function (r) {
       state.businesses = (r.businesses || r || []).filter(function (b) { return b && b.id; });
@@ -7956,7 +7960,7 @@
       mount.innerHTML =
         '<div class="panel"><div class="panel-head" style="gap:8px;flex-wrap:wrap"><h3>📒 Milk Inventory Ledger <span class="muted-sm" style="font-weight:600">· auto-derived from tanker procurement</span></h3>' +
           '<div style="display:flex;gap:6px;align-items:center;margin-left:auto"><input class="input" id="mk-inv-date" type="date" value="' + esc(d) + '" style="max-width:150px">' +
-          '<button class="btn btn-ghost sm" id="mk-inv-pdf">⬇ PDF</button><button class="btn btn-ghost sm" id="mk-inv-xls">Excel</button><button class="btn btn-ghost sm" id="mk-inv-csv">CSV</button><button class="btn btn-ghost sm" id="mk-inv-print">🖨</button></div></div>' +
+          '<button class="btn btn-ghost sm" id="mk-inv-view">👁 View</button><button class="btn btn-ghost sm" id="mk-inv-pdf">⬇ PDF</button><button class="btn btn-ghost sm" id="mk-inv-xls">Excel</button><button class="btn btn-ghost sm" id="mk-inv-csv">CSV</button><button class="btn btn-ghost sm" id="mk-inv-print">🖨</button></div></div>' +
           '<div class="panel-pad"><div class="dl-an-kpis" style="margin-bottom:10px">' + kpis + "</div>" +
           (s.reconciled ? "" : '<p class="dac-err" style="margin:0 0 8px">⚠ Ledger closing (' + mkInvL(s.closingBalance) + ") does not reconcile with live available (" + mkInvL(s.currentAvailable) + ").</p>") +
           '<div class="table-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Movement</th><th>Tanker</th><th style="text-align:right">In</th><th style="text-align:right">Out</th><th style="text-align:right">Balance</th></tr></thead><tbody>' + rows + "</tbody></table></div>" +
@@ -7964,6 +7968,7 @@
           "</div></div>";
       var di = mount.querySelector("#mk-inv-date"); if (di) di.addEventListener("change", function () { _mkInvDate = di.value; mkLoadInventoryLedger(host); });
       [["pdf", "pdf"], ["xls", "xls"], ["csv", "csv"], ["print", "print"]].forEach(function (m) { var el = mount.querySelector("#mk-inv-" + m[0]); if (el) el.addEventListener("click", function () { mkInvExport(m[1]); }); });
+      var mkiv = mount.querySelector("#mk-inv-view"); if (mkiv) mkiv.addEventListener("click", function () { if (!window.DOODLY_REPORTVIEWER) { dacToast("Report viewer is still loading — try again."); return; } var d = _mkInvDate || istTodayStr(); DOODLY_REPORTVIEWER.openServer({ module: "procurement", path: "/api/admin/milk/inventory", query: "view=ledger&from=" + d + "&to=" + d, title: "Milk Inventory Ledger", filename: "DOODLY_Milk_Inventory" }); });
     }).catch(function (e) { mount.innerHTML = '<div class="panel"><div class="panel-pad dac-err">' + esc((e && e.message) || "Couldn't load the inventory ledger.") + "</div></div>"; });
   }
 
