@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const report = await b2bSalesReport(from, to);
-    if (format === "json") { await log("json"); return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } }); }
+    if (format === "json") { await log("json"); await audit({ userId: actorId(req) ?? null, actorRole: role, action: "b2b.report.view", target: `salesReport · ${from}→${to}`, ctx: reqContext(req) }).catch(() => {}); return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } }); }
     if (format === "pdf") {
       const { bytes } = await renderMilkReportPdf(report as unknown as MilkReport);
       await log("pdf");

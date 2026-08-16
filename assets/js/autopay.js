@@ -385,6 +385,7 @@ window.DOODLY_AUTOPAY = (function () {
               ['all|All statuses', 'ACTIVE|Active', 'INACTIVE|Paused', 'RETRY|Retry', 'SUSPENDED|Suspended', 'CANCELLED|Cancelled']
                 .map(function (o) { var kv = o.split("|"); return '<option value="' + kv[0] + '"' + (filter.status === kv[0] ? " selected" : "") + '>' + kv[1] + '</option>'; }).join("") +
             '</select>' +
+            '<button class="btn btn-ghost sm" id="apView">👁 View</button>' +
             '<button class="btn btn-ghost sm" id="apExport">' + I.dl + ' Export CSV</button>' +
           '</div></div>' +
           '<div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Customer</th><th>Plan</th><th>Amount</th><th>Next renewal</th><th>Attempts</th><th>Status</th><th></th></tr></thead>' +
@@ -395,6 +396,24 @@ window.DOODLY_AUTOPAY = (function () {
       fs.addEventListener("change", function () { filter.status = fs.value; load(); });
       sb.addEventListener("input", function () { filter.q = sb.value; clearTimeout(searchTimer); searchTimer = setTimeout(load, 300); });
       if (ex) ex.addEventListener("click", exportCSV);
+      var vw = host.querySelector("#apView");
+      if (vw) vw.addEventListener("click", function () {
+        if (!window.DOODLY_REPORTVIEWER) return;
+        var flt = [];
+        if (filter.status && filter.status !== "all") flt.push("Status: " + filter.status);
+        if (filter.q) flt.push('Search: "' + filter.q + '"');
+        var data = current.map(function (r) {
+          return [r.customer || "", r.phone || "", r.email || "", r.plan || "", Math.round((r.amountPaise || 0) / 100),
+            r.nextRenewalAt ? String(r.nextRenewalAt).slice(0, 10) : "", r.attempts || 0, r.status || "", r.gatewaySubId || ""];
+        });
+        DOODLY_REPORTVIEWER.open({
+          title: "AutoPay Mandates Report",
+          module: window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : null,
+          meta: { filters: flt, recordCount: data.length },
+          columns: ["Customer", "Phone", "Email", "Plan", { label: "Amount (₹)", right: true }, "Next renewal", { label: "Attempts", right: true }, "Status", "Mandate"],
+          rows: data
+        }, { exporters: { csv: exportCSV } });
+      });
       wireRows(host);
     }
 

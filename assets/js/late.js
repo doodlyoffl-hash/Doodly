@@ -357,7 +357,7 @@ window.DOODLY_LATE = (function () {
             sel("lt-exec", "Executive", execs, f.exec) + sel("lt-area", "Area", areas, f.area) + sel("lt-status", "Status", ["Late", "Reviewed", "Resolved"], f.status) +
             '<label class="lt-fl"><span>Notified</span><select class="input" id="lt-notif"><option value="">All</option><option value="yes" ' + (f.notified === "yes" ? "selected" : "") + '>Sent</option><option value="no" ' + (f.notified === "no" ? "selected" : "") + '>Not sent</option></select></label>' +
           '</div>' +
-          '<div class="lt-flactions"><span class="muted-sm">' + list.length + ' late deliver' + (list.length === 1 ? "y" : "ies") + '</span><button class="link" id="lt-clear">Clear</button><span class="lt-exp"><button class="btn btn-ghost sm" id="lt-csv">CSV</button><button class="btn btn-ghost sm" id="lt-xls">Excel</button><button class="btn btn-primary sm" id="lt-pdf">PDF</button></span></div>' +
+          '<div class="lt-flactions"><span class="muted-sm">' + list.length + ' late deliver' + (list.length === 1 ? "y" : "ies") + '</span><button class="link" id="lt-clear">Clear</button><span class="lt-exp"><button class="btn btn-ghost sm" id="lt-view">👁 View</button><button class="btn btn-ghost sm" id="lt-csv">CSV</button><button class="btn btn-ghost sm" id="lt-xls">Excel</button><button class="btn btn-primary sm" id="lt-pdf">PDF</button></span></div>' +
         '</div>' +
         '<div class="table-wrap"><table class="tbl lt-tbl"><thead><tr><th>Date</th><th>Customer</th><th>Executive</th><th>Area</th><th>Scheduled</th><th>Actual</th><th>Delay</th><th>Reason</th><th>Apology</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
         (list.length > st.per ? '<div class="lt-pager"><button class="btn btn-ghost sm" id="lt-prev" ' + (st.page <= 1 ? "disabled" : "") + '>‹ Prev</button><span>Page ' + st.page + ' of ' + pages + '</span><button class="btn btn-ghost sm" id="lt-next" ' + (st.page >= pages ? "disabled" : "") + '>Next ›</button></div>' : "");
@@ -470,6 +470,24 @@ window.DOODLY_LATE = (function () {
       var prev = host.querySelector("#lt-prev"); if (prev) prev.addEventListener("click", function () { if (st.page > 1) { st.page--; render(); } });
       var next = host.querySelector("#lt-next"); if (next) next.addEventListener("click", function () { st.page++; render(); });
       var rows = lateRecords(st.f);
+      var view = host.querySelector("#lt-view"); if (view) view.addEventListener("click", function () {
+        if (!window.DOODLY_REPORTVIEWER) return;
+        var f = st.f || {}, flt = [];
+        var scopeLabel = { today: "Today", week: "This Week", month: "This Month", "30d": "30 Days" };
+        if (f.scope) flt.push("Period: " + (scopeLabel[f.scope] || f.scope));
+        if (f.exec) flt.push("Executive: " + f.exec);
+        if (f.area) flt.push("Area: " + f.area);
+        if (f.status) flt.push("Status: " + f.status);
+        if (f.notified) flt.push("Apology: " + (f.notified === "yes" ? "Sent" : "Not sent"));
+        if (f.q) flt.push('Search: "' + f.q + '"');
+        DOODLY_REPORTVIEWER.open({
+          title: "Late Deliveries Report",
+          module: window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : null,
+          meta: { filters: flt, recordCount: rows.length },
+          columns: LHEAD,
+          rows: rows.map(function (r) { return LCOLS.map(function (k) { return k === "notified" || k === "reviewed" ? (r[k] ? "Yes" : "No") : r[k]; }); })
+        }, { exporters: { csv: function () { exportLate("csv", rows); }, xls: function () { exportLate("xls", rows); }, pdf: function () { exportLate("pdf", rows); } } });
+      });
       var csv = host.querySelector("#lt-csv"); if (csv) csv.addEventListener("click", function () { exportLate("csv", rows); });
       var xls = host.querySelector("#lt-xls"); if (xls) xls.addEventListener("click", function () { exportLate("xls", rows); });
       var pdf = host.querySelector("#lt-pdf"); if (pdf) pdf.addEventListener("click", function () { exportLate("pdf", rows); });

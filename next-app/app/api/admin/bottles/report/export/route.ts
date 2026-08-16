@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   const log = (fmt: string) => audit({ userId: readUserId(req) ?? null, actorRole: readRole(req), action: "bottle.report.export", target: `${fkind} · ${fmt.toUpperCase()} · ${report.rowCount} row(s)`, ctx: reqContext(req) }).catch(() => {});
 
   try {
-    if (format === "json") { await log("json"); return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } }); }
+    if (format === "json") { await log("json"); await audit({ userId: readUserId(req) ?? null, actorRole: readRole(req), action: "bottle.report.view", target: `${fkind} · ${report.rowCount} row(s)`, ctx: reqContext(req) }).catch(() => {}); return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } }); }
     if (format === "pdf") {
       const { bytes } = await renderMilkReportPdf(report as unknown as MilkReport);
       await log("pdf");

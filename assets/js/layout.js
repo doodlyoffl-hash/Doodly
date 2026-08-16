@@ -10,6 +10,8 @@
   // Load the DOODLY date picker (brand-styled calendar for every date field, site-wide).
   try { if (!document.getElementById("doodly-datepicker-css")) { var _dpc = document.createElement("link"); _dpc.id = "doodly-datepicker-css"; _dpc.rel = "stylesheet"; _dpc.href = "/assets/css/datepicker.css"; document.head.appendChild(_dpc); } } catch (e) {}
   try { if (!window.DOODLY_DATEPICKER && !document.getElementById("doodly-datepicker-js")) { var _dpj = document.createElement("script"); _dpj.id = "doodly-datepicker-js"; _dpj.src = "/assets/js/datepicker.js"; _dpj.async = true; document.head.appendChild(_dpj); } } catch (e) {}
+  // Load the Universal Report Viewer once (View any report inside the site before downloading/printing).
+  try { if (!window.DOODLY_REPORTVIEWER && !document.getElementById("doodly-reportviewer-js")) { var _rvj = document.createElement("script"); _rvj.id = "doodly-reportviewer-js"; _rvj.src = "/assets/js/report-viewer.js"; _rvj.async = true; document.head.appendChild(_rvj); } } catch (e) {}
   const M = window.DOODLY_MANIFEST;
   const B = window.DOODLY_BLOCKS;
   const D = window.DOODLY;
@@ -1598,9 +1600,10 @@
     if (!bar) { bar = document.createElement("div"); bar.id = "subReportsBar"; anchor.parentNode.insertBefore(bar, anchor.nextSibling); }
     var types = [["cancelled", "Cancellations"], ["adjusted", "Missed &amp; adjusted"], ["extended", "Extensions"], ["customer_requested", "Customer-requested"], ["operational", "DOODLY adjustments"]];
     bar.innerHTML = '<div class="panel" style="margin:16px 0"><div class="panel-head"><h3>Lifecycle reports</h3></div><div class="panel-pad"><p class="muted-sm" style="margin-top:0">Download subscription lifecycle activity — cancellations, missed/adjusted deliveries, extensions, and the customer-requested vs DOODLY-adjustment split.</p><div style="display:flex;flex-direction:column;gap:8px">' +
-      types.map(function (t) { return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="min-width:170px">' + t[1] + '</b><button class="btn btn-ghost sm" data-subdl="' + t[0] + ',csv">CSV</button><button class="btn btn-ghost sm" data-subdl="' + t[0] + ',xls">Excel</button><button class="btn btn-ghost sm" data-subdl="' + t[0] + ',pdf">PDF</button></div>'; }).join("") +
+      types.map(function (t) { return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="min-width:170px">' + t[1] + '</b><button class="btn btn-ghost sm" data-subview="' + t[0] + '">👁 View</button><button class="btn btn-ghost sm" data-subdl="' + t[0] + ',csv">CSV</button><button class="btn btn-ghost sm" data-subdl="' + t[0] + ',xls">Excel</button><button class="btn btn-ghost sm" data-subdl="' + t[0] + ',pdf">PDF</button></div>'; }).join("") +
       "</div></div></div>";
     bar.querySelectorAll("[data-subdl]").forEach(function (b) { b.addEventListener("click", function () { var p = b.dataset.subdl.split(","); downloadSubReport(p[0], p[1]); }); });
+    bar.querySelectorAll("[data-subview]").forEach(function (b) { b.addEventListener("click", function () { if (!window.DOODLY_REPORTVIEWER) { dacToast("Report viewer is still loading — try again."); return; } DOODLY_REPORTVIEWER.openServer({ module: "subscriptions", path: "/api/admin/subscriptions/lifecycle-reports/export", query: "type=" + encodeURIComponent(b.dataset.subview), filename: "DOODLY_" + b.dataset.subview }); }); });
   }
   function subPatch(id, body) { return DOODLY_API.patch("/api/admin/subscriptions/" + id, body); }
   // Delegated row-click on the subscriptions board → open the manage drawer. Scoped to this
@@ -1858,7 +1861,7 @@
         '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
           '<span class="muted-sm">Sort:</span><select class="input" id="b2f-sort" style="max-width:180px">' + opt([["newest", "Newest first"], ["oldest", "Oldest first"], ["delivery_desc", "Delivery date ↓"], ["delivery_asc", "Delivery date ↑"], ["business_asc", "Business A→Z"], ["business_desc", "Business Z→A"], ["value_desc", "Value ↓"], ["value_asc", "Value ↑"], ["revenue_desc", "Revenue ↓"], ["invoice_desc", "Invoice # ↓"]], s.sort) + "</select>" +
           '<span class="muted-sm">Rows:</span><select class="input" id="b2f-size" style="max-width:80px">' + opt([["10", "10"], ["25", "25"], ["50", "50"], ["100", "100"]], String(s.pageSize)) + "</select>" +
-          '<div style="margin-left:auto;display:flex;gap:6px"><button class="btn btn-ghost sm" id="b2f-pdf">⬇ PDF</button><button class="btn btn-ghost sm" id="b2f-xls">Excel</button><button class="btn btn-ghost sm" id="b2f-csv">CSV</button><button class="btn btn-ghost sm" id="b2f-print">🖨 Print</button><button class="btn btn-primary sm" id="b2f-new">+ New order</button></div>' +
+          '<div style="margin-left:auto;display:flex;gap:6px"><button class="btn btn-ghost sm" id="b2f-view">👁 View</button><button class="btn btn-ghost sm" id="b2f-pdf">⬇ PDF</button><button class="btn btn-ghost sm" id="b2f-xls">Excel</button><button class="btn btn-ghost sm" id="b2f-csv">CSV</button><button class="btn btn-ghost sm" id="b2f-print">🖨 Print</button><button class="btn btn-primary sm" id="b2f-new">+ New order</button></div>' +
         "</div>" +
       "</div></div>" +
       '<div id="b2b-body"><p class="muted-sm">Loading…</p></div>';
@@ -1882,6 +1885,10 @@
     host.querySelector("#b2f-reset").addEventListener("click", function () { _b2bState = b2bFreshState(); renderB2BOrders(host); });
     host.querySelector("#b2f-new").addEventListener("click", function () { if (typeof openB2BOrderBooking === "function") openB2BOrderBooking(function () { b2bReload(host); }); else dacToast("Booking unavailable."); });
     ["pdf", "xls", "csv", "print"].forEach(function (fmt) { host.querySelector("#b2f-" + fmt).addEventListener("click", function () { b2bExport(fmt); }); });
+    var b2fView = host.querySelector("#b2f-view"); if (b2fView) b2fView.addEventListener("click", function () {
+      if (!window.DOODLY_REPORTVIEWER) { dacToast("Report viewer is still loading — try again."); return; }
+      DOODLY_REPORTVIEWER.openServer({ module: (window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : "b2b"), path: "/api/b2b/orders/export", query: b2bQuery(), title: "B2B Orders Report", filename: "DOODLY_B2B_Orders" });
+    });
     b2bReload(host);
   }
   function b2bToggle(arr, v) { var i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v); }
@@ -2039,7 +2046,7 @@
         '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
           '<span class="muted-sm">Sort:</span><select class="input" id="b2i-sort" style="max-width:160px">' + opt([["newest", "Newest first"], ["oldest", "Oldest first"], ["amount_desc", "Amount ↓"], ["amount_asc", "Amount ↑"], ["business", "Business A→Z"], ["due", "Due date"]], s.sort) + "</select>" +
           '<span class="muted-sm">Rows:</span><select class="input" id="b2i-size" style="max-width:80px">' + opt([["10", "10"], ["25", "25"], ["50", "50"], ["100", "100"]], String(s.pageSize)) + "</select>" +
-          '<div style="margin-left:auto;display:flex;gap:6px"><button class="btn btn-ghost sm" id="b2i-pdf-all">⬇ PDF</button><button class="btn btn-ghost sm" id="b2i-xls-all">Excel</button><button class="btn btn-ghost sm" id="b2i-csv-all">CSV</button><button class="btn btn-ghost sm" id="b2i-print-all">🖨 Print</button><button class="btn btn-ghost sm" id="b2i-reports">📊 Reports</button></div>' +
+          '<div style="margin-left:auto;display:flex;gap:6px"><button class="btn btn-ghost sm" id="b2i-view-all">👁 View</button><button class="btn btn-ghost sm" id="b2i-pdf-all">⬇ PDF</button><button class="btn btn-ghost sm" id="b2i-xls-all">Excel</button><button class="btn btn-ghost sm" id="b2i-csv-all">CSV</button><button class="btn btn-ghost sm" id="b2i-print-all">🖨 Print</button><button class="btn btn-ghost sm" id="b2i-reports">📊 Reports</button></div>' +
         "</div>" +
       "</div></div>" +
       '<div id="b2i-body"><p class="muted-sm">Loading…</p></div>';
@@ -2060,6 +2067,7 @@
     host.querySelector("#b2i-reports").addEventListener("click", function () { b2iReports(); });
     var toOut = host.querySelector("#b2i-tab-out"); if (toOut) toOut.addEventListener("click", function () { renderB2BOutstanding(host); });
     [["pdf-all", "pdf"], ["xls-all", "xls"], ["csv-all", "csv"], ["print-all", "print"]].forEach(function (m) { var el = host.querySelector("#b2i-" + m[0]); if (el) el.addEventListener("click", function () { b2iExport(m[1]); }); });
+    var b2iView = host.querySelector("#b2i-view-all"); if (b2iView) b2iView.addEventListener("click", function () { if (!window.DOODLY_REPORTVIEWER) { dacToast("Report viewer is still loading — try again."); return; } DOODLY_REPORTVIEWER.openServer({ module: (window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : "invoices"), path: "/api/b2b/invoices/export", query: b2iQuery(), title: "Business Invoices Report", filename: "DOODLY_B2B_Invoices" }); });
     b2iReload(host);
   }
   function b2iExport(fmt) {
@@ -2848,6 +2856,7 @@
       '<div class="panel" style="margin-bottom:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">' +
         '<h3 style="margin:0">🥛 Bottle-return pickups <span class="muted-sm" style="font-weight:600">— deposit refunds</span></h3>' +
         '<span style="display:flex;gap:6px;flex-wrap:wrap">' +
+          '<button type="button" class="btn btn-ghost sm" data-prepview="pickups">👁 View</button>' +
           '<button type="button" class="btn btn-ghost sm" data-prep="deposits,pdf">⬇ Deposit PDF</button>' +
           '<button type="button" class="btn btn-ghost sm" data-prep="pickups,pdf">Pickups PDF</button>' +
           '<button type="button" class="btn btn-ghost sm" data-prep="pickups,csv">CSV</button>' +
@@ -2856,6 +2865,7 @@
         '<div class="table-wrap"><table class="tbl"><thead><tr><th>Customer</th><th>Bottles</th><th>Deposit</th><th>Status</th><th></th></tr></thead><tbody>' + body + "</tbody></table></div></div>";
     mount.querySelectorAll("[data-pf]").forEach(function (b) { b.addEventListener("click", function () { _pickupFilter = b.dataset.pf; loadBottlePickups(); }); });
     mount.querySelectorAll("[data-prep]").forEach(function (b) { b.addEventListener("click", function () { var p = b.dataset.prep.split(","); exportBottleReport(p[0], p[1]); }); });
+    mount.querySelectorAll("[data-prepview]").forEach(function (b) { b.addEventListener("click", function () { viewBottleReport(b.dataset.prepview); }); });
     mount.querySelectorAll("[data-pverify]").forEach(function (b) { b.addEventListener("click", function () { pickupAction(b.dataset.pverify, { action: "verify" }); }); });
     mount.querySelectorAll("[data-prefund]").forEach(function (b) { b.addEventListener("click", function () { if (confirm("Refund the deposit for the collected bottles to the customer's wallet?")) pickupAction(b.dataset.prefund, { action: "refund" }); }); });
     mount.querySelectorAll("[data-pcancel]").forEach(function (b) { b.addEventListener("click", function () { if (confirm("Cancel this pickup request?")) pickupAction(b.dataset.pcancel, { action: "cancel" }); }); });
@@ -2911,13 +2921,14 @@
     mount.innerHTML =
       '<div class="panel" style="margin-bottom:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">' +
         '<h3 style="margin:0">🍼 Bottles with customers <span class="muted-sm" style="font-weight:600">— ' + (t.bottles || 0) + " bottle(s) · " + (t.overdue || 0) + " overdue</span></h3>" +
-        '<span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' + '<label class="muted-sm" style="display:inline-flex;align-items:center;gap:4px;margin-right:4px" title="Include customers who have returned everything (Pending 0)"><input type="checkbox" id="bottleInclSettled"> Include settled</label>' + rep("customers", "pdf", "⬇ PDF") + rep("customers", "xls", "Excel") + rep("customers", "csv", "CSV") + rep("executives", "pdf", "Exec PDF") + rep("ownership", "pdf", "Ownership PDF") + "</span></div>" +
+        '<span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' + '<label class="muted-sm" style="display:inline-flex;align-items:center;gap:4px;margin-right:4px" title="Include customers who have returned everything (Pending 0)"><input type="checkbox" id="bottleInclSettled"> Include settled</label>' + '<button type="button" class="btn btn-ghost sm" data-brepview="customers">👁 View</button>' + rep("customers", "pdf", "⬇ PDF") + rep("customers", "xls", "Excel") + rep("customers", "csv", "CSV") + rep("executives", "pdf", "Exec PDF") + rep("ownership", "pdf", "Ownership PDF") + "</span></div>" +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">' + fbtn("all", "All") + fbtn("overdue", "Overdue") + fbtn("high", "High (5+)") + "</div>" +
         '<div class="table-wrap"><table class="tbl"><thead><tr><th>Customer</th><th>Held</th><th>Overdue</th><th>Subscription</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div></div>" +
       '<div class="panel" style="margin-bottom:16px"><div class="panel-head"><h3>Bottle recovery <span class="muted-sm" style="font-weight:600">— open cases (' + (t.openRecoveries || 0) + ")</span></h3></div>" +
         '<div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Customer</th><th>Outstanding</th><th>Action</th></tr></thead><tbody>' + recRows + "</tbody></table></div></div></div>";
     mount.querySelectorAll("[data-bof]").forEach(function (b) { b.addEventListener("click", function () { _bottleFilter = b.dataset.bof; renderBottleOutstanding(mount, _bottleOut); }); });
     mount.querySelectorAll("[data-brep]").forEach(function (b) { b.addEventListener("click", function () { exportBottleReport(b.dataset.brep, b.dataset.bfmt); }); });
+    mount.querySelectorAll("[data-brepview]").forEach(function (b) { b.addEventListener("click", function () { viewBottleReport(b.dataset.brepview); }); });
     mount.querySelectorAll("[data-brec]").forEach(function (b) { b.addEventListener("click", function () { closeBottleRecovery(b.dataset.brec, b.dataset.mode); }); });
     mount.querySelectorAll("[data-badj]").forEach(function (b) { b.addEventListener("click", function () { openBottleAdjust(b.dataset.badj, b.dataset.bname); }); });
   }
@@ -2973,6 +2984,15 @@
       .then(function (r) { if (!r.ok) throw new Error(r.status === 403 ? "Your role can't export this (403)." : "Export failed (" + r.status + ")"); return r.blob(); })
       .then(function (blob) { var url = URL.createObjectURL(blob); var a = document.createElement("a"); a.href = url; a.download = "DOODLY_GPS_Corrections_" + kind + "." + ext; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 60000); dacToast("GPS corrections report downloaded (" + ext.toUpperCase() + ")."); })
       .catch(function (e) { dacToast(e.message || "Couldn't export the report."); });
+  }
+  function viewBottleReport(kind) {
+    if (!window.DOODLY_REPORTVIEWER) { dacToast("Report viewer is still loading — try again."); return; }
+    var scope = "outstanding"; try { var cb = document.getElementById("bottleInclSettled"); if (cb && cb.checked && kind === "customers") scope = "all"; } catch (e) {}
+    DOODLY_REPORTVIEWER.openServer({ module: "bottleInventory", path: "/api/admin/bottles/report/export", query: "kind=" + encodeURIComponent(kind) + "&scope=" + scope, filename: "DOODLY_Bottle_" + kind });
+  }
+  function viewGeoReport(kind) {
+    if (!window.DOODLY_REPORTVIEWER) { dacToast("Report viewer is still loading — try again."); return; }
+    DOODLY_REPORTVIEWER.openServer({ module: "geoCorrection", path: "/api/admin/geo-corrections/export", query: "kind=" + encodeURIComponent(kind), filename: "DOODLY_GPS_Corrections_" + kind });
   }
 
   function openBottleMovement() {
@@ -3274,12 +3294,13 @@
       '<div class="panel" style="margin-top:16px">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">' +
           '<h3 style="margin:0">📦 Packing Summary <span class="muted-sm" style="font-weight:600">— bottles to pack by size</span></h3>' +
-          '<span style="display:flex;gap:8px;flex-wrap:wrap">' + btn("pdf", icon("download", 14) + " PDF") + btn("xls", "Excel") + btn("csv", "CSV") + "</span>" +
+          '<span style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-ghost sm" id="pk-summary-view">' + icon("eye", 14) + ' View</button>' + btn("pdf", icon("download", 14) + " PDF") + btn("xls", "Excel") + btn("csv", "CSV") + "</span>" +
         "</div>" +
         '<div class="dl-an-kpis">' + kpiHtml + "</div>" +
         '<div style="margin-top:4px">' + sizeHtml + "</div>" +
       "</div>";
 
+    var pkv = mount.querySelector("#pk-summary-view"); if (pkv) pkv.addEventListener("click", function () { viewOpsReport("packingSheet", iso || _delDate); });
     mount.querySelectorAll("[data-pk-export]").forEach(function (b) {
       b.addEventListener("click", function () { exportPackingSheet(iso || _delDate, b.dataset.pkExport); });
     });
@@ -3905,12 +3926,14 @@
           '<b>GPS corrections</b> — ' + rows.length + ' · original <span class="muted-sm">' + fmtC(first.oldLat, first.oldLng) + '</span> &rarr; latest <b>' + fmtC(latest.newLat, latest.newLng) + '</b>' +
           '<div class="muted-sm">Last by ' + esc(latest.correctedBy || "—") + (latest.execEmployeeId ? " (" + esc(latest.execEmployeeId) + ")" : "") + " · " + new Date(latest.at).toLocaleString() + (latest.distanceMovedKm != null ? " · moved " + latest.distanceMovedKm + " km" : "") + "</div>" +
           '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">' +
+            '<button type="button" class="btn btn-ghost sm" data-geoview="customers">👁 View</button>' +
             '<button type="button" class="btn btn-ghost sm" data-geodl="customers,pdf">&#8595; Report PDF</button>' +
             '<button type="button" class="btn btn-ghost sm" data-geodl="customers,csv">CSV</button>' +
             '<button type="button" class="btn btn-ghost sm" data-geodl="executives,pdf">Exec PDF</button>' +
             '<button type="button" class="btn btn-ghost sm" data-geodl="areas,pdf">Areas PDF</button>' +
           "</div></div>";
         gh.querySelectorAll("[data-geodl]").forEach(function (b) { b.addEventListener("click", function () { var p = b.dataset.geodl.split(","); downloadGeoReport(p[0], p[1]); }); });
+        gh.querySelectorAll("[data-geoview]").forEach(function (b) { b.addEventListener("click", function () { viewGeoReport(b.dataset.geoview); }); });
       }).catch(function () { gh.innerHTML = ""; });
     })();
     var close = function () { ov.remove(); document.removeEventListener("keydown", onKey); };
@@ -4442,6 +4465,14 @@
       })
       .catch(function (e) { dacToast(e.message || "Couldn't export the " + cfg.label + "."); });
   }
+  // View an ops report inside the site (MilkReport-shaped ones: packingSheet / routeReport /
+  // gpsDistance / monthlyPay). Uses the SAME endpoint + date/month the file export uses.
+  function viewOpsReport(kind, iso) {
+    var cfg = OPS_REPORTS[kind]; if (!cfg || !window.DOODLY_REPORTVIEWER) { if (!window.DOODLY_REPORTVIEWER) dacToast("Report viewer is still loading — try again."); return; }
+    var qp = cfg.qp || "date", val = qp === "month" ? String(iso).slice(0, 7) : iso;
+    DOODLY_REPORTVIEWER.openServer({ module: "deliveries", path: cfg.path, query: qp + "=" + encodeURIComponent(val), filename: cfg.name });
+  }
+  window.DOODLY_ADMIN.viewOpsReport = viewOpsReport;
   function exportPackingList(iso, format) { exportOpsReport("packing", iso, format); }
   function exportPackingSheet(iso, format) { exportOpsReport("packingSheet", iso, format); }
   function exportManifest(iso, format) { exportOpsReport("manifest", iso, format); }
@@ -5521,7 +5552,7 @@
       var reps = [["summary", "Wallet Summary"], ["customer", "Customer Wallets"], ["liability", "Wallet Liability"], ["refund", "All Refunds"], ["bottleRefund", "Bottle Deposit Refunds"], ["trialRefund", "Trial Cashback"], ["referral", "Referral Rewards"], ["adjustment", "Manual Adjustments"], ["expiry", "Promotional Credit Expiry"]];
       return '<div class="panel"><div class="panel-head"><h3>Reports <span class="muted-sm" style="font-weight:600">· PDF · Excel · CSV</span></h3></div><div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr><th>Report</th><th></th></tr></thead><tbody>' +
         reps.map(function (r) {
-          return "<tr><td><b>" + e2(r[1]) + '</b></td><td style="text-align:right;white-space:nowrap"><button class="btn btn-ghost sm" data-rep="' + r[0] + '" data-fmt="pdf">⬇ PDF</button> <button class="btn btn-ghost sm" data-rep="' + r[0] + '" data-fmt="xls">Excel</button> <button class="btn btn-ghost sm" data-rep="' + r[0] + '" data-fmt="csv">CSV</button></td></tr>';
+          return "<tr><td><b>" + e2(r[1]) + '</b></td><td style="text-align:right;white-space:nowrap"><button class="btn btn-ghost sm" data-repview="' + r[0] + '">👁 View</button> <button class="btn btn-ghost sm" data-rep="' + r[0] + '" data-fmt="pdf">⬇ PDF</button> <button class="btn btn-ghost sm" data-rep="' + r[0] + '" data-fmt="xls">Excel</button> <button class="btn btn-ghost sm" data-rep="' + r[0] + '" data-fmt="csv">CSV</button></td></tr>';
         }).join("") + "</tbody></table></div></div></div>";
     }
     function settingsTab() {
@@ -5622,6 +5653,7 @@
       host.querySelectorAll("[data-reject]").forEach(function (b) { b.addEventListener("click", function () { decide(b.dataset.reject, "rejectAdjustment"); }); });
       host.querySelectorAll("[data-rev]").forEach(function (b) { b.addEventListener("click", function () { if (window.confirm("Reverse this transaction? An opposite entry will be posted (the ledger is never edited).")) DOODLY_API.post("/api/wallet/admin", { action: "reverse", txnId: b.dataset.rev }).then(function () { dacToast("Reversed."); load(); }).catch(function (e) { dacToast((e && e.message) || "Couldn't reverse."); }); }); });
       host.querySelectorAll("[data-rep]").forEach(function (b) { b.addEventListener("click", function () { exportReport(b.dataset.rep, b.dataset.fmt); }); });
+      host.querySelectorAll("[data-repview]").forEach(function (b) { b.addEventListener("click", function () { if (!window.DOODLY_REPORTVIEWER) { dacToast("Report viewer is still loading — try again."); return; } DOODLY_REPORTVIEWER.openServer({ module: "wallet", path: "/api/wallet/admin/export", query: "report=" + encodeURIComponent(b.dataset.repview), filename: "DOODLY_Wallet_" + b.dataset.repview }); }); });
       var wesave = host.querySelector("#we-save");
       if (wesave) wesave.addEventListener("click", function () {
         var kinds = Array.prototype.map.call(host.querySelectorAll(".we-kind:checked"), function (c) { return c.value; });
@@ -8372,7 +8404,7 @@
           "</select></label>" +
           '<label class="dac-f"><span>From</span><input class="input" id="pc-rfrom" type="date" value="' + month + '-01" style="max-width:150px"></label>' +
           '<label class="dac-f"><span>To</span><input class="input" id="pc-rto" type="date" value="' + day + '" style="max-width:150px"></label>' +
-          '<div style="display:flex;gap:6px"><button class="btn btn-primary sm" id="pc-rpdf">PDF</button><button class="btn btn-ghost sm" id="pc-rxls">Excel</button><button class="btn btn-ghost sm" id="pc-rcsv">CSV</button></div>' +
+          '<div style="display:flex;gap:6px"><button class="btn btn-ghost sm" id="pc-rview">👁 View</button><button class="btn btn-primary sm" id="pc-rpdf">PDF</button><button class="btn btn-ghost sm" id="pc-rxls">Excel</button><button class="btn btn-ghost sm" id="pc-rcsv">CSV</button></div>' +
         "</div><p class='muted-sm' style='margin-top:6px'>Inventory is a live snapshot; the date range applies to the other reports.</p>" +
       "</div></div>" +
       // Orders & Tankers drill-down — the B2B orders + tanker draws BEHIND the P&L numbers
@@ -8393,6 +8425,11 @@
     host.querySelector("#pc-rpdf").addEventListener("click", function () { doReport("pdf"); });
     host.querySelector("#pc-rxls").addEventListener("click", function () { doReport("xls"); });
     host.querySelector("#pc-rcsv").addEventListener("click", function () { doReport("csv"); });
+    host.querySelector("#pc-rview").addEventListener("click", function () {
+      if (!window.DOODLY_REPORTVIEWER) { dacToast("Report viewer is still loading — try again."); return; }
+      var type = host.querySelector("#pc-rtype").value, from = host.querySelector("#pc-rfrom").value, to = host.querySelector("#pc-rto").value, isB2b = type === "b2bSales";
+      DOODLY_REPORTVIEWER.openServer({ module: "procurement", path: isB2b ? "/api/b2b/reports/export" : "/api/admin/milk/reports/export", query: isB2b ? ("from=" + from + "&to=" + to) : ("type=" + encodeURIComponent(type) + "&from=" + from + "&to=" + to), filename: isB2b ? "DOODLY_B2B_Sales" : "DOODLY_Milk_" + type });
+    });
     function reload() {
       var d = host.querySelector("#pc-day").value || day, mo = host.querySelector("#pc-month").value || month;
       DOODLY_API.get("/api/admin/milk/pnl?date=" + d + "&month=" + mo).then(function (np) {

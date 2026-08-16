@@ -230,13 +230,24 @@ window.DOODLY_PINCODE = (function () {
             <div class="table-wrap"><table class="tbl"><thead><tr><th>Pincode</th><th>Area</th><th>City</th><th>State</th><th>Zone</th><th>Charge</th><th>Slot</th><th>ETA</th><th>On</th><th></th></tr></thead><tbody>${rows.map(tr).join("")}</tbody></table></div>
             <div class="hero-cta" style="margin-top:14px"><button class="btn btn-ghost" id="pc-add">+ Add pincode</button><button class="btn btn-primary" id="pc-save">Save areas</button><button class="btn btn-ghost" id="pc-reset">Reset</button><span class="ds-saved" id="pc-saved" hidden>${I.check} Saved — live on storefront</span></div>
           </div></div>
-        <div class="panel mt-3"><div class="panel-head"><h3>Waitlist <span class="badge">${wl.length}</span></h3><button class="btn btn-ghost" id="pc-csv" style="padding:.42rem .8rem;font-size:.82rem">Export CSV</button></div>
+        <div class="panel mt-3"><div class="panel-head"><h3>Waitlist <span class="badge">${wl.length}</span></h3><div><button class="btn btn-ghost" id="pc-view" style="padding:.42rem .8rem;font-size:.82rem">👁 View</button> <button class="btn btn-ghost" id="pc-csv" style="padding:.42rem .8rem;font-size:.82rem">Export CSV</button></div></div>
           <div class="panel-pad"><div class="pc-wl-list">${wlGroups}</div></div></div>`;
 
       host.querySelector("#pc-add").addEventListener("click", () => { pcRows = readTable(); pcRows.push({ pincode: "", area: "", city: "Vijayawada", state: "Andhra Pradesh", zone: (zoneList[0] || {}).id || "", charge: 0, slot: "Before 7 AM", eta: "", enabled: true }); render(); });
       host.querySelector("#pc-save").addEventListener("click", save);
       host.querySelector("#pc-reset").addEventListener("click", () => { resetList(); pcRows = list(); render(); loadPc(); });
       host.querySelector("#pc-csv").addEventListener("click", exportCsv);
+      host.querySelector("#pc-view").addEventListener("click", () => {
+        if (!window.DOODLY_REPORTVIEWER) { toast("Report viewer is still loading — try again."); return; }
+        const rows = wlData.map((w) => [w.name, w.mobile, w.email || "", w.address || "", w.pincode, new Date(w.createdAt || w.date).toLocaleString("en-IN")].map((c) => (c == null ? "" : String(c))));
+        window.DOODLY_REPORTVIEWER.open({
+          title: "Delivery Waitlist",
+          module: (window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : null),
+          meta: { recordCount: rows.length },
+          columns: ["Name", "Mobile", "Email", "Address", "Pincode", "Date"],
+          rows: rows,
+        }, { exporters: { csv: exportCsv } });
+      });
       host.querySelectorAll(".pc-del").forEach((b) => b.addEventListener("click", () => delPc(b.dataset.pin, Number(b.dataset.i))));
       host.querySelectorAll(".pc-wl-del").forEach((b) => b.addEventListener("click", () => delWl(b.dataset.id)));
     }

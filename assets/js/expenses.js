@@ -337,7 +337,7 @@ window.DOODLY_EXPENSES = (function () {
       return `
         <div class="exp-rephead">
           <div class="exp-presets">${presets.map((p) => `<button class="exp-chip ${(state.rPreset || "thisMonth") === p[0] ? "on" : ""}" data-rpreset="${p[0]}">${p[1]}</button>`).join("")}</div>
-          <div class="exp-repbtns"><button class="btn btn-ghost sm" id="r-csv">Export CSV</button><button class="btn btn-ghost sm" id="r-xls">Export Excel</button><button class="btn btn-primary sm" id="r-pdf">Export PDF</button></div>
+          <div class="exp-repbtns"><button class="btn btn-ghost sm" id="r-view">👁 View</button><button class="btn btn-ghost sm" id="r-csv">Export CSV</button><button class="btn btn-ghost sm" id="r-xls">Export Excel</button><button class="btn btn-primary sm" id="r-pdf">Export PDF</button></div>
         </div>
         <div class="exp-cards" style="margin-bottom:16px">
           <div class="exp-card"><p class="exp-cval">${rows.length}</p><p class="exp-clabel">Entries</p></div>
@@ -369,6 +369,7 @@ window.DOODLY_EXPENSES = (function () {
       if (state.tab === "categories") wireCats();
       if (state.tab === "reports") {
         host.querySelectorAll("[data-rpreset]").forEach((b) => b.addEventListener("click", () => { state.rPreset = b.dataset.rpreset; render(); }));
+        const rv = host.querySelector("#r-view"); if (rv) rv.addEventListener("click", viewReport);
         const ex = host.querySelector("#r-csv"); if (ex) ex.addEventListener("click", () => exportReport("csv"));
         const xl = host.querySelector("#r-xls"); if (xl) xl.addEventListener("click", () => exportReport("xls"));
         const pf = host.querySelector("#r-pdf"); if (pf) pf.addEventListener("click", () => exportReport("pdf"));
@@ -469,6 +470,22 @@ window.DOODLY_EXPENSES = (function () {
         <p style="margin-top:24px;color:#5E7167;font-size:12px">Generated ${new Date().toLocaleString("en-IN")} · DOODLY Dairy</p>
         </body></html>`);
       w.document.close(); setTimeout(() => { w.focus(); w.print(); }, 250);
+    }
+    // View the SAME report the export buttons produce, inside the shared viewer (View == Export).
+    function viewReport() {
+      if (!window.DOODLY_REPORTVIEWER) { toast("Report viewer is still loading — try again."); return; }
+      const f = preset(state.rPreset || "thisMonth");
+      const rows = applyFilters(list(), f).filter((e) => e.status !== "Rejected" && e.status !== "Cancelled").sort((x, y) => (y.date).localeCompare(x.date));
+      const data = rows.map((e) => [e.id, e.date, e.title, e.category, e.vendor || "", e.mode, e.amount, e.gst || 0, total(e), e.paid || 0, outstanding(e), e.status]);
+      const paid = rows.reduce((s, e) => s + (Number(e.paid) || 0), 0), sumTot = rows.reduce((s, e) => s + total(e), 0);
+      window.DOODLY_REPORTVIEWER.open({
+        title: "Expense Report",
+        module: (window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : null),
+        meta: { filters: ["Period: " + (state.rPreset || "thisMonth")], recordCount: rows.length },
+        summary: [{ label: "Entries", value: String(rows.length) }, { label: "Total", value: inr0(sumTot) }, { label: "Paid", value: inr0(paid) }, { label: "Outstanding", value: inr0(sumTot - paid) }],
+        columns: ["Expense ID", "Date", "Name", "Category", "Vendor", "Mode", { label: "Amount", right: true }, { label: "GST", right: true }, { label: "Total", right: true }, { label: "Paid", right: true }, { label: "Outstanding", right: true }, "Status"],
+        rows: data.map((r) => r.map((c) => (c == null ? "" : String(c)))),
+      }, { exporters: { csv: () => exportReport("csv"), xls: () => exportReport("xls"), pdf: () => exportReport("pdf") } });
     }
     function exportReport(kind) {
       const f = preset(state.rPreset || "thisMonth");

@@ -34,7 +34,10 @@ export async function GET(req: NextRequest) {
     const report = await buildLifecycleReport(type, from, to);
     await audit({ actorRole: role, action: "subscription.report.export", target: `${type} · ${format} · ${from}→${to} · ${report.rowCount} row(s)`, ctx: reqContext(req) }).catch(() => {});
 
-    if (format === "json") return NextResponse.json(report, { headers: noStore });
+    if (format === "json") {
+      await audit({ actorRole: role, action: "subscription.report.view", target: `${type} · ${report.rowCount} row(s)`, ctx: reqContext(req) }).catch(() => {});
+      return NextResponse.json(report, { headers: noStore });
+    }
     if (format === "pdf") {
       const { bytes } = await renderMilkReportPdf(report);
       return new NextResponse(Buffer.from(bytes), { headers: { ...noStore, "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${base}.pdf"` } });

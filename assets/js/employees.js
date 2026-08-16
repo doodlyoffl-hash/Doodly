@@ -46,6 +46,18 @@ window.DOODLY_HR = (function () {
     var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8" }));
     a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
   }
+  // Open a report in the shared Universal Report Viewer — View shows the SAME rows/headers the CSV builds from and delegates CSV back to downloadCSV (View == Export).
+  function reportModule() { try { return window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : null; } catch (e) { return null; } }
+  function openReport(o) {
+    if (!window.DOODLY_REPORTVIEWER) { toast("Report viewer is still loading — try again."); return; }
+    var headers = o.headers || [], rows = o.rows || [];
+    window.DOODLY_REPORTVIEWER.open({
+      title: o.title, module: reportModule(),
+      meta: { filters: o.filters || [], recordCount: rows.length },
+      columns: headers,
+      rows: rows.map(function (r) { return r.map(function (c) { return c == null ? "" : String(c); }); }),
+    }, { exporters: { csv: function () { downloadCSV(o.csvName, headers, rows); } } });
+  }
   // authenticated multipart upload (DOODLY_API only does JSON) — same base + bearer + envelope
   function apiUpload(method, path, formData) {
     var b = (window.DOODLY_API && window.DOODLY_API.base) ? window.DOODLY_API.base() : "";
@@ -296,12 +308,13 @@ window.DOODLY_HR = (function () {
       '<select class="input" id="atDept" style="max-width:180px"><option value="">All departments</option>' + DEPARTMENTS.map(function (d) { return "<option>" + d + "</option>"; }).join("") + "</select>" +
       '<input class="input" id="atQ" placeholder="Search employee…" style="flex:1;min-width:160px">' +
       (canA("edit") ? '<button class="btn btn-ghost sm" id="atBulk">Bulk mark…</button>' : "") +
-      '<button class="btn btn-ghost sm" id="atCsv">Export CSV</button></div><div id="atCounts"></div><div id="atBody" style="margin-top:12px"></div>';
+      '<button class="btn btn-ghost sm" id="atView">👁 View</button><button class="btn btn-ghost sm" id="atCsv">Export CSV</button></div><div id="atCounts"></div><div id="atBody" style="margin-top:12px"></div>';
     host.querySelector("#atDate").addEventListener("change", function () { st.date = this.value; load(); });
     host.querySelector("#atDept").addEventListener("change", function () { st.department = this.value; load(); });
     host.querySelector("#atQ").addEventListener("input", function () { st.q = this.value; clearTimeout(st._t); st._t = setTimeout(load, 350); });
     var bulk = host.querySelector("#atBulk"); if (bulk) bulk.addEventListener("click", openBulk);
     host.querySelector("#atCsv").addEventListener("click", function () { downloadCSV("doodly-attendance-" + st.date + ".csv", ["Code", "Employee", "Department", "Status", "OT (min)"], ((st.data && st.data.rows) || []).map(function (r) { return [r.employeeCode, r.name, r.department, r.status || "Unmarked", r.overtimeMins || 0]; })); });
+    host.querySelector("#atView").addEventListener("click", function () { openReport({ title: "Attendance — " + st.date, csvName: "doodly-attendance-" + st.date + ".csv", headers: ["Code", "Employee", "Department", "Status", "OT (min)"], rows: ((st.data && st.data.rows) || []).map(function (r) { return [r.employeeCode, r.name, r.department, r.status || "Unmarked", r.overtimeMins || 0]; }), filters: ["Date: " + st.date].concat(st.department ? ["Dept: " + st.department] : []).concat(st.q ? ['Search: "' + st.q + '"'] : []) }); });
     function renderReg() {
       var d = st.data, c = d.counts;
       host.querySelector("#atCounts").innerHTML = '<div class="hr-kpis">' + kpi("Present", c.present, "green") + kpi("Absent", c.absent, "red") + kpi("On leave", c.leave, "amber") + kpi("Off/Holiday", c.off) + kpi("Unmarked", c.unmarked) + "</div>";
@@ -345,11 +358,12 @@ window.DOODLY_HR = (function () {
       '<select class="input" id="lvStatus" style="max-width:180px"><option value="">All status</option>' + LEAVE_STATUS.map(function (s) { return '<option value="' + s[0] + '">' + s[1] + "</option>"; }).join("") + "</select>" +
       '<input class="input" id="lvQ" placeholder="Search code / employee…" style="flex:1;min-width:160px">' +
       (canL("edit") ? '<button class="btn btn-primary sm" id="lvNew">' + icon("plus", 14) + " New request</button>" : "") +
-      '<button class="btn btn-ghost sm" id="lvCsv">Export CSV</button></div><div id="lvBody"></div>';
+      '<button class="btn btn-ghost sm" id="lvView">👁 View</button><button class="btn btn-ghost sm" id="lvCsv">Export CSV</button></div><div id="lvBody"></div>';
     host.querySelector("#lvStatus").addEventListener("change", function () { st.status = this.value; load(); });
     host.querySelector("#lvQ").addEventListener("input", function () { st.q = this.value; clearTimeout(st._t); st._t = setTimeout(load, 350); });
     var nw = host.querySelector("#lvNew"); if (nw) nw.addEventListener("click", function () { openNewLeave(load); });
     host.querySelector("#lvCsv").addEventListener("click", function () { downloadCSV("doodly-leave.csv", ["Leave", "Employee", "Emp Code", "Department", "Type", "From", "To", "Days", "Status"], ((st.data && st.data.rows) || []).map(function (r) { return [r.code, r.name, r.employeeCode, r.department, leaveTypeLabel(r.type), r.startDate.slice(0, 10), r.endDate.slice(0, 10), r.days, r.status]; })); });
+    host.querySelector("#lvView").addEventListener("click", function () { openReport({ title: "Leave requests", csvName: "doodly-leave.csv", headers: ["Leave", "Employee", "Emp Code", "Department", "Type", "From", "To", "Days", "Status"], rows: ((st.data && st.data.rows) || []).map(function (r) { return [r.code, r.name, r.employeeCode, r.department, leaveTypeLabel(r.type), r.startDate.slice(0, 10), r.endDate.slice(0, 10), r.days, r.status]; }), filters: (st.status ? ["Status: " + st.status] : []).concat(st.q ? ['Search: "' + st.q + '"'] : []) }); });
     function renderList() {
       var d = st.data, rows = (d.rows || []).map(function (r) {
         var canDecide = canL("edit") && (r.status === "PENDING" || r.status === "MANAGER_APPROVED");
@@ -421,11 +435,12 @@ window.DOODLY_HR = (function () {
       host.querySelector("#avBody").innerHTML = '<div class="panel panel-pad"><div class="sk-line skeleton"></div></div>';
       API().get("/api/admin/salary" + qs).then(function (r) { st.data = r; render(); }).catch(function (e) { host.querySelector("#avBody").innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load advances.") + "</div>"; });
     }
-    host.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px"><select class="input" id="avStatus" style="max-width:160px"><option value="">All status</option>' + ADV_STATUS.map(function (s) { return '<option value="' + s[0] + '">' + s[1] + "</option>"; }).join("") + '</select><input class="input" id="avQ" placeholder="Search code / employee…" style="flex:1;min-width:160px">' + (canP("edit") ? '<button class="btn btn-primary sm" id="avNew">' + icon("plus", 14) + " New advance</button>" : "") + '<button class="btn btn-ghost sm" id="avCsv">Export CSV</button></div><div id="avCounts"></div><div id="avBody" style="margin-top:12px"></div>';
+    host.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px"><select class="input" id="avStatus" style="max-width:160px"><option value="">All status</option>' + ADV_STATUS.map(function (s) { return '<option value="' + s[0] + '">' + s[1] + "</option>"; }).join("") + '</select><input class="input" id="avQ" placeholder="Search code / employee…" style="flex:1;min-width:160px">' + (canP("edit") ? '<button class="btn btn-primary sm" id="avNew">' + icon("plus", 14) + " New advance</button>" : "") + '<button class="btn btn-ghost sm" id="avView">👁 View</button><button class="btn btn-ghost sm" id="avCsv">Export CSV</button></div><div id="avCounts"></div><div id="avBody" style="margin-top:12px"></div>';
     host.querySelector("#avStatus").addEventListener("change", function () { st.status = this.value; load(); });
     host.querySelector("#avQ").addEventListener("input", function () { st.q = this.value; clearTimeout(st._t); st._t = setTimeout(load, 350); });
     var nw = host.querySelector("#avNew"); if (nw) nw.addEventListener("click", function () { openNewAdvance(load); });
     host.querySelector("#avCsv").addEventListener("click", function () { downloadCSV("doodly-advances.csv", ["Advance", "Employee", "Emp Code", "Department", "Amount", "Installments", "Recovered", "Remaining", "Status"], ((st.data && st.data.rows) || []).map(function (a) { return [a.code, a.name, a.employeeCode, a.department, a.amountPaise / 100, a.installments, a.recoveredPaise / 100, a.remainingPaise / 100, a.status]; })); });
+    host.querySelector("#avView").addEventListener("click", function () { openReport({ title: "Salary advances", csvName: "doodly-advances.csv", headers: ["Advance", "Employee", "Emp Code", "Department", "Amount", "Installments", "Recovered", "Remaining", "Status"], rows: ((st.data && st.data.rows) || []).map(function (a) { return [a.code, a.name, a.employeeCode, a.department, a.amountPaise / 100, a.installments, a.recoveredPaise / 100, a.remainingPaise / 100, a.status]; }), filters: (st.status ? ["Status: " + st.status] : []).concat(st.q ? ['Search: "' + st.q + '"'] : []) }); });
     function render() {
       var d = st.data;
       host.querySelector("#avCounts").innerHTML = '<div class="hr-kpis">' + kpi("Pending", d.stats.pending, "amber") + kpi("Outstanding", rup(d.stats.outstandingPaise)) + "</div>";
@@ -468,13 +483,14 @@ window.DOODLY_HR = (function () {
       host.querySelector("#pyBody").innerHTML = '<div class="panel panel-pad"><div class="sk-line skeleton"></div></div>';
       API().get("/api/admin/payroll" + qs).then(function (r) { st.data = r; render(); }).catch(function (e) { host.querySelector("#pyBody").innerHTML = '<div class="notice warn">' + esc((e && e.message) || "Couldn't load payroll.") + "</div>"; });
     }
-    host.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px"><label class="dac-f" style="margin:0"><span>Month</span><input class="input" type="month" id="pyMonth" value="' + st.month + '"></label><select class="input" id="pyStatus" style="max-width:150px"><option value="">All status</option><option value="DRAFT">Draft</option><option value="FINALIZED">Finalized</option><option value="PAID">Paid</option></select><input class="input" id="pyQ" placeholder="Search employee…" style="flex:1;min-width:150px">' + (canP("edit") ? '<button class="btn btn-primary sm" id="pyGen">Generate payroll</button>' : "") + '<button class="btn btn-ghost sm" id="pyBank">Bank report</button><button class="btn btn-ghost sm" id="pyCsv">Export CSV</button></div><div id="pyCounts"></div><div id="pyBody" style="margin-top:12px"></div>';
+    host.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px"><label class="dac-f" style="margin:0"><span>Month</span><input class="input" type="month" id="pyMonth" value="' + st.month + '"></label><select class="input" id="pyStatus" style="max-width:150px"><option value="">All status</option><option value="DRAFT">Draft</option><option value="FINALIZED">Finalized</option><option value="PAID">Paid</option></select><input class="input" id="pyQ" placeholder="Search employee…" style="flex:1;min-width:150px">' + (canP("edit") ? '<button class="btn btn-primary sm" id="pyGen">Generate payroll</button>' : "") + '<button class="btn btn-ghost sm" id="pyBank">Bank report</button><button class="btn btn-ghost sm" id="pyView">👁 View</button><button class="btn btn-ghost sm" id="pyCsv">Export CSV</button></div><div id="pyCounts"></div><div id="pyBody" style="margin-top:12px"></div>';
     host.querySelector("#pyMonth").addEventListener("change", function () { st.month = this.value; load(); });
     host.querySelector("#pyStatus").addEventListener("change", function () { st.status = this.value; load(); });
     host.querySelector("#pyQ").addEventListener("input", function () { st.q = this.value; clearTimeout(st._t); st._t = setTimeout(load, 350); });
     var gen = host.querySelector("#pyGen"); if (gen) gen.addEventListener("click", function () { if (!confirm("Generate payroll for all active employees for " + monthLabel(st.month) + "? Existing drafts are recalculated.")) return; var b = this; b.disabled = true; API().post("/api/admin/payroll", { action: "generate", month: st.month }).then(function (r) { toast("Generated " + r.generated + " payslip(s)" + (r.skipped ? ", " + r.skipped + " skipped (no salary structure)" : "")); b.disabled = false; load(); }).catch(function (e) { b.disabled = false; toast((e && e.message) || "Couldn't generate."); }); });
     host.querySelector("#pyBank").addEventListener("click", function () { openBank(st.month); });
     host.querySelector("#pyCsv").addEventListener("click", function () { downloadCSV("doodly-payroll-" + st.month + ".csv", ["Slip", "Employee", "Emp Code", "Department", "Gross", "Deductions", "Net", "Status"], ((st.data && st.data.rows) || []).map(function (p) { return [p.code, p.name, p.employeeCode, p.department, p.grossPaise / 100, p.deductionsPaise / 100, p.netPaise / 100, p.status]; })); });
+    host.querySelector("#pyView").addEventListener("click", function () { openReport({ title: "Payroll — " + monthLabel(st.month), csvName: "doodly-payroll-" + st.month + ".csv", headers: ["Slip", "Employee", "Emp Code", "Department", "Gross", "Deductions", "Net", "Status"], rows: ((st.data && st.data.rows) || []).map(function (p) { return [p.code, p.name, p.employeeCode, p.department, p.grossPaise / 100, p.deductionsPaise / 100, p.netPaise / 100, p.status]; }), filters: ["Month: " + monthLabel(st.month)].concat(st.status ? ["Status: " + st.status] : []).concat(st.q ? ['Search: "' + st.q + '"'] : []) }); });
     function render() {
       var d = st.data, s = d.stats;
       host.querySelector("#pyCounts").innerHTML = '<div class="hr-kpis">' + kpi("Payslips", s.count) + kpi("Gross", rup(s.grossPaise)) + kpi("Deductions", rup(s.deductionsPaise), "amber") + kpi("Net payable", rup(s.netPaise), "green") + "</div>";

@@ -51,7 +51,10 @@ export async function GET(req: NextRequest) {
     }).catch(() => { /* never block a download on the audit */ });
 
     const base = `DOODLY_Packing_Sheet_${p.date}`;
-    if (format === "json") return NextResponse.json({ ...p, report }, { headers: noStore });
+    if (format === "json") {
+      await audit({ userId: readUserId(req) ?? null, actorRole: readRole(req), action: "deliveries.report.view", target: `packing · ${p.date} · ${p.lines.length} line(s)`, ctx: reqContext(req) }).catch(() => {});
+      return NextResponse.json({ ...p, report }, { headers: noStore });
+    }
     if (format === "pdf") {
       const { bytes } = await renderMilkReportPdf(report);
       return new NextResponse(Buffer.from(bytes), { headers: { ...noStore, "Content-Type": "application/pdf", "Content-Disposition": `${sp.get("inline") === "1" ? "inline" : "attachment"}; filename="${base}.pdf"` } });

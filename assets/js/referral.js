@@ -298,7 +298,7 @@ window.DOODLY_REFERRAL = (function () {
       }).join("") || '<tr><td colspan="7" class="muted-sm" style="padding:16px">No referrals match.</td></tr>';
       return '<div class="rf-bar"><div class="search-box rf-search">' + ic("search") + '<input class="input" id="rfSearch" placeholder="Search referrals…" value="' + esc(st.q) + '"></div>' +
         '<select class="input" id="rfStatus" style="width:auto"><option value="all">All statuses</option>' + STATUSES.map(function (s) { return '<option value="' + s + '"' + (st.status === s ? " selected" : "") + '>' + STATUS_LABEL[s] + '</option>'; }).join("") + '</select>' +
-        '<div style="flex:1"></div><div class="rf-export"><button class="btn btn-ghost sm" id="rfExport">' + ic("download", 15) + ' Export ▾</button><div class="dt-export-menu" id="rfExportMenu" hidden><button data-x="csv">CSV</button><button data-x="xls">Excel</button><button data-x="pdf">PDF</button></div></div></div>' +
+        '<div style="flex:1"></div><button class="btn btn-ghost sm" id="rfView">👁 View</button><div class="rf-export"><button class="btn btn-ghost sm" id="rfExport">' + ic("download", 15) + ' Export ▾</button><div class="dt-export-menu" id="rfExportMenu" hidden><button data-x="csv">CSV</button><button data-x="xls">Excel</button><button data-x="pdf">PDF</button></div></div></div>' +
         '<div class="table-wrap"><table class="tbl"><thead><tr><th>ID</th><th>Referrer</th><th>Referred</th><th>Plan</th><th>Status</th><th>Reward</th><th>Actions</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
     }
     function viewTop() {
@@ -324,6 +324,20 @@ window.DOODLY_REFERRAL = (function () {
         host.querySelectorAll("[data-approve]").forEach(function (b) { b.addEventListener("click", function () { var r = approve(b.dataset.approve); toast(r.credited ? "Approved · " + inr(r.amount) + " credited" : (r.msg || "Done")); render(); }); });
         host.querySelectorAll("[data-reject]").forEach(function (b) { b.addEventListener("click", function () { var why = prompt("Reason for rejection:", "Policy violation"); if (why === null) return; reject(b.dataset.reject, why); toast("Referral rejected"); render(); }); });
         host.querySelectorAll("[data-reverse]").forEach(function (b) { b.addEventListener("click", function () { var why = prompt("Reason for reversing this reward:", "Fraud / error"); if (why === null) return; var r = reverse(b.dataset.reverse, why); toast(r.ok ? "Reward reversed" : (r.msg || "")); render(); }); });
+        var vb = host.querySelector("#rfView"); if (vb) vb.addEventListener("click", function () {
+          if (!window.DOODLY_REPORTVIEWER) return;
+          var data = rowsFiltered().map(function (r) { return [r.id, r.referrer, r.code, r.referred, r.mobile || r.email || "", r.plan ? (PLAN_LABEL[r.plan] || r.plan) : "", STATUS_LABEL[r.status], r.rewardAmt || 0, r.at]; });
+          var flt = [];
+          if (st.q) flt.push('Search: "' + st.q + '"');
+          if (st.status && st.status !== "all") flt.push("Status: " + (STATUS_LABEL[st.status] || st.status));
+          DOODLY_REPORTVIEWER.open({
+            title: "Referrals Report",
+            module: window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : null,
+            meta: { filters: flt, recordCount: data.length },
+            columns: ["ID", "Referrer", "Code", "Referred", "Contact", "Plan", "Status", { label: "Reward", right: true }, "Date"],
+            rows: data
+          }, { exporters: { csv: function () { exportReport("csv"); }, xls: function () { exportReport("xls"); }, pdf: function () { exportReport("pdf"); } } });
+        });
         var eb = host.querySelector("#rfExport"), em = host.querySelector("#rfExportMenu");
         if (eb && em) { eb.addEventListener("click", function (e) { e.stopPropagation(); em.hidden = !em.hidden; }); document.addEventListener("click", function () { em.hidden = true; }); em.querySelectorAll("[data-x]").forEach(function (b) { b.addEventListener("click", function () { exportReport(b.dataset.x); em.hidden = true; }); }); }
       }

@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const report = await gpsDistanceReport(date);
-    if (format === "json") { await log("json", report.date, report.totals.executives); return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } }); }
+    if (format === "json") { await log("json", report.date, report.totals.executives); await audit({ userId: readUserId(req) ?? null, actorRole: readRole(req), action: "deliveries.report.view", target: `gps-distance · ${report.date} · ${report.totals.executives} exec(s)`, ctx: reqContext(req) }).catch(() => {}); return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } }); }
     if (format === "pdf") {
       // The shared renderer reads only title/subtitle/columns/rows/totalRow — the report is shaped to match.
       const { bytes } = await renderMilkReportPdf(report as unknown as MilkReport);

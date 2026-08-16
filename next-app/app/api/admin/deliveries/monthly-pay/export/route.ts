@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const report = await monthlyPayReport(month);
-    if (format === "json") { await log("json", report.date, report.totals.executives); return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } }); }
+    if (format === "json") { await log("json", report.date, report.totals.executives); await audit({ userId: readUserId(req) ?? null, actorRole: readRole(req), action: "deliveries.report.view", target: `monthly-pay · ${report.date} · ${report.totals.executives} exec(s)`, ctx: reqContext(req) }).catch(() => {}); return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } }); }
     if (format === "pdf") {
       const { bytes } = await renderMilkReportPdf(report as unknown as MilkReport);
       await log("pdf", report.date, report.totals.executives);

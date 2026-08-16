@@ -22,6 +22,10 @@ export async function GET(req: NextRequest) {
     const built = await buildWalletReport(report, from, to);
     await audit({ userId: null, actorRole: role, action: "wallet.report.export", target: `${report} · ${format} · ${built.rowCount} row(s)` }).catch(() => {});
 
+    if (format === "json") {
+      await audit({ userId: null, actorRole: role, action: "wallet.report.view", target: `${report} · ${built.rowCount} row(s)` }).catch(() => {});
+      return NextResponse.json(built);
+    }
     if (format === "csv") {
       return new NextResponse(walletReportCsv(built), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${walletReportFilename(report, "csv")}"` } });
     }

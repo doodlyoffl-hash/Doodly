@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const report = await b2bOrdersReport(filters, { sort, subtitle });
-    if (format === "json") { await log("json"); return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } }); }
+    if (format === "json") { await log("json"); await audit({ userId: actorId(req) ?? null, actorRole: role, action: "b2b.report.view", target: `orders · ${report.rowCount} row(s)`, ctx: reqContext(req) }).catch(() => {}); return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } }); }
     if (format === "csv") {
       await log("csv");
       return new NextResponse(milkReportCsv(report), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${milkReportFilename(report, "csv")}"`, "Cache-Control": "no-store" } });

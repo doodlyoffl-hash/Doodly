@@ -371,6 +371,7 @@ window.DOODLY_DASHBOARD = (function () {
           '<select class="input dash-refsel" id="dash-ref"><option value="0"' + (st.refreshSec === 0 ? " selected" : "") + '>Auto-refresh: Off</option><option value="30"' + (st.refreshSec === 30 ? " selected" : "") + '>Every 30s</option><option value="60"' + (st.refreshSec === 60 ? " selected" : "") + '>Every 60s</option></select>' +
           '<button class="btn btn-ghost sm" id="dash-refresh">↻ Refresh</button>' +
           '<span class="dash-updated">Updated ' + nowStr() + '</span>' +
+          '<button class="btn btn-ghost sm" id="dash-view">👁 View</button>' +
           '<span class="dash-exp"><button class="btn btn-ghost sm" id="dash-csv">CSV</button><button class="btn btn-ghost sm" id="dash-xls">Excel</button><button class="btn btn-primary sm" id="dash-pdf">PDF</button></span>' +
           (st.testRes ? '<span class="badge ' + (st.testRes.passed === st.testRes.total ? "green" : "red") + '">' + st.testRes.passed + "/" + st.testRes.total + ' tests</span>' : "") +
           '<button class="btn btn-ghost sm" id="dash-test">Run tests</button>' +
@@ -484,6 +485,17 @@ window.DOODLY_DASHBOARD = (function () {
       var ref = host.querySelector("#dash-ref"); if (ref) ref.addEventListener("change", function () { st.refreshSec = +ref.value; setRefresh(); });
       var rb = host.querySelector("#dash-refresh"); if (rb) rb.addEventListener("click", function () { st.lastUpdated = new Date(); loadReal(function () { render(); toast("Dashboard refreshed"); }); });
       var test = host.querySelector("#dash-test"); if (test) test.addEventListener("click", function () { st.testRes = runTests(); aggCache = {}; render(); toast("Tests: " + st.testRes.passed + "/" + st.testRes.total); });
+      var view = host.querySelector("#dash-view"); if (view) view.addEventListener("click", function () {
+        if (!window.DOODLY_REPORTVIEWER) return;
+        var ks = kpis(range);
+        DOODLY_REPORTVIEWER.open({
+          title: "Dashboard Report",
+          module: window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : null,
+          meta: { dateRange: range.from + " to " + range.to, filters: [range.label], recordCount: ks.length },
+          columns: ["Metric", "Value", { label: "Change %", right: true }],
+          rows: ks.map(function (x) { return [x.title, x.value, x.delta != null ? pct(x.delta) : ""]; })
+        }, { exporters: { csv: function () { exportCSV(range); }, xls: function () { exportXLS(range); }, print: function () { window.print(); } } });
+      });
       var csv = host.querySelector("#dash-csv"); if (csv) csv.addEventListener("click", function () { exportCSV(range); });
       var xls = host.querySelector("#dash-xls"); if (xls) xls.addEventListener("click", function () { exportXLS(range); });
       var pdf = host.querySelector("#dash-pdf"); if (pdf) pdf.addEventListener("click", function () { window.print(); });

@@ -562,7 +562,7 @@ window.DOODLY_WALLET = (function () {
         return '<tr' + (w.frozen ? ' class="wal-frozen-row"' : "") + '><td><b>' + esc(w.name) + '</b>' + (w.frozen ? ' <span class="badge red">frozen</span>' : "") + '<div class="muted-sm">' + esc(w.mobile || "—") + '</div></td><td><b>' + inr(w.balance) + '</b></td><td>' + inr(s.cashback) + '</td><td>' + (w.txns || []).length + '</td><td>' + (w.trialCredited ? '<span class="badge green">redeemed</span>' : w.trialPurchased ? '<span class="badge amber">eligible</span>' : '<span class="badge grey">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap"><button class="link w-cr" data-id="' + w.id + '">Credit</button> <button class="link w-db" data-id="' + w.id + '">Debit</button> <button class="link w-rf" data-id="' + w.id + '">Refund deposit</button> <button class="link w-fz" data-id="' + w.id + '" data-fz="' + (w.frozen ? "0" : "1") + '">' + (w.frozen ? "Unfreeze" : "Freeze") + '</button> <button class="link w-vw" data-id="' + w.id + '">View</button></td></tr>';
       }).join("") || '<tr><td colspan="6" class="muted-sm" style="text-align:center;padding:24px">No wallets found.</td></tr>';
-      return '<div class="exp-frow" style="margin-bottom:12px"><input class="input" id="w-q" placeholder="Search customer, mobile, order or reference…" value="' + esc(state.q) + '" style="flex:1"><button class="btn btn-ghost sm" id="w-csv">Export CSV</button></div>' +
+      return '<div class="exp-frow" style="margin-bottom:12px"><input class="input" id="w-q" placeholder="Search customer, mobile, order or reference…" value="' + esc(state.q) + '" style="flex:1"><button class="btn btn-ghost sm" id="w-view">👁 View</button><button class="btn btn-ghost sm" id="w-csv">Export CSV</button></div>' +
         '<div class="table-wrap"><table class="tbl"><thead><tr><th>Customer</th><th>Balance</th><th>Cashback</th><th>Txns</th><th>Trial</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
         (state.openId ? detail(find(state.openId)) : "");
     }
@@ -615,6 +615,18 @@ window.DOODLY_WALLET = (function () {
       if (state.tab === "wallets") {
         var q = host.querySelector("#w-q"); if (q) q.addEventListener("input", function () { state.q = q.value; var pos = q.selectionStart; render(); var nq = host.querySelector("#w-q"); if (nq) { nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) {} } });
         host.querySelector("#w-csv") && host.querySelector("#w-csv").addEventListener("click", exportCsv);
+        host.querySelector("#w-view") && host.querySelector("#w-view").addEventListener("click", function () {
+          if (!window.DOODLY_REPORTVIEWER) { toast("Report viewer is still loading — try again."); return; }
+          var rows = [];
+          wallets().forEach(function (w) { (w.txns || []).forEach(function (t) { rows.push([w.name, w.mobile, fmtDate(t.date), t.desc, typeLabel[t.type] || t.type, t.kind, t.amount, t.balanceAfter, t.ref].map(function (v) { return v == null ? "" : String(v); })); }); });
+          window.DOODLY_REPORTVIEWER.open({
+            title: "Wallet Ledger",
+            module: (window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : null),
+            meta: { recordCount: rows.length },
+            columns: ["Customer", "Mobile", "Date", "Description", "Type", "Credit/Debit", { label: "Amount", right: true }, { label: "Balance After", right: true }, "Reference"],
+            rows: rows,
+          }, { exporters: { csv: exportCsv } });
+        });
         host.querySelectorAll(".w-vw").forEach(function (b) { b.addEventListener("click", function () { state.openId = state.openId === b.dataset.id ? null : b.dataset.id; render(); }); });
         host.querySelectorAll(".w-cr").forEach(function (b) { b.addEventListener("click", function () { var a = prompt("Credit amount (₹)"); if (a && Number(a) > 0) { adminCredit(b.dataset.id, Number(a), prompt("Reason?") || "Manual credit"); toast("Credited"); render(); } }); });
         host.querySelectorAll(".w-db").forEach(function (b) { b.addEventListener("click", function () { var a = prompt("Debit amount (₹)"); if (a && Number(a) > 0) { adminDebit(b.dataset.id, Number(a), prompt("Reason? (required)") || "Manual debit"); toast("Debited"); render(); } }); });

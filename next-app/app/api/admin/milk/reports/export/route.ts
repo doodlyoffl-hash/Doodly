@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     const report = await buildMilkReport(type as MilkReportType, from, to);
     const log = async (fmt: string) => { await audit({ userId: readUserId(req) ?? null, actorRole: readRole(req), action: "milk.report.export", target: `${type} · ${fmt.toUpperCase()} · ${from}→${to} · ${report.rowCount} row(s)`, ctx: reqContext(req) }).catch(() => {}); };
 
-    if (format === "json") { await log("json"); return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } }); }
+    if (format === "json") { await log("json"); await audit({ userId: readUserId(req) ?? null, actorRole: readRole(req), action: "milk.report.view", target: `${type} · ${report.rowCount} row(s)`, ctx: reqContext(req) }).catch(() => {}); return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } }); }
     if (format === "pdf") {
       const { bytes, filename } = await renderMilkReportPdf(report);
       await log("pdf");

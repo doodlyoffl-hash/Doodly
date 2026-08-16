@@ -178,6 +178,7 @@ window.DOODLY_REVIEWS = (function () {
             [5, 4, 3, 2, 1].map(function (r) { return opt(String(r), r + "★", _f.rating); }).join("") +
           '</select>' +
           '<input type="search" id="rvSearch" class="la-search" placeholder="Search name, email, review…" value="' + esc(_f.q) + '">' +
+          '<button type="button" class="btn btn-ghost sm" id="rvView">👁 View</button>' +
           '<button type="button" class="btn btn-ghost sm" id="rvExport">' + icon("download", 15) + ' Export CSV</button>' +
         '</div>' +
       '</div>' +
@@ -232,6 +233,25 @@ window.DOODLY_REVIEWS = (function () {
       box.addEventListener("input", function () { clearTimeout(t); t = setTimeout(function () { _f.q = box.value.trim(); refetchRows(host); }, 300); });
     }
     if (exp) exp.addEventListener("click", exportCsv);
+    var view = host.querySelector("#rvView");
+    if (view) view.addEventListener("click", function () {
+      if (!window.DOODLY_REPORTVIEWER) return;
+      var flt = [];
+      if (_f.status) flt.push("Status: " + _f.status);
+      if (_f.rating) flt.push("Rating: " + _f.rating + "★");
+      if (_f.q) flt.push('Search: "' + _f.q + '"');
+      var data = _rows.map(function (r) {
+        var u = r.user || {};
+        return [fmtDate(r.createdAt), u.name || "", u.email || u.phone || "", r.rating, r.title || "", r.comment || "", r.target || r.productSlug || "", r.status, r.featured ? "Yes" : "No", r.reply || ""];
+      });
+      DOODLY_REPORTVIEWER.open({
+        title: "Reviews Report",
+        module: window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : null,
+        meta: { filters: flt, recordCount: data.length },
+        columns: ["Date", "Customer", "Email", { label: "Rating", right: true }, "Title", "Comment", "Product", "Status", "Featured", "Reply"],
+        rows: data
+      }, { exporters: { csv: exportCsv } });
+    });
     bindRowActions(host);
   }
 

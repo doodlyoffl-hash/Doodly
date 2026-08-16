@@ -350,7 +350,7 @@ window.DOODLY_B2B = (function () {
       var presets = [["", "All"], ["7", "Last 7d"], ["30", "Last 30d"]];
       var kc = function (l, v) { return '<div class="exp-card"><p class="exp-cval">' + v + '</p><p class="exp-clabel">' + l + '</p></div>'; };
       var tbl = function (title, head, rows) { return '<div class="panel"><div class="panel-head"><h3>' + title + '</h3></div><div class="panel-pad"><table class="tbl"><thead><tr>' + head.map(function (h) { return '<th>' + h + '</th>'; }).join("") + '</tr></thead><tbody>' + (rows.join("") || '<tr><td colspan="' + head.length + '" class="muted-sm">No data</td></tr>') + '</tbody></table></div></div>'; };
-      return '<div class="exp-rephead"><div class="exp-presets">' + presets.map(function (p) { return '<button class="exp-chip ' + ((st.rPreset || "") === p[0] ? "on" : "") + '" data-rp="' + p[0] + '">' + p[1] + '</button>'; }).join("") + '</div><button class="btn btn-primary sm" id="r-csv">Export CSV</button></div>' +
+      return '<div class="exp-rephead"><div class="exp-presets">' + presets.map(function (p) { return '<button class="exp-chip ' + ((st.rPreset || "") === p[0] ? "on" : "") + '" data-rp="' + p[0] + '">' + p[1] + '</button>'; }).join("") + '</div><button class="btn btn-ghost sm" id="r-view">👁 View</button><button class="btn btn-primary sm" id="r-csv">Export CSV</button></div>' +
         '<div class="exp-cards" style="margin:14px 0">' + kc("Orders", r.count) + kc("Revenue", inr(r.total)) + kc("Collected", inr(r.collected)) + kc("Outstanding", inr(r.outstanding)) + '</div>' +
         '<div class="exp-grid2">' +
           tbl("Top businesses", ["Business", "Orders", "Revenue"], r.topBiz.map(function (b) { return '<tr><td>' + esc((b.code || "") + " " + b.name) + '</td><td>' + b.orders + '</td><td><b>' + inr(b.rev) + '</b></td></tr>'; })) +
@@ -385,7 +385,7 @@ window.DOODLY_B2B = (function () {
         host.querySelectorAll(".o-reorder").forEach(function (b) { b.addEventListener("click", function () { var o = reorder(b.dataset.id); if (o) { toast("Reordered as " + o.code); render(); } }); });
         host.querySelectorAll(".o-print").forEach(function (b) { b.addEventListener("click", function () { window.print(); }); });
       }
-      if (st.tab === "reports") { host.querySelectorAll("[data-rp]").forEach(function (b) { b.addEventListener("click", function () { st.rPreset = b.dataset.rp; if (b.dataset.rp) { var f = new Date(); f.setDate(f.getDate() - Number(b.dataset.rp)); st.rFrom = f.toISOString().slice(0, 10); } else st.rFrom = ""; render(); }); }); var csv = host.querySelector("#r-csv"); if (csv) csv.addEventListener("click", exportReportCsv); }
+      if (st.tab === "reports") { host.querySelectorAll("[data-rp]").forEach(function (b) { b.addEventListener("click", function () { st.rPreset = b.dataset.rp; if (b.dataset.rp) { var f = new Date(); f.setDate(f.getDate() - Number(b.dataset.rp)); st.rFrom = f.toISOString().slice(0, 10); } else st.rFrom = ""; render(); }); }); var csv = host.querySelector("#r-csv"); if (csv) csv.addEventListener("click", exportReportCsv); var vw = host.querySelector("#r-view"); if (vw) vw.addEventListener("click", viewReport); }
     }
     function wireRegister() {
       var save = host.querySelector("#r-save"); if (!save) return;
@@ -447,6 +447,20 @@ window.DOODLY_B2B = (function () {
         var o = createOrder({ businessId: st.bizFor, items: st.items, deliveryDate: host.querySelector("#c-date").value, deliveryTime: host.querySelector("#c-time").value, discountBps: Math.round((Number(st.discPct) || 0) * 100), additionalCharges: Number(st.addl) || 0, remarks: st.remarks || (host.querySelector("#c-remarks") || {}).value || "" });
         if (o) { toast("Order " + o.code + " created · Pending"); resetOrder(); st.tab = "orders"; render(); }
       });
+    }
+    // View the report inside the shared viewer; the table mirrors the CSV's "Top businesses" section and the CSV download (Top businesses + Top products) is delegated to exportReportCsv.
+    function viewReport() {
+      if (!window.DOODLY_REPORTVIEWER) { toast("Report viewer is still loading — try again."); return; }
+      var r = reports(st.rFrom, st.rTo);
+      var rows = r.topBiz.map(function (b) { return [(b.code || "") + " " + b.name, b.orders, b.rev].map(function (c) { return c == null ? "" : String(c); }); });
+      window.DOODLY_REPORTVIEWER.open({
+        title: "B2B Report — Top businesses",
+        module: (window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : null),
+        meta: { filters: ["Period: " + (st.rPreset ? "Last " + st.rPreset + "d" : "All"), "CSV also includes Top products"], recordCount: rows.length },
+        summary: [{ label: "Orders", value: String(r.count) }, { label: "Revenue", value: inr(r.total) }, { label: "Collected", value: inr(r.collected) }, { label: "Outstanding", value: inr(r.outstanding) }],
+        columns: ["Business", { label: "Orders", right: true }, { label: "Revenue", right: true }],
+        rows: rows,
+      }, { exporters: { csv: exportReportCsv } });
     }
     function exportReportCsv() {
       var r = reports(st.rFrom, st.rTo);

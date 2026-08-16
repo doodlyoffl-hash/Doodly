@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const report = await geoCorrectionsReport(kind, { from, to });
-    if (format === "json") { await log("json", report.totals.corrections); return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } }); }
+    if (format === "json") { await log("json", report.totals.corrections); await audit({ userId: readUserId(req) ?? null, actorRole: readRole(req), action: "geoCorrection.report.view", target: `${kind} · ${report.totals.corrections} correction(s)`, ctx: reqContext(req) }).catch(() => {}); return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } }); }
     if (format === "pdf") {
       const { bytes } = await renderMilkReportPdf(report as unknown as MilkReport);
       await log("pdf", report.totals.corrections);

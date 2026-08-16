@@ -537,7 +537,7 @@ window.DOODLY_B2B_PRICING = (function () {
             '<button class="btn btn-primary sm" id="bp-copyrun">Copy pricing →</button>' : '<div class="bp-warn">Super Admin only.</div>') +
           '</div></div>' +
           '<div class="panel"><div class="panel-head"><h3>Import / Export price list</h3></div><div class="panel-pad">' +
-            '<button class="btn btn-ghost sm" id="bp-expcsv">Export CSV</button> <button class="btn btn-ghost sm" id="bp-expxls">Export Excel</button>' +
+            '<button class="btn btn-ghost sm" id="bp-expview">👁 View</button> <button class="btn btn-ghost sm" id="bp-expcsv">Export CSV</button> <button class="btn btn-ghost sm" id="bp-expxls">Export Excel</button>' +
             (isSuper() ? '<p class="muted-sm" style="margin-top:12px">Paste a price list — one per line: <code>product or slug, price, notes</code></p>' +
             '<textarea class="input" id="bp-import" rows="5" placeholder="A2 Buffalo Milk, 78, Bulk rate&#10;Malai Paneer, 420"></textarea>' +
             '<button class="btn btn-primary sm" id="bp-importrun" style="margin-top:8px">Import price list</button> <button class="link" id="bp-imptpl">Download template</button>' : "") +
@@ -555,7 +555,7 @@ window.DOODLY_B2B_PRICING = (function () {
       }).join("") || '<tr><td colspan="6" class="muted-sm" style="text-align:center;padding:20px">No pricing changes recorded yet.</td></tr>';
       return '<div class="bp-pickrow"><label class="bp-pf"><span>Business</span><select class="input" id="bp-biz"><option value="">All businesses</option>' + bizList().map(function (b) { return '<option value="' + b.id + '" ' + (b.id === st.bizId ? "selected" : "") + '>' + esc(b.code + " · " + b.name) + '</option>'; }).join("") + '</select></label>' +
         '<label class="bp-pf"><span>Search</span><input class="input" id="bp-hq" value="' + esc(st.hFilter) + '" placeholder="Product, reason, user…"></label>' +
-        '<div class="bp-pickactions"><button class="btn btn-ghost sm" id="bp-histcsv">Export CSV</button></div></div>' +
+        '<div class="bp-pickactions"><button class="btn btn-ghost sm" id="bp-histview">👁 View</button> <button class="btn btn-ghost sm" id="bp-histcsv">Export CSV</button></div></div>' +
         '<div class="table-wrap"><table class="tbl"><thead><tr><th>Product</th><th>Previous</th><th>New price</th><th>Changed by</th><th>Reason</th><th>Effective</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
     }
 
@@ -567,7 +567,7 @@ window.DOODLY_B2B_PRICING = (function () {
         return '<tr><td><b>' + esc(o.orderCode || "—") + '</b><div class="muted-sm">' + esc(o.bizCode || "") + '</div></td><td>' + esc(o.product) + '</td><td>' + (o.qty || "") + '</td><td>' + inr(o.businessPrice) + '</td><td><b>' + inr(o.finalPrice) + '</b></td><td>' + (diff > 0 ? '<span class="badge green">−' + inr(diff) + '</span>' : diff < 0 ? '<span class="badge amber">+' + inr(-diff) + '</span>' : "—") + '</td><td>' + esc(o.reason || "—") + '</td><td>' + esc(o.by) + '<div class="muted-sm">' + fmtDT(o.at) + '</div></td></tr>';
       }).join("") || '<tr><td colspan="8" class="muted-sm" style="text-align:center;padding:20px">No order-time overrides yet.</td></tr>';
       return '<div class="bp-pickrow"><label class="bp-pf"><span>Business</span><select class="input" id="bp-biz"><option value="">All businesses</option>' + bizList().map(function (b) { return '<option value="' + b.id + '" ' + (b.id === st.bizId ? "selected" : "") + '>' + esc(b.code + " · " + b.name) + '</option>'; }).join("") + '</select></label>' +
-        '<div class="bp-pickactions"><button class="btn btn-ghost sm" id="bp-ovcsv">Export CSV</button></div></div>' +
+        '<div class="bp-pickactions"><button class="btn btn-ghost sm" id="bp-ovview">👁 View</button> <button class="btn btn-ghost sm" id="bp-ovcsv">Export CSV</button></div></div>' +
         '<p class="muted-sm" style="margin:0 0 10px">Every price change made while creating an order — the business default is never altered.</p>' +
         '<div class="table-wrap"><table class="tbl"><thead><tr><th>Order</th><th>Product</th><th>Qty</th><th>Business price</th><th>Charged</th><th>Δ</th><th>Reason</th><th>By</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
     }
@@ -577,7 +577,7 @@ window.DOODLY_B2B_PRICING = (function () {
       var r = reports({ bizId: st.repAll ? "" : "" });
       var kc = function (l, v) { return '<div class="exp-card"><p class="exp-cval">' + v + '</p><p class="exp-clabel">' + l + '</p></div>'; };
       var tbl = function (title, head, rows) { return '<div class="panel"><div class="panel-head"><h3>' + title + '</h3></div><div class="panel-pad"><div class="table-wrap"><table class="tbl"><thead><tr>' + head.map(function (h) { return '<th>' + h + '</th>'; }).join("") + '</tr></thead><tbody>' + (rows.join("") || '<tr><td colspan="' + head.length + '" class="muted-sm">No data</td></tr>') + '</tbody></table></div></div></div>'; };
-      return '<div class="exp-rephead"><h3 style="margin:0">Pricing analytics</h3><div><button class="btn btn-ghost sm" id="bp-rcsv">CSV</button> <button class="btn btn-ghost sm" id="bp-rxls">Excel</button> <button class="btn btn-primary sm" id="bp-rpdf">PDF</button></div></div>' +
+      return '<div class="exp-rephead"><h3 style="margin:0">Pricing analytics</h3><div><button class="btn btn-ghost sm" id="bp-rview">👁 View</button> <button class="btn btn-ghost sm" id="bp-rcsv">CSV</button> <button class="btn btn-ghost sm" id="bp-rxls">Excel</button> <button class="btn btn-primary sm" id="bp-rpdf">PDF</button></div></div>' +
         '<div class="exp-cards" style="margin:14px 0">' + kc("Orders", r.orderCount) + kc("Revenue", inr(r.revenue)) + kc("Discount given", inr(r.totalDiscount)) + kc("Est. margin", inr(r.totalMargin)) + '</div>' +
         '<div class="exp-grid2">' +
           tbl("Average selling price &amp; margin", ["Product", "Qty", "Avg price", "Retail", "Disc %", "Margin %"], r.avgPrice.map(function (p) { return '<tr><td>' + esc(p.name) + '</td><td>' + p.qty + '</td><td><b>' + inr(p.avgPrice) + '</b></td><td>' + inr(p.retail) + '</td><td>' + p.discountPct + '%</td><td>' + p.marginPct + '%</td></tr>'; })) +
@@ -610,8 +610,8 @@ window.DOODLY_B2B_PRICING = (function () {
       if (st.tab === "pricing") wirePricing();
       if (st.tab === "bulk") wireBulk();
       if (st.tab === "copy") wireCopy();
-      if (st.tab === "history") { var hq = host.querySelector("#bp-hq"); if (hq) keepCaret(hq, function () { st.hFilter = hq.value; }); var hc = host.querySelector("#bp-histcsv"); if (hc) hc.addEventListener("click", exportHistoryCsv); }
-      if (st.tab === "overrides") { var oc = host.querySelector("#bp-ovcsv"); if (oc) oc.addEventListener("click", exportOverridesCsv); }
+      if (st.tab === "history") { var hq = host.querySelector("#bp-hq"); if (hq) keepCaret(hq, function () { st.hFilter = hq.value; }); var hc = host.querySelector("#bp-histcsv"); if (hc) hc.addEventListener("click", exportHistoryCsv); var hv = host.querySelector("#bp-histview"); if (hv) hv.addEventListener("click", viewHistoryReport); }
+      if (st.tab === "overrides") { var oc = host.querySelector("#bp-ovcsv"); if (oc) oc.addEventListener("click", exportOverridesCsv); var ov = host.querySelector("#bp-ovview"); if (ov) ov.addEventListener("click", viewOverridesReport); }
       if (st.tab === "reports") wireReports();
       if (st.tab === "settings") wireSettings();
     }
@@ -656,6 +656,7 @@ window.DOODLY_B2B_PRICING = (function () {
       var run = host.querySelector("#bp-copyrun"); if (run) run.addEventListener("click", function () { var from = host.querySelector("#bp-copyfrom").value; if (!from) { toast("Select a source business"); return; } var r = copyPricing(from, st.bizId, "Copied via admin"); toast(r.ok ? "Copied " + r.count + " product(s)" : r.msg); if (r.ok) { st.tab = "pricing"; render(); } });
       var ec = host.querySelector("#bp-expcsv"); if (ec) ec.addEventListener("click", function () { exportPriceList("csv"); });
       var ex = host.querySelector("#bp-expxls"); if (ex) ex.addEventListener("click", function () { exportPriceList("xls"); });
+      var evw = host.querySelector("#bp-expview"); if (evw) evw.addEventListener("click", viewPriceListReport);
       var ir = host.querySelector("#bp-importrun"); if (ir) ir.addEventListener("click", function () {
         var raw = host.querySelector("#bp-import").value; var rows = parseImport(raw); if (!rows.length) { toast("Nothing to import"); return; }
         var r = importList(st.bizId, rows, "Imported price list");
@@ -668,6 +669,7 @@ window.DOODLY_B2B_PRICING = (function () {
       var c = host.querySelector("#bp-rcsv"); if (c) c.addEventListener("click", function () { exportReports("csv"); });
       var x = host.querySelector("#bp-rxls"); if (x) x.addEventListener("click", function () { exportReports("xls"); });
       var p = host.querySelector("#bp-rpdf"); if (p) p.addEventListener("click", function () { window.print(); });
+      var v = host.querySelector("#bp-rview"); if (v) v.addEventListener("click", viewPricingReport);
     }
     function wireSettings() {
       var save = host.querySelector("#bp-setsave"); if (save) save.addEventListener("click", function () {
@@ -717,6 +719,49 @@ window.DOODLY_B2B_PRICING = (function () {
       var data = r.avgPrice.map(function (p) { return [p.name, p.qty, p.avgPrice, p.retail, p.discountPct, p.marginPct, p.marginAmt]; });
       if (fmt === "xls") download("b2b-pricing-report.xls", toXls("B2B Pricing Report", head, data), "application/vnd.ms-excel");
       else download("b2b-pricing-report.csv", toCsv([head].concat(data)), "text/csv");
+    }
+
+    /* ---- shared report viewer (View shows the SAME data the export buttons build from) ---- */
+    function rvModule() { try { return window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : null; } catch (e) { return null; } }
+    function viewPriceListReport() {
+      if (!window.DOODLY_REPORTVIEWER) { toast("Report viewer is still loading — try again."); return; }
+      var b = curBiz(); var rows = exportRows(st.bizId).map(function (r) { return [r.product, r.retail, r.business, r.status, r.gst, r.notes].map(function (c) { return c == null ? "" : String(c); }); });
+      window.DOODLY_REPORTVIEWER.open({
+        title: "Price list" + (b ? " — " + b.name : ""), module: rvModule(),
+        meta: { filters: b ? [b.code + " · " + b.name] : [], recordCount: rows.length },
+        columns: ["Product", { label: "Retail", right: true }, { label: "Business", right: true }, "Status", "GST", "Notes"], rows: rows,
+      }, { exporters: { csv: function () { exportPriceList("csv"); }, xls: function () { exportPriceList("xls"); } } });
+    }
+    function viewHistoryReport() {
+      if (!window.DOODLY_REPORTVIEWER) { toast("Report viewer is still loading — try again."); return; }
+      var h = historyAll().filter(function (x) { return !st.bizId || x.bizId === st.bizId; });
+      var rows = h.map(function (x) { return [fmtDate(x.effectiveDate || x.at), x.bizCode, x.product, x.prevPrice, x.newPrice, x.changedBy, x.reason].map(function (c) { return c == null ? "" : String(c); }); });
+      window.DOODLY_REPORTVIEWER.open({
+        title: "Price history", module: rvModule(),
+        meta: { filters: st.bizId ? [(curBiz() ? curBiz().code : st.bizId)] : [], recordCount: rows.length },
+        columns: ["Date", "Business", "Product", { label: "Previous", right: true }, { label: "New", right: true }, "Changed by", "Reason"], rows: rows,
+      }, { exporters: { csv: exportHistoryCsv } });
+    }
+    function viewOverridesReport() {
+      if (!window.DOODLY_REPORTVIEWER) { toast("Report viewer is still loading — try again."); return; }
+      var o = overridesAll().filter(function (x) { return !st.bizId || x.bizId === st.bizId; });
+      var rows = o.map(function (x) { return [fmtDT(x.at), x.orderCode, x.bizCode, x.product, x.qty, x.businessPrice, x.finalPrice, x.reason, x.by].map(function (c) { return c == null ? "" : String(c); }); });
+      window.DOODLY_REPORTVIEWER.open({
+        title: "Order-time price overrides", module: rvModule(),
+        meta: { filters: st.bizId ? [(curBiz() ? curBiz().code : st.bizId)] : [], recordCount: rows.length },
+        columns: ["Date", "Order", "Business", "Product", { label: "Qty", right: true }, { label: "Business price", right: true }, { label: "Charged", right: true }, "Reason", "By"], rows: rows,
+      }, { exporters: { csv: exportOverridesCsv } });
+    }
+    function viewPricingReport() {
+      if (!window.DOODLY_REPORTVIEWER) { toast("Report viewer is still loading — try again."); return; }
+      var r = reports({});
+      var rows = r.avgPrice.map(function (p) { return [p.name, p.qty, p.avgPrice, p.retail, p.discountPct, p.marginPct, p.marginAmt].map(function (c) { return c == null ? "" : String(c); }); });
+      window.DOODLY_REPORTVIEWER.open({
+        title: "Pricing analytics", module: rvModule(),
+        meta: { recordCount: rows.length },
+        summary: [{ label: "Orders", value: String(r.orderCount) }, { label: "Revenue", value: inr(r.revenue) }, { label: "Discount given", value: inr(r.totalDiscount) }, { label: "Est. margin", value: inr(r.totalMargin) }],
+        columns: ["Product", { label: "Qty", right: true }, { label: "Avg price", right: true }, { label: "Retail", right: true }, { label: "Discount %", right: true }, { label: "Margin %", right: true }, { label: "Margin ₹", right: true }], rows: rows,
+      }, { exporters: { csv: function () { exportReports("csv"); }, xls: function () { exportReports("xls"); } } });
     }
 
     render();

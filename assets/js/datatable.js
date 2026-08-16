@@ -112,6 +112,7 @@ window.DOODLY_TABLE = (function () {
 
     var moduleKey = RB() ? RB().routeModule(location.pathname) : null;
     var canExport = !moduleKey || !RB() || RB().can(moduleKey, "export");
+    var canView = !moduleKey || !RB() || RB().can(moduleKey, "view");
 
     var st = { search: "", sort: [], facets: {}, datePreset: "all", from: "", to: "", page: 1, size: 25, panel: false };
     (function restore() {
@@ -148,6 +149,7 @@ window.DOODLY_TABLE = (function () {
         '<select class="input dt-saved" id="dtSaved"><option value="">Saved views…</option>' + sf.map(function (s, i) { return '<option value="' + i + '">' + esc(s.name) + '</option>'; }).join("") + '<option value="__save">＋ Save current view…</option>' + (sf.length ? '<option value="__manage">⚙ Manage views…</option>' : "") + '</select>' +
         '<div class="dt-spacer"></div>' +
         '<button class="icon-btn dt-fav" id="dtFav" title="Favorite this view">' + ic("star", 17) + '</button>' +
+        '<button class="btn btn-ghost sm dt-btn" id="dtViewBtn"' + (canView ? "" : " disabled title=\"You don't have permission to view this report\"") + '>' + ic("eye", 15) + ' View</button>' +
         '<div class="dt-export"><button class="btn btn-ghost sm dt-btn" id="dtExportBtn"' + (canExport ? "" : " disabled title=\"You don't have export permission\"") + '>' + ic("download", 15) + ' Export ▾</button>' +
           '<div class="dt-export-menu" id="dtExportMenu" hidden><button data-x="csv">CSV (.csv)</button><button data-x="xls">Excel (.xls)</button><button data-x="pdf">PDF</button></div></div>' +
         '<button class="icon-btn dt-refresh" id="dtRefresh" title="Refresh">' + ic("refresh", 16) + '</button>' +
@@ -283,6 +285,8 @@ window.DOODLY_TABLE = (function () {
       if (fr) fr.addEventListener("change", dchg); if (to) to.addEventListener("change", dchg);
       host.querySelectorAll(".dt-th").forEach(function (th) { var go = function (e) { var multi = e.shiftKey; var col = +th.dataset.col; var ex = st.sort.find(function (s) { return s.col === col; }); if (!multi) { var dir = ex ? (ex.dir === "asc" ? "desc" : "asc") : "asc"; st.sort = [{ col: col, dir: dir }]; } else { if (ex) ex.dir = ex.dir === "asc" ? "desc" : "asc"; else st.sort.push({ col: col, dir: "asc" }); } apply(); }; th.addEventListener("click", go); th.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(e); } }); });
       var rf = host.querySelector("#dtRefresh"); if (rf) rf.addEventListener("click", function () { rf.classList.add("spin"); apply(); toast("Data refreshed"); setTimeout(function () { rf.classList.remove("spin"); }, 500); });
+      // view report
+      var vb = host.querySelector("#dtViewBtn"); if (vb && !vb.disabled) vb.addEventListener("click", openViewer);
       // export
       var eb = host.querySelector("#dtExportBtn"), em = host.querySelector("#dtExportMenu");
       if (eb && em && !eb.disabled) { eb.addEventListener("click", function (e) { e.stopPropagation(); em.hidden = !em.hidden; }); document.addEventListener("click", function () { em.hidden = true; }); em.querySelectorAll("[data-x]").forEach(function (b) { b.addEventListener("click", function () { doExport(b.dataset.x); em.hidden = true; }); }); }
@@ -313,6 +317,33 @@ window.DOODLY_TABLE = (function () {
       toast("Exported " + rows.length + " rows (" + kind.toUpperCase() + ")");
     }
     function dl(href, name) { var a = document.createElement("a"); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+
+    /* ---------- View report (same filtered/sorted rows the exports use) ---------- */
+    function openViewer() {
+      if (!window.DOODLY_REPORTVIEWER) { toast("Report viewer is still loading — try again."); return; }
+      var fRows = filtered();
+      // active filter summary (mirrors the chips)
+      var flt = [];
+      if (st.search) flt.push('Search: "' + st.search + '"');
+      for (var fk in st.facets) (st.facets[fk] || []).forEach(function (v) { flt.push(humanize(fk) + ": " + v); });
+      st.sort.forEach(function (s) { flt.push("Sort: " + stripHtml(cfg.cols[s.col]) + (s.dir === "asc" ? " ↑" : " ↓")); });
+      var dateRange = "";
+      if (dateField && st.datePreset !== "all") dateRange = st.datePreset === "custom" ? ((st.from || "…") + " → " + (st.to || "…")) : ((DATE_PRESETS.find(function (p) { return p[0] === st.datePreset; }) || [])[1] || "");
+      var by = ""; try { var u = RB() && RB().currentUser && RB().currentUser(); by = (u && (u.name || u.email)) || (RB() && RB().activeRole()) || ""; } catch (e) {}
+      // drop action columns (empty header / Manage / Actions) from the report view
+      var keep = []; cfg.cols.forEach(function (c, i) { var h = String(c == null ? "" : c).trim(); if (h && h !== "Manage" && h !== "Actions" && h !== "Action") keep.push(i); });
+      window.DOODLY_REPORTVIEWER.open({
+        title: cfg.title,
+        module: moduleKey,
+        meta: { dateRange: dateRange, filters: flt, generatedBy: by, recordCount: fRows.length },
+        columns: keep.map(function (i) { return { label: cfg.cols[i] || "", right: false }; }),
+        rows: fRows.map(function (it) { return keep.map(function (i) { return it.cells[i]; }); }),
+        html: true
+      }, {
+        // delegate every export to the SAME doExport → View, CSV, Excel, PDF, Print share one dataset
+        exporters: { csv: function () { doExport("csv"); }, xls: function () { doExport("xls"); }, pdf: function () { doExport("pdf"); }, print: function () { doExport("pdf"); } }
+      });
+    }
 
     /* ---------- favorites ---------- */
     function favKey() { return location.pathname; }

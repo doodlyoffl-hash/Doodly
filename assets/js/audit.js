@@ -361,7 +361,7 @@ window.DOODLY_AUDIT = (function () {
             '<label class="aud-fl"><span>To</span><input class="input" id="aud-to" type="date" value="' + esc(f.to || "") + '"></label>' +
           '</div>' +
           '<div class="aud-flactions"><span class="muted-sm">' + total + ' event' + (total === 1 ? "" : "s") + '</span><button class="link" id="aud-clear">Clear filters</button>' +
-            '<span class="aud-exp"><button class="btn btn-ghost sm" id="aud-csv">CSV</button><button class="btn btn-ghost sm" id="aud-xls">Excel</button><button class="btn btn-primary sm" id="aud-pdf">PDF</button></span></div>' +
+            '<span class="aud-exp"><button class="btn btn-ghost sm" id="aud-view">👁 View</button><button class="btn btn-ghost sm" id="aud-csv">CSV</button><button class="btn btn-ghost sm" id="aud-xls">Excel</button><button class="btn btn-primary sm" id="aud-pdf">PDF</button></span></div>' +
         '</div>' +
         '<div class="table-wrap"><table class="tbl aud-tbl"><thead><tr><th>When</th><th>User</th><th>Module</th><th>Action</th><th>Entity</th><th>Change</th><th>Status</th><th>Device / IP</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
         pager(total, pages);
@@ -449,6 +449,27 @@ window.DOODLY_AUDIT = (function () {
       var next = host.querySelector("#aud-next"); if (next) next.addEventListener("click", function () { st.page++; render(); });
       var per = host.querySelector("#aud-per"); if (per) per.addEventListener("change", function () { st.per = +per.value; st.page = 1; render(); });
       var rows = entries(st.f);
+      var view = host.querySelector("#aud-view"); if (view) view.addEventListener("click", function () {
+        if (!window.DOODLY_REPORTVIEWER) return;
+        var f = st.f || {}, flt = [];
+        if (f.q) flt.push('Search: "' + f.q + '"');
+        if (f.user) flt.push("User: " + f.user);
+        if (f.role) flt.push("Role: " + roleLabel(f.role));
+        if (f.module) flt.push("Module: " + f.module);
+        if (f.action) flt.push("Action: " + f.action);
+        if (f.status) flt.push("Status: " + f.status);
+        if (f.entityType) flt.push("Entity: " + f.entityType);
+        if (f.entityId) flt.push("Entity ID: " + f.entityId);
+        if (f.from) flt.push("From " + f.from);
+        if (f.to) flt.push("To " + f.to);
+        DOODLY_REPORTVIEWER.open({
+          title: "Audit Log Report",
+          module: window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : null,
+          meta: { filters: flt, recordCount: rows.length },
+          columns: HEAD,
+          rows: rows.map(function (e) { return COLS.map(function (c) { return c === "role" ? roleLabel(e[c]) : c === "ts" ? new Date(e.ts).toLocaleString("en-IN") : e[c]; }); })
+        }, { exporters: { csv: function () { exportLogs("csv", rows, "filtered"); }, xls: function () { exportLogs("xls", rows, "filtered"); }, pdf: function () { exportLogs("pdf", rows, "filtered"); } } });
+      });
       var csv = host.querySelector("#aud-csv"); if (csv) csv.addEventListener("click", function () { exportLogs("csv", rows, "filtered"); });
       var xls = host.querySelector("#aud-xls"); if (xls) xls.addEventListener("click", function () { exportLogs("xls", rows, "filtered"); });
       var pdf = host.querySelector("#aud-pdf"); if (pdf) pdf.addEventListener("click", function () { exportLogs("pdf", rows, "filtered"); });

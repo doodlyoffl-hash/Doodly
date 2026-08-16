@@ -278,7 +278,7 @@ window.DOODLY_GST = (function () {
           '<label class="gst-f"><span>Product</span><select class="input" id="rfProduct"><option value="">All</option>' + prods.map(function (p) { return '<option value="' + p.slug + '"' + (st.rf.product === p.slug ? " selected" : "") + '>' + esc(p.name) + '</option>'; }).join("") + '</select></label>' +
           '<label class="gst-f"><span>GST %</span><select class="input" id="rfRate"><option value="">All</option>' + rateOpts.map(function (r) { return '<option value="' + r + '"' + (String(st.rf.percent) === String(r) ? " selected" : "") + '>' + r + '%</option>'; }).join("") + '</select></label>' +
           '<button class="btn btn-ghost sm" id="rfClear">Clear</button>' +
-          '<div style="flex:1"></div><div class="gst-export"><button class="btn btn-ghost sm" id="gstExport">' + ic("download", 15) + ' Export ▾</button><div class="dt-export-menu" id="gstExportMenu" hidden><button data-x="csv">CSV</button><button data-x="xls">Excel</button><button data-x="pdf">PDF</button></div></div>' +
+          '<div style="flex:1"></div><button class="btn btn-ghost sm" id="gstView">👁 View</button><div class="gst-export"><button class="btn btn-ghost sm" id="gstExport">' + ic("download", 15) + ' Export ▾</button><div class="dt-export-menu" id="gstExportMenu" hidden><button data-x="csv">CSV</button><button data-x="xls">Excel</button><button data-x="pdf">PDF</button></div></div>' +
         '</div>' +
         '<div class="exp-cards" style="margin:12px 0">' + kc("GST Collected", inr(rep.collected)) + kc("Taxable Value", inr(rep.taxable)) + kc("Transactions", rep.count) + kc("Tax Liability", inr(rep.collected)) + '</div>' +
         '<div class="exp-grid2">' + tbl("GST by Product", rep.byProduct, "Product") + tbl("GST by Rate", rep.byRate, "GST %") + tbl("GST by Date", rep.byDate, "Date") + tbl("GST by Invoice", rep.byInvoice, "Invoice") + '</div>';
@@ -327,6 +327,23 @@ window.DOODLY_GST = (function () {
       if (st.tab === "reports") {
         ["rfFrom:from", "rfTo:to", "rfProduct:product", "rfRate:percent"].forEach(function (pair) { var x = pair.split(":"); var el = host.querySelector("#" + x[0]); if (el) el.addEventListener("change", function () { st.rf[x[1]] = el.value; render(); }); });
         var cl = host.querySelector("#rfClear"); if (cl) cl.addEventListener("click", function () { st.rf = { from: "", to: "", product: "", percent: "", customer: "" }; render(); });
+        var vb = host.querySelector("#gstView"); if (vb) vb.addEventListener("click", function () {
+          if (!window.DOODLY_REPORTVIEWER) return;
+          var rep = reports(st.rf), f = st.rf || {}, flt = [];
+          if (f.from) flt.push("From " + f.from);
+          if (f.to) flt.push("To " + f.to);
+          if (f.product) flt.push("Product: " + f.product);
+          if (f.percent !== "" && f.percent != null) flt.push("GST %: " + f.percent);
+          if (f.customer) flt.push("Customer: " + f.customer);
+          DOODLY_REPORTVIEWER.open({
+            title: "GST Report",
+            module: window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : null,
+            meta: { dateRange: (f.from || f.to) ? ((f.from || "…") + " to " + (f.to || "…")) : "", filters: flt, recordCount: rep.count },
+            summary: [{ label: "GST Collected", value: inr(rep.collected) }, { label: "Taxable Value", value: inr(rep.taxable) }, { label: "Transactions", value: rep.count }],
+            columns: ["Invoice", "Date", "Product", "Customer", { label: "Taxable", right: true }, { label: "GST %", right: true }, { label: "GST Amount", right: true }],
+            rows: rep.rows.map(function (t) { return [t.ref, t.date, t.product, t.customer, t.subtotal, t.percent + "%", t.amount]; })
+          }, { exporters: { csv: function () { exportReport("csv"); }, xls: function () { exportReport("xls"); }, pdf: function () { exportReport("pdf"); } } });
+        });
         var eb = host.querySelector("#gstExport"), em = host.querySelector("#gstExportMenu");
         if (eb && em) { eb.addEventListener("click", function (e) { e.stopPropagation(); em.hidden = !em.hidden; }); document.addEventListener("click", function () { em.hidden = true; }); em.querySelectorAll("[data-x]").forEach(function (b) { b.addEventListener("click", function () { exportReport(b.dataset.x); em.hidden = true; }); }); }
       }

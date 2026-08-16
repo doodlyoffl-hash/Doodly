@@ -868,16 +868,26 @@ window.DOODLY_PUZZLE = (function () {
         var body = ov.querySelector(".dac-body");
         if (!rows.length) { body.innerHTML = '<p style="color:var(--ink-3)">No participants yet.</p>'; return; }
         body.innerHTML =
-          '<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn btn-ghost sm" id="pzp-csv">' + icon("download", 14) + " Export CSV</button></div>" +
+          '<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px"><button class="btn btn-ghost sm" id="pzp-view">' + icon("eye", 14) + ' View</button><button class="btn btn-ghost sm" id="pzp-csv">' + icon("download", 14) + " Export CSV</button></div>" +
           '<div style="overflow-x:auto;max-height:52vh"><table class="pza-table"><thead><tr><th>#</th><th>Customer</th><th>Status</th><th>Moves</th><th>Time</th><th>Completed</th><th>Device</th></tr></thead><tbody>' +
           rows.map(function (r) {
             return "<tr><td>" + (r.rank || "—") + "</td><td><b>" + esc(r.name || "—") + "</b><br><span style='font-size:.72rem;color:var(--ink-3)'>" + esc(r.email || r.phone || "") + "</span></td>" +
               "<td>" + esc(r.status) + "</td><td>" + (r.moves != null ? r.moves : "—") + "</td><td>" + fmtDur(r.durationMs) + "</td>" +
               "<td>" + (r.completedAt ? fmtDateFull(r.completedAt) : "—") + "</td><td style='font-size:.75rem'>" + esc(r.device || "—") + " · " + esc(r.browser || "—") + (r.ip ? "<br>" + esc(r.ip) : "") + "</td></tr>";
           }).join("") + "</tbody></table></div>";
-        body.querySelector("#pzp-csv").addEventListener("click", function () {
-          dl("puzzle-m" + p.monthIndex + "-players.csv", toCsv([["Rank", "Name", "Email", "Phone", "Status", "Moves", "DurationMs", "StartedAt", "CompletedAt", "Device", "Browser", "IP"]].concat(
-            rows.map(function (r) { return [r.rank || "", r.name || "", r.email || "", r.phone || "", r.status, r.moves != null ? r.moves : "", r.durationMs != null ? r.durationMs : "", r.startedAt || "", r.completedAt || "", r.device || "", r.browser || "", r.ip || ""]; }))));
+        var playersHeader = ["Rank", "Name", "Email", "Phone", "Status", "Moves", "DurationMs", "StartedAt", "CompletedAt", "Device", "Browser", "IP"];
+        var playersRows = rows.map(function (r) { return [r.rank || "", r.name || "", r.email || "", r.phone || "", r.status, r.moves != null ? r.moves : "", r.durationMs != null ? r.durationMs : "", r.startedAt || "", r.completedAt || "", r.device || "", r.browser || "", r.ip || ""]; });
+        function playersCsv() { dl("puzzle-m" + p.monthIndex + "-players.csv", toCsv([playersHeader].concat(playersRows))); }
+        body.querySelector("#pzp-csv").addEventListener("click", playersCsv);
+        body.querySelector("#pzp-view").addEventListener("click", function () {
+          if (!window.DOODLY_REPORTVIEWER) { toast("Report viewer is still loading — try again."); return; }
+          window.DOODLY_REPORTVIEWER.open({
+            title: "Players — M" + p.monthIndex + " · " + (p.title || ""),
+            module: (window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : null),
+            meta: { recordCount: playersRows.length },
+            columns: playersHeader,
+            rows: playersRows.map(function (r) { return r.map(function (c) { return c == null ? "" : String(c); }); }),
+          }, { exporters: { csv: playersCsv } });
         });
       }).catch(function (e) { ov.querySelector(".dac-body").innerHTML = '<p style="color:#b3261e">' + esc(e.message || "Failed.") + "</p>"; });
     });
@@ -890,6 +900,7 @@ window.DOODLY_PUZZLE = (function () {
         var header = ["Month", "Puzzle", "Phase", "Participants", "Completed", "Completion %", "Avg moves", "Avg time", "Best moves", "Winner", "Prize"];
         body.innerHTML =
           '<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px;flex-wrap:wrap">' +
+          '<button class="btn btn-ghost sm" id="pzr-view">' + icon("eye", 14) + " View</button>" +
           '<button class="btn btn-ghost sm" id="pzr-csv">' + icon("download", 14) + " CSV</button>" +
           '<button class="btn btn-ghost sm" id="pzr-xls">' + icon("download", 14) + " Excel</button>" +
           '<button class="btn btn-ghost sm" id="pzr-pdf">' + icon("file", 14) + " PDF</button></div>" +
@@ -903,9 +914,9 @@ window.DOODLY_PUZZLE = (function () {
             return ["M" + r.month, r.title, r.phase, r.participants, r.completed, r.completionRate + "%", r.avgMoves != null ? r.avgMoves : "", fmtDur(r.avgDurationMs), r.bestMoves != null ? r.bestMoves : "", r.winner || "", r.prizeStatus || ""];
           }));
         };
-        body.querySelector("#pzr-csv").addEventListener("click", function () { dl("puzzle-challenge-report.csv", toCsv(mkRows())); });
-        body.querySelector("#pzr-xls").addEventListener("click", function () { dl("puzzle-challenge-report.xls", toCsv(mkRows(), "\t")); });
-        body.querySelector("#pzr-pdf").addEventListener("click", function () {
+        function reportCsv() { dl("puzzle-challenge-report.csv", toCsv(mkRows())); }
+        function reportXls() { dl("puzzle-challenge-report.xls", toCsv(mkRows(), "\t")); }
+        function reportPdf() {
           var w = window.open("", "_blank");
           w.document.write("<html><head><title>DOODLY Puzzle Challenge Report</title><style>body{font-family:Segoe UI,Arial,sans-serif;padding:26px;color:#1c2b23}h1{font-size:20px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #cfe0d6;padding:7px 9px;text-align:left}th{background:#eaf7ef}</style></head><body>" +
             "<h1>DOODLY — Monthly Puzzle Challenge Report</h1><p>Generated " + new Date().toLocaleString("en-IN") + "</p>" +
@@ -913,6 +924,19 @@ window.DOODLY_PUZZLE = (function () {
             mkRows().slice(1).map(function (r) { return "<tr>" + r.map(function (c) { return "<td>" + String(c) + "</td>"; }).join("") + "</tr>"; }).join("") +
             "</table></body></html>");
           w.document.close(); w.focus(); w.print();
+        }
+        body.querySelector("#pzr-csv").addEventListener("click", reportCsv);
+        body.querySelector("#pzr-xls").addEventListener("click", reportXls);
+        body.querySelector("#pzr-pdf").addEventListener("click", reportPdf);
+        body.querySelector("#pzr-view").addEventListener("click", function () {
+          if (!window.DOODLY_REPORTVIEWER) { toast("Report viewer is still loading — try again."); return; }
+          window.DOODLY_REPORTVIEWER.open({
+            title: "Puzzle Challenge — Reports",
+            module: (window.DOODLY_RBAC ? DOODLY_RBAC.routeModule(location.pathname) : null),
+            meta: { recordCount: rows.length },
+            columns: header,
+            rows: mkRows().slice(1).map(function (r) { return r.map(function (c) { return c == null ? "" : String(c); }); }),
+          }, { exporters: { csv: reportCsv, xls: reportXls, pdf: reportPdf } });
         });
       }).catch(function (e) { ov.querySelector(".dac-body").innerHTML = '<p style="color:#b3261e">' + esc(e.message || "Failed.") + "</p>"; });
     });

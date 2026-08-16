@@ -27,7 +27,10 @@ export async function GET(req: NextRequest) {
     action: "reward.report.export", target: `${fmt.toUpperCase()} · ${report.rowCount} reward(s)`, ctx: reqContext(req),
   }).catch(() => {});
 
-  if (format === "json") return NextResponse.json(report);
+  if (format === "json") {
+    await audit({ userId: readUserId(req) ?? null, actorRole: readRole(req), action: "reward.report.view", target: `${report.rowCount} reward(s)`, ctx: reqContext(req) }).catch(() => {});
+    return NextResponse.json(report);
+  }
 
   if (format === "pdf") {
     // The Milk PDF renderer is a generic table renderer over the same report model.

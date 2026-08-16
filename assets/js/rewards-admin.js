@@ -136,7 +136,7 @@ window.DOODLY_REWARDS_ADMIN = (function () {
         '<input class="rwa-search" id="rwaSearch" placeholder="Search code or campaign…" value="' + esc(state.search) + '">' +
         '<select class="rwa-sel" id="rwaSource"><option value="">All sources</option><option value="puzzle_challenge"' + (state.source === "puzzle_challenge" ? " selected" : "") + ">Puzzle winners</option><option value=\"manual\"" + (state.source === "manual" ? " selected" : "") + ">Manual</option></select>" +
         '<span class="rwa-grow"></span>' +
-        (can("export") ? '<span class="rwa-dl">' + icon("download", 15) + '<button data-dl="csv">CSV</button><button data-dl="xls">Excel</button><button data-dl="pdf">PDF</button></span>' : "") +
+        (can("export") ? '<span class="rwa-dl"><button data-rvview="1">' + icon("eye", 14) + ' View</button>' + icon("download", 15) + '<button data-dl="csv">CSV</button><button data-dl="xls">Excel</button><button data-dl="pdf">PDF</button></span>' : "") +
         (can("create") ? '<button class="btn btn-primary" id="rwaIssue">' + icon("plus", 16) + " Issue reward</button>" : "") +
       "</div>" +
       '<div id="rwaAnalytics"></div>' +
@@ -152,6 +152,7 @@ window.DOODLY_REWARDS_ADMIN = (function () {
     host.querySelector("#rwaSource").addEventListener("change", function (e) { state.source = e.target.value; mountAdmin(); });
     var issue = host.querySelector("#rwaIssue"); if (issue) issue.addEventListener("click", openIssue);
     host.querySelectorAll("[data-dl]").forEach(function (b) { b.addEventListener("click", function () { downloadReport(b.getAttribute("data-dl")); }); });
+    var rvv = host.querySelector("[data-rvview]"); if (rvv) rvv.addEventListener("click", openReportViewer);
     host.querySelectorAll(".rwa-row").forEach(function (tr) { tr.addEventListener("click", function () { openDetail(tr.getAttribute("data-id")); }); });
     loadAnalytics(host);
   }
@@ -216,6 +217,15 @@ window.DOODLY_REWARDS_ADMIN = (function () {
         toast("Reward report downloaded (" + ext.toUpperCase() + ").");
       })
       .catch(function (e) { toast((e && e.message) || "Couldn't export the report."); });
+  }
+  // View the SERVER report inside the shared viewer; PDF/Excel/CSV are wired to the same endpoint + query (View == download).
+  function openReportViewer() {
+    if (!window.DOODLY_REPORTVIEWER) { toast("Report viewer is still loading — try again."); return; }
+    var q = [];
+    if (state.status) q.push("status=" + encodeURIComponent(state.status));
+    if (state.source) q.push("source=" + encodeURIComponent(state.source));
+    if (state.search) q.push("search=" + encodeURIComponent(state.search));
+    window.DOODLY_REPORTVIEWER.openServer({ module: "rewards", path: "/api/admin/rewards/export", query: q.join("&"), title: "Rewards Report", filename: "DOODLY_Rewards" });
   }
 
   /* ---------------- detail drawer ---------------- */
