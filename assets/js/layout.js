@@ -2023,7 +2023,7 @@
     var statuses = [["ISSUED", "Unpaid"], ["PARTIAL", "Partial"], ["PAID", "Paid"], ["VOID", "Void"]];
     var opt = function (arr, sel) { return arr.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === sel ? " selected" : "") + ">" + esc(o[1]) + "</option>"; }).join(""); };
     host.innerHTML =
-      '<div class="panel-head" style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><h3 style="margin:0">Invoice Management</h3><span class="muted-sm">Auto-generated on delivery · live from the database</span>' +
+      '<div class="panel-head" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><h3 style="margin:0">Invoice Management</h3><span class="muted-sm">Auto-generated on delivery · live from the database</span>' +
         '<div style="margin-left:auto;display:flex;gap:4px"><button class="btn btn-primary sm" id="b2i-tab-inv">Invoices</button><button class="btn btn-ghost sm" id="b2i-tab-out">Outstanding</button></div></div>' +
       '<div id="b2i-summary" class="dl-an-kpis" style="margin-bottom:12px"></div>' +
       '<div class="panel" style="margin-bottom:12px"><div class="panel-pad" style="display:flex;flex-direction:column;gap:8px">' +
@@ -2096,7 +2096,7 @@
     var bases = [["payment", "Payment date"], ["issued", "Invoice date"], ["delivery", "Delivery date"], ["cleared", "Outstanding cleared date"], ["created", "Outstanding created date"]];
     var statuses = [["", "All owing"], ["overdue", "Overdue only"], ["cleared", "Fully paid"]];
     host.innerHTML =
-      '<div class="panel-head" style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><h3 style="margin:0">Outstanding Ledger</h3><span class="muted-sm">Payment-ledger truth · outstanding as of any date, never hides old balances</span>' +
+      '<div class="panel-head" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><h3 style="margin:0">Outstanding Ledger</h3><span class="muted-sm">Payment-ledger truth · outstanding as of any date, never hides old balances</span>' +
         '<div style="margin-left:auto;display:flex;gap:4px"><button class="btn btn-ghost sm" id="b2o-tab-inv">Invoices</button><button class="btn btn-primary sm" id="b2o-tab-out">Outstanding</button></div></div>' +
       '<div id="b2o-summary" class="dl-an-kpis" style="margin-bottom:10px"></div>' +
       '<div id="b2o-aging" class="dl-an-kpis" style="margin-bottom:12px"></div>' +

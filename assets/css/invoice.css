@@ -8,7 +8,7 @@
 
 /* actions */
 .inv-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-bottom: 14px; }
-.inv-bizpick { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.inv-bizpick { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
 .inv-bizpick .input { width: auto; }
 
 /* document card */
