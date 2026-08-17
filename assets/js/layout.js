@@ -8388,12 +8388,12 @@
         '<label class="dac-f"><span>Month (IST)</span><input class="input" id="pc-month" type="month" value="' + month + '" style="max-width:150px"></label>' +
         '<button class="btn btn-ghost sm" id="pc-resettle" title="Recompute the selected day\'s milk COGS from its delivered orders (reverses stale draws)">↻ Re-settle this day</button>' +
       "</div>" +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px" id="pc-cards">' +
+      '<div class="grid-2-collapse" style="gap:14px" id="pc-cards">' +
         pnlCard("Daily P&L — " + esc(milkDate(p.daily.from)), p.daily) +
         pnlCard("Monthly P&L — " + esc(p.monthly.label), p.monthly) +
       "</div>" +
       '<div class="panel" style="margin-top:14px"><div class="panel-head"><h3>⚙ Seasonal rates</h3><span class="muted-sm">Super Admin only</span></div><div class="panel-pad">' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+        '<div class="grid-2-collapse" style="gap:10px">' +
           '<label class="dac-f"><span>Conversion factor (KG → litres divisor)</span><input class="input" id="pc-conv" type="number" step="0.001" value="' + _milkCfg.conversionFactor + '"></label>' +
           '<label class="dac-f"><span>Maintenance charge (₹ / litre)</span><input class="input" id="pc-milk" type="number" step="0.01" value="' + (_milkCfg.milkRatePaise / 100) + '"></label>' +
           '<label class="dac-f"><span>FAT rate (₹ / kg-fat)</span><input class="input" id="pc-fat" type="number" step="0.01" value="' + (_milkCfg.fatRatePaise / 100) + '"></label>' +

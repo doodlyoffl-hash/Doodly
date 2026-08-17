@@ -640,6 +640,12 @@ table.tbl td .strong { color:var(--forest); font-weight:700; }
 .cms-body .table-wrap { overflow-x:auto; }
 .cms-body .input { padding:.45rem .6rem; }
 .cms-foot { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:16px 24px; border-top:1px solid var(--line); background:var(--surface-2); }
+
+/* 2-column grid that keeps 2 columns on desktop but collapses to ONE on phones —
+   stops fixed 1fr-1fr grids (whose children have large min-widths, e.g. number
+   inputs or chart panels) from clipping off the right edge on mobile. */
+.grid-2-collapse { display:grid; grid-template-columns:1fr 1fr; }
+@media (max-width:560px){ .grid-2-collapse { grid-template-columns:1fr; } }
 .cms-toast { position:fixed; left:50%; bottom:28px; transform:translate(-50%,20px); background:var(--forest); color:#fff; padding:13px 20px; border-radius:14px; box-shadow:var(--shadow-lg); z-index:400; opacity:0; transition:opacity .3s, transform .3s; font-size:.92rem; }
 [data-theme="dark"] .cms-toast { background:var(--leaf); color:#06140d; }
 .cms-toast.show { opacity:1; transform:translate(-50%,0); }
