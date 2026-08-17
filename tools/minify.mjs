@@ -58,6 +58,10 @@ if (failed.length) console.log("  ⚠ JS passed through un-minified (kept workin
 
 // ---- CSS (clean-css level 1 only: whitespace/comments — no structural merging that could shift the cascade) ----
 if (CleanCSS) {
+  // Level 1 only (whitespace/comments). Level 2 (structural merge/restructure) was tried
+  // and gave only ~1KB more (402→401KB total) — because each file is minified in isolation
+  // and the CSS is already well-structured, so there's nothing to merge — while adding
+  // within-file cascade risk. Not worth it; staying on the safe level 1.
   const cleaner = new CleanCSS({ level: 1, returnPromise: false });
   const cssFiles = (await readdir(cssDir)).filter((f) => f.endsWith(".css") && !f.endsWith(".min.css"));
   let cb = 0, ca = 0, cc = 0, cfail = [];
