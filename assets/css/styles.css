@@ -433,6 +433,15 @@ section { padding-block: clamp(56px, 8vw, 110px); }
   .footer .socials { justify-content: center; }
 }
 
+/* On the narrowest phones the nav cluster (logo + Story pill + icon buttons)
+   fills the row and the last icon jams against — or clips past — the edge.
+   Give it breathing room by trimming the gutter and inter-item gaps only;
+   icon buttons keep their 30px touch target and no nav item is dropped. */
+@media (max-width: 360px) {
+  .nav .wrap { padding-left: 12px; padding-right: 12px; gap: 8px; }
+  .nav-right { gap: 4px; }
+}
+
 /* ---------- Reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
