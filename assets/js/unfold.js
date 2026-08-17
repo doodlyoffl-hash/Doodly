@@ -63,7 +63,7 @@ window.DOODLY_UNFOLD = (function () {
     var p = (window.DOODLY && (window.DOODLY.products || window.DOODLY.catalogue)) || null;
     if (Array.isArray(p) && p.length) return p.map(function (x) { return { slug: x.slug || x.id, name: x.name, status: x.status || (x.availability && x.availability.status), image: (x.image || (x.images && x.images[0]) || ""), emoji: x.emoji }; });
     return [
-      { slug: "milk", name: "A2 Buffalo Milk", status: "AVAILABLE", emoji: "🥛", image: "/assets/img/products/milk-bottle.png" },
+      { slug: "milk", name: "A2 Buffalo Milk", status: "AVAILABLE", emoji: "🥛", image: "/assets/img/products/milk-bottle.webp" },
       { slug: "curd", name: "Buffalo Pot Curd", status: "COMING_SOON", emoji: "🍶" },
       { slug: "paneer", name: "Malai Paneer", status: "COMING_SOON", emoji: "🧀" },
       { slug: "ghee", name: "Buffalo Ghee", status: "COMING_SOON", emoji: "🫙" },
@@ -133,7 +133,7 @@ window.DOODLY_UNFOLD = (function () {
         '<p class="unf-hsub">' + esc(c.heroSub) + '</p>' +
         '<div class="unf-hcta"><button class="btn btn-primary" data-go="market-reality">Begin the story ↓</button><a class="btn btn-ghost" href="/subscriptions.html">Order Now</a></div>' +
       '</div>' +
-      '<div class="unf-bottle" aria-hidden="true"><img src="/assets/img/products/milk-bottle.png" alt="" onerror="this.style.display=\'none\'"></div>' +
+      '<div class="unf-bottle" aria-hidden="true"><img src="/assets/img/products/milk-bottle.webp" alt="" onerror="this.style.display=\'none\'"></div>' +
       '<div class="unf-wave" aria-hidden="true"><svg viewBox="0 0 1440 120" preserveAspectRatio="none"><path d="M0 60 C 180 20 360 100 720 60 S 1260 20 1440 60 L1440 120 L0 120 Z" fill="var(--milk)" opacity=".7"/><path d="M0 80 C 220 40 420 110 720 80 S 1300 50 1440 80 L1440 120 L0 120 Z" fill="var(--milk)"/></svg></div>' +
     '</header>';
   }

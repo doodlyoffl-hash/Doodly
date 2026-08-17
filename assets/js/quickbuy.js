@@ -12,7 +12,7 @@ window.DOODLY_QUICKBUY = (function () {
   const B = () => window.DOODLY_BLOCKS;
   const icon = (n, s) => (B() ? B().icon(n, s) : "");
   const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
-  const IMG = "/assets/img/products/milk-bottle.png";
+  const IMG = "/assets/img/products/milk-bottle.webp";
 
   function trial() {
     return (D().variants || []).find((v) => v.type === "trial")

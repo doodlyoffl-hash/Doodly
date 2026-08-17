@@ -1,3 +1,19 @@
+/* WebP image fallback — if a .webp fails to load (the ~1% of browsers without WebP
+   support), swap it to its original .png/.jpg (kept on disk). Capture-phase, one place. */
+(function () {
+  document.addEventListener("error", function (e) {
+    var img = e.target;
+    if (!img || img.tagName !== "IMG") return;
+    var src = img.getAttribute("src") || "";
+    if (!/\.webp(\?|#|$)/i.test(src)) return;
+    var tried = img.getAttribute("data-wf") || "";
+    if (tried === "jpg") return;                       // tried both, give up
+    var ext = tried === "png" ? "jpg" : "png";
+    img.setAttribute("data-wf", ext);
+    img.setAttribute("src", src.replace(/\.webp(\?|#|$)/i, "." + ext + "$1"));
+  }, true);
+})();
+
 /* =============================================================
    DOODLY — Catalogue & Pricing Configuration  (the "CMS")
    -------------------------------------------------------------
@@ -162,12 +178,12 @@ window.DOODLY = {
       // demo rating REMOVED — PDP stars are live from /api/reviews/public?productSlug=
       // (approved verified customer ratings only; hydrated by reviews.js)
 
-      image: "/assets/img/products/milk-bottle.png",
+      image: "/assets/img/products/milk-bottle.webp",
       gallery: [
-        "/assets/img/products/milk-bottle.png",
-        "/assets/img/products/milk-lifestyle.jpg",
-        "/assets/img/products/milk-splash.jpg",
-        "/assets/img/products/farm-story.jpg",
+        "/assets/img/products/milk-bottle.webp",
+        "/assets/img/products/milk-lifestyle.webp",
+        "/assets/img/products/milk-splash.webp",
+        "/assets/img/products/farm-story.webp",
       ],
 
       // PRICING (₹) — nothing hardcoded in the UI
