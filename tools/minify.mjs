@@ -56,30 +56,26 @@ for (const f of files) {
 console.log(`DOODLY minify JS  — ${count} files: ${(before/1024).toFixed(0)} KB → ${(after/1024).toFixed(0)} KB (-${(100*(1-after/before)).toFixed(0)}%)`);
 if (failed.length) console.log("  ⚠ JS passed through un-minified (kept working):\n   " + failed.join("\n   "));
 
-// ---- CSS (clean-css level 1 only: whitespace/comments — no structural merging that could shift the cascade) ----
+// ---- CSS bundle: concatenate all stylesheets (in cascade order) into ONE minified file ----
+// Pages now load a single /assets/css/bundle.min.css instead of ~37 <link>s → far fewer
+// requests. Level 1 (whitespace/comments) only — concatenation preserves the exact cascade
+// order, so no rule can change precedence. datepicker.css is NOT bundled (runtime-injected).
 if (CleanCSS) {
-  // Level 1 only (whitespace/comments). Level 2 (structural merge/restructure) was tried
-  // and gave only ~1KB more (402→401KB total) — because each file is minified in isolation
-  // and the CSS is already well-structured, so there's nothing to merge — while adding
-  // within-file cascade risk. Not worth it; staying on the safe level 1.
   const cleaner = new CleanCSS({ level: 1, returnPromise: false });
-  const cssFiles = (await readdir(cssDir)).filter((f) => f.endsWith(".css") && !f.endsWith(".min.css"));
-  let cb = 0, ca = 0, cc = 0, cfail = [];
-  for (const f of cssFiles) {
-    const code = await readFile(join(cssDir, f), "utf8");
-    const out = join(cssDir, f.replace(/\.css$/, ".min.css"));
-    try {
-      const r = cleaner.minify(code);
-      if (r.errors && r.errors.length) throw new Error(r.errors[0]);
-      if (!r.styles) throw new Error("empty output");
-      await writeFile(out, r.styles, "utf8");
-      cb += code.length; ca += r.styles.length; cc++;
-    } catch (e) {
-      await writeFile(out, code, "utf8");   // fallback: verbatim so the referenced .min.css always works
-      cfail.push(f + " (" + (e.message || e) + ")");
-      cb += code.length; ca += code.length; cc++;
-    }
+  // MUST match the order the pages loaded stylesheets in (cascade order).
+  const CSS_ORDER = ["styles","type","app","motion","auth","login","cart","checkout","schedule","pincode","autopay","maps","delivery","rbac","rbac-admin","audit","expenses","unfold","wallet","b2b","b2b-pricing","dashboard","late","assistant","customer","liveorder","help","tour","search","assign","marquee","datatable","gst","referral","invoice","puzzle","loyalty"];
+  let raw = "", missing = [];
+  for (const name of CSS_ORDER) {
+    try { raw += `/*! ${name} */\n` + await readFile(join(cssDir, name + ".css"), "utf8") + "\n"; }
+    catch { missing.push(name); }
   }
-  console.log(`DOODLY minify CSS — ${cc} files: ${(cb/1024).toFixed(0)} KB → ${(ca/1024).toFixed(0)} KB (-${(100*(1-ca/cb)).toFixed(0)}%)`);
-  if (cfail.length) console.log("  ⚠ CSS passed through un-minified (kept working):\n   " + cfail.join("\n   "));
+  let out = raw;
+  try {
+    const r = cleaner.minify(raw);
+    if (r.errors && r.errors.length) throw new Error(r.errors[0]);
+    if (r.styles) out = r.styles;
+  } catch (e) { console.log("  ⚠ CSS bundle minify failed — using concatenated (un-minified): " + (e.message || e)); }
+  await writeFile(join(cssDir, "bundle.min.css"), out, "utf8");
+  console.log(`DOODLY bundle CSS — ${CSS_ORDER.length - missing.length} files → bundle.min.css: ${(raw.length/1024).toFixed(0)} KB → ${(out.length/1024).toFixed(0)} KB`);
+  if (missing.length) console.log("  ⚠ missing from bundle: " + missing.join(", "));
 }
