@@ -1860,7 +1860,7 @@
         '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
           '<span class="muted-sm">Sort:</span><select class="input" id="b2f-sort" style="max-width:180px">' + opt([["newest", "Newest first"], ["oldest", "Oldest first"], ["delivery_desc", "Delivery date ↓"], ["delivery_asc", "Delivery date ↑"], ["business_asc", "Business A→Z"], ["business_desc", "Business Z→A"], ["value_desc", "Value ↓"], ["value_asc", "Value ↑"], ["revenue_desc", "Revenue ↓"], ["invoice_desc", "Invoice # ↓"]], s.sort) + "</select>" +
           '<span class="muted-sm">Rows:</span><select class="input" id="b2f-size" style="max-width:80px">' + opt([["10", "10"], ["25", "25"], ["50", "50"], ["100", "100"]], String(s.pageSize)) + "</select>" +
-          '<div style="margin-left:auto;display:flex;gap:6px"><button class="btn btn-ghost sm" id="b2f-view">👁 View</button><button class="btn btn-ghost sm" id="b2f-pdf">⬇ PDF</button><button class="btn btn-ghost sm" id="b2f-xls">Excel</button><button class="btn btn-ghost sm" id="b2f-csv">CSV</button><button class="btn btn-ghost sm" id="b2f-print">🖨 Print</button><button class="btn btn-primary sm" id="b2f-new">+ New order</button></div>' +
+          '<div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost sm" id="b2f-view">👁 View</button><button class="btn btn-ghost sm" id="b2f-pdf">⬇ PDF</button><button class="btn btn-ghost sm" id="b2f-xls">Excel</button><button class="btn btn-ghost sm" id="b2f-csv">CSV</button><button class="btn btn-ghost sm" id="b2f-print">🖨 Print</button><button class="btn btn-primary sm" id="b2f-new">+ New order</button></div>' +
         "</div>" +
       "</div></div>" +
       '<div id="b2b-body"><p class="muted-sm">Loading…</p></div>';
@@ -2045,7 +2045,7 @@
         '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
           '<span class="muted-sm">Sort:</span><select class="input" id="b2i-sort" style="max-width:160px">' + opt([["newest", "Newest first"], ["oldest", "Oldest first"], ["amount_desc", "Amount ↓"], ["amount_asc", "Amount ↑"], ["business", "Business A→Z"], ["due", "Due date"]], s.sort) + "</select>" +
           '<span class="muted-sm">Rows:</span><select class="input" id="b2i-size" style="max-width:80px">' + opt([["10", "10"], ["25", "25"], ["50", "50"], ["100", "100"]], String(s.pageSize)) + "</select>" +
-          '<div style="margin-left:auto;display:flex;gap:6px"><button class="btn btn-ghost sm" id="b2i-view-all">👁 View</button><button class="btn btn-ghost sm" id="b2i-pdf-all">⬇ PDF</button><button class="btn btn-ghost sm" id="b2i-xls-all">Excel</button><button class="btn btn-ghost sm" id="b2i-csv-all">CSV</button><button class="btn btn-ghost sm" id="b2i-print-all">🖨 Print</button><button class="btn btn-ghost sm" id="b2i-reports">📊 Reports</button></div>' +
+          '<div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost sm" id="b2i-view-all">👁 View</button><button class="btn btn-ghost sm" id="b2i-pdf-all">⬇ PDF</button><button class="btn btn-ghost sm" id="b2i-xls-all">Excel</button><button class="btn btn-ghost sm" id="b2i-csv-all">CSV</button><button class="btn btn-ghost sm" id="b2i-print-all">🖨 Print</button><button class="btn btn-ghost sm" id="b2i-reports">📊 Reports</button></div>' +
         "</div>" +
       "</div></div>" +
       '<div id="b2i-body"><p class="muted-sm">Loading…</p></div>';
