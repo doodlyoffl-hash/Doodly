@@ -45,11 +45,11 @@
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* fluid sizes (min, fluid, max).
-     Note: only the MAX (desktop cap) was calmed ~12% (display 68→60, section 52→46,
+     Note: only the MAX (desktop cap) was calmed (hero 68→64, section 52→46,
      H1 43→38, H2 34→30) — the min + fluid slope are unchanged, so every viewport
      below ~800px (all phones/tablets) renders byte-identically; only laptop/desktop
      headings shrink. Keeps the premium editorial feel, just less oversized on large screens. */
-  --fs-display-xl: clamp(2.5rem, 1.55rem + 4.1vw, 3.75rem);
+  --fs-display-xl: clamp(2.5rem, 1.55rem + 4.1vw, 4rem);
   --fs-display-lg: clamp(2.05rem, 1.45rem + 2.7vw, 2.875rem);
   --fs-h1: clamp(1.85rem, 1.42rem + 1.95vw, 2.4rem);
   --fs-h2: clamp(1.5rem, 1.25rem + 1.15vw, 1.9rem);
