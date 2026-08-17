@@ -61,7 +61,10 @@ if (failed.length) console.log("  ⚠ JS passed through un-minified (kept workin
 // requests. Level 1 (whitespace/comments) only — concatenation preserves the exact cascade
 // order, so no rule can change precedence. datepicker.css is NOT bundled (runtime-injected).
 if (CleanCSS) {
-  const cleaner = new CleanCSS({ level: 1, returnPromise: false });
+  // Level 2 on the single bundle = cross-file merge/dedupe (real savings, now that all CSS is
+  // one file). mergeSemantically:false keeps merges cascade-safe (no reordering that could flip
+  // precedence). Verified visually across surfaces; falls back to concat on error.
+  const cleaner = new CleanCSS({ level: { 1: {}, 2: { mergeSemantically: false, restructureRules: false } }, returnPromise: false });
   // MUST match the order the pages loaded stylesheets in (cascade order).
   const CSS_ORDER = ["styles","type","app","motion","auth","login","cart","checkout","schedule","pincode","autopay","maps","delivery","rbac","rbac-admin","audit","expenses","unfold","wallet","b2b","b2b-pricing","dashboard","late","assistant","customer","liveorder","help","tour","search","assign","marquee","datatable","gst","referral","invoice","puzzle","loyalty"];
   let raw = "", missing = [];
