@@ -140,6 +140,11 @@ function Build-HeadExtra($s) {
 # Resilient: minify.mjs exits 0 (keeping existing committed .min.js) if node/terser is absent.
 try { & node (Join-Path $Root 'tools/minify.mjs') } catch { Write-Host "  (minify skipped: $_)" -ForegroundColor Yellow }
 
+# Content-hash build id → stamped as ?v=<id> on every .min.js/.min.css URL so those
+# assets are safely immutable-long-cacheable (the URL changes only when content changes).
+$buildId = ''
+try { $buildId = (Get-Content (Join-Path $Root 'assets/build-id.txt') -Raw).Trim() } catch { }
+
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $count = 0
 $bySurface = @{}
@@ -160,6 +165,7 @@ foreach ($m in $rx.Matches($manifest)) {
 
   $adminBlock = if ($adminSurfaces -contains $surface) { $adminScripts + "`n" } else { '' }
   $html = $template.Replace('{{ROUTE}}', $route).Replace('{{TITLE}}', $title).Replace('{{DESC}}', $desc).Replace('{{HEAD_EXTRA}}', $headExtra).Replace('{{ADMIN_SCRIPTS}}', $adminBlock)
+  if ($buildId) { $html = $html.Replace('.min.js"', ".min.js?v=$buildId`"").Replace('.min.css"', ".min.css?v=$buildId`"") }
   [System.IO.File]::WriteAllText($path, $html, $utf8)
   $count++
   if (-not $bySurface.ContainsKey($surface)) { $bySurface[$surface] = 0 }

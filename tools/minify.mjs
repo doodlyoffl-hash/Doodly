@@ -15,6 +15,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const jsDir = join(root, "assets", "js");
@@ -82,3 +83,15 @@ if (CleanCSS) {
   console.log(`DOODLY bundle CSS — ${CSS_ORDER.length - missing.length} files → bundle.min.css: ${(raw.length/1024).toFixed(0)} KB → ${(out.length/1024).toFixed(0)} KB`);
   if (missing.length) console.log("  ⚠ missing from bundle: " + missing.join(", "));
 }
+
+// ---- Build id: deterministic content hash of the minified JS + CSS bundle.
+// generate.ps1 stamps it as ?v=<id> on every .min.js/.min.css URL so those assets
+// can be immutably long-cached SAFELY — the URL changes only when content changes.
+try {
+  const h = createHash("sha256");
+  for (const f of (await readdir(jsDir)).filter((x) => x.endsWith(".min.js")).sort()) h.update(await readFile(join(jsDir, f)));
+  try { h.update(await readFile(join(cssDir, "bundle.min.css"))); } catch {}
+  const id = h.digest("hex").slice(0, 12);
+  await writeFile(join(root, "assets", "build-id.txt"), id, "utf8");
+  console.log(`DOODLY build id: ${id}`);
+} catch (e) { console.log("  ⚠ build-id skipped: " + (e.message || e)); }
