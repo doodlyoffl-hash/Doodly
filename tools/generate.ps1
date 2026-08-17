@@ -82,10 +82,7 @@ $template = @'
   <script src="/assets/js/pincode.js"></script>
   <script src="/assets/js/autopay.js"></script>
   <script src="/assets/js/maps.js"></script>
-  <script src="/assets/js/delivery.js"></script>
   <script src="/assets/js/rbac.js"></script>
-  <script src="/assets/js/rbac-admin.js"></script>
-  <script src="/assets/js/audit.js"></script>
   <script src="/assets/js/mockdata.js"></script>
   <script src="/assets/js/blocks.js"></script>
   <script src="/assets/js/datatable.js"></script>
@@ -97,36 +94,46 @@ $template = @'
   <script src="/assets/js/cart.js"></script>
   <script src="/assets/js/checkout.js"></script>
   <script src="/assets/js/auth.js"></script>
-  <script src="/assets/js/admin-cms.js"></script>
-  <script src="/assets/js/expenses.js"></script>
   <script src="/assets/js/qr.js"></script>
   <script src="/assets/js/unfold.js"></script>
   <script src="/assets/js/wallet.js"></script>
   <script src="/assets/js/referral.js"></script>
   <script src="/assets/js/invoice.js"></script>
-  <script src="/assets/js/b2b.js"></script>
-  <script src="/assets/js/b2b-pricing.js"></script>
-  <script src="/assets/js/dashboard.js"></script>
-  <script src="/assets/js/late.js"></script>
-  <script src="/assets/js/employees.js"></script>
   <script src="/assets/js/assistant.js"></script>
   <script src="/assets/js/customer.js"></script>
   <script src="/assets/js/liveorder.js"></script>
   <script src="/assets/js/help.js"></script>
   <script src="/assets/js/tour.js"></script>
   <script src="/assets/js/search.js"></script>
-  <script src="/assets/js/assign.js"></script>
-  <script src="/assets/js/gst.js"></script>
   <script src="/assets/js/puzzle.js"></script>
   <script src="/assets/js/loyalty.js"></script>
   <script src="/assets/js/reviews.js"></script>
   <script src="/assets/js/rewards.js"></script>
-  <script src="/assets/js/rewards-admin.js"></script>
   <script src="/assets/js/account.js"></script>
-  <script src="/assets/js/layout.js"></script>
+{{ADMIN_SCRIPTS}}  <script src="/assets/js/layout.js"></script>
 </body>
 </html>
 '@
+
+# Back-office-only scripts (~550KB). Emitted ONLY on admin/driver/delivery pages —
+# the storefront (public/account/auth) never uses these, so shoppers stop downloading
+# them. Each self-gates to /admin/ or /driver/ (or has no customer route), verified.
+$adminScripts = @'
+  <script src="/assets/js/delivery.js"></script>
+  <script src="/assets/js/rbac-admin.js"></script>
+  <script src="/assets/js/audit.js"></script>
+  <script src="/assets/js/admin-cms.js"></script>
+  <script src="/assets/js/expenses.js"></script>
+  <script src="/assets/js/b2b.js"></script>
+  <script src="/assets/js/b2b-pricing.js"></script>
+  <script src="/assets/js/dashboard.js"></script>
+  <script src="/assets/js/late.js"></script>
+  <script src="/assets/js/employees.js"></script>
+  <script src="/assets/js/assign.js"></script>
+  <script src="/assets/js/gst.js"></script>
+  <script src="/assets/js/rewards-admin.js"></script>
+'@
+$adminSurfaces = @('admin', 'driver', 'delivery')
 
 # Default meta description (unchanged pages keep this byte-for-byte).
 $defaultDesc = 'DOODLY — fresh A2 buffalo milk, delivered daily in glass bottles.'
@@ -182,7 +189,8 @@ foreach ($m in $rx.Matches($manifest)) {
   if ($noindexRoutes -contains $route) { $headExtra = "`n  <meta name=""robots"" content=""noindex, nofollow"">" }
   elseif ($seo.ContainsKey($route)) { $desc = $seo[$route].desc; $headExtra = Build-HeadExtra $seo[$route] }
 
-  $html = $template.Replace('{{ROUTE}}', $route).Replace('{{TITLE}}', $title).Replace('{{DESC}}', $desc).Replace('{{HEAD_EXTRA}}', $headExtra)
+  $adminBlock = if ($adminSurfaces -contains $surface) { $adminScripts + "`n" } else { '' }
+  $html = $template.Replace('{{ROUTE}}', $route).Replace('{{TITLE}}', $title).Replace('{{DESC}}', $desc).Replace('{{HEAD_EXTRA}}', $headExtra).Replace('{{ADMIN_SCRIPTS}}', $adminBlock)
   [System.IO.File]::WriteAllText($path, $html, $utf8)
   $count++
   if (-not $bySurface.ContainsKey($surface)) { $bySurface[$surface] = 0 }
