@@ -149,3 +149,15 @@
   .wal-hero-glow, .wal-rupee, .wal-loader span, .wal-coin, .wal-suc-badge { animation: none !important; }
   .wal-coin { display: none; } .wal-bar, .wal-brk-bar span, .wal-add, .wal-qa, .wal-preset { transition: none !important; }
 }
+
+/* =============================================================
+   MOBILE ONLY (<=560px) — clamp the wallet grid to the viewport.
+   `.wal` has no explicit columns, so its implicit `auto` track is
+   blown out to ~599px by a wide grid item's intrinsic min-content
+   (the history table's default min-width:auto). minmax(0,1fr) caps
+   the track to the container; the table scrolls in its own wrap.
+   Desktop (>=561px) never sees this rule → byte-identical.
+   ============================================================= */
+@media (max-width: 560px){
+  .wal { grid-template-columns: minmax(0, 1fr); }
+}
