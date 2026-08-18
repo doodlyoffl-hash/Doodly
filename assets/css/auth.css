@@ -120,14 +120,18 @@
 
 /* floating-label fields */
 .fl-field { position:relative; margin-bottom:15px; }
-.fl-field .fl-ic { position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--ink-3);
+/* Icon in REM (was px) so its clearance stays a constant ratio to the input's
+   rem padding-left — a px icon + rem padding drift apart when the effective rem
+   shrinks (smaller browser default font, zoom rounding) and the icon lands on
+   the typed text. Keep .fl-ic size ~= (padding-left − ~0.85rem). */
+.fl-field .fl-ic { position:absolute; left:0.85rem; top:50%; transform:translateY(-50%); color:var(--ink-3);
   display:grid; place-items:center; pointer-events:none; transition:color .2s; }
-.fl-field .fl-ic svg { width:18px; height:18px; }
-.fl-field input { width:100%; padding:1.15rem .9rem .5rem 2.5rem; border-radius:14px;
+.fl-field .fl-ic svg { width:1.15rem; height:1.15rem; }
+.fl-field input { width:100%; padding:1.15rem .9rem .5rem 2.85rem; border-radius:14px;
   border:1px solid var(--line); background:var(--surface); color:var(--forest); font:inherit; font-size:.96rem;
   transition:border-color .22s, box-shadow .22s, background .22s; }
 .fl-field input::placeholder { color:transparent; }
-.fl-field label { position:absolute; left:2.5rem; top:50%; transform:translateY(-50%); transform-origin:left center;
+.fl-field label { position:absolute; left:2.85rem; top:50%; transform:translateY(-50%); transform-origin:left center;
   color:var(--ink-3); font-size:.95rem; pointer-events:none; transition:transform .18s cubic-bezier(.2,.8,.2,1), color .18s; }
 .fl-field input:focus + label,
 .fl-field input:not(:placeholder-shown) + label { transform:translateY(calc(-50% - 1.1rem)) scale(.74); color:var(--leaf-600); font-weight:700; }
