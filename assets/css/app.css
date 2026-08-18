@@ -8,7 +8,7 @@
 
 /* ---------- Page header (every inner page) ---------- */
 .page-head { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-end; justify-content: space-between; margin-bottom: 28px; }
-.page-head .ph-title { font-family: "Fraunces", serif; font-weight: 600; letter-spacing: -.02em; color: var(--forest); font-size: clamp(1.7rem, 3.4vw, 2.4rem); line-height: 1.05; }
+.page-head .ph-title { font-family: "Fraunces", serif; font-weight: 600; letter-spacing: -.02em; color: var(--forest); font-size: var(--fs-h1); line-height: 1.05; }
 .page-head .ph-sub { color: var(--ink-2); margin-top: 8px; max-width: 60ch; }
 .page-head .ph-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 
