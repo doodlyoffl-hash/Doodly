@@ -75,7 +75,7 @@
 @keyframes navVan { 0% { left: 6%; opacity: 0; } 5% { opacity: .5; } 48% { left: 90%; opacity: .5; } 54% { opacity: 0; } 100% { left: 90%; opacity: 0; } }
 
 /* logo: gentle float + light reflection + hover scale */
-.nav .logo { position: relative; overflow: hidden; flex-shrink: 0; animation: floaty 6s ease-in-out 1.2s infinite; }
+.nav .logo { position: relative; overflow: hidden; flex-shrink: 0; } /* logo sits STILL — floaty bob removed per user request */
 .nav .logo-img, .nav-right { flex-shrink: 0; }   /* logo + actions never collapse, at any width */
 .nav .logo-img { transition: transform .3s cubic-bezier(.2,.8,.2,1), height .3s ease; }
 .nav .logo:hover .logo-img { transform: scale(1.06); }
@@ -359,7 +359,7 @@
 
 /* footer logo: float + light reflection sweep */
 .foot-logo { position: relative; display: inline-block; overflow: hidden; border-radius: 8px; }
-.foot-logo .logo-img { animation: logoIn .7s cubic-bezier(.2,.8,.2,1) both, floaty 5s ease-in-out 1s infinite; }
+.foot-logo .logo-img { animation: logoIn .7s cubic-bezier(.2,.8,.2,1) both; } /* one-time entrance only — floaty bob removed */
 .foot-logo::after { content: ""; position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(115deg, transparent 40%, rgba(255,255,255,.7) 50%, transparent 60%);
   transform: translateX(-160%); animation: fsLogoSheen 6s ease-in-out 1.5s infinite; }
