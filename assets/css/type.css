@@ -231,12 +231,12 @@ footer, .footer, .footer-bottom, .foot-col a { font-family: var(--font-body); }
    system consistent, so sticky/fixed positioning, dropdowns, modals and Google
    Maps clicks/pin-drops stay aligned; and media-query breakpoints evaluate on
    the UNZOOMED viewport, so responsiveness is fully preserved (verified at 320–
-   1920px). Set to 0.80 (user-requested tighter density); body/inputs sit near
-   the low end of the readable range at this value — dial back toward 0.85 if
-   any text reads too small. To change it: edit this one value. (Firefox <126
-   ignores zoom → renders at 100%, a graceful no-op.)
-   ============================================================= */
-body { zoom: 0.80; }
+   1920px). SPLIT by surface: the customer-facing storefront (public / account /
+   auth) sits at 0.90 — a bit larger for a premium marketing feel — while the
+   data-dense back-office (admin / driver / delivery) is tightened to 0.80 in the
+   block below (denser = better for a dashboard). To change either: edit the one
+   value on its rule. (Firefox <126 ignores zoom → renders at 100%, a no-op.) */
+body { zoom: 0.90; }
 
 /* =============================================================
    Back-office density — admin / driver / delivery surfaces.
@@ -251,6 +251,7 @@ body { zoom: 0.80; }
 body[data-route^="admin/"],
 body[data-route^="driver/"],
 body[data-route^="delivery/"] {
+  zoom: 0.80;                 /* tighter than the 0.90 storefront base (denser dashboard) */
   --fs-display-xl: 2rem;      /* 32px  (storefront up to 64) */
   --fs-display-lg: 1.75rem;   /* 28px  (up to 46) */
   --fs-h1: 1.625rem;          /* 26px  page titles (was up to 38) */
