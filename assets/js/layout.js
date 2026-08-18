@@ -333,7 +333,10 @@
       const t = (f.type || "").toLowerCase(), l = (f.label || "").toLowerCase();
       if (t === "password") return icon("lock", 18);
       if (t === "email" || /email/.test(l)) return icon("mail", 18);
-      return icon("phone", 18);
+      if (/referr|promo|coupon|voucher/.test(l)) return icon("gift", 18);
+      if (t === "tel" || /phone|mobile|whatsapp/.test(l)) return icon("phone", 18);
+      if (/name/.test(l)) return icon("user", 18);
+      return icon("user", 18);   // neutral default (was phone — which mislabeled name/referral fields)
     };
     const checkSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12 5 5L20 6"/></svg>`;
     const eyeSvg = icon("eye", 18);
