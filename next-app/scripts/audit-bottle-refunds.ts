@@ -55,6 +55,29 @@ async function main() {
   });
   badState.forEach((b) => anomalies.push(`REFUNDED-STATE-NO-COLLECTION: pickup ${b.id}`));
 
+  // ---- ORIGIN TRACE: classify every DEPOSIT_REFUNDED row (real customer vs test residue) ----
+  const refUserIds = [...new Set(refundLedger.map((l) => l.userId))];
+  const refUsers = await db.user.findMany({ where: { id: { in: refUserIds } }, select: { id: true, name: true, email: true, role: true, createdAt: true } });
+  const uMap = new Map(refUsers.map((u) => [u.id, u]));
+  const pickups = await db.bottlePickupRequest.findMany({ where: { userId: { in: refUserIds } }, select: { userId: true, status: true } });
+  const isTest = (u?: { name?: string | null; email?: string | null }) =>
+    !!u && (/^PICKUP-E2E/i.test(u.name || "") || /@doodly\.test$/i.test(u.email || "") || /^pickup-e2e/i.test(u.email || ""));
+  const trace: string[] = [];
+  let testResidue = 0;
+  for (const l of refundLedger) {
+    const u = uMap.get(l.userId);
+    const test = isTest(u);
+    const viaPickup = /pickup:|Bottle-return pickup/i.test(l.note || "");
+    const hasPickup = pickups.some((p) => p.userId === l.userId);
+    const origin = !u ? "ORPHAN (user deleted)"
+      : test ? "E2E TEST RESIDUE (delete-safe: test user)"
+      : viaPickup ? (hasPickup ? "pickup flow — real customer" : "pickup flow — request since removed")
+      : "manual/admin or legacy";
+    if (test || !u) testResidue++;
+    const who = test ? `TEST[${(u?.name || "").slice(0, 22)}]` : (u ? `customer ${l.userId.slice(0, 8)}…` : `deleted ${l.userId.slice(0, 8)}…`);
+    trace.push(`  • ${who} · ₹${l.amountPaise / 100} · qty ${l.qty} · ${l.createdAt.toISOString().slice(0, 10)} · role ${u?.role || "?"} · note ${JSON.stringify((l.note || "").slice(0, 42))}\n      → ORIGIN: ${origin}`);
+  }
+
   // ---- summary ----
   const byStatus = await db.bottlePickupRequest.groupBy({ by: ["status"], _count: { _all: true } });
   const totalRefunded = refunded.reduce((a, r) => a + r.refundedPaise, 0);
@@ -64,6 +87,11 @@ async function main() {
   console.log("Pickup requests by status:", byStatus.map((s) => `${s.status}=${s._count._all}`).join("  "));
   console.log(`Refunded pickups: ${refunded.length}  |  bottles collected (refunded set): ${totalCollected}  |  total refunded: ${inr(totalRefunded)}`);
   console.log(`DEPOSIT_REFUNDED ledger rows: ${refundLedger.length}  |  customers refunded: ${refundedByUser.size}`);
+  if (trace.length) {
+    console.log("\nOrigin of each DEPOSIT_REFUNDED row:");
+    trace.forEach((t) => console.log(t));
+    if (testResidue) console.log(`\n  ⚠ ${testResidue} row(s) are E2E test-residue/orphan (test users, not real-customer refunds) — safe to purge via an approved cleanup, not this read-only audit.`);
+  }
   if (anomalies.length === 0) {
     console.log("\n✅ CLEAN — every refund maps to an actual collection; no over-refunds, no refunds exceeding deposits, no refund-without-collection.");
   } else {
