@@ -222,21 +222,22 @@ footer, .footer, .footer-bottom, .foot-col a { font-family: var(--font-body); }
 }
 
 /* =============================================================
-   GLOBAL UI SCALE — render the whole application at ~85% ("approximately 80%")
-   for a compact, professional/ERP density on desktop AND mobile. This is the
-   ONE lever that scales EVERYTHING uniformly — token typography, the ~1000
-   hard-coded px font-sizes, AND all px spacing/padding — which is why per-token
-   fixes alone couldn't fully calm the size.
-   Uses `zoom` (NOT transform:scale) on purpose: `zoom` keeps the coordinate
-   system consistent, so sticky/fixed positioning, dropdowns, modals and Google
-   Maps clicks/pin-drops stay aligned; and media-query breakpoints evaluate on
-   the UNZOOMED viewport, so responsiveness is fully preserved (verified at 320–
-   1920px). SPLIT by surface: the customer-facing storefront (public / account /
-   auth) sits at 0.90 — a bit larger for a premium marketing feel — while the
-   data-dense back-office (admin / driver / delivery) is tightened to 0.80 in the
-   block below (denser = better for a dashboard). To change either: edit the one
-   value on its rule. (Firefox <126 ignores zoom → renders at 100%, a no-op.) */
-body { zoom: 0.90; }
+   GLOBAL TYPE SCALE — a stable, jitter-free ~90% reduction of the rem-based
+   type system via the ROOT font-size.
+   ⚠️ This REPLACES an earlier `body{zoom:0.90/0.80}` global scale. Fractional
+   CSS `zoom` re-rasterizes content at sub-pixel offsets, so images/logos/cards
+   visibly SHIMMER/JITTER during scroll and transform-animations (confirmed:
+   under zoom they sat on fractional device-px positions) — the P0 "shaking"
+   report, and exactly the hazard the brief flags (no zoom / transform:scale
+   scaling hacks). Root font-size is a REAL layout change (elements are actually
+   smaller, integer-positioned) → no rasterization scaling → images stay crisp
+   and STABLE while the type is compact. Only rem scales (tokens + rem spacing);
+   hard-coded px keeps its size, so the storefront reads a touch larger than the
+   old zoom, but it is stable. Media queries are px → breakpoints unchanged. The
+   rem-consistent input-icon fixes scale proportionally → gaps preserved. Back-
+   office gets extra compaction from the density-token block below (no 2nd zoom).
+   ============================================================= */
+html { font-size: 90%; }
 
 /* =============================================================
    Back-office density — admin / driver / delivery surfaces.
@@ -251,7 +252,7 @@ body { zoom: 0.90; }
 body[data-route^="admin/"],
 body[data-route^="driver/"],
 body[data-route^="delivery/"] {
-  zoom: 0.80;                 /* tighter than the 0.90 storefront base (denser dashboard) */
+  /* denser than the storefront via smaller TOKENS (no zoom — was zoom:0.80). */
   --fs-display-xl: 2rem;      /* 32px  (storefront up to 64) */
   --fs-display-lg: 1.75rem;   /* 28px  (up to 46) */
   --fs-h1: 1.625rem;          /* 26px  page titles (was up to 38) */

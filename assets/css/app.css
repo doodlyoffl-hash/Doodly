@@ -734,7 +734,7 @@ table.tbl td .strong { color:var(--forest); font-weight:700; }
 .inner-hero p { color:var(--ink-2); margin-top:14px; max-width:60ch; font-size:1.08rem; }
 
 /* ---------- Brand logo (single source: assets/img/logo.svg) ---------- */
-.logo-img { height: 34px; width: auto; display: block; object-fit: contain; }
+.logo-img { height: 34px; width: auto; aspect-ratio: 824 / 301; display: block; object-fit: contain; } /* aspect-ratio reserves width before logo.png loads → no nav/footer jump (natural 824x301) */
 .logo-img.logo-lg { height: 54px; }
 .nav .logo-img { height: 34px; }
 .sb-brand .logo-img { height: 30px; }
@@ -757,7 +757,7 @@ table.tbl td .strong { color:var(--forest); font-weight:700; }
 .mm-inner { display:flex; flex-direction:column; gap:20px; height:100%; overflow-y:auto;
   padding:16px 22px calc(env(safe-area-inset-bottom, 0px) + 20px); }
 .mm-head { display:flex; align-items:center; justify-content:space-between; }
-.mm-logo img { height:30px; width:auto; display:block; animation:mmFloat 3.2s ease-in-out infinite; }
+.mm-logo img { height:30px; width:auto; aspect-ratio:824/301; display:block; animation:mmFloat 3.2s ease-in-out infinite; }
 .mm-close { width:42px; height:42px; border-radius:50%; display:grid; place-items:center; border:1px solid var(--line);
   background:var(--surface); color:var(--forest); cursor:pointer; transition:transform .25s, background .2s; }
 .mm-close:hover { transform:rotate(90deg); background:var(--mint-soft); }

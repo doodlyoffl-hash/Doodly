@@ -126,14 +126,14 @@
 /* ---------------- DOODLY "Story" button (header / footer) ---------------- */
 .nav-story { display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(232,184,100,.5); background: var(--gold-soft); color: var(--forest); font-weight: 800; font-size: .82rem; padding: 7px 12px; border-radius: 999px; text-decoration: none; transition: transform .2s, box-shadow .2s, border-color .2s; }
 .nav-story:hover { transform: translateY(-1px); border-color: var(--gold); box-shadow: var(--shadow-sm); }
-.nav-story .ns-logo { height: 15px; width: auto; }
+.nav-story .ns-logo { height: 15px; width: auto; aspect-ratio: 824 / 301; }
 .nav-story span { color: var(--gold); font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; }
 @media (max-width: 720px) { .nav-story span { display: none; } }
 /* scoped under .footer so it beats the generic `.footer a { display:block; padding:9px 0 }` reset (which otherwise stretches this pill to full width) */
 /* Light mode (default): the footer surface is light, so use an on-brand mint pill with forest text. */
 .footer .foot-story { display: inline-flex; align-items: center; gap: 8px; width: auto; margin-top: 14px; border: 1px solid var(--mint, #cfead8); background: var(--mint-soft, #eef6ef); color: var(--forest-700, #15533e); font-weight: 700; font-size: .82rem; padding: 9px 16px; border-radius: 999px; text-decoration: none; transition: background .2s, border-color .2s, color .2s; }
 .footer .foot-story:hover { background: #e2f2e8; border-color: var(--leaf, #1FAE66); color: var(--leaf-600, #169A57); }
-.footer .foot-story .ns-logo { height: 15px; width: auto; filter: none; }
+.footer .foot-story .ns-logo { height: 15px; width: auto; aspect-ratio: 824 / 301; filter: none; }
 /* Dark mode: the footer is dark, so switch to white text on a translucent-white pill + a white logo. */
 [data-theme="dark"] .footer .foot-story { border-color: rgba(255,255,255,.28); background: rgba(255,255,255,.08); color: #fff; }
 [data-theme="dark"] .footer .foot-story:hover { background: rgba(255,255,255,.16); border-color: var(--mint); color: #fff; }
