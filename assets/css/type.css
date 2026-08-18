@@ -222,6 +222,22 @@ footer, .footer, .footer-bottom, .foot-col a { font-family: var(--font-body); }
 }
 
 /* =============================================================
+   GLOBAL UI SCALE — render the whole application at ~85% ("approximately 80%")
+   for a compact, professional/ERP density on desktop AND mobile. This is the
+   ONE lever that scales EVERYTHING uniformly — token typography, the ~1000
+   hard-coded px font-sizes, AND all px spacing/padding — which is why per-token
+   fixes alone couldn't fully calm the size.
+   Uses `zoom` (NOT transform:scale) on purpose: `zoom` keeps the coordinate
+   system consistent, so sticky/fixed positioning, dropdowns, modals and Google
+   Maps clicks/pin-drops stay aligned; and media-query breakpoints evaluate on
+   the UNZOOMED viewport, so responsiveness is fully preserved (verified at 320–
+   1920px). Kept at 0.85 (not 0.8) so body/inputs stay above the readable floor.
+   To dial it: change this one value. (Firefox <126 ignores zoom → renders at
+   100%, a graceful no-op.)
+   ============================================================= */
+body { zoom: 0.85; }
+
+/* =============================================================
    Back-office density — admin / driver / delivery surfaces.
    The premium editorial scale above is right for the marketing storefront,
    but reads oversized in a data-dense back-office tool (page titles up to
