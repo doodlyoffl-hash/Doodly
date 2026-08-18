@@ -108,7 +108,7 @@
 .tb-search { position:relative; }
 /* ONLY the direct-child search magnifier is the absolutely-positioned left icon —
    NOT a descendant svg like the injected ⓘ help-tip (data-help="search"). */
-.tb-search > svg { position:absolute; left:.7rem; top:50%; transform:translateY(-50%); color:var(--ink-3); width:16px; height:16px; }
+.tb-search > svg { position:absolute; left:.7rem; top:50%; transform:translateY(-50%); color:var(--ink-3); width:1rem; height:1rem; } /* rem so icon can't drift into the rem padding-left */
 /* the contextual-help ⓘ injected into the search box sits at the right, clear of the text */
 .tb-search > .help-tip { position:absolute; right:.55rem; top:50%; transform:translateY(-50%); margin:0; }
 .topbar .tb-right { margin-left:auto; display:flex; align-items:center; gap:8px; }
@@ -201,7 +201,7 @@ table.tbl td .strong { color:var(--forest); font-weight:700; }
 .input, .select { padding:.6rem .85rem; border-radius:12px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font:inherit; }
 .input::placeholder { color:var(--ink-3); }
 .search-box { position:relative; }
-.search-box svg { position:absolute; left:.7rem; top:50%; transform:translateY(-50%); color:var(--ink-3); width:16px; height:16px; }
+.search-box svg { position:absolute; left:.7rem; top:50%; transform:translateY(-50%); color:var(--ink-3); width:1rem; height:1rem; } /* rem so icon can't drift into the rem padding-left */
 .search-box input { padding-left:2.2rem; width:100%; }
 
 /* pagination */

@@ -5,7 +5,9 @@
    ============================================================= */
 .mp-picker { display:block; }
 .mp-search { position:relative; margin-bottom:10px; }
-.mp-search-ic { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--ink-3); pointer-events:none; }
+/* icon geometry in rem so it can't drift into the input's rem padding-left */
+.mp-search-ic { position:absolute; left:.8rem; top:50%; transform:translateY(-50%); color:var(--ink-3); pointer-events:none; }
+.mp-search-ic svg { width:1.1rem; height:1.1rem; }
 .mp-search-i { width:100%; padding:.78rem 2.6rem .78rem 2.4rem; border-radius:13px; border:1.5px solid var(--line); background:var(--surface); color:var(--forest); font:inherit; font-size:.94rem; transition:border-color .2s, box-shadow .2s; }
 .mp-search-i:focus { outline:none; border-color:var(--leaf); box-shadow:var(--ring); }
 .mp-geo { position:absolute; right:8px; top:50%; transform:translateY(-50%); width:32px; height:32px; border-radius:9px; border:0; background:var(--mint-soft); color:var(--leaf-600); cursor:pointer; display:grid; place-items:center; }
