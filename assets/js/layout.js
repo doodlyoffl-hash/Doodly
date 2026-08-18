@@ -311,15 +311,22 @@
   // Mobile bottom tab bar — quick one-thumb access (Home / Products / Cart / Account).
   // Shown ONLY ≤560px via CSS (.mnav); desktop never renders it. The hamburger
   // slide-out still holds the full menu. Cart tab reuses the existing #cartBtn.
-  function bottomNav() {
+  function bottomNav(mode) {
     const u = publicUser();
-    const cells = [
+    const cells = (mode === "account") ? [
+      { href: "/account/dashboard.html", ic: "home", label: "Home", on: /^account\/dashboard/.test(route) || route === "account" },
+      { href: "/account/orders.html", ic: "receipt", label: "Orders", on: /^account\/orders/.test(route) },
+      { href: "/account/subscription.html", ic: "refresh", label: "Plans", on: /^account\/subscription/.test(route) },
+      { href: "/account/wallet.html", ic: "wallet", label: "Wallet", on: /^account\/wallet/.test(route) },
+      { href: "/account/profile.html", ic: "user", label: "Account", on: /^account\/(profile|settings|referrals|rewards|addresses|notifications|support|tracking|deliveries|invoices|bottles|calendar|vacation|extra-milk|my-hr|subscription-history)/.test(route) },
+    ] : [
       { href: "/", ic: "home", label: "Home", on: route === "home" },
       { href: "/products.html", ic: "box", label: "Products", on: /^products/.test(route) },
       { href: "#cart", ic: "cart", label: "Cart", cart: true },
       { href: u ? accountHome(u) : "/login.html", ic: "user", label: "Account", on: /^account/.test(route) },
-    ].map(c => `<a class="mnav-item${c.on ? " active" : ""}" href="${c.href}"${c.cart ? ' data-mnav-cart="1"' : ""} aria-label="${c.label}"><span class="mnav-ic">${icon(c.ic, 22)}</span><span class="mnav-lbl">${c.label}</span></a>`).join("");
-    return `<nav class="mnav" role="navigation" aria-label="Quick navigation">${cells}</nav>`;
+    ];
+    const html = cells.map(c => `<a class="mnav-item${c.on ? " active" : ""}" href="${c.href}"${c.cart ? ' data-mnav-cart="1"' : ""} aria-label="${c.label}"><span class="mnav-ic">${icon(c.ic, 22)}</span><span class="mnav-lbl">${c.label}</span></a>`).join("");
+    return `<nav class="mnav" role="navigation" aria-label="Quick navigation">${html}</nav>`;
   }
   function renderPublic() {
     let main = "";
@@ -552,6 +559,8 @@
           <div class="content">${guarded ? "" : breadcrumbs(surface)}${content}</div>
         </div>
       </div>`;
+    // Customer account gets the mobile bottom tab bar (≤560px via CSS); admin/driver do NOT.
+    if (surface === "account") document.body.insertAdjacentHTML("beforeend", bottomNav("account"));
     wireDashboard();
   }
 
