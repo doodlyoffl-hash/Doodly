@@ -372,9 +372,12 @@ table.tbl td .strong { color:var(--forest); font-weight:700; }
 .pstatus-ic svg { display:block; }
 .pstatus-tx { display:inline-flex; flex-direction:column; }
 .pstatus-sub { font-weight:600; font-size:.78em; opacity:.85; letter-spacing:0; }
-/* corner placement over an image stage */
-.pstatus--tl { position:absolute; top:14px; left:14px; z-index:4; }
-.pstatus--tr { position:absolute; top:14px; right:14px; z-index:4; }
+/* corner placement over an image stage — double-class so absolute positioning
+   wins over .pstatus--soon{position:relative} (same 1-class specificity, and
+   --soon is defined later); otherwise a --soon corner badge drops into flow and
+   stretches full-width instead of pinning to the corner. */
+.pstatus.pstatus--tl { position:absolute; top:14px; left:14px; z-index:4; }
+.pstatus.pstatus--tr { position:absolute; top:14px; right:14px; z-index:4; }
 
 /* tones */
 .pstatus--available { background:linear-gradient(180deg,#eafaf0,#dcf4e6); color:#11663f; border-color:#bfe8cf; }
