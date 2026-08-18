@@ -308,6 +308,19 @@
     </footer>`;
   }
 
+  // Mobile bottom tab bar — quick one-thumb access (Home / Products / Cart / Account).
+  // Shown ONLY ≤560px via CSS (.mnav); desktop never renders it. The hamburger
+  // slide-out still holds the full menu. Cart tab reuses the existing #cartBtn.
+  function bottomNav() {
+    const u = publicUser();
+    const cells = [
+      { href: "/", ic: "home", label: "Home", on: route === "home" },
+      { href: "/products.html", ic: "box", label: "Products", on: /^products/.test(route) },
+      { href: "#cart", ic: "cart", label: "Cart", cart: true },
+      { href: u ? accountHome(u) : "/login.html", ic: "user", label: "Account", on: /^account/.test(route) },
+    ].map(c => `<a class="mnav-item${c.on ? " active" : ""}" href="${c.href}"${c.cart ? ' data-mnav-cart="1"' : ""} aria-label="${c.label}"><span class="mnav-ic">${icon(c.ic, 22)}</span><span class="mnav-lbl">${c.label}</span></a>`).join("");
+    return `<nav class="mnav" role="navigation" aria-label="Quick navigation">${cells}</nav>`;
+  }
   function renderPublic() {
     let main = "";
     if (entry.hero) main += B.render([{ type: "innerHero", ...entry.hero }]);
@@ -317,6 +330,8 @@
     document.body.insertAdjacentHTML("afterbegin", publicHeader());
     root.outerHTML = `<main id="main">${main}</main>`;
     document.body.insertAdjacentHTML("beforeend", publicFooter());
+    document.body.insertAdjacentHTML("beforeend", bottomNav());
+    (function () { const mc = document.querySelector(".mnav [data-mnav-cart]"); if (mc) mc.addEventListener("click", function (e) { e.preventDefault(); const cb = document.getElementById("cartBtn"); if (cb) cb.click(); else if (window.DOODLY_CART && DOODLY_CART.open) DOODLY_CART.open(); }); })();
     wirePublic();
   }
 

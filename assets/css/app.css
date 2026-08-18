@@ -758,6 +758,29 @@ table.tbl td .strong { color:var(--forest); font-weight:700; }
   padding:16px 22px calc(env(safe-area-inset-bottom, 0px) + 20px); }
 .mm-head { display:flex; align-items:center; justify-content:space-between; }
 .mm-logo img { height:30px; width:auto; aspect-ratio:824/301; display:block; } /* static — mmFloat bob removed */
+
+/* ---- Mobile bottom tab bar (≤560px ONLY — desktop never renders it) ---- */
+.mnav { display:none; }
+@media (max-width:560px){
+  .mnav { display:flex; position:fixed; left:0; right:0; bottom:0; z-index:60;
+    background:color-mix(in srgb, var(--surface,#fff) 92%, transparent);
+    -webkit-backdrop-filter:saturate(170%) blur(14px); backdrop-filter:saturate(170%) blur(14px);
+    border-top:1px solid var(--line,#e7ece8);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px));
+    box-shadow:0 -10px 26px -14px rgba(11,31,23,.22); }
+  .mnav-item { flex:1 1 0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:3px; min-height:50px; padding:4px 2px; border-radius:12px; color:var(--ink-3,#8a958f);
+    text-decoration:none; font-size:10.5px; font-weight:700; letter-spacing:.01em; transition:color .18s, background .18s; }
+  .mnav-item:active { background:var(--mint-soft,#e4f6ec); }
+  .mnav-item.active { color:var(--leaf-600,#169A57); }
+  .mnav-ic { display:grid; place-items:center; }
+  .mnav-ic svg { width:22px; height:22px; }
+  .mnav-lbl { line-height:1; }
+  /* clear page content + footer above the fixed bar */
+  body { padding-bottom:calc(60px + env(safe-area-inset-bottom,0px)); }
+  /* lift bottom-anchored floating buttons above the bar */
+  .da-fab, .assistant-fab, [class*="-fab"], .lo-launch, .pc-fab { bottom:calc(72px + env(safe-area-inset-bottom,0px)) !important; }
+}
 .mm-close { width:42px; height:42px; border-radius:50%; display:grid; place-items:center; border:1px solid var(--line);
   background:var(--surface); color:var(--forest); cursor:pointer; transition:transform .25s, background .2s; }
 .mm-close:hover { transform:rotate(90deg); background:var(--mint-soft); }
