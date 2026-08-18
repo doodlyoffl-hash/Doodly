@@ -125,9 +125,10 @@ window.DOODLY_CUSTOMER = (function () {
       '<div class="deflist">' +
         '<div class="row"><span class="k">Deposit paid</span><span class="v">' + rup(d.paidPaise) + '</span></div>' +
         '<div class="row"><span class="k">Refunded to wallet</span><span class="v">' + rup(d.refundedPaise) + '</span></div>' +
-        '<div class="row"><span class="k">Refundable (held)</span><span class="v"><b>' + rup(d.heldPaise) + '</b></span></div>' +
+        '<div class="row"><span class="k">Pending refund (after collection)</span><span class="v"><b>' + rup(d.heldPaise) + '</b></span></div>' +
         '<div class="row"><span class="k">Outstanding bottles</span><span class="v">' + (d.outstandingBottles || 0) + '</span></div>' +
       '</div>' +
+      ((d.heldPaise || 0) > 0 ? '<p class="muted-sm" style="margin-top:6px">Your <b>pending refund</b> is credited to your DOODLY Wallet only after our delivery executive collects and verifies your bottles — not when you request the pickup.</p>' : "") +
       '<div style="margin-top:12px"><div class="strong" style="margin-bottom:6px">Pickup requests</div><div class="deflist">' + rows + '</div></div>' +
       (r && !r.canRequest && (d.outstandingBottles || 0) > 0 ? '<p class="muted-sm" style="margin-top:8px">A pickup request is already in progress.</p>' : "") +
       ((d.outstandingBottles || 0) === 0 ? '<p class="muted-sm" style="margin-top:8px">You have no bottles to return right now.</p>' : "") +
@@ -139,7 +140,7 @@ window.DOODLY_CUSTOMER = (function () {
     var m = document.createElement("div"); m.className = "dl-modal";
     m.innerHTML = '<div class="dl-modal-card" role="dialog" aria-modal="true" aria-label="Request bottle return">' +
       '<div class="dl-modal-head"><h3>Request bottle return</h3><button class="dl-x" aria-label="Close">✕</button></div>' +
-      '<p class="dl-modal-sub">' + (d.outstandingBottles || 0) + ' bottle' + ((d.outstandingBottles || 0) === 1 ? "" : "s") + ' · refundable ' + rup(d.heldPaise) + ' to your DOODLY Wallet</p>' +
+      '<p class="dl-modal-sub">' + (d.outstandingBottles || 0) + ' bottle' + ((d.outstandingBottles || 0) === 1 ? "" : "s") + ' · <b>' + rup(d.heldPaise) + '</b> refundable to your wallet <b>after we collect &amp; verify</b> your bottles</p>' +
       '<label class="dl-f"><span>Preferred date</span><input type="date" id="cuPickDate" class="input"></label>' +
       '<label class="dl-f"><span>Preferred time slot</span><select id="cuPickSlot" class="input"><option value="">Any slot</option><option>6:00-8:00 AM</option><option>8:00-10:00 AM</option><option>4:00-6:00 PM</option></select></label>' +
       '<textarea class="dl-notes" id="cuPickNote" placeholder="Notes for the pickup (optional)"></textarea>' +
