@@ -780,6 +780,14 @@ table.tbl td .strong { color:var(--forest); font-weight:700; }
   body { padding-bottom:calc(60px + env(safe-area-inset-bottom,0px)); }
   /* lift bottom-anchored floating buttons above the bar */
   .da-fab, .assistant-fab, [class*="-fab"], .lo-launch, .pc-fab { bottom:calc(72px + env(safe-area-inset-bottom,0px)) !important; }
+  /* Checkout is a focused conversion flow: drop the storefront tab bar so it
+     doesn't invite abandonment and doesn't collide with the pinned Pay bar.
+     co-root reserves its own bottom space (checkout.css), so reset body pad. */
+  body[data-route="checkout"] .mnav { display:none; }
+  body[data-route="checkout"] { padding-bottom:0; }
+  body[data-route="checkout"] .da-fab, body[data-route="checkout"] .assistant-fab,
+  body[data-route="checkout"] [class*="-fab"], body[data-route="checkout"] .lo-launch,
+  body[data-route="checkout"] .pc-fab { bottom:calc(88px + env(safe-area-inset-bottom,0px)) !important; }
 }
 .mm-close { width:42px; height:42px; border-radius:50%; display:grid; place-items:center; border:1px solid var(--line);
   background:var(--surface); color:var(--forest); cursor:pointer; transition:transform .25s, background .2s; }
