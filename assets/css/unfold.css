@@ -129,6 +129,10 @@
 .nav-story .ns-logo { height: 15px; width: auto; aspect-ratio: 824 / 301; }
 .nav-story span { color: var(--gold); font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; }
 @media (max-width: 720px) { .nav-story span { display: none; } }
+/* small phones: the icon-only Story pill can't co-exist with logo + 5 nav
+   icons in <=~342px, spilling the hamburger off-screen. Shed the decorative
+   pill here (primary nav lives in the bottom tab bar on mobile anyway). */
+@media (max-width: 360px) { .nav-story { display: none; } }
 /* scoped under .footer so it beats the generic `.footer a { display:block; padding:9px 0 }` reset (which otherwise stretches this pill to full width) */
 /* Light mode (default): the footer surface is light, so use an on-brand mint pill with forest text. */
 .footer .foot-story { display: inline-flex; align-items: center; gap: 8px; width: auto; margin-top: 14px; border: 1px solid var(--mint, #cfead8); background: var(--mint-soft, #eef6ef); color: var(--forest-700, #15533e); font-weight: 700; font-size: .82rem; padding: 9px 16px; border-radius: 999px; text-decoration: none; transition: background .2s, border-color .2s, color .2s; }
