@@ -835,7 +835,11 @@ table.tbl td .strong { color:var(--forest); font-weight:700; }
      These stay visible at 561–1279px, where the hamburger is the sole nav and
      there is no bottom bar — so account/login must remain reachable there. */
   .nav .nav-acct-dd { display:none; }
-  .mm-acct-link, .mm-signout, .mm-login { display:none; }
+  /* footer Profile is the ONE account/profile entry on phones: strip the header
+     account dropdown, the in-menu account/login CTAs, AND any account deep-link
+     tiles (Orders/Deliveries) from the hamburger — so the top menu is purely
+     website navigation. All kept 561–1279px, where the hamburger is the only nav. */
+  .mm-acct-link, .mm-signout, .mm-login, .mm-tile[href^="/account/"] { display:none; }
   /* clear page content + footer above the fixed bar — ONLY on surfaces that
      actually render it (public + account add the .has-bottomnav class); admin/
      driver/delivery/auth have no bar, so they get no dead bottom space. */
