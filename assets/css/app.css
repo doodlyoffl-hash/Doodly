@@ -776,6 +776,10 @@ table.tbl td .strong { color:var(--forest); font-weight:700; }
   .mnav-ic { display:grid; place-items:center; }
   .mnav-ic svg { width:22px; height:22px; }
   .mnav-lbl { line-height:1; }
+  /* the bottom tab bar carries Cart, so the header cart icon is redundant on
+     mobile — hide it (the bar's Cart tab still fires #cartBtn.click() to open
+     the drawer; a display:none button still receives programmatic clicks). */
+  #cartBtn { display:none; }
   /* clear page content + footer above the fixed bar */
   body { padding-bottom:calc(60px + env(safe-area-inset-bottom,0px)); }
   /* lift bottom-anchored floating buttons above the bar */
