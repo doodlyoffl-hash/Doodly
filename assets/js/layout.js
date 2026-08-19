@@ -1042,7 +1042,17 @@
       ".dac-head h3{margin:0;font-family:var(--font-display,inherit);font-size:1.05rem;color:var(--ink,#16241c)}" +
       ".dac-body{padding:16px 18px;overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1 1 auto;min-height:0}" +
       ".dac-sec{border-top:1px solid var(--line,#e9efe9);padding-top:12px;margin-top:2px}.dac-sec .tbl{font-size:.82rem}" +
-      "@keyframes dacFade{from{opacity:0}to{opacity:1}}@keyframes dacPop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}";
+      "@keyframes dacFade{from{opacity:0}to{opacity:1}}@keyframes dacPop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}" +
+      // MOBILE (<=560px): dock these dialogs as app-style bottom sheets (slide up
+      // from the bottom edge, full width, top-rounded, grab handle, safe-area).
+      // Desktop keeps the centered dacPop card. Injected inline so it beats the
+      // bundle CSS in the cascade regardless of specificity.
+      "@media(max-width:560px){" +
+        ".dac-ov{align-items:flex-end;padding:0}" +
+        ".dac-card,.dac-modal{width:100%;max-width:none;border-radius:18px 18px 0 0;max-height:92vh;max-height:92dvh;animation:dacSheet .26s cubic-bezier(.22,1,.36,1)}" +
+        ".dac-card::before,.dac-modal::before{content:'';display:block;width:40px;height:4px;border-radius:999px;background:var(--line,#e3ece3);margin:8px auto 0;flex:0 0 auto}" +
+        ".dac-ft{padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}" +
+      "}@keyframes dacSheet{from{transform:translateY(100%)}to{transform:none}}";
     document.head.appendChild(s);
   }
   // Expose so the `if (window.dacStyles) dacStyles()` guards used by later drawers
