@@ -496,7 +496,7 @@
 
     root.outerHTML = `<div class="auth auth-v2">${stage}<div class="auth-main">${bubbles}${a.chooser ? chooser : card}</div></div>`;
     wireTheme();
-    try { wireSimpleMode(); } catch (e) {}
+    try { clearEasyView(); } catch (e) {}
     wireOtp();
     if (window.DOODLY_AUTH) window.DOODLY_AUTH.init(document);
     if (window.DOODLY_MOTION) window.DOODLY_MOTION.init(document);
@@ -655,91 +655,18 @@
     btn.addEventListener("click", () => apply(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
   }
 
-  /* Senior-friendly Simple Ordering Mode — an ADDITIVE opt-in skin: larger text,
-     larger buttons/targets, higher contrast and calmer motion, applied ONLY when
-     the visitor has turned it on (data-simple="1"). Default screens are byte-identical.
-     Persisted per-customer (CustomerPreference.simpleMode) + mirrored to localStorage
-     so it follows the customer and applies before first paint. Toggle in Account →
-     Settings, or via DOODLY_SIMPLE.set(true/false). */
-  function simpleModeCss() {
-    if (document.getElementById("doodly-simple-css")) return;
-    var st = document.createElement("style"); st.id = "doodly-simple-css";
-    st.textContent =
-      ':root[data-simple="1"]{font-size:112.5%}'
-      + ':root[data-simple="1"] body{line-height:1.7;letter-spacing:.1px}'
-      + ':root[data-simple="1"] .btn,:root[data-simple="1"] button.btn,:root[data-simple="1"] .btn-auth{font-size:1.06rem;min-height:54px;padding:14px 24px;border-radius:14px;font-weight:700}'
-      + ':root[data-simple="1"] .input,:root[data-simple="1"] input,:root[data-simple="1"] select,:root[data-simple="1"] textarea{font-size:1.06rem;min-height:54px;padding:13px 15px;border-radius:12px}'
-      + ':root[data-simple="1"] label{font-size:.95rem;font-weight:600}'
-      + ':root[data-simple="1"] .co-steps{gap:6px}:root[data-simple="1"] .co-step,:root[data-simple="1"] .co-steps [role="listitem"]{font-size:1rem;font-weight:700}'
-      + ':root[data-simple="1"] .co-card,:root[data-simple="1"] .co-cards>*{padding:16px!important}'
-      + ':root[data-simple="1"] a{text-underline-offset:3px}'
-      + '@media (prefers-reduced-motion:no-preference){:root[data-simple="1"] *{animation-duration:.001ms!important;transition-duration:120ms!important}}';
-    (document.head || document.documentElement).appendChild(st);
-  }
-  function applySimple(on) {
-    try { if (on) document.documentElement.dataset.simple = "1"; else document.documentElement.removeAttribute("data-simple"); localStorage.setItem("doodly-simple", on ? "1" : "0"); } catch (e) {}
-  }
-  function wireSimpleMode() {
-    simpleModeCss();
-    try { applySimple(localStorage.getItem("doodly-simple") === "1"); } catch (e) {}
-    // Hydrate from the customer's saved preference once per load (so it follows them across devices).
-    var signedIn = false; try { signedIn = !!(localStorage.getItem("doodly-currentuser") || localStorage.getItem("doodly-token")); } catch (e) {}
-    if (signedIn && !window.__smHydrated && window.DOODLY_API) {
-      window.__smHydrated = true;
-      try { DOODLY_API.get("/api/account/settings").then(function (d) { var sm = d && d.settings && d.settings.simpleMode; if (typeof sm === "boolean") applySimple(sm); }).catch(function () {}); } catch (e) {}
-    }
-    if (!window.DOODLY_SIMPLE) window.DOODLY_SIMPLE = {
-      isOn: function () { try { return document.documentElement.dataset.simple === "1"; } catch (e) { return false; } },
-      set: function (on) { applySimple(!!on); try { if (window.DOODLY_API && (localStorage.getItem("doodly-currentuser") || localStorage.getItem("doodly-token"))) DOODLY_API.patch("/api/account/settings", { simpleMode: !!on }).catch(function () {}); } catch (e) {} },
-      toggle: function () { this.set(!this.isOn()); },
-    };
-    try { maybeEasyViewPrompt(); } catch (e) {}
-  }
-
-  /* First-visit "Easy view" nudge — a gentle, dismissible, ONE-TIME offer to turn on
-     Simple Mode. Storefront only (never staff/exec surfaces, checkout or auth pages),
-     and deferred while the cookie banner is up so the two never stack. */
-  function injectEasyViewStyles() {
-    if (document.getElementById("doodly-easyview-css")) return;
-    var st = document.createElement("style"); st.id = "doodly-easyview-css";
-    st.textContent = '#doodly-easyview{position:fixed;left:12px;right:12px;bottom:12px;z-index:2147482000;max-width:560px;margin:0 auto;background:#fff;color:#0F3D2E;border:1px solid #DCE7DF;border-radius:16px;box-shadow:0 12px 44px rgba(15,61,46,.18);transform:translateY(170%);transition:transform .34s cubic-bezier(.2,.7,.2,1);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}'
-      + '#doodly-easyview.show{transform:translateY(0)}'
-      + '#doodly-easyview .dev-in{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:16px 18px}'
-      + '#doodly-easyview .dev-ic{font-size:1.6rem;flex:none}'
-      + '#doodly-easyview .dev-t{margin:0;flex:1;min-width:200px;font-size:1rem;line-height:1.5;color:#33413a}'
-      + '#doodly-easyview .dev-b{display:flex;gap:10px;flex-wrap:wrap}'
-      + '#doodly-easyview .dev-btn{font:inherit;font-size:.98rem;font-weight:700;border-radius:12px;padding:12px 20px;cursor:pointer;border:1px solid transparent;min-height:48px}'
-      + '#doodly-easyview .dev-yes{background:#1FAE66;color:#fff}#doodly-easyview .dev-yes:hover{background:#16824F}'
-      + '#doodly-easyview .dev-no{background:transparent;color:#33413a;border-color:#DCE7DF}#doodly-easyview .dev-no:hover{background:#F3F7F2}'
-      + '#doodly-easyview .dev-btn:focus-visible{outline:2px solid #16824F;outline-offset:2px}'
-      + '@media (prefers-color-scheme:dark){#doodly-easyview{background:#132420;color:#E9F2EB;border-color:#213730}#doodly-easyview .dev-t{color:#A9BDB1}#doodly-easyview .dev-no{color:#A9BDB1;border-color:#213730}#doodly-easyview .dev-no:hover{background:#182A22}}'
-      + '@media (prefers-reduced-motion:reduce){#doodly-easyview{transition:none}}';
-    (document.head || document.documentElement).appendChild(st);
-  }
-  function maybeEasyViewPrompt() {
-    try {
-      if (/^\/(admin|driver|delivery)(\/|$)/.test(location.pathname)) return;      // staff/exec surfaces
-      if (/(checkout|login|signup|otp|forgot|reset|password)/i.test(location.pathname)) return;   // don't interrupt purchase/auth
-      if (localStorage.getItem("doodly-easyview-prompt")) return;                  // shown before → never again
-      injectEasyViewStyles();
-      setTimeout(function () {
-        try {
-          if (localStorage.getItem("doodly-easyview-prompt")) return;
-          if (document.documentElement.dataset.simple === "1") return;             // already on
-          if (document.getElementById("doodly-consent")) return;                   // cookie banner is up → defer to a later visit
-          if (document.getElementById("doodly-easyview")) return;
-          localStorage.setItem("doodly-easyview-prompt", "1");                     // one-time
-          var bar = document.createElement("div");
-          bar.id = "doodly-easyview"; bar.setAttribute("role", "dialog"); bar.setAttribute("aria-label", "Easy view suggestion");
-          bar.innerHTML = '<div class="dev-in"><span class="dev-ic" aria-hidden="true">🔎</span><p class="dev-t">Prefer <b>larger text and simpler screens</b>? Turn on <b>Easy view</b> — you can switch it off anytime in Settings.</p><div class="dev-b"><button type="button" class="dev-btn dev-no">No thanks</button><button type="button" class="dev-btn dev-yes">Turn on Easy view</button></div></div>';
-          document.body.appendChild(bar);
-          var close = function () { bar.classList.remove("show"); setTimeout(function () { if (bar.parentNode) bar.parentNode.removeChild(bar); }, 340); };
-          bar.querySelector(".dev-yes").addEventListener("click", function () { try { if (window.DOODLY_SIMPLE) DOODLY_SIMPLE.set(true); } catch (e) {} close(); });
-          bar.querySelector(".dev-no").addEventListener("click", close);
-          setTimeout(function () { bar.classList.add("show"); }, 60);
-        } catch (e) {}
-      }, 1500);   // let the page settle first
-    } catch (e) {}
+  /* Easy View / Simple Mode was REMOVED (P0). It injected `:root[data-simple="1"]{
+     font-size:112.5%}` (persisted per-account via CustomerPreference.simpleMode +
+     localStorage), which enlarged fonts and changed the UI scale unexpectedly across
+     sessions/devices. clearEasyView() runs once at boot to drop any leftover state so
+     existing browsers return to the single default appearance. Backend field is left
+     inert (never read) — no DB migration. Genuine a11y (reduced-motion, focus, ARIA,
+     semantics) is untouched. */
+  function clearEasyView() {
+    try { document.documentElement.removeAttribute("data-simple"); } catch (e) {}
+    try { localStorage.removeItem("doodly-simple"); localStorage.removeItem("doodly-easyview-prompt"); } catch (e) {}
+    try { ["doodly-simple-css", "doodly-easyview-css", "doodly-easyview"].forEach(function (id) { var el = document.getElementById(id); if (el && el.parentNode) el.parentNode.removeChild(el); }); } catch (e) {}
+    try { if (window.DOODLY_SIMPLE) { try { delete window.DOODLY_SIMPLE; } catch (e2) { window.DOODLY_SIMPLE = undefined; } } } catch (e) {}
   }
 
   function wireReveals() {
@@ -928,7 +855,7 @@
   }
 
   function wirePublic() {
-    wireTheme(); try { wireSimpleMode(); } catch (e) {} wireReveals(); wireFaq(); wireTabs(); wireForms(); wireBuilder();
+    wireTheme(); try { clearEasyView(); } catch (e) {} wireReveals(); wireFaq(); wireTabs(); wireForms(); wireBuilder();
     try { wireBlog(); } catch (e) {}
     try { if (window.DOODLY_CMS && DOODLY_CMS.hydratePage) DOODLY_CMS.hydratePage(); } catch (e) {}
     const burger = $("#navBurger"), menu = $("#mobileMenu");
@@ -8853,7 +8780,7 @@
   window.DOODLY_ADMIN.bkWire = bkWire;
 
   function wireDashboard() {
-    wireTheme(); try { wireSimpleMode(); } catch (e) {} wireReveals(); wireFaq(); wireTabs(); wireForms(); wireBuilder();
+    wireTheme(); try { clearEasyView(); } catch (e) {} wireReveals(); wireFaq(); wireTabs(); wireForms(); wireBuilder();
     const burger = $("#sbBurger"), sb = $("#sidebar"), scrim = $("#scrim");
     const toggle = (open) => { sb.classList.toggle("open", open); scrim.classList.toggle("show", open); };
     if (burger) burger.addEventListener("click", () => toggle(!sb.classList.contains("open")));

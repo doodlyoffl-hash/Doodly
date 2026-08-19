@@ -1061,24 +1061,14 @@ window.DOODLY_ACCOUNT = (function () {
     var setYN = function (el, on) { if (el) el.value = on ? "On" : "Off"; };
     var yn = function (el) { return el ? el.value === "On" : undefined; };
 
-    // Senior-friendly "Easy view" (Simple Mode) — a self-saving toggle injected at the top of the
-    // General form. Applies live + persists (CustomerPreference.simpleMode) via DOODLY_SIMPLE.
-    if (gen && !gen.querySelector("[data-simple-toggle]")) {
-      var wrap = document.createElement("div");
-      wrap.style.cssText = "margin:0 0 16px;padding:14px 16px;border:1px solid var(--line,#e4ede7);border-radius:12px;background:var(--surface-2,#f3f7f2)";
-      wrap.innerHTML = '<label style="display:flex;align-items:center;gap:12px;cursor:pointer;font-weight:600"><input type="checkbox" data-simple-toggle style="width:22px;height:22px;flex:none"> <span>Easy view — larger text &amp; simpler screens<br><span class="muted-sm" style="font-weight:400">Turn this on if the site feels small or busy. You can switch it off anytime.</span></span></label>';
-      gen.insertBefore(wrap, gen.firstChild);
-      var scb = wrap.querySelector("[data-simple-toggle]");
-      try { scb.checked = !!(window.DOODLY_SIMPLE && DOODLY_SIMPLE.isOn()); } catch (e) {}
-      scb.addEventListener("change", function () { try { if (window.DOODLY_SIMPLE) DOODLY_SIMPLE.set(scb.checked); } catch (e) {} toast(scb.checked ? "Easy view is on ✓" : "Easy view is off"); });
-    }
+    // Easy View / Simple Mode toggle REMOVED (P0) — the feature and its font-scaling
+    // side effect are gone; the settings screen keeps the standard default appearance.
 
     if (gen || notif) {
       // prefill every control from the customer's saved preferences
       API().get("/api/account/settings").then(function (r) {
         var s = r.settings || {};
         var lang = sel(gen, "language"); if (lang && LANG_LABEL[s.language]) lang.value = LANG_LABEL[s.language];
-        var scb2 = gen && gen.querySelector("[data-simple-toggle]"); if (scb2) scb2.checked = !!s.simpleMode;
         setYN(sel(notif, "email-updates"), s.emailOptIn);
         setYN(sel(notif, "sms-updates"), s.smsOptIn);
         setYN(sel(notif, "whatsapp-updates"), s.whatsappOptIn);
