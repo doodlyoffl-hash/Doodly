@@ -784,6 +784,13 @@ table.tbl td .strong { color:var(--forest); font-weight:700; }
      bar + chat button on mobile — hide it here (hero CTAs + bottom bar drive
      conversion). Desktop keeps the floating promo. */
   .qbuy { display:none; }
+  /* Single, non-duplicative account access on phones: the footer Profile tab is
+     the one entry point, so drop (a) the storefront header account dropdown/avatar
+     and (b) the in-menu account + login CTAs. The hamburger is navigation only.
+     These stay visible at 561–1279px, where the hamburger is the sole nav and
+     there is no bottom bar — so account/login must remain reachable there. */
+  .nav .nav-acct-dd { display:none; }
+  .mm-acct-link, .mm-signout, .mm-login { display:none; }
   /* clear page content + footer above the fixed bar — ONLY on surfaces that
      actually render it (public + account add the .has-bottomnav class); admin/
      driver/delivery/auth have no bar, so they get no dead bottom space. */

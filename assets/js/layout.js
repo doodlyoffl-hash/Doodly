@@ -150,10 +150,12 @@
   function mobileMenu() {
     const links = M.nav.public.map((l, i) =>
       `<a href="${l.href}"${isActive(l.href) ? ' class="active" aria-current="page"' : ""} style="--i:${i}"><span>${l.label}</span>${icon("arrow", 18)}</a>`).join("");
+    // Navigation only — the customer account lives behind the footer Profile tab,
+    // so this menu carries no Profile/account-hub tile (avoids duplicate entry).
     const quick = [
-      ["Home", "/", "home"], ["Products", "/products.html", "box"], ["Subscription", "/subscriptions.html", "refresh"],
-      ["My Orders", "/account/orders.html", "clock"], ["Cart", "#cart", "box", "cart"],
-      ["Profile", "/account/profile.html", "user"], ["Support", "/contact.html", "msg"],
+      ["Home", "/", "home"], ["Products", "/products.html", "box"], ["Subscriptions", "/subscriptions.html", "refresh"],
+      ["Orders", "/account/orders.html", "clock"], ["Deliveries", "/account/deliveries.html", "truck"],
+      ["Help Centre", "/help.html", "help"], ["Support", "/contact.html", "msg"],
     ].map((q, i) => q[3] === "cart"
       ? `<button type="button" class="mm-tile" data-cart style="--i:${i}">${icon(q[2], 22)}<span>${q[0]}</span></button>`
       : `<a class="mm-tile" href="${q[1]}" style="--i:${i}">${icon(q[2], 22)}<span>${q[0]}</span></a>`).join("");
@@ -169,9 +171,9 @@
         <div class="mm-cta">
           <a href="/doodly.html" class="btn btn-ghost btn-lg mm-story"><img src="/assets/img/logo.png" alt="" style="height:16px;width:auto;vertical-align:-2px;margin-right:6px">✦ Unfold Pure</a>
           ${(() => { const u = publicUser(); return u
-            ? `<a href="${accountHome(u)}" class="btn btn-ghost btn-lg">${icon("user", 16)} My Account — ${esc(String(u.name || "").split(/\s+/)[0] || "Account")}</a>
+            ? `<a href="${accountHome(u)}" class="btn btn-ghost btn-lg mm-acct-link">${icon("user", 16)} My Account — ${esc(String(u.name || "").split(/\s+/)[0] || "Account")}</a>
                <button type="button" class="btn btn-ghost btn-lg mm-signout" data-logout>${icon("logout", 16)} Sign out</button>`
-            : `<a href="/login.html" class="btn btn-ghost btn-lg">Log in</a>`; })()}
+            : `<a href="/login/customer.html" class="btn btn-ghost btn-lg mm-login">Log in</a>`; })()}
           <a href="/subscriptions.html" class="btn btn-primary btn-lg">Subscribe</a>
         </div>
       </div>
@@ -318,12 +320,14 @@
       { href: "/account/orders.html", ic: "receipt", label: "Orders", on: /^account\/orders/.test(route) },
       { href: "/account/subscription.html", ic: "refresh", label: "Plans", on: /^account\/subscription$/.test(route) },
       { href: "/account/wallet.html", ic: "wallet", label: "Wallet", on: /^account\/wallet/.test(route) },
-      { href: "/account/profile.html", ic: "user", label: "Account", on: /^account\/(profile|settings|referrals|rewards|addresses|notifications|support|tracking|deliveries|invoices|bottles|calendar|vacation|extra-milk|my-hr|subscription-history)/.test(route) },
+      { href: "/account/profile.html", ic: "user", label: "Profile", on: /^account\/(profile|settings|referrals|rewards|addresses|notifications|support|tracking|deliveries|invoices|bottles|calendar|vacation|extra-milk|my-hr|subscription-history)/.test(route) },
     ] : [
       { href: "/", ic: "home", label: "Home", on: route === "home" },
       { href: "/products.html", ic: "box", label: "Products", on: /^products/.test(route) },
       { href: "#cart", ic: "cart", label: "Cart", cart: true },
-      { href: u ? accountHome(u) : "/login.html", ic: "user", label: "Account", on: /^account/.test(route) },
+      // Profile = the customer account entry. Signed-in → their account home; guests
+      // go straight to the CUSTOMER login (never the /login.html role chooser).
+      { href: u ? accountHome(u) : "/login/customer.html?from=/account/dashboard.html", ic: "user", label: "Profile", on: /^account/.test(route) },
     ];
     const html = cells.map(c => `<a class="mnav-item${c.on ? " active" : ""}" href="${c.href}"${c.cart ? ' data-mnav-cart="1"' : ""} aria-label="${c.label}"><span class="mnav-ic">${icon(c.ic, 22)}</span><span class="mnav-lbl">${c.label}</span></a>`).join("");
     return `<nav class="mnav" role="navigation" aria-label="Quick navigation">${html}</nav>`;
