@@ -764,8 +764,11 @@ table.tbl td .strong { color:var(--forest); font-weight:700; }
 @media (max-width:560px){
   /* ===== Premium dairy-inspired bottom navigation ===== */
   .mnav { display:flex; position:fixed; left:0; right:0; bottom:0; z-index:60;
-    background:color-mix(in srgb, var(--surface,#fff) 90%, transparent);
-    -webkit-backdrop-filter:saturate(180%) blur(18px); backdrop-filter:saturate(180%) blur(18px);
+    /* more-opaque bg + a LIGHT blur: a strong backdrop-filter blur re-composites
+       every frame as animated content (product cards) scrolls behind it, which
+       janks real mobile GPUs (smooth on the desktop preview). 8px is still frosted. */
+    background:color-mix(in srgb, var(--surface,#fff) 94%, transparent);
+    -webkit-backdrop-filter:saturate(150%) blur(8px); backdrop-filter:saturate(150%) blur(8px);
     border-top:1px solid color-mix(in srgb, var(--line,#e7ece8) 85%, transparent);
     padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));
     box-shadow:0 -14px 34px -18px rgba(11,31,23,.26); }

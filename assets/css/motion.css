@@ -100,6 +100,12 @@
 /* scrolled state: shrink + stronger blur/shadow + smaller logo + crisper edge */
 .nav.scrolled { height: 56px; box-shadow: 0 6px 22px rgba(15,61,46,.12); border-bottom-color: rgba(31,174,102,.22);
   -webkit-backdrop-filter: saturate(180%) blur(24px); backdrop-filter: saturate(180%) blur(24px); }
+/* Real mobile GPUs jank re-blurring the animated hero behind the sticky header on
+   every scroll frame (the desktop preview absorbs it). Lighter blur on phones —
+   still frosted; desktop keeps the full 24px. */
+@media (max-width: 560px) {
+  .nav.scrolled { -webkit-backdrop-filter: saturate(150%) blur(8px); backdrop-filter: saturate(150%) blur(8px); }
+}
 .nav.scrolled .logo-img { height: 24px; }
 
 /* directional auto-hide: slide the bar out of the way on scroll-down, reveal on
@@ -141,7 +147,7 @@
   animation: glassSheen 7s ease-in-out 1.4s infinite;
 }
 @keyframes glassSheen { 0%,72%,100% { transform: translateX(-140%); } 86% { transform: translateX(140%); } }
-.hero .bottle, .pd-gallery .bottle { animation: bottleBob 5.5s ease-in-out infinite; transform-origin: 50% 80%; }
+.hero .bottle, .pd-gallery .bottle { animation: bottleBob 5.5s ease-in-out infinite; transform-origin: 50% 80%; will-change: transform; backface-visibility: hidden; }
 @keyframes bottleBob { 0%,100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-7px) rotate(-1.2deg); } }
 
 /* decorative fx layer injected by motion.js (absolute, no layout impact) */
@@ -168,7 +174,7 @@
 .product .pemoji { display: inline-block; transition: transform .4s cubic-bezier(.2,.8,.2,1); transform-origin: 50% 80%; }
 .product:hover .pemoji { transform: scale(1.14) rotate(-5deg); }
 /* floating product bottle + glass reflection */
-.pstage .pbottle { animation: bottleFloat 5s ease-in-out infinite; transition: transform .35s cubic-bezier(.2,.8,.2,1); }
+.pstage .pbottle { animation: bottleFloat 5s ease-in-out infinite; transition: transform .35s cubic-bezier(.2,.8,.2,1); will-change: transform; backface-visibility: hidden; }
 @keyframes bottleFloat { 0%,100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-6px) rotate(-1.4deg); } }
 .product:hover .pstage .pbottle { animation-play-state: paused; transform: scale(1.06) translateY(-4px); }
 /* animated "Farm Fresh" badge shine */
@@ -184,7 +190,7 @@
 }
 .product .plink svg { transition: transform .25s ease; }
 .product:hover .plink svg { transform: translateX(4px); }
-.product.is-soon .pemoji { animation: floaty 4.5s ease-in-out infinite; }
+.product.is-soon .pemoji { animation: floaty 4.5s ease-in-out infinite; will-change: transform; backface-visibility: hidden; }
 @keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 .badge-soon { animation: softPulse 2.6s ease-in-out infinite; }
 @keyframes softPulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.06); opacity: .82; } }
