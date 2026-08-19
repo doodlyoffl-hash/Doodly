@@ -509,8 +509,6 @@ window.DOODLY_CHECKOUT = (function () {
       startDate: sub.startIso || undefined,
       slot: SC && SC.slotLabel ? SC.slotLabel() : undefined,
       address: addressPayload,
-      // Senior-friendly Simple Mode is the same order via the same engine — just tagged for analytics.
-      source: (function () { try { return document.documentElement.dataset.simple === "1" ? "simple_mode" : undefined; } catch (e) { return undefined; } })(),
     };
     DOODLY_API.post("/api/checkout", payload)
       .then((res) => {
