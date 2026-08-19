@@ -758,6 +758,115 @@ table.tbl td .strong { color:var(--forest); font-weight:700; }
   padding:16px 22px calc(env(safe-area-inset-bottom, 0px) + 20px); }
 .mm-head { display:flex; align-items:center; justify-content:space-between; }
 .mm-logo img { height:30px; width:auto; aspect-ratio:824/301; display:block; } /* static — mmFloat bob removed */
+
+/* ---- Mobile bottom tab bar (≤560px ONLY — desktop never renders it) ---- */
+.mnav { display:none; }
+@media (max-width:560px){
+  /* ===== Premium dairy-inspired bottom navigation ===== */
+  .mnav { display:flex; position:fixed; left:0; right:0; bottom:0; z-index:60;
+    background:color-mix(in srgb, var(--surface,#fff) 90%, transparent);
+    -webkit-backdrop-filter:saturate(180%) blur(18px); backdrop-filter:saturate(180%) blur(18px);
+    border-top:1px solid color-mix(in srgb, var(--line,#e7ece8) 85%, transparent);
+    padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));
+    box-shadow:0 -14px 34px -18px rgba(11,31,23,.26); }
+  /* a whisper-thin cream line along the top edge — the subtle "milk-wave" */
+  .mnav::before { content:""; position:absolute; left:14%; right:14%; top:0; height:2px; border-radius:2px;
+    background:linear-gradient(90deg, transparent, color-mix(in srgb, var(--gold,#E8B864) 40%, transparent) 40%, color-mix(in srgb, var(--gold,#E8B864) 40%, transparent) 60%, transparent);
+    opacity:.55; pointer-events:none; }
+
+  .mnav-item { position:relative; flex:1 1 0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
+    gap:2px; min-height:50px; padding:3px 2px 2px; border-radius:14px; color:var(--ink-3,#8a958f);
+    text-decoration:none; font-size:10.5px; font-weight:700; letter-spacing:.01em;
+    -webkit-tap-highlight-color:transparent; transition:color .22s ease; }
+  .mnav-item.active { color:var(--leaf-600,#169A57); }
+  .mnav-item:focus-visible { outline:none; }
+  .mnav-item:focus-visible .mnav-ic::before { transform:scale(1); opacity:.5; }
+
+  /* icon sits in a soft round well; a milk-drop halo blooms behind it when active */
+  .mnav-ic { position:relative; display:grid; place-items:center; width:40px; height:38px;
+    transition:transform .3s cubic-bezier(.34,1.56,.64,1); }
+  .mnav-ic::before { content:""; position:absolute; inset:1px 1px auto; margin:auto; width:38px; height:38px; border-radius:50%;
+    background:radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--mint-soft,#e4f6ec) 94%, #fff), color-mix(in srgb, var(--mint,#cfead8) 50%, transparent) 70%, transparent 74%);
+    transform:scale(.35); opacity:0; transition:transform .32s cubic-bezier(.34,1.56,.64,1), opacity .24s ease; }
+  .mnav-ic svg { position:relative; width:24px; height:24px; overflow:visible; }
+  .mnav-lbl { line-height:1; }
+
+  /* active: icon lifts, milk-drop halo blooms, milk accents fill cream */
+  .mnav-item.active .mnav-ic { transform:translateY(-4px); }
+  .mnav-item.active .mnav-ic::before { transform:scale(1); opacity:1; }
+  .mnav-item.active .mn-milk { fill:color-mix(in srgb, #fff 80%, var(--mint-soft,#eef7ef)); }
+  /* tap: soft press on the icon */
+  .mnav-item:active .mnav-ic { transform:translateY(-2px) scale(.9); }
+
+  /* SVG parts animate about their own box */
+  .mnav-ic svg [class^="mn-"], .mnav-ic svg [class*=" mn-"] { transform-box:fill-box; }
+  /* per-icon dairy micro-animations, played once when a tab becomes active */
+  .mnav-item.active .mn-drop        { animation:mnDropRise .55s ease both; transform-origin:center; }
+  .mnav-item.active .mn-bottle-milk { animation:mnMilkFill .5s cubic-bezier(.4,0,.2,1) both; transform-origin:center bottom; }
+  .mnav-item.active .mn-pkg         { animation:mnPkgFwd .45s ease both; transform-origin:center; }
+  .mnav-item.active .mn-can         { animation:mnCanTip .6s ease both; transform-origin:center bottom; }
+  .mnav-item.active .mn-wdrop       { animation:mnDropPulse .55s ease both; transform-origin:center; }
+  .mnav-item.active .mn-head, .mnav-item.active .mn-body { animation:mnPop .5s cubic-bezier(.34,1.56,.64,1) both; transform-origin:center; }
+  @keyframes mnDropRise  { 0%{ transform:translateY(3px); opacity:0 } 55%{ opacity:1 } 100%{ transform:translateY(0); opacity:1 } }
+  @keyframes mnMilkFill  { 0%{ transform:scaleY(.35); opacity:.55 } 100%{ transform:scaleY(1); opacity:1 } }
+  @keyframes mnPkgFwd    { 0%{ transform:translateY(1.5px) scale(.94) } 60%{ transform:translateY(-1px) scale(1.02) } 100%{ transform:none } }
+  @keyframes mnCanTip    { 0%{ transform:rotate(-6deg) } 55%{ transform:rotate(4deg) } 100%{ transform:none } }
+  @keyframes mnDropPulse { 0%{ transform:scale(.7); opacity:.55 } 55%{ transform:scale(1.08) } 100%{ transform:scale(1); opacity:1 } }
+  @keyframes mnPop       { 0%{ transform:scale(.6) } 60%{ transform:scale(1.1) } 100%{ transform:scale(1) } }
+
+  /* respect reduced motion — keep a clear but static active cue */
+  @media (prefers-reduced-motion: reduce){
+    .mnav-item, .mnav-ic, .mnav-ic::before,
+    .mnav-ic svg [class^="mn-"], .mnav-ic svg [class*=" mn-"] { transition:none !important; animation:none !important; }
+    .mnav-item.active .mnav-ic { transform:translateY(-3px); }
+    .mnav-item.active .mnav-ic::before { transform:scale(1); opacity:1; }
+  }
+  /* the bottom tab bar carries Cart, so the header cart icon is redundant on
+     mobile — hide it (the bar's Cart tab still fires #cartBtn.click() to open
+     the drawer; a display:none button still receives programmatic clicks). */
+  #cartBtn { display:none; }
+  /* the floating "Trial" quick-buy promo (.qbuy) crowds/overlaps the bottom tab
+     bar + chat button on mobile — hide it here (hero CTAs + bottom bar drive
+     conversion). Desktop keeps the floating promo. */
+  .qbuy { display:none; }
+  /* Single, non-duplicative account access on phones: the footer Profile tab is
+     the one entry point, so drop (a) the storefront header account dropdown/avatar
+     and (b) the in-menu account + login CTAs. The hamburger is navigation only.
+     These stay visible at 561–1279px, where the hamburger is the sole nav and
+     there is no bottom bar — so account/login must remain reachable there. */
+  .nav .nav-acct-dd { display:none; }
+  /* footer Profile is the ONE account/profile entry on phones: strip the header
+     account dropdown, the in-menu account/login CTAs, AND any account deep-link
+     tiles (Orders/Deliveries) from the hamburger — so the top menu is purely
+     website navigation. All kept 561–1279px, where the hamburger is the only nav. */
+  .mm-acct-link, .mm-signout, .mm-login, .mm-tile[href^="/account/"] { display:none; }
+  /* clear page content + footer above the fixed bar — ONLY on surfaces that
+     actually render it (public + account add the .has-bottomnav class); admin/
+     driver/delivery/auth have no bar, so they get no dead bottom space. */
+  body.has-bottomnav { padding-bottom:calc(68px + env(safe-area-inset-bottom,0px)); }
+  /* lift bottom-anchored floating buttons AND centre-bottom toasts above the bar
+     (guardToast is lifted via its own class in layout.js). Target the FIXED
+     containers — `.da` (chat assistant), not the inner static `.da-fab`, whose
+     hit-box would otherwise still sit over the Profile tab and swallow its taps. */
+  body.has-bottomnav .da, body.has-bottomnav .assistant-fab,
+  body.has-bottomnav .lo-launch, body.has-bottomnav .pc-fab,
+  body.has-bottomnav .cart-toast-wrap, body.has-bottomnav .pc-toast-wrap, body.has-bottomnav .vp-toast, body.has-bottomnav .guard-toast {
+    bottom:calc(72px + env(safe-area-inset-bottom,0px)) !important;
+  }
+  /* the inner button had a manual lift from the old rule — neutralise it so the
+     whole assistant now rides on its lifted `.da` container. */
+  body.has-bottomnav .da-fab { bottom:auto !important; }
+  /* Checkout is a focused conversion flow: drop the storefront tab bar so it
+     doesn't invite abandonment and doesn't collide with the pinned Pay bar.
+     co-root reserves its own bottom space (checkout.css), so reset body pad. */
+  body[data-route="checkout"] .mnav { display:none; }
+  body[data-route="checkout"] { padding-bottom:0; }
+  body[data-route="checkout"] .da, body[data-route="checkout"] .assistant-fab,
+  body[data-route="checkout"] .lo-launch, body[data-route="checkout"] .pc-fab,
+  body[data-route="checkout"] .cart-toast-wrap, body[data-route="checkout"] .pc-toast-wrap,
+  body[data-route="checkout"] .vp-toast, body[data-route="checkout"] .guard-toast { bottom:calc(88px + env(safe-area-inset-bottom,0px)) !important; }
+  body[data-route="checkout"] .da-fab { bottom:auto !important; }
+}
 .mm-close { width:42px; height:42px; border-radius:50%; display:grid; place-items:center; border:1px solid var(--line);
   background:var(--surface); color:var(--forest); cursor:pointer; transition:transform .25s, background .2s; }
 .mm-close:hover { transform:rotate(90deg); background:var(--mint-soft); }

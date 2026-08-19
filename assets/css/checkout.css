@@ -264,3 +264,44 @@
 .co-walletuse b { color:var(--leaf-600); font-weight:700; }
 .co-sum .row.co-total-struck b { text-decoration:line-through; opacity:.55; font-weight:600; }
 .co-sum .row.co-r-payable b { color:var(--leaf-600); }
+
+/* =============================================================
+   MOBILE ONLY (<=560px) — focused checkout with a pinned action.
+   Desktop (>=561px) is byte-identical: nothing here applies there.
+   ============================================================= */
+@media (max-width:560px){
+  .co-root { padding-top:16px; padding-bottom:calc(80px + env(safe-area-inset-bottom,0px)); }
+  .co-grid { gap:18px; }
+  .co-h { font-size:1.2rem; margin-bottom:12px; }
+  .co-summary { padding:15px; border-radius:16px; }
+  /* calm the per-step entrance on mobile — also keeps the fixed action bar
+     positioned to the viewport (a transformed ancestor would re-anchor it) */
+  .co-pane { animation:none; }
+  /* pin the step's primary action to the bottom as an app-style action bar */
+  .co-nav {
+    position:fixed; left:0; right:0; bottom:0; z-index:55; margin-top:0;
+    display:flex; align-items:center; gap:10px;
+    padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));
+    background:color-mix(in srgb, var(--surface,#fff) 92%, transparent);
+    -webkit-backdrop-filter:saturate(170%) blur(14px); backdrop-filter:saturate(170%) blur(14px);
+    border-top:1px solid var(--line,#e7ece8);
+    box-shadow:0 -10px 26px -14px rgba(11,31,23,.22);
+  }
+  .co-nav > span:empty { display:none; }        /* drop the spacer so Next spans full width on step 1 */
+  /* the nav Back button collides with the dead card-flip rule `.co-back{rotateY(180deg)}`
+     (checkout.css:~135) which mirrors its label; neutralise it within the mobile bar. */
+  .co-nav .co-back { flex:0 0 auto; padding-left:14px; padding-right:14px; min-height:48px; transform:none; }
+  .co-nav .co-next { flex:1 1 auto; min-width:0; min-height:48px; }
+  /* checkout add-address modal → app-style bottom sheet */
+  .co-modal { align-items:end; padding:0; }
+  .co-modal-card {
+    max-width:none; max-height:92vh; border-radius:22px 22px 0 0;
+    padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));
+    transform:translateY(100%);
+  }
+  .co-modal.show .co-modal-card { transform:translateY(0); }
+  .co-modal-card::before {
+    content:""; display:block; width:40px; height:4px; border-radius:999px;
+    background:var(--line); margin:-6px auto 12px;
+  }
+}

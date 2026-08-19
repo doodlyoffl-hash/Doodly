@@ -62,7 +62,7 @@
   function guardToast(msg) {
     let el = document.getElementById("doodlyGuardToast");
     if (!el) {
-      el = document.createElement("div"); el.id = "doodlyGuardToast"; el.setAttribute("role", "status");
+      el = document.createElement("div"); el.id = "doodlyGuardToast"; el.className = "guard-toast"; el.setAttribute("role", "status");
       el.style.cssText = "position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:99999;background:#0F3D2E;color:#fff;padding:12px 20px;border-radius:14px;font-size:.9rem;font-weight:600;box-shadow:0 12px 40px rgba(15,61,46,.4);max-width:90vw;text-align:center;line-height:1.4";
       document.body.appendChild(el);
     }
@@ -150,10 +150,12 @@
   function mobileMenu() {
     const links = M.nav.public.map((l, i) =>
       `<a href="${l.href}"${isActive(l.href) ? ' class="active" aria-current="page"' : ""} style="--i:${i}"><span>${l.label}</span>${icon("arrow", 18)}</a>`).join("");
+    // Navigation only — the customer account lives behind the footer Profile tab,
+    // so this menu carries no Profile/account-hub tile (avoids duplicate entry).
     const quick = [
-      ["Home", "/", "home"], ["Products", "/products.html", "box"], ["Subscription", "/subscriptions.html", "refresh"],
-      ["My Orders", "/account/orders.html", "clock"], ["Cart", "#cart", "box", "cart"],
-      ["Profile", "/account/profile.html", "user"], ["Support", "/contact.html", "msg"],
+      ["Home", "/", "home"], ["Products", "/products.html", "box"], ["Subscriptions", "/subscriptions.html", "refresh"],
+      ["Orders", "/account/orders.html", "clock"], ["Deliveries", "/account/deliveries.html", "truck"],
+      ["Help Centre", "/help.html", "help"], ["Support", "/contact.html", "msg"],
     ].map((q, i) => q[3] === "cart"
       ? `<button type="button" class="mm-tile" data-cart style="--i:${i}">${icon(q[2], 22)}<span>${q[0]}</span></button>`
       : `<a class="mm-tile" href="${q[1]}" style="--i:${i}">${icon(q[2], 22)}<span>${q[0]}</span></a>`).join("");
@@ -169,9 +171,9 @@
         <div class="mm-cta">
           <a href="/doodly.html" class="btn btn-ghost btn-lg mm-story"><img src="/assets/img/logo.png" alt="" style="height:16px;width:auto;vertical-align:-2px;margin-right:6px">✦ Unfold Pure</a>
           ${(() => { const u = publicUser(); return u
-            ? `<a href="${accountHome(u)}" class="btn btn-ghost btn-lg">${icon("user", 16)} My Account — ${esc(String(u.name || "").split(/\s+/)[0] || "Account")}</a>
+            ? `<a href="${accountHome(u)}" class="btn btn-ghost btn-lg mm-acct-link">${icon("user", 16)} My Account — ${esc(String(u.name || "").split(/\s+/)[0] || "Account")}</a>
                <button type="button" class="btn btn-ghost btn-lg mm-signout" data-logout>${icon("logout", 16)} Sign out</button>`
-            : `<a href="/login.html" class="btn btn-ghost btn-lg">Log in</a>`; })()}
+            : `<a href="/login/customer.html" class="btn btn-ghost btn-lg mm-login">Log in</a>`; })()}
           <a href="/subscriptions.html" class="btn btn-primary btn-lg">Subscribe</a>
         </div>
       </div>
@@ -308,6 +310,57 @@
     </footer>`;
   }
 
+  // Mobile bottom tab bar — quick one-thumb access (Home / Products / Cart / Account).
+  // Shown ONLY ≤560px via CSS (.mnav); desktop never renders it. The hamburger
+  // slide-out still holds the full menu. Cart tab reuses the existing #cartBtn.
+  /* Dairy-inspired footer illustration family — one coherent line-art set (24px
+     viewBox, 1.7 stroke, rounded, currentColor) used ONLY by the mobile bottom
+     bar. `.mn-milk` parts fill cream when active ("milk fills up"); other classed
+     parts drive the per-icon micro-animations in CSS. Kept out of the shared icon
+     registry so nothing elsewhere changes. */
+  function mnavIcon(name) {
+    const open = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+    const paths = {
+      // farmhouse + a drop of morning-fresh milk rising above the roof
+      home: '<path d="M4 11.5 12 5l8 6.5"/><path d="M6 10.4V19a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-8.6"/><path d="M10 20v-4.1a2 2 0 0 1 4 0V20"/><circle class="mn-drop mn-milk" cx="12" cy="3.5" r="1.15"/>',
+      // glass milk bottle with a milk fill (Shop)
+      box: '<path class="mn-bottle" d="M9.5 3.5h5M10.1 3.5v1.9c0 .7-.3 1.3-.9 1.8-1 .8-1.6 1.9-1.6 3.2V19A1.5 1.5 0 0 0 9.1 20.5h5A1.5 1.5 0 0 0 15.6 19v-8.6c0-1.3-.6-2.4-1.6-3.2-.6-.5-.9-1.1-.9-1.8V3.5"/><path class="mn-bottle-milk mn-milk" d="M7.6 12.6h8v6.4A1.5 1.5 0 0 1 14.1 20.5h-5A1.5 1.5 0 0 1 7.6 19z"/>',
+      // milk crate with two bottle necks (Cart)
+      cart: '<rect x="4" y="9.6" width="16" height="10.4" rx="1.6"/><path d="M4 13.5h16"/><path class="mn-crate-b" d="M8 9.6V6.7a1 1 0 0 1 1-1h.6a1 1 0 0 1 1 1v2.9"/><path class="mn-crate-b" d="M13.4 9.6V6.7a1 1 0 0 1 1-1h.6a1 1 0 0 1 1 1v2.9"/>',
+      // delivery package / crate (Orders)
+      receipt: '<path class="mn-pkg" d="M4 7.8 12 3.6l8 4.2v8.4L12 20.4 4 16.2z"/><path class="mn-pkg" d="M4 7.8 12 12l8-4.2M12 12v8.4"/><path d="M8 5.7 16 9.9" opacity=".5"/>',
+      // traditional milk can (Plans / subscription)
+      refresh: '<path class="mn-can" d="M8 8.3h8l-.6 9.8a2 2 0 0 1-2 1.9h-2.8a2 2 0 0 1-2-1.9z"/><path d="M9 8.3 9.4 5.7a1 1 0 0 1 1-.8h3.2a1 1 0 0 1 1 .8l.4 2.6"/><path d="M10.2 4.9h3.6"/>',
+      // a single milk drop (Wallet)
+      wallet: '<path class="mn-wdrop mn-milk" d="M12 3.7c2.9 3.6 5.3 6.5 5.3 9.5a5.3 5.3 0 0 1-10.6 0c0-3 2.4-5.9 5.3-9.5z"/><path d="M9.9 13.4a2.1 2.1 0 0 0 2.1 2.1" opacity=".5"/>',
+      // friendly customer (Profile)
+      user: '<circle class="mn-head" cx="12" cy="8" r="3.3"/><path class="mn-body" d="M5.6 19.8a6.4 6.4 0 0 1 12.8 0"/>',
+    };
+    return open + (paths[name] || paths.home) + '</svg>';
+  }
+
+  function bottomNav(mode) {
+    const u = publicUser();
+    const cells = (mode === "account") ? [
+      // Home goes to the STOREFRONT home (not the account dashboard) — a clear
+      // "back to the main site" affordance; the dashboard lives under Profile.
+      { href: "/", ic: "home", label: "Home", on: route === "home" },
+      { href: "/account/orders.html", ic: "receipt", label: "Orders", on: /^account\/orders/.test(route) },
+      { href: "/account/subscription.html", ic: "refresh", label: "Plans", on: /^account\/subscription$/.test(route) },
+      { href: "/account/wallet.html", ic: "wallet", label: "Wallet", on: /^account\/wallet/.test(route) },
+      { href: "/account/profile.html", ic: "user", label: "Profile", on: /^account\/(dashboard|profile|settings|referrals|rewards|addresses|notifications|support|tracking|deliveries|invoices|bottles|calendar|vacation|extra-milk|my-hr|subscription-history)/.test(route) || route === "account" },
+    ] : [
+      { href: "/", ic: "home", label: "Home", on: route === "home" },
+      { href: "/products.html", ic: "box", label: "Products", on: /^products/.test(route) },
+      { href: "#cart", ic: "cart", label: "Cart", cart: true },
+      // Profile = the customer account entry. Signed-in → their account home; guests
+      // go straight to the CUSTOMER login (never the /login.html role chooser). Post-
+      // login lands Home per the standing customerAuthDest rule (user-confirmed).
+      { href: u ? accountHome(u) : "/login/customer.html", ic: "user", label: "Profile", on: /^account/.test(route) },
+    ];
+    const html = cells.map(c => `<a class="mnav-item${c.on ? " active" : ""}" href="${c.href}"${c.cart ? ' data-mnav-cart="1"' : ""} aria-label="${c.label}"${c.on ? ' aria-current="page"' : ""}><span class="mnav-ic">${mnavIcon(c.ic)}</span><span class="mnav-lbl">${c.label}</span></a>`).join("");
+    return `<nav class="mnav" role="navigation" aria-label="Primary">${html}</nav>`;
+  }
   function renderPublic() {
     let main = "";
     if (entry.hero) main += B.render([{ type: "innerHero", ...entry.hero }]);
@@ -317,6 +370,9 @@
     document.body.insertAdjacentHTML("afterbegin", publicHeader());
     root.outerHTML = `<main id="main">${main}</main>`;
     document.body.insertAdjacentHTML("beforeend", publicFooter());
+    document.body.insertAdjacentHTML("beforeend", bottomNav());
+    document.body.classList.add("has-bottomnav");   // gates the mobile bottom-bar spacing (only where the bar exists)
+    (function () { const mc = document.querySelector(".mnav [data-mnav-cart]"); if (mc) mc.addEventListener("click", function (e) { e.preventDefault(); const cb = document.getElementById("cartBtn"); if (cb) cb.click(); else if (window.DOODLY_CART && DOODLY_CART.open) DOODLY_CART.open(); }); })();
     wirePublic();
   }
 
@@ -537,6 +593,8 @@
           <div class="content">${guarded ? "" : breadcrumbs(surface)}${content}</div>
         </div>
       </div>`;
+    // Customer account gets the mobile bottom tab bar (≤560px via CSS); admin/driver do NOT.
+    if (surface === "account") { document.body.insertAdjacentHTML("beforeend", bottomNav("account")); document.body.classList.add("has-bottomnav"); }
     wireDashboard();
   }
 
@@ -1018,7 +1076,17 @@
       ".dac-head h3{margin:0;font-family:var(--font-display,inherit);font-size:1.05rem;color:var(--ink,#16241c)}" +
       ".dac-body{padding:16px 18px;overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1 1 auto;min-height:0}" +
       ".dac-sec{border-top:1px solid var(--line,#e9efe9);padding-top:12px;margin-top:2px}.dac-sec .tbl{font-size:.82rem}" +
-      "@keyframes dacFade{from{opacity:0}to{opacity:1}}@keyframes dacPop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}";
+      "@keyframes dacFade{from{opacity:0}to{opacity:1}}@keyframes dacPop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}" +
+      // MOBILE (<=560px): dock these dialogs as app-style bottom sheets (slide up
+      // from the bottom edge, full width, top-rounded, grab handle, safe-area).
+      // Desktop keeps the centered dacPop card. Injected inline so it beats the
+      // bundle CSS in the cascade regardless of specificity.
+      "@media(max-width:560px){" +
+        ".dac-ov{align-items:flex-end;padding:0}" +
+        ".dac-card,.dac-modal{width:100%;max-width:none;border-radius:18px 18px 0 0;max-height:92vh;max-height:92dvh;animation:dacSheet .26s cubic-bezier(.22,1,.36,1)}" +
+        ".dac-card::before,.dac-modal::before{content:'';display:block;width:40px;height:4px;border-radius:999px;background:var(--line,#e3ece3);margin:8px auto 0;flex:0 0 auto}" +
+        ".dac-ft{padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}" +
+      "}@keyframes dacSheet{from{transform:translateY(100%)}to{transform:none}}";
     document.head.appendChild(s);
   }
   // Expose so the `if (window.dacStyles) dacStyles()` guards used by later drawers
@@ -9164,6 +9232,16 @@
     // Esc closes an open dropdown
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") document.querySelectorAll("details.acct-dd[open]").forEach((d) => d.removeAttribute("open")); });
   }
+
+  // Subtle haptic tick on mobile bottom-bar taps (Android/Chrome; iOS Safari
+  // ignores navigator.vibrate — no permission needed). Skipped under reduced motion.
+  try {
+    if (navigator.vibrate && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      document.addEventListener("pointerdown", function (e) {
+        if (e.target.closest && e.target.closest(".mnav-item")) { try { navigator.vibrate(6); } catch (_) {} }
+      }, { passive: true });
+    }
+  } catch (e) {}
 
   /* ============================================================
      Boot

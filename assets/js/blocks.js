@@ -24,6 +24,7 @@ window.DOODLY_BLOCKS = (function () {
     users:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 4-5.5 6.5-5.5s5.5 2 6.5 5.5"/><path d="M16 5.5a3.5 3.5 0 0 1 0 6.8M22 20c-.6-2.4-2-4-3.7-4.8"/>',
     home:'<path d="M4 11 12 4l8 7"/><path d="M6 10v10h12V10"/><path d="M10 20v-6h4v6"/>',
     box:'<path d="M21 8 12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
+    cart:'<circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.5 12h11l2-8H6"/>',
     cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/>',
     wallet:'<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18M17 14h.01"/>',
     bell:'<path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
