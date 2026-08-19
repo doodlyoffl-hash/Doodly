@@ -342,11 +342,13 @@
   function bottomNav(mode) {
     const u = publicUser();
     const cells = (mode === "account") ? [
-      { href: "/account/dashboard.html", ic: "home", label: "Home", on: /^account\/dashboard/.test(route) || route === "account" },
+      // Home goes to the STOREFRONT home (not the account dashboard) — a clear
+      // "back to the main site" affordance; the dashboard lives under Profile.
+      { href: "/", ic: "home", label: "Home", on: route === "home" },
       { href: "/account/orders.html", ic: "receipt", label: "Orders", on: /^account\/orders/.test(route) },
       { href: "/account/subscription.html", ic: "refresh", label: "Plans", on: /^account\/subscription$/.test(route) },
       { href: "/account/wallet.html", ic: "wallet", label: "Wallet", on: /^account\/wallet/.test(route) },
-      { href: "/account/profile.html", ic: "user", label: "Profile", on: /^account\/(profile|settings|referrals|rewards|addresses|notifications|support|tracking|deliveries|invoices|bottles|calendar|vacation|extra-milk|my-hr|subscription-history)/.test(route) },
+      { href: "/account/profile.html", ic: "user", label: "Profile", on: /^account\/(dashboard|profile|settings|referrals|rewards|addresses|notifications|support|tracking|deliveries|invoices|bottles|calendar|vacation|extra-milk|my-hr|subscription-history)/.test(route) || route === "account" },
     ] : [
       { href: "/", ic: "home", label: "Home", on: route === "home" },
       { href: "/products.html", ic: "box", label: "Products", on: /^products/.test(route) },
