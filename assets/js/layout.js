@@ -313,6 +313,32 @@
   // Mobile bottom tab bar — quick one-thumb access (Home / Products / Cart / Account).
   // Shown ONLY ≤560px via CSS (.mnav); desktop never renders it. The hamburger
   // slide-out still holds the full menu. Cart tab reuses the existing #cartBtn.
+  /* Dairy-inspired footer illustration family — one coherent line-art set (24px
+     viewBox, 1.7 stroke, rounded, currentColor) used ONLY by the mobile bottom
+     bar. `.mn-milk` parts fill cream when active ("milk fills up"); other classed
+     parts drive the per-icon micro-animations in CSS. Kept out of the shared icon
+     registry so nothing elsewhere changes. */
+  function mnavIcon(name) {
+    const open = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+    const paths = {
+      // farmhouse + a drop of morning-fresh milk rising above the roof
+      home: '<path d="M4 11.5 12 5l8 6.5"/><path d="M6 10.4V19a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-8.6"/><path d="M10 20v-4.1a2 2 0 0 1 4 0V20"/><circle class="mn-drop mn-milk" cx="12" cy="3.5" r="1.15"/>',
+      // glass milk bottle with a milk fill (Shop)
+      box: '<path class="mn-bottle" d="M9.5 3.5h5M10.1 3.5v1.9c0 .7-.3 1.3-.9 1.8-1 .8-1.6 1.9-1.6 3.2V19A1.5 1.5 0 0 0 9.1 20.5h5A1.5 1.5 0 0 0 15.6 19v-8.6c0-1.3-.6-2.4-1.6-3.2-.6-.5-.9-1.1-.9-1.8V3.5"/><path class="mn-bottle-milk mn-milk" d="M7.6 12.6h8v6.4A1.5 1.5 0 0 1 14.1 20.5h-5A1.5 1.5 0 0 1 7.6 19z"/>',
+      // milk crate with two bottle necks (Cart)
+      cart: '<rect x="4" y="9.6" width="16" height="10.4" rx="1.6"/><path d="M4 13.5h16"/><path class="mn-crate-b" d="M8 9.6V6.7a1 1 0 0 1 1-1h.6a1 1 0 0 1 1 1v2.9"/><path class="mn-crate-b" d="M13.4 9.6V6.7a1 1 0 0 1 1-1h.6a1 1 0 0 1 1 1v2.9"/>',
+      // delivery package / crate (Orders)
+      receipt: '<path class="mn-pkg" d="M4 7.8 12 3.6l8 4.2v8.4L12 20.4 4 16.2z"/><path class="mn-pkg" d="M4 7.8 12 12l8-4.2M12 12v8.4"/><path d="M8 5.7 16 9.9" opacity=".5"/>',
+      // traditional milk can (Plans / subscription)
+      refresh: '<path class="mn-can" d="M8 8.3h8l-.6 9.8a2 2 0 0 1-2 1.9h-2.8a2 2 0 0 1-2-1.9z"/><path d="M9 8.3 9.4 5.7a1 1 0 0 1 1-.8h3.2a1 1 0 0 1 1 .8l.4 2.6"/><path d="M10.2 4.9h3.6"/>',
+      // a single milk drop (Wallet)
+      wallet: '<path class="mn-wdrop mn-milk" d="M12 3.7c2.9 3.6 5.3 6.5 5.3 9.5a5.3 5.3 0 0 1-10.6 0c0-3 2.4-5.9 5.3-9.5z"/><path d="M9.9 13.4a2.1 2.1 0 0 0 2.1 2.1" opacity=".5"/>',
+      // friendly customer (Profile)
+      user: '<circle class="mn-head" cx="12" cy="8" r="3.3"/><path class="mn-body" d="M5.6 19.8a6.4 6.4 0 0 1 12.8 0"/>',
+    };
+    return open + (paths[name] || paths.home) + '</svg>';
+  }
+
   function bottomNav(mode) {
     const u = publicUser();
     const cells = (mode === "account") ? [
@@ -330,8 +356,8 @@
       // login lands Home per the standing customerAuthDest rule (user-confirmed).
       { href: u ? accountHome(u) : "/login/customer.html", ic: "user", label: "Profile", on: /^account/.test(route) },
     ];
-    const html = cells.map(c => `<a class="mnav-item${c.on ? " active" : ""}" href="${c.href}"${c.cart ? ' data-mnav-cart="1"' : ""} aria-label="${c.label}"><span class="mnav-ic">${icon(c.ic, 22)}</span><span class="mnav-lbl">${c.label}</span></a>`).join("");
-    return `<nav class="mnav" role="navigation" aria-label="Quick navigation">${html}</nav>`;
+    const html = cells.map(c => `<a class="mnav-item${c.on ? " active" : ""}" href="${c.href}"${c.cart ? ' data-mnav-cart="1"' : ""} aria-label="${c.label}"${c.on ? ' aria-current="page"' : ""}><span class="mnav-ic">${mnavIcon(c.ic)}</span><span class="mnav-lbl">${c.label}</span></a>`).join("");
+    return `<nav class="mnav" role="navigation" aria-label="Primary">${html}</nav>`;
   }
   function renderPublic() {
     let main = "";
@@ -9204,6 +9230,16 @@
     // Esc closes an open dropdown
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") document.querySelectorAll("details.acct-dd[open]").forEach((d) => d.removeAttribute("open")); });
   }
+
+  // Subtle haptic tick on mobile bottom-bar taps (Android/Chrome; iOS Safari
+  // ignores navigator.vibrate — no permission needed). Skipped under reduced motion.
+  try {
+    if (navigator.vibrate && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      document.addEventListener("pointerdown", function (e) {
+        if (e.target.closest && e.target.closest(".mnav-item")) { try { navigator.vibrate(6); } catch (_) {} }
+      }, { passive: true });
+    }
+  } catch (e) {}
 
   /* ============================================================
      Boot
