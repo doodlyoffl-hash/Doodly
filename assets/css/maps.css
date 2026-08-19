@@ -100,3 +100,23 @@
 @media (prefers-reduced-motion: reduce) {
   .mp-pin-main, .mp-route-line, .mp-cur-halo { animation:none !important; }
 }
+
+/* =============================================================
+   MOBILE ONLY (<=560px) — present the address form as an
+   app-style bottom sheet (docks to the bottom edge, slides up,
+   grab-handle affordance). Desktop keeps the centered card.
+   ============================================================= */
+@media (max-width:560px){
+  .ad-modal { align-items:end; padding:0; }
+  .ad-modal-card {
+    width:100%; max-width:none; max-height:92vh;
+    border-radius:22px 22px 0 0;
+    padding-bottom:calc(18px + env(safe-area-inset-bottom,0px));
+    transform:translateY(100%);
+  }
+  .ad-modal.show .ad-modal-card { transform:translateY(0); }
+  .ad-modal-card::before {
+    content:""; display:block; width:40px; height:4px; border-radius:999px;
+    background:var(--line); margin:2px auto 12px;
+  }
+}

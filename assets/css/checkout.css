@@ -292,4 +292,16 @@
      (checkout.css:~135) which mirrors its label; neutralise it within the mobile bar. */
   .co-nav .co-back { flex:0 0 auto; padding-left:14px; padding-right:14px; min-height:48px; transform:none; }
   .co-nav .co-next { flex:1 1 auto; min-width:0; min-height:48px; }
+  /* checkout add-address modal → app-style bottom sheet */
+  .co-modal { align-items:end; padding:0; }
+  .co-modal-card {
+    max-width:none; max-height:92vh; border-radius:22px 22px 0 0;
+    padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));
+    transform:translateY(100%);
+  }
+  .co-modal.show .co-modal-card { transform:translateY(0); }
+  .co-modal-card::before {
+    content:""; display:block; width:40px; height:4px; border-radius:999px;
+    background:var(--line); margin:-6px auto 12px;
+  }
 }
