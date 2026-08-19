@@ -326,8 +326,9 @@
       { href: "/products.html", ic: "box", label: "Products", on: /^products/.test(route) },
       { href: "#cart", ic: "cart", label: "Cart", cart: true },
       // Profile = the customer account entry. Signed-in → their account home; guests
-      // go straight to the CUSTOMER login (never the /login.html role chooser).
-      { href: u ? accountHome(u) : "/login/customer.html?from=/account/dashboard.html", ic: "user", label: "Profile", on: /^account/.test(route) },
+      // go straight to the CUSTOMER login (never the /login.html role chooser). Post-
+      // login lands Home per the standing customerAuthDest rule (user-confirmed).
+      { href: u ? accountHome(u) : "/login/customer.html", ic: "user", label: "Profile", on: /^account/.test(route) },
     ];
     const html = cells.map(c => `<a class="mnav-item${c.on ? " active" : ""}" href="${c.href}"${c.cart ? ' data-mnav-cart="1"' : ""} aria-label="${c.label}"><span class="mnav-ic">${icon(c.ic, 22)}</span><span class="mnav-lbl">${c.label}</span></a>`).join("");
     return `<nav class="mnav" role="navigation" aria-label="Quick navigation">${html}</nav>`;
