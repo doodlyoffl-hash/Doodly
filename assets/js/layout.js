@@ -62,7 +62,7 @@
   function guardToast(msg) {
     let el = document.getElementById("doodlyGuardToast");
     if (!el) {
-      el = document.createElement("div"); el.id = "doodlyGuardToast"; el.setAttribute("role", "status");
+      el = document.createElement("div"); el.id = "doodlyGuardToast"; el.className = "guard-toast"; el.setAttribute("role", "status");
       el.style.cssText = "position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:99999;background:#0F3D2E;color:#fff;padding:12px 20px;border-radius:14px;font-size:.9rem;font-weight:600;box-shadow:0 12px 40px rgba(15,61,46,.4);max-width:90vw;text-align:center;line-height:1.4";
       document.body.appendChild(el);
     }
@@ -316,7 +316,7 @@
     const cells = (mode === "account") ? [
       { href: "/account/dashboard.html", ic: "home", label: "Home", on: /^account\/dashboard/.test(route) || route === "account" },
       { href: "/account/orders.html", ic: "receipt", label: "Orders", on: /^account\/orders/.test(route) },
-      { href: "/account/subscription.html", ic: "refresh", label: "Plans", on: /^account\/subscription/.test(route) },
+      { href: "/account/subscription.html", ic: "refresh", label: "Plans", on: /^account\/subscription$/.test(route) },
       { href: "/account/wallet.html", ic: "wallet", label: "Wallet", on: /^account\/wallet/.test(route) },
       { href: "/account/profile.html", ic: "user", label: "Account", on: /^account\/(profile|settings|referrals|rewards|addresses|notifications|support|tracking|deliveries|invoices|bottles|calendar|vacation|extra-milk|my-hr|subscription-history)/.test(route) },
     ] : [
@@ -338,6 +338,7 @@
     root.outerHTML = `<main id="main">${main}</main>`;
     document.body.insertAdjacentHTML("beforeend", publicFooter());
     document.body.insertAdjacentHTML("beforeend", bottomNav());
+    document.body.classList.add("has-bottomnav");   // gates the mobile bottom-bar spacing (only where the bar exists)
     (function () { const mc = document.querySelector(".mnav [data-mnav-cart]"); if (mc) mc.addEventListener("click", function (e) { e.preventDefault(); const cb = document.getElementById("cartBtn"); if (cb) cb.click(); else if (window.DOODLY_CART && DOODLY_CART.open) DOODLY_CART.open(); }); })();
     wirePublic();
   }
@@ -560,7 +561,7 @@
         </div>
       </div>`;
     // Customer account gets the mobile bottom tab bar (≤560px via CSS); admin/driver do NOT.
-    if (surface === "account") document.body.insertAdjacentHTML("beforeend", bottomNav("account"));
+    if (surface === "account") { document.body.insertAdjacentHTML("beforeend", bottomNav("account")); document.body.classList.add("has-bottomnav"); }
     wireDashboard();
   }
 

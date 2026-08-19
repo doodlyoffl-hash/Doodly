@@ -289,12 +289,17 @@ body[data-route^="delivery/"] {
   .section-head .display,
   h2.display { font-size: 21px; line-height: 1.2; letter-spacing: -.01em; }
   .lead { font-size: 15.5px; line-height: 1.5; }
-  /* touch ergonomics — comfortable, thumb-friendly targets */
+  /* touch ergonomics — comfortable, thumb-friendly targets. Exclude toggle
+     inputs: a 44px min-height distorts native checkboxes/radios (e.g. the
+     17px .co-walletuse checkbox) into a tall bar. */
   .btn { min-height: 44px; }
-  input, select, textarea, .input, .co-input, .pc-input, .fl-field input { min-height: 44px; }
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea, .input, .co-input, .pc-input, .fl-field input { min-height: 44px; }
   .nav-links a { min-height: 40px; display: inline-flex; align-items: center; }
 
-  /* Phase 3 — mobile section rhythm (desktop's airy 56px reads spread-out on a phone) */
+  /* Phase 3 — mobile section rhythm: reduce the base `section` padding-block
+     (styles.css: clamp(56px,8vw,110px) → 56px on a phone) to a tighter 38px.
+     Applies to every <section>, incl. checkout's `.co-pane`, keeping the phone
+     reduction consistent (co-pane: 56px desktop → 38px mobile, as tuned). */
   section { padding-top: 38px; padding-bottom: 38px; }
   .wrap { padding-left: 18px; padding-right: 18px; }
   /* Phase 4 — product cards: more content room, comfortable on a phone */
