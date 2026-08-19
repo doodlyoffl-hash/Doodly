@@ -788,6 +788,10 @@ table.tbl td .strong { color:var(--forest); font-weight:700; }
   body[data-route="checkout"] .da-fab, body[data-route="checkout"] .assistant-fab,
   body[data-route="checkout"] [class*="-fab"], body[data-route="checkout"] .lo-launch,
   body[data-route="checkout"] .pc-fab { bottom:calc(88px + env(safe-area-inset-bottom,0px)) !important; }
+  /* the quick-buy "Trial" promo (.qbuy is the fixed wrapper; .qbuy-fab inside is
+     static, so the lift above can't move it) collides with the pinned CTA — and a
+     trial-pack promo mid-checkout is a distraction anyway. Drop it on checkout. */
+  body[data-route="checkout"] .qbuy { display:none; }
 }
 .mm-close { width:42px; height:42px; border-radius:50%; display:grid; place-items:center; border:1px solid var(--line);
   background:var(--surface); color:var(--forest); cursor:pointer; transition:transform .25s, background .2s; }
