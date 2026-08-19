@@ -845,20 +845,27 @@ table.tbl td .strong { color:var(--forest); font-weight:700; }
      driver/delivery/auth have no bar, so they get no dead bottom space. */
   body.has-bottomnav { padding-bottom:calc(68px + env(safe-area-inset-bottom,0px)); }
   /* lift bottom-anchored floating buttons AND centre-bottom toasts above the bar
-     (guardToast is lifted via its own class in layout.js). */
-  body.has-bottomnav .da-fab, body.has-bottomnav .assistant-fab, body.has-bottomnav .lo-launch, body.has-bottomnav .pc-fab,
+     (guardToast is lifted via its own class in layout.js). Target the FIXED
+     containers — `.da` (chat assistant), not the inner static `.da-fab`, whose
+     hit-box would otherwise still sit over the Profile tab and swallow its taps. */
+  body.has-bottomnav .da, body.has-bottomnav .assistant-fab,
+  body.has-bottomnav .lo-launch, body.has-bottomnav .pc-fab,
   body.has-bottomnav .cart-toast-wrap, body.has-bottomnav .pc-toast-wrap, body.has-bottomnav .vp-toast, body.has-bottomnav .guard-toast {
     bottom:calc(72px + env(safe-area-inset-bottom,0px)) !important;
   }
+  /* the inner button had a manual lift from the old rule — neutralise it so the
+     whole assistant now rides on its lifted `.da` container. */
+  body.has-bottomnav .da-fab { bottom:auto !important; }
   /* Checkout is a focused conversion flow: drop the storefront tab bar so it
      doesn't invite abandonment and doesn't collide with the pinned Pay bar.
      co-root reserves its own bottom space (checkout.css), so reset body pad. */
   body[data-route="checkout"] .mnav { display:none; }
   body[data-route="checkout"] { padding-bottom:0; }
-  body[data-route="checkout"] .da-fab, body[data-route="checkout"] .assistant-fab,
+  body[data-route="checkout"] .da, body[data-route="checkout"] .assistant-fab,
   body[data-route="checkout"] .lo-launch, body[data-route="checkout"] .pc-fab,
   body[data-route="checkout"] .cart-toast-wrap, body[data-route="checkout"] .pc-toast-wrap,
   body[data-route="checkout"] .vp-toast, body[data-route="checkout"] .guard-toast { bottom:calc(88px + env(safe-area-inset-bottom,0px)) !important; }
+  body[data-route="checkout"] .da-fab { bottom:auto !important; }
 }
 .mm-close { width:42px; height:42px; border-radius:50%; display:grid; place-items:center; border:1px solid var(--line);
   background:var(--surface); color:var(--forest); cursor:pointer; transition:transform .25s, background .2s; }
