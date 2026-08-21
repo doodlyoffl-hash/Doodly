@@ -67,7 +67,7 @@ if (CleanCSS) {
   // precedence). Verified visually across surfaces; falls back to concat on error.
   const cleaner = new CleanCSS({ level: { 1: {}, 2: { mergeSemantically: false, restructureRules: false } }, returnPromise: false });
   // MUST match the order the pages loaded stylesheets in (cascade order).
-  const CSS_ORDER = ["styles","type","app","motion","auth","login","cart","checkout","schedule","pincode","autopay","maps","delivery","rbac","rbac-admin","audit","expenses","unfold","wallet","b2b","b2b-pricing","dashboard","late","assistant","customer","liveorder","help","tour","search","assign","marquee","datatable","gst","referral","invoice","puzzle","loyalty"];
+  const CSS_ORDER = ["styles","type","app","motion","auth","login","cart","checkout","exit-intent","schedule","pincode","autopay","maps","delivery","rbac","rbac-admin","audit","expenses","unfold","wallet","b2b","b2b-pricing","dashboard","late","assistant","customer","liveorder","help","tour","search","assign","marquee","datatable","gst","referral","invoice","puzzle","loyalty"];
   let raw = "", missing = [];
   for (const name of CSS_ORDER) {
     try { raw += `/*! ${name} */\n` + await readFile(join(cssDir, name + ".css"), "utf8") + "\n"; }

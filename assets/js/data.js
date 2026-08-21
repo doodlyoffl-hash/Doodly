@@ -97,6 +97,32 @@ window.DOODLY = {
     integrations: { googleMapsKey: "", razorpayKeyId: "", gaMeasurementId: "G-G22MZXRM0H", gaMeasurementIdDev: "", metaPixelId: "", clarityId: "y2rzetuvxp", clarityIdDev: "", domain: "doodly.in" },
   },
 
+  /* ---- Exit-Intent recovery offer (Admin-configurable) ----
+     A one-time extra-10% popup shown to an eligible visitor who shows genuine
+     exit intent. It hands the EXISTING coupon `couponCode` to checkout, which
+     auto-applies it through /api/coupons/validate — the BACKEND enforces the
+     one-time redemption (Coupon.perCustomerLimit + CouponRedemption). These are
+     storefront DEFAULTS; the live values are served by /api/config → exitIntent
+     from AppSetting `campaign.exitIntent` (edited under Admin → Growth → Coupons →
+     Exit-Intent), so copy/toggles change with no redeploy. */
+  exitIntent: {
+    enabled: true,
+    couponCode: "EXIT10",          // must exist in the Coupon engine (PERCENT 10%, perCustomerLimit 1)
+    campaign: "exit-intent",
+    frequency: "customer",         // 'customer' | 'session' | 'campaign'
+    cooldownDays: 7,               // re-eligible this long after a dismissal
+    requireProductView: true,      // only after the visitor has seen a product page
+    idleMsMobile: 15000,           // mobile inactivity-after-intent fallback
+    startsAt: null, endsAt: null,  // optional ISO schedule window
+    heading: "Before you go… 🥛",
+    offer: "Get an EXTRA 10% OFF",
+    sub: "Your fresh DOODLY order is waiting — here's an exclusive treat before you leave.",
+    cta: "Claim 10% OFF",
+    dismiss: "No thanks",
+    badge: "10%",
+    note: "One-time offer · applied at checkout",
+  },
+
   /* ---- Delivery scheduling settings (Admin-configurable) ----
      The 8 PM cut-off and everything below is read by schedule.js;
      admins override these from /admin/delivery-settings (persisted

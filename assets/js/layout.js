@@ -6318,6 +6318,14 @@
   async function wireCouponsBackend() {
     if ((document.body.dataset.route || "") !== "admin/coupons" || !window.DOODLY_API) return;
     var host = document.querySelector('.dt-host[data-dataset="coupons"]');
+    // Inject the Exit-Intent popup settings button once (config lives under Coupons).
+    if (host && !document.getElementById("ei-settings-bar")) {
+      var bar = document.createElement("div"); bar.id = "ei-settings-bar";
+      bar.style.cssText = "display:flex;justify-content:flex-end;margin-bottom:10px";
+      bar.innerHTML = '<button class="btn btn-ghost" type="button" id="ei-settings-btn">🎯 Exit-Intent Popup</button>';
+      host.parentNode.insertBefore(bar, host);
+      bar.querySelector("#ei-settings-btn").addEventListener("click", function () { window.DOODLY_ADMIN.exitIntentSettings(); });
+    }
     try {
       _couponList = {};
       var data = await DOODLY_API.get("/api/admin/coupons?view=list&pageSize=500");
@@ -6404,6 +6412,73 @@
   }
   window.DOODLY_ADMIN.createCoupon = function () { openCouponForm(null); };
   window.DOODLY_ADMIN.manageCoupon = function (id) { openCouponForm(_couponList[id]); };
+
+  // ---- Growth → Coupons → Exit-Intent recovery popup (config only; the discount
+  // itself is the referenced Coupon, so one-time usage is enforced by the coupon
+  // engine — this panel just toggles + tunes the storefront popup). ----
+  async function openExitIntentForm() {
+    if (document.querySelector(".dac-ov")) return;
+    if (window.dacStyles) dacStyles();
+    var cfg = null;
+    try { var r = await DOODLY_API.get("/api/admin/campaign/exit-intent"); cfg = r && r.config; } catch (e) {
+      dacToast(e && e.code === "forbidden" ? "Only Marketing / Admin can configure this (403)." : (e && e.message) || "Couldn't load exit-intent config."); return;
+    }
+    cfg = cfg || {};
+    var chk = function (b) { return b ? " checked" : ""; };
+    var dv = function (d) { return d ? String(d).slice(0, 10) : ""; };
+    var ov = document.createElement("div"); ov.className = "dac-ov";
+    ov.innerHTML = '<div class="dac-card" role="dialog" aria-modal="true" aria-label="Exit-Intent offer" style="max-width:600px">'
+      + '<div class="dac-hd"><h3>Exit-Intent Popup</h3><button class="dac-x" type="button" aria-label="Close">&times;</button></div>'
+      + '<form class="dac-bd" autocomplete="off">'
+      + '<p class="muted-sm" style="margin:0 0 10px">A one-time extra-discount offer shown when an eligible visitor is about to leave. It applies the coupon below at checkout — create that coupon (Percentage, Per-customer limit 1) so the <b>backend enforces one-time use</b>.</p>'
+      + '<div style="margin-bottom:10px"><label class="check" style="display:inline-flex;gap:6px"><input type="checkbox" id="ei-on"' + chk(cfg.enabled) + '> Enabled (show the popup)</label></div>'
+      + '<div class="dac-row"><label class="dac-f"><span>Coupon code <i class="req">*</i></span><input class="input" id="ei-code" value="' + esc(cfg.couponCode || "") + '" placeholder="EXIT10"></label>'
+      + '<label class="dac-f"><span>Frequency</span><select class="input" id="ei-freq">'
+      + '<option value="customer"' + (cfg.frequency === "customer" || !cfg.frequency ? " selected" : "") + '>Once per customer</option>'
+      + '<option value="session"' + (cfg.frequency === "session" ? " selected" : "") + '>Once per session</option>'
+      + '<option value="campaign"' + (cfg.frequency === "campaign" ? " selected" : "") + '>Once per campaign</option></select></label></div>'
+      + '<div class="dac-row"><label class="dac-f"><span>Re-show after dismissal (days)</span><input class="input" id="ei-cool" inputmode="numeric" value="' + (cfg.cooldownDays != null ? cfg.cooldownDays : 7) + '"></label>'
+      + '<label class="dac-f"><span>Mobile idle trigger (seconds)</span><input class="input" id="ei-idle" inputmode="numeric" value="' + Math.round((cfg.idleMsMobile || 15000) / 1000) + '"></label></div>'
+      + '<div style="margin-bottom:10px"><label class="check" style="display:inline-flex;gap:6px"><input type="checkbox" id="ei-prod"' + chk(cfg.requireProductView) + '> Only after the visitor has viewed a product</label></div>'
+      + '<div class="dac-row"><label class="dac-f"><span>Starts (optional)</span><input class="input" id="ei-start" type="date" value="' + dv(cfg.startsAt) + '"></label>'
+      + '<label class="dac-f"><span>Ends (optional)</span><input class="input" id="ei-end" type="date" value="' + dv(cfg.endsAt) + '"></label></div>'
+      + '<hr style="border:0;border-top:1px solid var(--line);margin:12px 0"><p class="muted-sm" style="margin:0 0 8px;font-weight:600">Popup copy</p>'
+      + '<div class="dac-row"><label class="dac-f"><span>Heading</span><input class="input" id="ei-head" value="' + esc(cfg.heading || "") + '"></label>'
+      + '<label class="dac-f"><span>Offer line</span><input class="input" id="ei-offer" value="' + esc(cfg.offer || "") + '"></label></div>'
+      + '<label class="dac-f" style="margin-bottom:10px"><span>Sub-text</span><input class="input" id="ei-sub" value="' + esc(cfg.sub || "") + '"></label>'
+      + '<div class="dac-row"><label class="dac-f"><span>Claim button</span><input class="input" id="ei-cta" value="' + esc(cfg.cta || "") + '"></label>'
+      + '<label class="dac-f"><span>Dismiss link</span><input class="input" id="ei-dismiss" value="' + esc(cfg.dismiss || "") + '"></label></div>'
+      + '<div class="dac-row"><label class="dac-f"><span>Badge</span><input class="input" id="ei-badge" value="' + esc(cfg.badge || "") + '" maxlength="6"></label>'
+      + '<label class="dac-f"><span>Fine print</span><input class="input" id="ei-note" value="' + esc(cfg.note || "") + '"></label></div>'
+      + '<p class="dac-err" id="ei-err"></p></form>'
+      + '<div class="dac-ft"><span style="flex:1"></span><button class="btn btn-ghost" type="button" id="ei-cancel">Cancel</button><button class="btn btn-primary" type="button" id="ei-save">Save</button></div></div>';
+    document.body.appendChild(ov);
+    var qs = function (s) { return ov.querySelector(s); };
+    var close = function () { ov.remove(); document.removeEventListener("keydown", onKey); };
+    function onKey(e) { if (e.key === "Escape") close(); }
+    qs(".dac-x").addEventListener("click", close); qs("#ei-cancel").addEventListener("click", close);
+    ov.addEventListener("click", function (e) { if (e.target === ov) close(); });
+    document.addEventListener("keydown", onKey);
+    qs("#ei-save").addEventListener("click", async function () {
+      var err = qs("#ei-err");
+      var code = (qs("#ei-code").value || "").trim();
+      if (!code) { err.textContent = "Enter the coupon code the popup should apply."; return; }
+      var patch = {
+        enabled: qs("#ei-on").checked, couponCode: code, frequency: qs("#ei-freq").value,
+        cooldownDays: Number(qs("#ei-cool").value) || 0, idleMsMobile: Math.round((Number(qs("#ei-idle").value) || 15) * 1000),
+        requireProductView: qs("#ei-prod").checked,
+        startsAt: qs("#ei-start").value || null, endsAt: qs("#ei-end").value || null,
+        heading: qs("#ei-head").value, offer: qs("#ei-offer").value, sub: qs("#ei-sub").value,
+        cta: qs("#ei-cta").value, dismiss: qs("#ei-dismiss").value, badge: qs("#ei-badge").value, note: qs("#ei-note").value,
+      };
+      var btn = qs("#ei-save"); btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
+      try {
+        await DOODLY_API.post("/api/admin/campaign/exit-intent", { config: patch });
+        dacToast("Exit-Intent popup " + (patch.enabled ? "enabled" : "disabled") + " · " + code); close();
+      } catch (e) { err.textContent = e.code === "forbidden" ? "Only Marketing / Admin can configure this (403)." : (e.message || "Couldn't save."); btn.disabled = false; btn.textContent = "Save"; }
+    });
+  }
+  window.DOODLY_ADMIN.exitIntentSettings = openExitIntentForm;
 
   // ---- Growth → Offers (admin/offers → live promotion engine: typed/prioritised offers + lifecycle; reuses /api/admin/offers + coupon discount engine) ----
   var OF_TYPES = ["PERCENT", "FLAT", "BOGO", "BUNDLE", "SUBSCRIPTION", "FIRST_ORDER", "SEASONAL", "FESTIVAL", "LIMITED_TIME", "CUSTOMER_SPECIFIC", "PRODUCT_SPECIFIC", "CATEGORY_SPECIFIC", "CASHBACK"];
