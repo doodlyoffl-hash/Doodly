@@ -287,7 +287,7 @@ window.DOODLY_CHECKOUT = (function () {
     if (i < 0 || i >= STEPS.length) return;
     state.step = i; state.reached = Math.max(state.reached, i);
     STEPS.forEach((s, k) => { const el = paneEl(s[0]); if (el) el.hidden = k !== i; });
-    if (STEPS[i] && STEPS[i][0] === "payment") { hydrateWalletUse(); recalcPromo(); }   // coupon + wallet preview
+    if (STEPS[i] && STEPS[i][0] === "payment") { hydrateWalletUse(); maybeAutoCoupon(); recalcPromo(); }   // coupon + wallet preview (+ staged campaign coupon)
     updateStepper();
     const top = mount.querySelector(".co-steps"); if (top) top.scrollIntoView({ behavior: reduced() ? "auto" : "smooth", block: "start" });
   }
@@ -377,6 +377,25 @@ window.DOODLY_CHECKOUT = (function () {
         recalcPromo();
       })
       .catch((e) => { btn.disabled = false; btn.textContent = "Apply"; couponMsg((e && e.message) || "Couldn't check the coupon — try again.", false); });
+  }
+  // A campaign popup (e.g. the exit-intent 10% offer) can stage a coupon code in
+  // localStorage['doodly-coupon']. When the payment step is reached we pre-fill the
+  // coupon box and run the SAME applyCoupon() path — so the BACKEND validates and
+  // enforces one-time use exactly as if the customer typed it. One attempt per
+  // checkout; the staged code is consumed once purchase succeeds (see line ~654).
+  let _autoCouponTried = false;
+  function maybeAutoCoupon() {
+    if (_autoCouponTried) return;
+    let code = ""; try { code = (localStorage.getItem("doodly-coupon") || "").trim(); } catch (e) {}
+    if (!code) return;
+    if (state.coupon || state.autopay === true) return;             // already applied, or AutoPay ignores coupons
+    if (!coSignedIn() || !window.DOODLY_API) return;                // needs a session to validate
+    const inp = mount.querySelector("#coCouponInput");
+    if (!inp || inp.disabled || (inp.value || "").trim()) return;   // don't clobber a code the customer is typing
+    _autoCouponTried = true;
+    inp.value = code.toUpperCase();
+    try { if (window.DOODLY_ANALYTICS) DOODLY_ANALYTICS.trackCoupon("auto_applied", { code: code.toUpperCase(), source: "exit_intent" }); } catch (e) {}
+    applyCoupon();
   }
   function hydrateWalletUse() {
     const row = mount.querySelector("#coWalletUse"); if (!row) return;
@@ -652,6 +671,8 @@ window.DOODLY_CHECKOUT = (function () {
         </div></div>`;
     // clear the cart now that the order is placed
     try { localStorage.removeItem("doodly-cart"); } catch (e) {}
+    // consume any staged campaign coupon (exit-intent etc.) — it's been redeemed
+    try { localStorage.removeItem("doodly-coupon"); } catch (e) {}
     if (CART()) CART().refreshBadge(true);
     // GA4: backend-CONFIRMED purchase only (state.realOrder is set from /api/checkout or after
     // /api/payments/verify). Idempotent per DOODLY order number — refresh / back / retry / re-render

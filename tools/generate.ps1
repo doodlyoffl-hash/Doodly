@@ -58,6 +58,7 @@ $template = @'
   <script src="/assets/js/variant-select.min.js"></script>
   <script src="/assets/js/cart.min.js"></script>
   <script src="/assets/js/checkout.min.js"></script>
+  <script src="/assets/js/exit-intent.min.js"></script>
   <script src="/assets/js/auth.min.js"></script>
   <script src="/assets/js/qr.min.js"></script>
   <script src="/assets/js/unfold.min.js"></script>

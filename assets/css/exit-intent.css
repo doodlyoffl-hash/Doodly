@@ -1,0 +1,153 @@
+/* =============================================================
+   DOODLY — Exit-Intent 10% Offer popup  (paired with exit-intent.js)
+
+   Premium, dairy-themed, token-driven (light + dark). Centered card
+   on desktop, docked bottom-sheet ≤560px. Animation is transform/
+   opacity ONLY on GPU-isolated layers (no zoom, no layout shift, no
+   per-frame re-blur of moving content) → no jitter on mobile GPUs.
+   Fully disabled under prefers-reduced-motion.
+   ============================================================= */
+
+.dexit-ov {
+  position: fixed; inset: 0; z-index: 2000;
+  display: grid; place-items: center;
+  padding: 20px;
+  background: rgba(8, 20, 14, .46);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  opacity: 0; visibility: hidden;
+  transition: opacity .3s ease, visibility 0s linear .3s;
+}
+.dexit-ov.show { opacity: 1; visibility: visible; transition: opacity .32s ease; }
+
+.dexit-card {
+  position: relative;
+  width: 100%; max-width: 400px;
+  background:
+    radial-gradient(120% 90% at 50% -10%, color-mix(in srgb, var(--mint) 26%, var(--surface)) 0%, var(--surface) 58%);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg, 28px);
+  box-shadow: 0 24px 70px rgba(15, 61, 46, .28), 0 2px 10px rgba(15, 61, 46, .12);
+  padding: 30px 26px 24px;
+  text-align: center;
+  overflow: hidden;
+  /* entrance: rise + settle. GPU-isolated so it composites off-thread. */
+  transform: translate3d(0, 22px, 0) scale(.975);
+  opacity: 0;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  transition: transform .42s cubic-bezier(.22, 1, .36, 1), opacity .34s ease;
+}
+.dexit-ov.show .dexit-card { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
+
+/* soft top sheen so the card reads "premium" without a busy graphic */
+.dexit-card::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 84px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--leaf) 14%, transparent), transparent);
+  pointer-events: none;
+}
+
+.dexit-x {
+  position: absolute; top: 12px; right: 12px; z-index: 2;
+  width: 34px; height: 34px; border-radius: 50%;
+  display: grid; place-items: center;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-3);
+  cursor: pointer; transition: transform .18s ease, color .18s ease, border-color .18s ease;
+}
+.dexit-x:hover { color: var(--ink); border-color: var(--ink-3); transform: rotate(90deg); }
+.dexit-x:focus-visible { outline: 2px solid var(--leaf); outline-offset: 2px; }
+
+/* --- artwork: milk bottle + discount badge --- */
+.dexit-art {
+  position: relative; width: 92px; height: 108px; margin: 4px auto 14px;
+  display: grid; place-items: center;
+}
+.dexit-bottle {
+  width: 62px; height: auto;
+  transform: translate3d(0, 0, 0);
+  will-change: transform; backface-visibility: hidden;
+  animation: dexitBob 3.4s ease-in-out infinite;
+  filter: drop-shadow(0 8px 14px rgba(15, 61, 46, .18));
+}
+/* theme-aware bottle: --forest flips light in dark mode, so the glass outline
+   stays visible on both grounds (CSS overrides the SVG's inline stroke). */
+.dexit-bottle .dexit-glass { stroke: var(--forest); }
+.dexit-bottle .dexit-milk { fill: color-mix(in srgb, var(--mint) 20%, #fff); }
+@keyframes dexitBob {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50%      { transform: translate3d(0, -6px, 0); }
+}
+.dexit-badge {
+  position: absolute; top: -2px; right: 2px;
+  width: 58px; height: 58px; border-radius: 50%;
+  display: grid; place-content: center; line-height: 1;
+  color: #fff; text-align: center;
+  background: linear-gradient(140deg, var(--leaf), color-mix(in srgb, var(--leaf) 60%, var(--forest)));
+  box-shadow: 0 8px 20px rgba(31, 174, 102, .45);
+  transform: translate3d(0, 0, 0) rotate(-8deg);
+  will-change: transform; backface-visibility: hidden;
+  animation: dexitPulse 2.6s ease-in-out infinite;
+}
+.dexit-badge b { font-size: 1.22rem; font-weight: 900; letter-spacing: -.02em; }
+.dexit-badge span { font-size: .58rem; font-weight: 800; letter-spacing: .14em; opacity: .95; }
+@keyframes dexitPulse {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-8deg) scale(1); }
+  50%      { transform: translate3d(0, 0, 0) rotate(-8deg) scale(1.06); }
+}
+
+.dexit-h { font-size: 1.42rem; font-weight: 800; color: var(--forest); margin: 0 0 4px; letter-spacing: -.01em; }
+.dexit-offer { font-size: 1.06rem; font-weight: 700; color: var(--leaf); margin: 0 0 8px; }
+.dexit-sub { font-size: .92rem; color: var(--ink-2); line-height: 1.5; margin: 0 auto 20px; max-width: 30ch; }
+
+.dexit-cta {
+  display: block; width: 100%;
+  padding: 14px 18px; border: 0; border-radius: 999px;
+  font-family: inherit; font-size: 1.02rem; font-weight: 800; color: #fff; cursor: pointer;
+  background: linear-gradient(135deg, var(--leaf), color-mix(in srgb, var(--leaf) 55%, var(--forest)));
+  box-shadow: 0 12px 26px rgba(31, 174, 102, .38);
+  transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
+}
+.dexit-cta:hover { transform: translateY(-2px); box-shadow: 0 16px 32px rgba(31, 174, 102, .46); filter: brightness(1.03); }
+.dexit-cta:active { transform: translateY(0); }
+.dexit-cta:focus-visible { outline: 2px solid var(--forest); outline-offset: 3px; }
+
+.dexit-no {
+  display: block; width: 100%; margin-top: 10px;
+  padding: 8px; border: 0; background: none; cursor: pointer;
+  font-family: inherit; font-size: .9rem; font-weight: 600; color: var(--ink-3);
+  transition: color .18s ease;
+}
+.dexit-no:hover { color: var(--ink-2); text-decoration: underline; }
+.dexit-no:focus-visible { outline: 2px solid var(--leaf); outline-offset: 2px; border-radius: 8px; }
+
+.dexit-note { font-size: .72rem; color: var(--ink-3); margin: 14px 0 0; letter-spacing: .01em; }
+
+/* --- mobile: dock as a bottom sheet (≤560px) --- */
+@media (max-width: 560px) {
+  .dexit-ov { place-items: end center; padding: 0; }
+  .dexit-card {
+    max-width: 100%;
+    border-radius: 26px 26px 0 0;
+    padding: 26px 22px calc(24px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -18px 50px rgba(15, 61, 46, .3);
+    /* slide up from the bottom edge (translate only — no layout shift) */
+    transform: translate3d(0, 100%, 0);
+    transition: transform .4s cubic-bezier(.22, 1, .36, 1), opacity .3s ease;
+  }
+  .dexit-ov.show .dexit-card { transform: translate3d(0, 0, 0); }
+  /* grab handle affordance */
+  .dexit-card::after {
+    content: ""; position: absolute; top: 9px; left: 50%; transform: translateX(-50%);
+    width: 40px; height: 4px; border-radius: 999px; background: var(--line);
+  }
+  .dexit-h { font-size: 1.3rem; }
+}
+
+/* --- accessibility: honour reduced motion (no jitter, instant states) --- */
+@media (prefers-reduced-motion: reduce) {
+  .dexit-ov, .dexit-card { transition: opacity .2s ease; }
+  .dexit-card { transform: none; }
+  .dexit-ov.show .dexit-card { transform: none; }
+  .dexit-bottle, .dexit-badge { animation: none; }
+  .dexit-x:hover { transform: none; }
+  .dexit-cta:hover { transform: none; }
+}
