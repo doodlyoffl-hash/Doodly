@@ -513,6 +513,9 @@ window.DOODLY_MANIFEST = (function () {
     "admin/quality": { surface:"admin", title:"Quality Testing", blocks:[ head("Quality Testing","Batch test results and cold-chain logs.",[{label:"Record test",kind:"btn-primary",icon:"plus"},{label:"Quality rules",kind:"btn-ghost",icon:"clipboard"}]), { type:"kpis", items:[{n:"100%",l:"Batches tested"},{n:"1",l:"Flagged"},{n:"4.0°C",l:"Avg temp"},{n:"9.1",l:"Avg SNF"}] }, tbl("quality",{toolbar:false,pager:false}) ]},
     "admin/milk-tankers": { surface:"admin", title:"Milk Tankers", blocks:[ head("Milk Procurement & Profit Center","Enter each day's tanker in KG — cost, litres and FIFO inventory are computed automatically. Sales draw milk down oldest-first."), { type:"milkTankers" } ]},
     "admin/profit-center": { surface:"admin", title:"Profit Center", blocks:[ head("Milk Profit & Loss","Daily and monthly profit after procurement (FIFO cost of milk sold) and expenses. Edit the seasonal rates below."), { type:"profitCenter" } ]},
+
+    /* ===== PRIVATE MILK BUSINESS (hidden — NOT in any nav; noindex; gated on the `milkBusiness` RBAC module server-side) ===== */
+    "admin/milk-business": { surface:"admin", title:"Milk Business Control Centre", full:true, blocks:[ { type:"milkBusiness" } ]},
     "admin/reports": { surface:"admin", title:"Reports", blocks:[
       head("Reports","Live business intelligence — sales, customers, subscriptions, finance, operations, procurement & marketing."),
       { type:"reportsBoard" },

@@ -49,7 +49,11 @@ async function allMovements(toEnd?: Date): Promise<RawMove[]> {
   for (const t of tankers) moves.push({ day: dayMillis(t.procurementDate), real: t.createdAt, type: "PROCUREMENT", litres: t.litres, tankerId: t.id, tankerCode: t.code, note: null });
   for (const f of freshouts) moves.push({ day: dayMillis(f.entryAt), real: f.entryAt, type: "FRESHOUT", litres: f.litres, tankerId: f.tankerId, tankerCode: f.tanker.code, note: `${r2(f.quantityKg)} kg residue` });
   for (const c of cons) {
-    const type: MovementType = c.channel === "RETAIL" ? "RETAIL" : c.channel === "B2B" ? "B2B" : "WASTAGE";
+    // WAREHOUSE / OUTLET (private walk-in channels) are retail-family milk outflow — group them
+    // under RETAIL so the physical inventory equation still reconciles (closing == live available)
+    // without surfacing the private channels as distinct lines on the public inventory view. Only
+    // real ADJUSTMENT rows are wastage.
+    const type: MovementType = (c.channel === "RETAIL" || c.channel === "WAREHOUSE" || c.channel === "OUTLET") ? "RETAIL" : c.channel === "B2B" ? "B2B" : "WASTAGE";
     moves.push({ day: dayMillis(c.date), real: c.createdAt, type, litres: -c.litres, tankerId: c.tankerId, tankerCode: c.tanker.code, note: c.note });
   }
   // Daily ledger order: by attributed day, then receipts before issues, then real time.

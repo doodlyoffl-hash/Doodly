@@ -115,7 +115,7 @@ $seo = @{
   }
 }
 # Routes that must never be indexed (private, token-gated pages).
-$noindexRoutes = @('rewards/claim')
+$noindexRoutes = @('rewards/claim', 'admin/milk-business')
 function Build-HeadExtra($s) {
   $ld = '{"@context":"https://schema.org","@type":"WebPage","name":"' + $s.ogTitle + '","description":"' + $s.desc + '","url":"' + $s.canonical + '","publisher":{"@type":"Organization","name":"DOODLY","logo":"https://doodly.in/assets/img/logo.png"}}'
   $lines = @(

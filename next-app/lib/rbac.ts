@@ -16,7 +16,7 @@ const LEVEL_ACTIONS: Record<string, string[]> = {
   view: ["view"], manage: ["view", "create", "edit", "export"], full: ["view", "create", "edit", "export", "delete"],
 };
 // specials granted at "full"
-const SPECIALS: Record<string, string[]> = { payments: ["refund", "approve"], billing: ["approve"], inventory: ["adjust"], bottleInventory: ["adjust"], deliveries: ["assign"] };
+const SPECIALS: Record<string, string[]> = { payments: ["refund", "approve"], billing: ["approve"], inventory: ["adjust"], bottleInventory: ["adjust"], deliveries: ["assign"], milkBusiness: ["adjust", "close", "reconcile"] };
 
 const ADMIN_FULL: Record<string, Level> = {};
 ["dashboard", "orders", "assistedOrders", "subscriptions", "billing", "customers", "payments", "revenue", "expenses", "wallet", "loyalty", "rewards", "coupons", "offers", "products", "categories", "inventory", "bottleInventory", "deliverySettings", "deliveries", "serviceableAreas", "geoCorrection", "drivers", "routes", "farmers", "procurement", "quality", "reports", "blogs", "cms", "notifications", "support", "users", "roles", "auditLogs", "settings", "careers", "employees", "attendance", "payroll", "leave", "advances"].forEach((m) => (ADMIN_FULL[m] = "full"));
@@ -26,9 +26,9 @@ export const DEFAULT_MATRIX: Record<RoleKey, "*" | Record<string, Level>> = {
   super_admin: "*",
   admin: ADMIN_FULL,
   support: { dashboard: "view", customers: "view", orders: "manage", assistedOrders: "manage", subscriptions: "view", support: "full" },
-  operations: { dashboard: "view", deliveries: "full", drivers: "manage", routes: "manage", serviceableAreas: "manage", deliverySettings: "manage", geoCorrection: "manage", inventory: "view", assistedOrders: "manage", reports: "view" },
+  operations: { dashboard: "view", deliveries: "full", drivers: "manage", routes: "manage", serviceableAreas: "manage", deliverySettings: "manage", geoCorrection: "manage", inventory: "view", assistedOrders: "manage", reports: "view", milkBusiness: "full" },
   procurement: { dashboard: "view", farmers: "manage", procurement: "full", quality: "view", reports: "view" },
-  accountant: { dashboard: "view", revenue: "view", payments: "full", billing: "manage", expenses: "full", wallet: "full", reports: "manage", coupons: "view", employees: "view", attendance: "view", payroll: "full", advances: "full", leave: "view" },
+  accountant: { dashboard: "view", revenue: "view", payments: "full", billing: "manage", expenses: "full", wallet: "full", reports: "manage", coupons: "view", employees: "view", attendance: "view", payroll: "full", advances: "full", leave: "view", milkBusiness: "full" },
   inventory: { dashboard: "view", inventory: "full", bottleInventory: "full", reports: "view" },
   quality: { dashboard: "view", quality: "full", procurement: "view", reports: "view" },
   marketing: { dashboard: "view", coupons: "full", offers: "full", blogs: "full", cms: "manage", notifications: "manage", loyalty: "manage", rewards: "manage", reports: "view" },

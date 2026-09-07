@@ -1741,7 +1741,147 @@ enum TankerStatus {
 enum ConsumptionChannel {
   RETAIL       // customer / subscription / trial / one-time (litres)
   B2B          // business order milk lines (litres)
+  WAREHOUSE    // PRIVATE milk-business: walk-in warehouse retail (litres)
+  OUTLET       // PRIVATE milk-business: retail outlet fixed-price (litres)
   ADJUSTMENT   // manual wastage / correction
+}
+
+// ============================================================
+// PRIVATE Milk-Business module — walk-in retail channels.
+// Warehouse (per-litre, customer-specific price) + Outlet (per-litre,
+// fixed price). Revenue is recognised at the moment of sale (cash sale,
+// customer physically present); the price applied is SNAPSHOTTED on the
+// sale row so a later price change never rewrites a past sale. Each sale's
+// litres draw milk FIFO via settleDay (channel WAREHOUSE / OUTLET), so COGS
+// + inventory stay authoritative in the existing engine. All money paise.
+// ============================================================
+
+// Walk-in warehouse retail customer master (customers who come to the warehouse).
+model WarehouseCustomer {
+  id          String                     @id @default(cuid())
+  code        String                     @unique            // "WHC-000001"
+  name        String
+  mobile      String?
+  email       String?
+  gst         String?
+  notes       String?
+  active      Boolean                    @default(true)
+  deletedAt   DateTime?
+  createdById String?
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @default(now()) @updatedAt
+  pricings    WarehouseCustomerPricing[]
+  sales       WarehouseSale[]
+  @@index([active, deletedAt])
+}
+
+// Customer-specific per-LITRE price, effective-dated (historical integrity:
+// a sale always snapshots its own price; this drives the default at entry time).
+model WarehouseCustomerPricing {
+  id             String            @id @default(cuid())
+  customerId     String
+  customer       WarehouseCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  pricePaise     Int                                        // per LITRE
+  effectiveFrom  DateTime          @default(now())
+  effectiveUntil DateTime?
+  active         Boolean           @default(true)
+  deletedAt      DateTime?
+  createdById    String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @default(now()) @updatedAt
+  @@index([customerId, active, effectiveFrom])
+}
+
+// One walk-in warehouse sale. Revenue = netPaise, recognised on saleDate (IST day).
+model WarehouseSale {
+  id                 String             @id @default(cuid())
+  code               String             @unique             // "WHS-YYYYMMDD-####"
+  customerId         String?                                // null = anonymous cash walk-in
+  customer           WarehouseCustomer? @relation(fields: [customerId], references: [id])
+  customerName       String?                                // snapshot (anonymous or at sale time)
+  saleDate           DateTime                               // IST business-day midnight (settle/pnl key)
+  soldAt             DateTime           @default(now())      // actual clock time of entry
+  litres             Float
+  pricePerLitrePaise Int                                    // snapshot of the price applied
+  grossPaise         Int                                    // round(litres * price)
+  discountPaise      Int                @default(0)
+  netPaise           Int                                    // gross − discount = revenue recognised
+  paymentStatus      String             @default("PAID")    // PAID | PENDING | PARTIAL
+  paidPaise          Int                @default(0)
+  paymentMode        String?                                // cash | upi | bank
+  reference          String?
+  status             String             @default("COMPLETED") // COMPLETED | VOID (void re-settles the day)
+  voidedAt           DateTime?
+  voidReason         String?
+  notes              String?
+  soldById           String?                                // real user id (never dev-bridge static-*)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @default(now()) @updatedAt
+  @@index([saleDate, status])
+  @@index([customerId, saleDate])
+}
+
+// Retail outlet master (DOODLY-operated counters; per-litre fixed pricing).
+model RetailOutlet {
+  id            String          @id @default(cuid())
+  code          String          @unique              // "OUT-000001"
+  name          String
+  location      String?
+  contactPerson String?
+  mobile        String?
+  active        Boolean         @default(true)
+  deletedAt     DateTime?
+  createdById   String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @default(now()) @updatedAt
+  pricings      OutletPricing[]
+  sales         OutletSale[]
+  @@index([active, deletedAt])
+}
+
+// Outlet fixed per-LITRE price, effective-dated (a sale snapshots its own price).
+model OutletPricing {
+  id             String       @id @default(cuid())
+  outletId       String
+  outlet         RetailOutlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  pricePaise     Int                                       // per LITRE (fixed)
+  effectiveFrom  DateTime     @default(now())
+  effectiveUntil DateTime?
+  active         Boolean      @default(true)
+  deletedAt      DateTime?
+  createdById    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @default(now()) @updatedAt
+  @@index([outletId, active, effectiveFrom])
+}
+
+// One retail-outlet sale. Revenue = netPaise, recognised on saleDate (IST day).
+model OutletSale {
+  id                 String       @id @default(cuid())
+  code               String       @unique               // "OTS-YYYYMMDD-####"
+  outletId           String
+  outlet             RetailOutlet @relation(fields: [outletId], references: [id])
+  outletName         String?                             // snapshot at sale time
+  saleDate           DateTime                            // IST business-day midnight
+  soldAt             DateTime     @default(now())
+  litres             Float
+  pricePerLitrePaise Int                                 // snapshot of the fixed price applied
+  grossPaise         Int
+  discountPaise      Int          @default(0)
+  netPaise           Int
+  paymentStatus      String       @default("PAID")
+  paidPaise          Int          @default(0)
+  paymentMode        String?
+  reference          String?
+  status             String       @default("COMPLETED")  // COMPLETED | VOID
+  voidedAt           DateTime?
+  voidReason         String?
+  notes              String?
+  soldById           String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @default(now()) @updatedAt
+  @@index([saleDate, status])
+  @@index([outletId, saleDate])
 }
 
 // Editable seasonal rates (singleton). One row, id = "singleton".

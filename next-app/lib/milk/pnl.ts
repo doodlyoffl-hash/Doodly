@@ -78,7 +78,10 @@ export async function pnlForBounds(label: string, start: Date, end: Date): Promi
     // distinct businesses served (delivered) in the window
     db.businessOrder.groupBy({ by: ["businessId"], where: { revenuePaise: { not: null }, deliveredAt: { gte: start, lt: end } } }),
     b2bLitresForDay(start, end),                                 // B2B milk-equiv litres delivered (same delivered basis as COGS)
-    db.tankerConsumption.aggregate({ where: { date: { gte: start, lt: end } }, _sum: { costPaise: true, litres: true } }),
+    // Public Profit Center COGS = retail(home-delivery) + B2B + wastage, as before.
+    // EXCLUDE the private-module walk-in channels (WAREHOUSE/OUTLET) — their revenue is
+    // NOT recognised here, so their COGS must not be either (they have their own P&L).
+    db.tankerConsumption.aggregate({ where: { date: { gte: start, lt: end }, channel: { notIn: ["WAREHOUSE", "OUTLET"] } }, _sum: { costPaise: true, litres: true } }),
     db.expense.aggregate({ where: { deletedAt: null, status: { notIn: ["REJECTED", "CANCELLED"] }, date: { gte: start, lt: end } }, _sum: { totalPaise: true } }),
     db.milkTanker.aggregate({ where: { deletedAt: null, procurementDate: { gte: start, lt: end } }, _sum: { totalCostPaise: true, litres: true, quantityKg: true } }),
   ]);

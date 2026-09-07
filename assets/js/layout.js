@@ -8393,6 +8393,356 @@
   }
   window.DOODLY_ADMIN.wireProfitCenterBackend = wireProfitCenterBackend;
 
+  /* ============================================================
+     PRIVATE Milk Business Control Centre (hidden module; gated on
+     `milkBusiness` server-side). Phase 0 = read-only dashboard that
+     COMPOSES the existing milk/B2B/expense engines. Warehouse + outlet
+     channels + tanker/sales/payment/report tabs land in later phases.
+     Uses only existing .kpi/.panel styling (no redesign).
+     ============================================================ */
+  function mbMoney(p) { return milkRs(p || 0); }
+  function mbL(n) { return (Math.round((n || 0) * 100) / 100).toLocaleString("en-IN") + " L"; }
+  function mbNum(n) { return (n || 0).toLocaleString("en-IN"); }
+  function mbKpi(label, val, sub) { return '<div class="kpi"><div class="n">' + val + '</div><div class="l">' + esc(label) + (sub ? ' <span class="muted-sm">· ' + esc(sub) + '</span>' : '') + '</div></div>'; }
+  function mbGroup(title, cards) { return '<div style="margin:6px 0 16px"><h3 style="font-size:.95rem;margin:0 0 8px;color:var(--forest)">' + title + '</h3><div class="kpi-row">' + cards + '</div></div>'; }
+
+  var MB_TABS = [["dashboard", "📊 Dashboard"], ["warehouse", "🏭 Warehouse walk-in"], ["outlet", "🛒 Retail outlet"], ["reports", "📄 Reports"]];
+  async function wireMilkBusinessBackend() {
+    if (!window.DOODLY_API) return;
+    var host = document.getElementById("milkBusinessMount"); if (!host) return;
+    // Client gate is UX only — the server RBAC guard on every /api/private/* is the real boundary.
+    try { if (window.DOODLY_RBAC && !DOODLY_RBAC.can("milkBusiness", "view")) { host.innerHTML = '<div class="panel panel-pad"><h2>Restricted</h2><p class="muted-sm">This private module requires the Milk Business permission (Super Admin, Accountant or Operations).</p></div>'; return; } } catch (e) {}
+    if (!host.dataset.built) {
+      host.dataset.built = "1";
+      host.innerHTML = '<div class="panel panel-pad" style="margin-bottom:14px;border-left:4px solid var(--forest)">'
+        + '<div style="font-weight:800;font-size:1.15rem;color:var(--forest)">🔒 Milk Business Control Centre</div>'
+        + '<div class="muted-sm">Private accounting console · procurement · B2B + walk-in + outlet sales · milk position · P&amp;L. Restricted access; every action is audited.</div>'
+        + '<div id="mb-tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">' + MB_TABS.map(function (t) { return '<button class="btn btn-ghost mb-tab" data-tab="' + t[0] + '">' + t[1] + '</button>'; }).join("") + '</div></div>'
+        + '<div id="mb-tab-body"><p class="muted-sm">Loading…</p></div>';
+      host.querySelectorAll(".mb-tab").forEach(function (b) { b.addEventListener("click", function () { mbShowTab(host, b.dataset.tab); }); });
+    }
+    mbShowTab(host, host.dataset.tab || "dashboard");
+  }
+  function mbShowTab(host, tab) {
+    host.dataset.tab = tab;
+    host.querySelectorAll(".mb-tab").forEach(function (b) { var on = b.dataset.tab === tab; b.classList.toggle("btn-primary", on); b.classList.toggle("btn-ghost", !on); });
+    var body = host.querySelector("#mb-tab-body");
+    if (tab === "warehouse") return mbWarehouseTab(body);
+    if (tab === "outlet") return mbOutletTab(body);
+    if (tab === "reports") return mbReportsTab(body);
+    return mbDashboardTab(body);
+  }
+  var MB_REPORTS = [
+    ["private-pnl", "Profit & Loss (B2B + walk-in + outlet)"],
+    ["warehouse-sales", "Warehouse walk-in sales"],
+    ["warehouse-customers", "Warehouse customer summary"],
+    ["outlet-sales", "Retail outlet sales"],
+    ["outlets", "Outlet summary"],
+    ["tanker", "Tanker cost & consumption"],
+    ["procurement", "Procurement (tankers received)"],
+    ["inventory", "Inventory on hand"],
+    ["consumption", "Milk consumption by channel"],
+  ];
+  function mbReportsTab(body) {
+    var today = istTodayStr(), first = today.slice(0, 8) + "01";
+    body.innerHTML = '<div class="panel panel-pad">'
+      + '<h3 style="margin:0 0 4px;color:var(--forest)">Reports</h3>'
+      + '<p class="muted-sm" style="margin:0 0 12px">Every report opens in-place with <b>View</b>, and the same filtered data exports to <b>PDF · Excel · CSV · Print</b>.</p>'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
+      + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px;min-width:260px">Report<select class="input" id="mbr-type">' + MB_REPORTS.map(function (r) { return '<option value="' + r[0] + '">' + esc(r[1]) + "</option>"; }).join("") + "</select></label>"
+      + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px">From<input type="date" class="input" id="mbr-from" value="' + esc(first) + '"></label>'
+      + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px">To<input type="date" class="input" id="mbr-to" value="' + esc(today) + '"></label>'
+      + '<button class="btn btn-primary" id="mbr-view">View report</button></div>'
+      + '<p class="muted-sm" style="margin-top:10px">Business-wise, retail-customer and tanker-wise reports all reconcile with the ledgers they summarise.</p></div>';
+    body.querySelector("#mbr-view").addEventListener("click", function () {
+      var type = body.querySelector("#mbr-type").value, from = body.querySelector("#mbr-from").value, to = body.querySelector("#mbr-to").value;
+      if (!window.DOODLY_REPORTVIEWER) { dacToast("Report viewer not available."); return; }
+      DOODLY_REPORTVIEWER.openServer({ module: "milkBusiness", path: "/api/private/milk-business/reports/export", query: "type=" + type + "&from=" + from + "&to=" + to, title: (MB_REPORTS.filter(function (r) { return r[0] === type; })[0] || [])[1] || "Report" });
+    });
+  }
+
+  /* ---------- Dashboard tab ---------- */
+  function mbDashboardTab(body) {
+    var day0 = istTodayStr();
+    body.innerHTML = '<div class="panel panel-pad" style="margin-bottom:14px;display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">'
+      + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px">Day<input type="date" id="mb-date" class="input" value="' + esc(day0) + '"></label>'
+      + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px">Month<input type="month" id="mb-month" class="input" value="' + esc(day0.slice(0, 7)) + '"></label>'
+      + '<button class="btn btn-ghost" id="mb-refresh">↻ Refresh</button></div>'
+      + '<div id="mb-body"><p class="muted-sm">Loading…</p></div>';
+    body.querySelector("#mb-date").addEventListener("change", function () { mbDashLoad(body); });
+    body.querySelector("#mb-month").addEventListener("change", function () { mbDashLoad(body); });
+    body.querySelector("#mb-refresh").addEventListener("click", function () { mbDashLoad(body); });
+    mbDashLoad(body);
+  }
+  function mbDashLoad(body) {
+    var out = body.querySelector("#mb-body"); if (!out) return;
+    var day = body.querySelector("#mb-date").value || istTodayStr();
+    var month = body.querySelector("#mb-month").value || day.slice(0, 7);
+    out.innerHTML = '<p class="muted-sm">Loading…</p>';
+    DOODLY_API.get("/api/private/milk-business/dashboard?date=" + day + "&month=" + month)
+      .then(function (d) { out.innerHTML = mbRender(d); })
+      .catch(function (e) { out.innerHTML = '<div class="panel panel-pad muted-sm">' + (e.code === "forbidden" ? "Your role can't open the Milk Business module (403)." : "Couldn't load — " + esc(e.message || e.code || "error")) + "</div>"; });
+  }
+  function mbRender(d) {
+    var t = d.today, m = d.month_, pos = d.position, s = t.sales;
+    var proc = mbGroup("Today's Procurement (" + esc(d.date) + ")",
+      mbKpi("Tankers received", mbNum(t.procurement.tankersReceived))
+      + mbKpi("KG procured", mbNum(t.procurement.kgProcured))
+      + mbKpi("Litres procured", mbL(t.procurement.litresProcured))
+      + mbKpi("Tanker cost", mbMoney(t.procurement.totalTankerCostPaise))
+      + mbKpi("Avg cost / L", mbMoney(t.procurement.avgCostPerLitrePaise)));
+    var sales = mbGroup("Today's Sales (B2B + walk-in + outlet)",
+      mbKpi("B2B revenue", mbMoney(s.b2bRevenuePaise), s.b2bOrders + " ord · " + s.b2bBusinesses + " biz")
+      + mbKpi("B2B KG sold", mbNum(s.b2bKg), "avg " + mbMoney(s.avgB2bPricePerKgPaise) + "/kg")
+      + mbKpi("Warehouse walk-in", mbMoney(s.warehouseRevenuePaise), s.warehouseSales + " sale(s) · " + mbL(s.warehouseLitres))
+      + mbKpi("Warehouse avg / L", mbMoney(s.avgWarehousePricePerLitrePaise))
+      + mbKpi("Retail outlet", mbMoney(s.outletRevenuePaise), "Phase 2")
+      + mbKpi("Total revenue", mbMoney(s.totalRevenuePaise)));
+    var position = mbGroup("Today's Milk Position" + (pos.reconciled ? ' <span style="color:var(--leaf-600,#1FAE66)">✓ reconciled</span>' : ' <span style="color:#c0392b">⚠ not reconciled</span>'),
+      mbKpi("Opening", mbL(pos.openingLitres))
+      + mbKpi("+ Procurement", mbL(pos.procurementLitres))
+      + mbKpi("+ Freshout", mbL(pos.freshoutLitres))
+      + mbKpi("Total available", mbL(pos.totalAvailableLitres))
+      + mbKpi("− Sold (all channels)", mbL(pos.totalSoldLitres))
+      + mbKpi("Closing", mbL(pos.closingLitres))
+      + mbKpi("Live available", mbL(pos.currentAvailableLitres), pos.openLots + " lots · " + mbMoney(pos.inventoryValuePaise)));
+    var fin = mbGroup("Today's Finance",
+      mbKpi("Revenue", mbMoney(t.finance.revenuePaise))
+      + mbKpi("Milk COGS", mbMoney(t.finance.cogsPaise))
+      + mbKpi("Gross profit", mbMoney(t.finance.grossProfitPaise), t.finance.grossMarginPct + "%")
+      + mbKpi("Expenses", mbMoney(t.finance.expensesPaise))
+      + mbKpi("Net profit", mbMoney(t.finance.netProfitPaise), t.finance.netMarginPct + "%"));
+    var monthly = mbGroup("This Month (" + esc(d.month) + ")",
+      mbKpi("Revenue", mbMoney(m.finance.revenuePaise))
+      + mbKpi("COGS", mbMoney(m.finance.cogsPaise))
+      + mbKpi("Gross", mbMoney(m.finance.grossProfitPaise), m.finance.grossMarginPct + "%")
+      + mbKpi("Expenses", mbMoney(m.finance.expensesPaise))
+      + mbKpi("Net", mbMoney(m.finance.netProfitPaise), m.finance.netMarginPct + "%")
+      + mbKpi("Warehouse sales", mbNum(m.sales.warehouseSales), mbL(m.sales.warehouseLitres))
+      + mbKpi("Litres procured", mbL(m.procurement.litresProcured)));
+    return proc + sales + position + fin + monthly
+      + '<p class="muted-sm" style="margin-top:8px">P&amp;L = B2B + Warehouse walk-in + Retail outlet (spec §25). The milk position is physical and includes every channel. Retail-outlet lands in Phase 2.</p>';
+  }
+
+  /* ---------- Warehouse walk-in tab ---------- */
+  var _mbCustomers = [];
+  function mbWarehouseTab(body) {
+    body.innerHTML = '<div id="mb-wh"><p class="muted-sm">Loading…</p></div>';
+    DOODLY_API.get("/api/private/milk-business/warehouse/customers?includeInactive=1")
+      .then(function (r) { _mbCustomers = (r && r.customers) || []; mbWarehouseRender(body.querySelector("#mb-wh")); })
+      .catch(function (e) { body.querySelector("#mb-wh").innerHTML = '<div class="panel panel-pad muted-sm">' + (e.code === "forbidden" ? "Your role can't open this (403)." : "Couldn't load — " + esc(e.message || "error")) + "</div>"; });
+  }
+  function mbCustOptions(sel) {
+    return '<option value="">Anonymous walk-in</option>' + _mbCustomers.map(function (c) { return '<option value="' + esc(c.id) + '"' + (sel === c.id ? " selected" : "") + ">" + esc(c.name) + " (" + esc(c.code) + ")</option>"; }).join("");
+  }
+  function mbWarehouseRender(host) {
+    var today = istTodayStr();
+    host.innerHTML =
+      // Record a sale
+      '<div class="panel panel-pad" style="margin-bottom:14px">'
+      + '<h3 style="margin:0 0 10px;color:var(--forest)">Record a walk-in sale (per litre)</h3>'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
+      + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px;min-width:200px">Customer<select class="input" id="wh-cust">' + mbCustOptions("") + '</select></label>'
+      + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px;width:110px">Litres<input class="input" id="wh-litres" inputmode="decimal" placeholder="0"></label>'
+      + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px;width:130px">Price ₹/Litre<input class="input" id="wh-price" inputmode="decimal" placeholder="0"></label>'
+      + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px;width:110px">Discount ₹<input class="input" id="wh-disc" inputmode="decimal" placeholder="0"></label>'
+      + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px;width:120px">Payment<select class="input" id="wh-pay"><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank">Bank</option><option value="credit">Credit (unpaid)</option></select></label>'
+      + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px;width:150px">Date<input type="date" class="input" id="wh-date" value="' + esc(today) + '"></label>'
+      + '<div style="display:flex;flex-direction:column;gap:2px"><span class="muted-sm">Total</span><b id="wh-total" style="font-size:1.1rem;color:var(--forest)">₹0.00</b></div>'
+      + '<button class="btn btn-primary" id="wh-save">Record sale</button></div>'
+      + '<p class="dac-err" id="wh-err" style="margin-top:8px"></p></div>'
+      // Customers + pricing
+      + '<div class="panel panel-pad" style="margin-bottom:14px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0;color:var(--forest)">Warehouse customers &amp; pricing</h3>'
+      + '<span style="display:flex;gap:8px"><input class="input" id="wh-newname" placeholder="New customer name" style="width:180px"><input class="input" id="wh-newmobile" placeholder="Mobile" style="width:130px"><button class="btn btn-ghost" id="wh-addcust">+ Add</button></span></div>'
+      + '<div id="wh-custlist" style="margin-top:10px"></div></div>'
+      // Recent sales
+      + '<div class="panel panel-pad"><h3 style="margin:0 0 10px;color:var(--forest)">Recent walk-in sales</h3><div id="wh-sales"><p class="muted-sm">Loading…</p></div></div>';
+
+    var q = function (s) { return host.querySelector(s); };
+    function recalc() { var l = Number(q("#wh-litres").value) || 0, p = Number(q("#wh-price").value) || 0, d = Number(q("#wh-disc").value) || 0; q("#wh-total").textContent = milkRs(Math.max(0, Math.round(l * p * 100) - Math.round(d * 100))); }
+    ["#wh-litres", "#wh-price", "#wh-disc"].forEach(function (s) { q(s).addEventListener("input", recalc); });
+    // auto-fill price from the customer's current rate
+    q("#wh-cust").addEventListener("change", function () {
+      var id = q("#wh-cust").value; if (!id) { return; }
+      DOODLY_API.get("/api/private/milk-business/warehouse/customers?pricingFor=" + id).then(function (r) {
+        var pr = (r && r.pricing) || []; if (pr[0]) { q("#wh-price").value = (pr[0].pricePaise / 100); recalc(); }
+      }).catch(function () {});
+    });
+    q("#wh-save").addEventListener("click", function () {
+      var err = q("#wh-err"); err.textContent = "";
+      var litres = Number(q("#wh-litres").value) || 0, price = Number(q("#wh-price").value) || 0;
+      if (!(litres > 0)) { err.textContent = "Enter litres greater than 0."; return; }
+      if (!(price >= 0) || q("#wh-price").value === "") { err.textContent = "Enter a price per litre."; return; }
+      var pay = q("#wh-pay").value;
+      var payload = { action: "create", customerId: q("#wh-cust").value || null, litres: litres, pricePerLitrePaise: Math.round(price * 100), discountPaise: Math.round((Number(q("#wh-disc").value) || 0) * 100), paymentMode: pay === "credit" ? null : pay, paymentStatus: pay === "credit" ? "PENDING" : "PAID", saleDate: q("#wh-date").value || undefined };
+      var btn = q("#wh-save"); btn.disabled = true; btn.textContent = "Saving…";
+      DOODLY_API.post("/api/private/milk-business/warehouse/sales", payload).then(function (r) {
+        dacToast("Sale " + (r.sale && r.sale.code) + " recorded — milk drawn FIFO."); btn.disabled = false; btn.textContent = "Record sale";
+        q("#wh-litres").value = ""; q("#wh-disc").value = ""; recalc(); mbLoadWhSales(host);
+      }).catch(function (e) { err.textContent = e.code === "forbidden" ? "Your role can't record sales (403)." : (e.message || "Couldn't record the sale."); btn.disabled = false; btn.textContent = "Record sale"; });
+    });
+    q("#wh-addcust").addEventListener("click", function () {
+      var name = (q("#wh-newname").value || "").trim(); if (!name) { dacToast("Enter a customer name."); return; }
+      DOODLY_API.post("/api/private/milk-business/warehouse/customers", { action: "create", name: name, mobile: (q("#wh-newmobile").value || "").trim() }).then(function () {
+        dacToast("Customer added."); q("#wh-newname").value = ""; q("#wh-newmobile").value = ""; mbWarehouseTab(host.closest("#mb-tab-body"));
+      }).catch(function (e) { dacToast(e.message || "Couldn't add the customer."); });
+    });
+    mbRenderCustList(host); mbLoadWhSales(host);
+  }
+  function mbRenderCustList(host) {
+    var list = host.querySelector("#wh-custlist"); if (!list) return;
+    if (!_mbCustomers.length) { list.innerHTML = '<p class="muted-sm">No warehouse customers yet — add one above. Anonymous walk-ins can still be recorded with a manual price.</p>'; return; }
+    list.innerHTML = '<div style="overflow-x:auto"><table class="table"><thead><tr><th>Code</th><th>Name</th><th>Mobile</th><th>Current ₹/L</th><th>Sales</th><th>Set price</th></tr></thead><tbody>'
+      + _mbCustomers.map(function (c) {
+        return '<tr><td>' + esc(c.code) + '</td><td>' + esc(c.name) + '</td><td class="muted-sm">' + esc(c.mobile || "—") + '</td>'
+          + '<td><span data-price="' + esc(c.id) + '" class="muted-sm">…</span></td><td>' + mbNum(c.sales) + '</td>'
+          + '<td><span style="display:flex;gap:6px"><input class="input" data-newprice="' + esc(c.id) + '" inputmode="decimal" placeholder="₹/L" style="width:80px"><button class="btn btn-ghost" data-setprice="' + esc(c.id) + '">Set</button></span></td></tr>';
+      }).join("") + '</tbody></table></div>';
+    // load current prices
+    _mbCustomers.forEach(function (c) {
+      DOODLY_API.get("/api/private/milk-business/warehouse/customers?pricingFor=" + c.id).then(function (r) {
+        var pr = (r && r.pricing) || []; var cell = list.querySelector('[data-price="' + c.id + '"]'); if (cell) cell.textContent = pr[0] ? milkRs(pr[0].pricePaise) : "—";
+      }).catch(function () {});
+    });
+    list.querySelectorAll("[data-setprice]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.getAttribute("data-setprice"); var inp = list.querySelector('[data-newprice="' + id + '"]'); var v = Number(inp.value) || 0;
+        if (!(v > 0)) { dacToast("Enter a price per litre."); return; }
+        DOODLY_API.post("/api/private/milk-business/warehouse/customers", { action: "setPrice", customerId: id, pricePaise: Math.round(v * 100) }).then(function () {
+          dacToast("Price updated to " + milkRs(Math.round(v * 100)) + "/L."); inp.value = ""; mbRenderCustList(host);
+        }).catch(function (e) { dacToast(e.message || "Couldn't set the price."); });
+      });
+    });
+  }
+  function mbLoadWhSales(host) {
+    var box = host.querySelector("#wh-sales"); if (!box) return;
+    DOODLY_API.get("/api/private/milk-business/warehouse/sales").then(function (r) {
+      var sales = (r && r.sales) || [];
+      if (!sales.length) { box.innerHTML = '<p class="muted-sm">No walk-in sales yet.</p>'; return; }
+      box.innerHTML = '<div style="overflow-x:auto"><table class="table"><thead><tr><th>Code</th><th>Time</th><th>Customer</th><th>Litres</th><th>₹/L</th><th>Net</th><th>Payment</th><th>Status</th><th></th></tr></thead><tbody>'
+        + sales.map(function (s) {
+          var voidable = s.status === "COMPLETED";
+          return '<tr' + (s.status === "VOID" ? ' style="opacity:.5"' : "") + '><td>' + esc(s.code) + '</td><td class="muted-sm">' + esc(String(s.soldAt).slice(0, 16).replace("T", " ")) + '</td>'
+            + '<td>' + esc(s.customerName || "Anonymous") + '</td><td>' + mbL(s.litres) + '</td><td>' + milkRs(s.pricePerLitrePaise) + '</td><td>' + milkRs(s.netPaise) + '</td>'
+            + '<td class="muted-sm">' + esc((s.paymentStatus || "") + (s.paymentMode ? " · " + s.paymentMode : "")) + '</td>'
+            + '<td><span class="badge ' + (s.status === "VOID" ? "grey" : "green") + '">' + esc(s.status) + '</span></td>'
+            + '<td>' + (voidable ? '<button class="btn btn-ghost" data-void="' + esc(s.id) + '" style="color:#c0392b">Void</button>' : "") + '</td></tr>';
+        }).join("") + '</tbody></table></div>';
+      box.querySelectorAll("[data-void]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-void"); if (!confirm("Void this sale? The milk draw will be reversed (revenue removed, stock restored). This is recorded, not deleted.")) return;
+          var reason = prompt("Reason for voiding (optional):") || "";
+          DOODLY_API.post("/api/private/milk-business/warehouse/sales", { action: "void", id: id, reason: reason }).then(function () { dacToast("Sale voided — day re-settled."); mbLoadWhSales(host); }).catch(function (e) { dacToast(e.code === "forbidden" ? "Only full access can void (403)." : (e.message || "Couldn't void.")); });
+        });
+      });
+    }).catch(function (e) { box.innerHTML = '<p class="muted-sm">Couldn\'t load sales — ' + esc(e.message || "error") + "</p>"; });
+  }
+  /* ---------- Retail outlet tab ---------- */
+  var _mbOutlets = [];
+  function mbOutletTab(body) {
+    body.innerHTML = '<div id="mb-out"><p class="muted-sm">Loading…</p></div>';
+    DOODLY_API.get("/api/private/milk-business/outlet/outlets?includeInactive=1")
+      .then(function (r) { _mbOutlets = (r && r.outlets) || []; mbOutletRender(body.querySelector("#mb-out")); })
+      .catch(function (e) { body.querySelector("#mb-out").innerHTML = '<div class="panel panel-pad muted-sm">' + (e.code === "forbidden" ? "Your role can't open this (403)." : "Couldn't load — " + esc(e.message || "error")) + "</div>"; });
+  }
+  function mbOutletOptions() {
+    if (!_mbOutlets.length) return '<option value="">— add an outlet first —</option>';
+    return '<option value="">Select outlet…</option>' + _mbOutlets.map(function (o) { return '<option value="' + esc(o.id) + '">' + esc(o.name) + " (" + esc(o.code) + ")</option>"; }).join("");
+  }
+  function mbOutletRender(host) {
+    var today = istTodayStr();
+    host.innerHTML =
+      '<div class="panel panel-pad" style="margin-bottom:14px">'
+      + '<h3 style="margin:0 0 10px;color:var(--forest)">Record an outlet sale (per litre · fixed price)</h3>'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
+      + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px;min-width:200px">Outlet<select class="input" id="out-outlet">' + mbOutletOptions() + '</select></label>'
+      + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px;width:110px">Litres<input class="input" id="out-litres" inputmode="decimal" placeholder="0"></label>'
+      + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px;width:130px">Price ₹/Litre<input class="input" id="out-price" inputmode="decimal" placeholder="0"></label>'
+      + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px;width:110px">Discount ₹<input class="input" id="out-disc" inputmode="decimal" placeholder="0"></label>'
+      + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px;width:120px">Payment<select class="input" id="out-pay"><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank">Bank</option></select></label>'
+      + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px;width:150px">Date<input type="date" class="input" id="out-date" value="' + esc(today) + '"></label>'
+      + '<div style="display:flex;flex-direction:column;gap:2px"><span class="muted-sm">Total</span><b id="out-total" style="font-size:1.1rem;color:var(--forest)">₹0.00</b></div>'
+      + '<button class="btn btn-primary" id="out-save">Record sale</button></div>'
+      + '<p class="dac-err" id="out-err" style="margin-top:8px"></p></div>'
+      + '<div class="panel panel-pad" style="margin-bottom:14px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0;color:var(--forest)">Outlets &amp; fixed pricing</h3>'
+      + '<span style="display:flex;gap:8px"><input class="input" id="out-newname" placeholder="New outlet name" style="width:170px"><input class="input" id="out-newloc" placeholder="Location" style="width:130px"><button class="btn btn-ghost" id="out-add">+ Add</button></span></div>'
+      + '<div id="out-list" style="margin-top:10px"></div></div>'
+      + '<div class="panel panel-pad"><h3 style="margin:0 0 10px;color:var(--forest)">Recent outlet sales</h3><div id="out-sales"><p class="muted-sm">Loading…</p></div></div>';
+
+    var q = function (s) { return host.querySelector(s); };
+    function recalc() { var l = Number(q("#out-litres").value) || 0, p = Number(q("#out-price").value) || 0, d = Number(q("#out-disc").value) || 0; q("#out-total").textContent = milkRs(Math.max(0, Math.round(l * p * 100) - Math.round(d * 100))); }
+    ["#out-litres", "#out-price", "#out-disc"].forEach(function (s) { q(s).addEventListener("input", recalc); });
+    q("#out-outlet").addEventListener("change", function () {
+      var id = q("#out-outlet").value; if (!id) { return; }
+      DOODLY_API.get("/api/private/milk-business/outlet/outlets?pricingFor=" + id).then(function (r) { var pr = (r && r.pricing) || []; if (pr[0]) { q("#out-price").value = (pr[0].pricePaise / 100); recalc(); } }).catch(function () {});
+    });
+    q("#out-save").addEventListener("click", function () {
+      var err = q("#out-err"); err.textContent = "";
+      var id = q("#out-outlet").value; if (!id) { err.textContent = "Select an outlet."; return; }
+      var litres = Number(q("#out-litres").value) || 0, price = Number(q("#out-price").value) || 0;
+      if (!(litres > 0)) { err.textContent = "Enter litres greater than 0."; return; }
+      if (q("#out-price").value === "" || !(price >= 0)) { err.textContent = "Enter/confirm the price per litre."; return; }
+      var payload = { action: "create", outletId: id, litres: litres, pricePerLitrePaise: Math.round(price * 100), discountPaise: Math.round((Number(q("#out-disc").value) || 0) * 100), paymentMode: q("#out-pay").value, saleDate: q("#out-date").value || undefined };
+      var btn = q("#out-save"); btn.disabled = true; btn.textContent = "Saving…";
+      DOODLY_API.post("/api/private/milk-business/outlet/sales", payload).then(function (r) {
+        dacToast("Sale " + (r.sale && r.sale.code) + " recorded — milk drawn FIFO."); btn.disabled = false; btn.textContent = "Record sale";
+        q("#out-litres").value = ""; q("#out-disc").value = ""; recalc(); mbLoadOutletSales(host);
+      }).catch(function (e) { err.textContent = e.code === "forbidden" ? "Your role can't record sales (403)." : (e.message || "Couldn't record the sale."); btn.disabled = false; btn.textContent = "Record sale"; });
+    });
+    q("#out-add").addEventListener("click", function () {
+      var name = (q("#out-newname").value || "").trim(); if (!name) { dacToast("Enter an outlet name."); return; }
+      DOODLY_API.post("/api/private/milk-business/outlet/outlets", { action: "create", name: name, location: (q("#out-newloc").value || "").trim() }).then(function () {
+        dacToast("Outlet added."); mbOutletTab(host.closest("#mb-tab-body"));
+      }).catch(function (e) { dacToast(e.message || "Couldn't add the outlet."); });
+    });
+    mbRenderOutletList(host); mbLoadOutletSales(host);
+  }
+  function mbRenderOutletList(host) {
+    var list = host.querySelector("#out-list"); if (!list) return;
+    if (!_mbOutlets.length) { list.innerHTML = '<p class="muted-sm">No outlets yet — add one above, then set its fixed ₹/L.</p>'; return; }
+    list.innerHTML = '<div style="overflow-x:auto"><table class="table"><thead><tr><th>Code</th><th>Outlet</th><th>Location</th><th>Fixed ₹/L</th><th>Sales</th><th>Set price</th></tr></thead><tbody>'
+      + _mbOutlets.map(function (o) {
+        return '<tr><td>' + esc(o.code) + '</td><td>' + esc(o.name) + '</td><td class="muted-sm">' + esc(o.location || "—") + '</td>'
+          + '<td><span data-oprice="' + esc(o.id) + '" class="muted-sm">…</span></td><td>' + mbNum(o.sales) + '</td>'
+          + '<td><span style="display:flex;gap:6px"><input class="input" data-onewprice="' + esc(o.id) + '" inputmode="decimal" placeholder="₹/L" style="width:80px"><button class="btn btn-ghost" data-osetprice="' + esc(o.id) + '">Set</button></span></td></tr>';
+      }).join("") + '</tbody></table></div>';
+    _mbOutlets.forEach(function (o) {
+      DOODLY_API.get("/api/private/milk-business/outlet/outlets?pricingFor=" + o.id).then(function (r) { var pr = (r && r.pricing) || []; var cell = list.querySelector('[data-oprice="' + o.id + '"]'); if (cell) cell.textContent = pr[0] ? milkRs(pr[0].pricePaise) : "—"; }).catch(function () {});
+    });
+    list.querySelectorAll("[data-osetprice]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.getAttribute("data-osetprice"); var inp = list.querySelector('[data-onewprice="' + id + '"]'); var v = Number(inp.value) || 0;
+        if (!(v > 0)) { dacToast("Enter a price per litre."); return; }
+        DOODLY_API.post("/api/private/milk-business/outlet/outlets", { action: "setPrice", outletId: id, pricePaise: Math.round(v * 100) }).then(function () { dacToast("Fixed price set to " + milkRs(Math.round(v * 100)) + "/L."); inp.value = ""; mbRenderOutletList(host); }).catch(function (e) { dacToast(e.message || "Couldn't set the price."); });
+      });
+    });
+  }
+  function mbLoadOutletSales(host) {
+    var box = host.querySelector("#out-sales"); if (!box) return;
+    DOODLY_API.get("/api/private/milk-business/outlet/sales").then(function (r) {
+      var sales = (r && r.sales) || [];
+      if (!sales.length) { box.innerHTML = '<p class="muted-sm">No outlet sales yet.</p>'; return; }
+      box.innerHTML = '<div style="overflow-x:auto"><table class="table"><thead><tr><th>Code</th><th>Time</th><th>Outlet</th><th>Litres</th><th>₹/L</th><th>Net</th><th>Status</th><th></th></tr></thead><tbody>'
+        + sales.map(function (s) {
+          var voidable = s.status === "COMPLETED";
+          return '<tr' + (s.status === "VOID" ? ' style="opacity:.5"' : "") + '><td>' + esc(s.code) + '</td><td class="muted-sm">' + esc(String(s.soldAt).slice(0, 16).replace("T", " ")) + '</td>'
+            + '<td>' + esc(s.outletName || "—") + '</td><td>' + mbL(s.litres) + '</td><td>' + milkRs(s.pricePerLitrePaise) + '</td><td>' + milkRs(s.netPaise) + '</td>'
+            + '<td><span class="badge ' + (s.status === "VOID" ? "grey" : "green") + '">' + esc(s.status) + '</span></td>'
+            + '<td>' + (voidable ? '<button class="btn btn-ghost" data-ovoid="' + esc(s.id) + '" style="color:#c0392b">Void</button>' : "") + '</td></tr>';
+        }).join("") + '</tbody></table></div>';
+      box.querySelectorAll("[data-ovoid]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-ovoid"); if (!confirm("Void this outlet sale? The milk draw will be reversed. Recorded, not deleted.")) return;
+          var reason = prompt("Reason (optional):") || "";
+          DOODLY_API.post("/api/private/milk-business/outlet/sales", { action: "void", id: id, reason: reason }).then(function () { dacToast("Sale voided — day re-settled."); mbLoadOutletSales(host); }).catch(function (e) { dacToast(e.code === "forbidden" ? "Only full access can void (403)." : (e.message || "Couldn't void.")); });
+        });
+      });
+    }).catch(function (e) { box.innerHTML = '<p class="muted-sm">Couldn\'t load sales — ' + esc(e.message || "error") + "</p>"; });
+  }
+  window.DOODLY_ADMIN.wireMilkBusinessBackend = wireMilkBusinessBackend;
+
   function pnlCard(title, p) {
     var line = function (l, v, strong) { return '<div style="display:flex;justify-content:space-between;padding:3px 0' + (strong ? ";border-top:1px solid rgba(0,0,0,.12);margin-top:4px;font-weight:700" : "") + '"><span' + (strong ? "" : ' class="muted-sm"') + ">" + l + "</span><span>" + v + "</span></div>"; };
     var profitColour = p.netProfitPaise >= 0 ? "var(--leaf-600,#1FAE66)" : "#c0392b";
@@ -8835,6 +9185,7 @@
     if (route === "admin/cutoff") return wireOpsCutoffAlert();
     if (route === "admin/milk-tankers") return wireMilkTankersBackend();
     if (route === "admin/profit-center") return wireProfitCenterBackend();
+    if (route === "admin/milk-business") return wireMilkBusinessBackend();
     // ?date=YYYY-MM-DD deep-links a specific day (the Delivery Calendar links here).
     if (route === "admin/deliveries") { var qd = null; try { qd = new URLSearchParams(location.search).get("date"); } catch (e) {} return wireDeliveriesBackend(qd && /^\d{4}-\d{2}-\d{2}$/.test(qd) ? qd : undefined); }
     if (route === "admin/delivery-settings") return wireDeliverySettingsBackend();

@@ -96,10 +96,24 @@ export async function b2bLitresForDay(start: Date, end: Date): Promise<number> {
   return litres;
 }
 
+/** Litres sold via the PRIVATE walk-in warehouse channel on an IST day (non-void). */
+export async function warehouseLitresForDay(start: Date, end: Date): Promise<number> {
+  const r = await db.warehouseSale.aggregate({ where: { status: "COMPLETED", saleDate: { gte: start, lt: end } }, _sum: { litres: true } });
+  return r._sum.litres ?? 0;
+}
+
+/** Litres sold via the PRIVATE retail-outlet channel on an IST day (non-void). */
+export async function outletLitresForDay(start: Date, end: Date): Promise<number> {
+  const r = await db.outletSale.aggregate({ where: { status: "COMPLETED", saleDate: { gte: start, lt: end } }, _sum: { litres: true } });
+  return r._sum.litres ?? 0;
+}
+
 export interface DaySettlement {
   date: string;
   retail: ConsumeResult;
   b2b: ConsumeResult;
+  warehouse: ConsumeResult;
+  outlet: ConsumeResult;
   totalLitres: number;
   cogsPaise: number;
   shortfallLitres: number;
@@ -111,9 +125,14 @@ export interface DaySettlement {
  *  (which fires on every completion) so it doesn't flood the audit log. */
 export async function settleDay(dateIso: string, actor?: { actorId?: string; actorRole?: string; quiet?: boolean; clearedByTankerId?: string }): Promise<DaySettlement> {
   const { start, end, iso } = istDayWindow(dateIso);
-  const [retailLitres, b2bLitres] = await Promise.all([retailLitresForDay(start, end), b2bLitresForDay(start, end)]);
+  const [retailLitres, b2bLitres, warehouseLitres, outletLitres] = await Promise.all([
+    retailLitresForDay(start, end), b2bLitresForDay(start, end),
+    warehouseLitresForDay(start, end), outletLitresForDay(start, end),
+  ]);
   const refRetail = `settle:${iso}:RETAIL`;
   const refB2b = `settle:${iso}:B2B`;
+  const refWarehouse = `settle:${iso}:WAREHOUSE`;
+  const refOutlet = `settle:${iso}:OUTLET`;
   const day = start;   // attribute consumption to IST-midnight of that day
 
   const result = await db.$transaction(async (tx) => {
@@ -125,9 +144,13 @@ export async function settleDay(dateIso: string, actor?: { actorId?: string; act
     await tx.$executeRawUnsafe("SELECT pg_advisory_xact_lock(hashtext($1)::bigint)", `milk-settle:${iso}`);
     await reverseByRef(tx, refRetail);
     await reverseByRef(tx, refB2b);
+    await reverseByRef(tx, refWarehouse);
+    await reverseByRef(tx, refOutlet);
     const retail = await consumeLitres(tx, { date: day, channel: "RETAIL", litres: retailLitres, sourceRef: refRetail, note: `Retail sales ${iso}` });
     const b2b = await consumeLitres(tx, { date: day, channel: "B2B", litres: b2bLitres, sourceRef: refB2b, note: `B2B sales ${iso}` });
-    return { retail, b2b };
+    const warehouse = await consumeLitres(tx, { date: day, channel: "WAREHOUSE", litres: warehouseLitres, sourceRef: refWarehouse, note: `Warehouse walk-in ${iso}` });
+    const outlet = await consumeLitres(tx, { date: day, channel: "OUTLET", litres: outletLitres, sourceRef: refOutlet, note: `Retail outlet ${iso}` });
+    return { retail, b2b, warehouse, outlet };
   }, {
     // A re-settle does reverse + re-consume across several lots — many sequential
     // round-trips. Prisma's 5s default is too tight when the DB is a round-trip
@@ -140,26 +163,33 @@ export async function settleDay(dateIso: string, actor?: { actorId?: string; act
     date: iso,
     retail: result.retail,
     b2b: result.b2b,
-    totalLitres: result.retail.allocatedLitres + result.b2b.allocatedLitres,
-    cogsPaise: result.retail.costPaise + result.b2b.costPaise,
-    shortfallLitres: result.retail.shortfallLitres + result.b2b.shortfallLitres,
+    warehouse: result.warehouse,
+    outlet: result.outlet,
+    totalLitres: result.retail.allocatedLitres + result.b2b.allocatedLitres + result.warehouse.allocatedLitres + result.outlet.allocatedLitres,
+    cogsPaise: result.retail.costPaise + result.b2b.costPaise + result.warehouse.costPaise + result.outlet.costPaise,
+    shortfallLitres: result.retail.shortfallLitres + result.b2b.shortfallLitres + result.warehouse.shortfallLitres + result.outlet.shortfallLitres,
   };
   if (!actor?.quiet) await audit({
     userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system",
     action: "milk.settle",
-    target: `${iso} · retail ${retailLitres.toFixed(1)}L · b2b ${b2bLitres.toFixed(1)}L · COGS ₹${(settlement.cogsPaise / 100).toFixed(2)}${settlement.shortfallLitres > 0.001 ? ` · SHORT ${settlement.shortfallLitres.toFixed(1)}L` : ""}`,
+    target: `${iso} · retail ${retailLitres.toFixed(1)}L · b2b ${b2bLitres.toFixed(1)}L${warehouseLitres > 0.001 ? ` · warehouse ${warehouseLitres.toFixed(1)}L` : ""}${outletLitres > 0.001 ? ` · outlet ${outletLitres.toFixed(1)}L` : ""} · COGS ₹${(settlement.cogsPaise / 100).toFixed(2)}${settlement.shortfallLitres > 0.001 ? ` · SHORT ${settlement.shortfallLitres.toFixed(1)}L` : ""}`,
   }).catch(() => {});
 
   // FIFO carry-forward: persist / clear this day's Pending Allocation (excess sales over open
   // stock). Best-effort + separate from the settle tx — the ledger already committed. A later
   // tanker's arrival re-settles the day (createTanker); once stock covers it, the row clears.
   try {
-    const shortRetail = result.retail.shortfallLitres, shortB2b = result.b2b.shortfallLitres, short = shortRetail + shortB2b;
+    // Fold the walk-in channels (WAREHOUSE/OUTLET) into the retail-family bucket of the
+    // pending row (they're retail milk); the total short is what drives absorption on the
+    // next tanker, and the row's retail+b2b still sums to total.
+    const shortRetail = result.retail.shortfallLitres + result.warehouse.shortfallLitres + result.outlet.shortfallLitres;
+    const shortB2b = result.b2b.shortfallLitres, short = shortRetail + shortB2b;
+    const soldRetailFamily = retailLitres + warehouseLitres + outletLitres;
     if (short > EPS) {
       await db.milkPendingAllocation.upsert({
         where: { date: day },
-        create: { date: day, retailLitres: r2(shortRetail), b2bLitres: r2(shortB2b), totalLitres: r2(short), soldRetailLitres: r2(retailLitres), soldB2bLitres: r2(b2bLitres), status: "PENDING", reason: "Sales exceeded open tanker stock" },
-        update: { retailLitres: r2(shortRetail), b2bLitres: r2(shortB2b), totalLitres: r2(short), soldRetailLitres: r2(retailLitres), soldB2bLitres: r2(b2bLitres), status: "PENDING", clearedAt: null, clearedByTankerId: null },
+        create: { date: day, retailLitres: r2(shortRetail), b2bLitres: r2(shortB2b), totalLitres: r2(short), soldRetailLitres: r2(soldRetailFamily), soldB2bLitres: r2(b2bLitres), status: "PENDING", reason: "Sales exceeded open tanker stock" },
+        update: { retailLitres: r2(shortRetail), b2bLitres: r2(shortB2b), totalLitres: r2(short), soldRetailLitres: r2(soldRetailFamily), soldB2bLitres: r2(b2bLitres), status: "PENDING", clearedAt: null, clearedByTankerId: null },
       });
       if (!actor?.quiet) await audit({ userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system", action: "milk.pending.created", target: `${iso} · pending ${r2(short)}L (retail ${r2(shortRetail)} + b2b ${r2(shortB2b)}) — waiting for next tanker` }).catch(() => {});
     } else {

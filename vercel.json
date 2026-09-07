@@ -8,7 +8,8 @@
     { "source": "/register", "destination": "/register.html" },
     { "source": "/check-delivery", "destination": "/check-delivery.html" },
     { "source": "/delivery-availability", "destination": "/check-delivery.html" },
-    { "source": "/rewards/claim", "destination": "/rewards/claim.html" }
+    { "source": "/rewards/claim", "destination": "/rewards/claim.html" },
+    { "source": "/private-business", "destination": "/admin/milk-business.html" }
   ],
   "headers": [
     {
