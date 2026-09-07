@@ -11,8 +11,11 @@ import { db } from "@/lib/db";
 import { istDayWindow } from "@/lib/delivery/stats";
 import { type MilkReport, buildMilkReport, type MilkReportType } from "@/lib/milk/reports";
 import { mbRangePnl } from "@/lib/milk-business/pnl";
+import { warehouseOutstanding } from "@/lib/milk-business/warehouse";
+import { outletOutstanding } from "@/lib/milk-business/outlet";
+import { outstandingReport as b2bOutstandingReport, agingReport as b2bAgingReport } from "@/lib/b2b/outstanding";
 
-export const MB_REPORT_TYPES = ["warehouse-sales", "outlet-sales", "warehouse-customers", "outlets", "private-pnl", "tanker", "procurement", "inventory", "consumption"] as const;
+export const MB_REPORT_TYPES = ["private-pnl", "warehouse-sales", "warehouse-customers", "warehouse-outstanding", "outlet-sales", "outlets", "outlet-outstanding", "b2b-outstanding", "b2b-aging", "tanker", "procurement", "inventory", "consumption"] as const;
 export type MbReportType = (typeof MB_REPORT_TYPES)[number];
 
 const rup = (p: number) => "₹" + ((p || 0) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -25,6 +28,9 @@ export async function buildMbReport(type: MbReportType, fromIso: string, toIso: 
   if (type === "tanker" || type === "procurement" || type === "inventory" || type === "consumption") {
     return buildMilkReport(type as MilkReportType, fromIso, toIso);
   }
+  // delegate the B2B business-wise financial reports (spec §32/§12) to the existing engine
+  if (type === "b2b-outstanding") return b2bOutstandingReport({ asOf: toIso });
+  if (type === "b2b-aging") return b2bAgingReport({ asOf: toIso });
 
   const start = istDayWindow(fromIso).start;
   const end = istDayWindow(toIso).end;
@@ -74,6 +80,28 @@ export async function buildMbReport(type: MbReportType, fromIso: string, toIso: 
       type: "consumption", title: "Retail Outlet Report", subtitle: `${range} · ${grp.length} outlet(s) · ${stamp}`, rowCount: grp.length,
       columns: [{ label: "Outlet" }, { label: "Litres", right: true }, { label: "Avg ₹/L", right: true }, { label: "Revenue", right: true }, { label: "Sales", right: true }],
       rows, totalRow: ["TOTAL", n2(l) + " L", "", rup(net), ""],
+    };
+  }
+
+  if (type === "warehouse-outstanding") {
+    const rows0 = await warehouseOutstanding();
+    const rows = rows0.map((r) => [r.customerName, String(r.openSales), rup(r.outstandingPaise)]);
+    const total = rows0.reduce((a, r) => a + r.outstandingPaise, 0);
+    return {
+      type: "consumption", title: "Warehouse Outstanding (credit sales)", subtitle: `As of ${dmy(toIso)} · ${rows0.length} customer(s) owing · ${stamp}`, rowCount: rows0.length,
+      columns: [{ label: "Customer" }, { label: "Open sales", right: true }, { label: "Outstanding", right: true }],
+      rows, totalRow: ["TOTAL", "", rup(total)],
+    };
+  }
+
+  if (type === "outlet-outstanding") {
+    const rows0 = await outletOutstanding();
+    const rows = rows0.map((r) => [r.outletName, String(r.openSales), rup(r.outstandingPaise)]);
+    const total = rows0.reduce((a, r) => a + r.outstandingPaise, 0);
+    return {
+      type: "consumption", title: "Retail Outlet Outstanding (credit sales)", subtitle: `As of ${dmy(toIso)} · ${rows0.length} outlet(s) owing · ${stamp}`, rowCount: rows0.length,
+      columns: [{ label: "Outlet" }, { label: "Open sales", right: true }, { label: "Outstanding", right: true }],
+      rows, totalRow: ["TOTAL", "", rup(total)],
     };
   }
 

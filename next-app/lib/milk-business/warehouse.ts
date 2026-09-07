@@ -147,3 +147,29 @@ export async function listWarehouseSales(opts: { from?: string; to?: string; cus
   const rows = await db.warehouseSale.findMany({ where, orderBy: { soldAt: "desc" }, take: Math.min(2000, opts.limit ?? 500) });
   return rows;
 }
+
+/** Record a payment against a credit (PENDING/PARTIAL) walk-in sale. Updates paidPaise
+ *  and derives the status; the audit log is the payment history (who/when/how much). */
+export async function collectWarehousePayment(saleId: string, amountPaise: number, method: string | undefined, reference: string | undefined, actor?: MbActor) {
+  const amt = Math.round(Number(amountPaise) || 0);
+  if (!(amt > 0)) throw new Error("Payment amount must be greater than 0.");
+  const sale = await db.warehouseSale.findUnique({ where: { id: saleId } });
+  if (!sale) throw new Error("Sale not found.");
+  if (sale.status !== "COMPLETED") throw new Error("Cannot collect against a voided sale.");
+  const outstanding = sale.netPaise - sale.paidPaise;
+  if (outstanding <= 0) throw new Error("This sale is already fully paid.");
+  const applied = Math.min(amt, outstanding);
+  const paid = sale.paidPaise + applied;
+  const updated = await db.warehouseSale.update({ where: { id: saleId }, data: { paidPaise: paid, paymentStatus: paid >= sale.netPaise ? "PAID" : "PARTIAL", paymentMode: method?.trim() || sale.paymentMode, reference: reference?.trim() || sale.reference } });
+  await audit({ userId: actor?.userId ?? null, actorRole: actor?.role ?? "system", action: "milkBusiness.warehouse.payment.collect", target: `${sale.code} · +₹${(applied / 100).toFixed(2)}${method ? " (" + method + ")" : ""} · outstanding ₹${((sale.netPaise - paid) / 100).toFixed(2)}` }).catch(() => {});
+  return { sale: updated, applied, remaining: sale.netPaise - paid };
+}
+
+/** Outstanding per warehouse customer = Σ(net − paid) over COMPLETED unpaid sales. */
+export async function warehouseOutstanding() {
+  const grp = await db.warehouseSale.groupBy({ by: ["customerId", "customerName"], where: { status: "COMPLETED", paymentStatus: { in: ["PENDING", "PARTIAL"] } }, _sum: { netPaise: true, paidPaise: true }, _count: true });
+  return grp
+    .map((g) => ({ customerId: g.customerId, customerName: g.customerName || "Anonymous", outstandingPaise: (g._sum.netPaise ?? 0) - (g._sum.paidPaise ?? 0), openSales: g._count }))
+    .filter((r) => r.outstandingPaise > 0)
+    .sort((a, b) => b.outstandingPaise - a.outstandingPaise);
+}

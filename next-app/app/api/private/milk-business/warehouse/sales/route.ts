@@ -5,7 +5,7 @@
    Gated server-side on the milkBusiness RBAC module. */
 import { NextRequest, NextResponse } from "next/server";
 import { requireMilkBusiness } from "@/lib/milk-business/guard";
-import { listWarehouseSales, createWarehouseSale, voidWarehouseSale } from "@/lib/milk-business/warehouse";
+import { listWarehouseSales, createWarehouseSale, voidWarehouseSale, collectWarehousePayment, warehouseOutstanding } from "@/lib/milk-business/warehouse";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
   if (!g.ok) return g.res;
   const sp = req.nextUrl.searchParams;
   try {
+    if (sp.get("view") === "outstanding") return NextResponse.json({ ok: true, outstanding: await warehouseOutstanding() }, { headers: { "Cache-Control": "no-store" } });
     const sales = await listWarehouseSales({ from: sp.get("from") ?? undefined, to: sp.get("to") ?? undefined, customerId: sp.get("customerId") ?? undefined, status: sp.get("status") ?? undefined });
     return NextResponse.json({ ok: true, sales }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
@@ -34,6 +35,7 @@ export async function POST(req: NextRequest) {
   try {
     if (action === "create") return NextResponse.json({ ok: true, ...(await createWarehouseSale(body as never, actor)) });
     if (action === "void") { if (!body.id) return NextResponse.json({ error: "id required" }, { status: 400 }); return NextResponse.json({ ok: true, ...(await voidWarehouseSale(String(body.id), body.reason as string, actor)) }); }
+    if (action === "collectPayment") { if (!body.id) return NextResponse.json({ error: "id required" }, { status: 400 }); return NextResponse.json({ ok: true, ...(await collectWarehousePayment(String(body.id), Math.round(Number(body.amountPaise) || 0), body.method as string, body.reference as string, actor)) }); }
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (e) {
     return NextResponse.json({ error: (e as Error)?.message ?? "Action failed" }, { status: 409 });

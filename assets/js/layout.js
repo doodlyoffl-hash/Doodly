@@ -8436,8 +8436,12 @@
     ["private-pnl", "Profit & Loss (B2B + walk-in + outlet)"],
     ["warehouse-sales", "Warehouse walk-in sales"],
     ["warehouse-customers", "Warehouse customer summary"],
+    ["warehouse-outstanding", "Warehouse outstanding (credit)"],
     ["outlet-sales", "Retail outlet sales"],
     ["outlets", "Outlet summary"],
+    ["outlet-outstanding", "Outlet outstanding (credit)"],
+    ["b2b-outstanding", "B2B business-wise outstanding"],
+    ["b2b-aging", "B2B outstanding — aging"],
     ["tanker", "Tanker cost & consumption"],
     ["procurement", "Procurement (tankers received)"],
     ["inventory", "Inventory on hand"],
@@ -8520,8 +8524,14 @@
       + mbKpi("Net", mbMoney(m.finance.netProfitPaise), m.finance.netMarginPct + "%")
       + mbKpi("Warehouse sales", mbNum(m.sales.warehouseSales), mbL(m.sales.warehouseLitres))
       + mbKpi("Litres procured", mbL(m.procurement.litresProcured)));
-    return proc + sales + position + fin + monthly
-      + '<p class="muted-sm" style="margin-top:8px">P&amp;L = B2B + Warehouse walk-in + Retail outlet (spec §25). The milk position is physical and includes every channel. Retail-outlet lands in Phase 2.</p>';
+    var tot = s.totalRevenuePaise || 0, mix = function (p) { return tot > 0 ? Math.round((p / tot) * 1000) / 10 + "%" : "—"; };
+    var mixG = mbGroup("Revenue mix &amp; average selling price",
+      mbKpi("B2B share", mix(s.b2bRevenuePaise), "avg " + mbMoney(s.avgB2bPricePerKgPaise) + "/kg")
+      + mbKpi("Warehouse share", mix(s.warehouseRevenuePaise), "avg " + mbMoney(s.avgWarehousePricePerLitrePaise) + "/L")
+      + mbKpi("Outlet share", mix(s.outletRevenuePaise))
+      + mbKpi("Milk sold (COGS basis)", mbL(t.finance.litresSold)));
+    return proc + sales + mixG + position + fin + monthly
+      + '<p class="muted-sm" style="margin-top:8px">P&amp;L = B2B + Warehouse walk-in + Retail outlet (spec §25). The milk position is physical and includes every channel.</p>';
   }
 
   /* ---------- Warehouse walk-in tab ---------- */
@@ -8623,12 +8633,22 @@
       box.innerHTML = '<div style="overflow-x:auto"><table class="table"><thead><tr><th>Code</th><th>Time</th><th>Customer</th><th>Litres</th><th>₹/L</th><th>Net</th><th>Payment</th><th>Status</th><th></th></tr></thead><tbody>'
         + sales.map(function (s) {
           var voidable = s.status === "COMPLETED";
+          var credit = voidable && (s.paymentStatus === "PENDING" || s.paymentStatus === "PARTIAL");
+          var pay = (s.paymentStatus || "") + (s.paymentMode ? " · " + s.paymentMode : "") + (credit ? " · due " + milkRs((s.netPaise || 0) - (s.paidPaise || 0)) : "");
           return '<tr' + (s.status === "VOID" ? ' style="opacity:.5"' : "") + '><td>' + esc(s.code) + '</td><td class="muted-sm">' + esc(String(s.soldAt).slice(0, 16).replace("T", " ")) + '</td>'
             + '<td>' + esc(s.customerName || "Anonymous") + '</td><td>' + mbL(s.litres) + '</td><td>' + milkRs(s.pricePerLitrePaise) + '</td><td>' + milkRs(s.netPaise) + '</td>'
-            + '<td class="muted-sm">' + esc((s.paymentStatus || "") + (s.paymentMode ? " · " + s.paymentMode : "")) + '</td>'
-            + '<td><span class="badge ' + (s.status === "VOID" ? "grey" : "green") + '">' + esc(s.status) + '</span></td>'
-            + '<td>' + (voidable ? '<button class="btn btn-ghost" data-void="' + esc(s.id) + '" style="color:#c0392b">Void</button>' : "") + '</td></tr>';
+            + '<td class="muted-sm">' + esc(pay) + '</td>'
+            + '<td><span class="badge ' + (s.status === "VOID" ? "grey" : credit ? "amber" : "green") + '">' + esc(s.status === "VOID" ? "VOID" : credit ? s.paymentStatus : "PAID") + '</span></td>'
+            + '<td style="white-space:nowrap">' + (credit ? '<button class="btn btn-ghost" data-collect="' + esc(s.id) + '" data-due="' + ((s.netPaise || 0) - (s.paidPaise || 0)) + '">Collect</button> ' : "") + (voidable ? '<button class="btn btn-ghost" data-void="' + esc(s.id) + '" style="color:#c0392b">Void</button>' : "") + '</td></tr>';
         }).join("") + '</tbody></table></div>';
+      box.querySelectorAll("[data-collect]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-collect"), due = Number(btn.getAttribute("data-due")) || 0;
+          var v = prompt("Amount received (₹). Outstanding: " + milkRs(due), (due / 100).toString()); if (v == null) return;
+          var amt = Math.round((Number(v) || 0) * 100); if (!(amt > 0)) { dacToast("Enter a valid amount."); return; }
+          DOODLY_API.post("/api/private/milk-business/warehouse/sales", { action: "collectPayment", id: id, amountPaise: amt, method: "cash" }).then(function (r) { dacToast("Collected " + milkRs(r.applied) + " · outstanding " + milkRs(r.remaining)); mbLoadWhSales(host); }).catch(function (e) { dacToast(e.message || "Couldn't record the payment."); });
+        });
+      });
       box.querySelectorAll("[data-void]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           var id = btn.getAttribute("data-void"); if (!confirm("Void this sale? The milk draw will be reversed (revenue removed, stock restored). This is recorded, not deleted.")) return;
@@ -8724,14 +8744,24 @@
     DOODLY_API.get("/api/private/milk-business/outlet/sales").then(function (r) {
       var sales = (r && r.sales) || [];
       if (!sales.length) { box.innerHTML = '<p class="muted-sm">No outlet sales yet.</p>'; return; }
-      box.innerHTML = '<div style="overflow-x:auto"><table class="table"><thead><tr><th>Code</th><th>Time</th><th>Outlet</th><th>Litres</th><th>₹/L</th><th>Net</th><th>Status</th><th></th></tr></thead><tbody>'
+      box.innerHTML = '<div style="overflow-x:auto"><table class="table"><thead><tr><th>Code</th><th>Time</th><th>Outlet</th><th>Litres</th><th>₹/L</th><th>Net</th><th>Payment</th><th>Status</th><th></th></tr></thead><tbody>'
         + sales.map(function (s) {
           var voidable = s.status === "COMPLETED";
+          var credit = voidable && (s.paymentStatus === "PENDING" || s.paymentStatus === "PARTIAL");
           return '<tr' + (s.status === "VOID" ? ' style="opacity:.5"' : "") + '><td>' + esc(s.code) + '</td><td class="muted-sm">' + esc(String(s.soldAt).slice(0, 16).replace("T", " ")) + '</td>'
             + '<td>' + esc(s.outletName || "—") + '</td><td>' + mbL(s.litres) + '</td><td>' + milkRs(s.pricePerLitrePaise) + '</td><td>' + milkRs(s.netPaise) + '</td>'
-            + '<td><span class="badge ' + (s.status === "VOID" ? "grey" : "green") + '">' + esc(s.status) + '</span></td>'
-            + '<td>' + (voidable ? '<button class="btn btn-ghost" data-ovoid="' + esc(s.id) + '" style="color:#c0392b">Void</button>' : "") + '</td></tr>';
+            + '<td class="muted-sm">' + esc((s.paymentStatus || "") + (credit ? " · due " + milkRs((s.netPaise || 0) - (s.paidPaise || 0)) : "")) + '</td>'
+            + '<td><span class="badge ' + (s.status === "VOID" ? "grey" : credit ? "amber" : "green") + '">' + esc(s.status === "VOID" ? "VOID" : credit ? s.paymentStatus : "PAID") + '</span></td>'
+            + '<td style="white-space:nowrap">' + (credit ? '<button class="btn btn-ghost" data-ocollect="' + esc(s.id) + '" data-due="' + ((s.netPaise || 0) - (s.paidPaise || 0)) + '">Collect</button> ' : "") + (voidable ? '<button class="btn btn-ghost" data-ovoid="' + esc(s.id) + '" style="color:#c0392b">Void</button>' : "") + '</td></tr>';
         }).join("") + '</tbody></table></div>';
+      box.querySelectorAll("[data-ocollect]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-ocollect"), due = Number(btn.getAttribute("data-due")) || 0;
+          var v = prompt("Amount received (₹). Outstanding: " + milkRs(due), (due / 100).toString()); if (v == null) return;
+          var amt = Math.round((Number(v) || 0) * 100); if (!(amt > 0)) { dacToast("Enter a valid amount."); return; }
+          DOODLY_API.post("/api/private/milk-business/outlet/sales", { action: "collectPayment", id: id, amountPaise: amt, method: "cash" }).then(function (r) { dacToast("Collected " + milkRs(r.applied) + " · outstanding " + milkRs(r.remaining)); mbLoadOutletSales(host); }).catch(function (e) { dacToast(e.message || "Couldn't record the payment."); });
+        });
+      });
       box.querySelectorAll("[data-ovoid]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           var id = btn.getAttribute("data-ovoid"); if (!confirm("Void this outlet sale? The milk draw will be reversed. Recorded, not deleted.")) return;
