@@ -3,7 +3,9 @@
      Revenue = B2B (delivered, net GST) + Warehouse walk-in + Retail Outlet
      COGS    = FIFO cost of milk sold through THOSE channels only
                (TankerConsumption where channel ∈ {B2B, WAREHOUSE, OUTLET})
-     Expenses= date-based Expense.totalPaise (not rejected/cancelled)
+     Expenses= date-based Expense.totalPaise (not rejected/cancelled), MILK-SCOPED
+               — only categories with slug prefix `milk-business-` (see ./expenses),
+               so retail/general expenses booked elsewhere are NOT subtracted here.
      Gross   = Revenue − COGS      Net = Gross − Expenses
    This is a DISTINCT lens from the public Profit Center (which is home-delivery
    + B2B); it deliberately EXCLUDES the consumer home-delivery channel. B2B is
@@ -14,6 +16,7 @@ import { db } from "@/lib/db";
 import { istDayWindow } from "@/lib/delivery/stats";
 import { b2bLitresForDay, warehouseLitresForDay, outletLitresForDay } from "@/lib/milk/settle";
 import { isMilkSlug } from "@/lib/b2b/units";
+import { MILK_EXPENSE_SLUG_PREFIX } from "./expenses";
 
 const IST_MS = 5.5 * 60 * 60 * 1000;
 const r2 = (n: number) => Math.round((n || 0) * 100) / 100;
@@ -40,7 +43,7 @@ export async function mbPnlForBounds(label: string, start: Date, end: Date): Pro
     db.outletSale.aggregate({ where: { status: "COMPLETED", saleDate: { gte: start, lt: end } }, _sum: { netPaise: true, litres: true }, _count: true }),
     // COGS + drawn litres for the private channels only
     db.tankerConsumption.aggregate({ where: { date: { gte: start, lt: end }, channel: { in: ["B2B", "WAREHOUSE", "OUTLET"] } }, _sum: { costPaise: true, litres: true } }),
-    db.expense.aggregate({ where: { deletedAt: null, status: { notIn: ["REJECTED", "CANCELLED"] }, date: { gte: start, lt: end } }, _sum: { totalPaise: true } }),
+    db.expense.aggregate({ where: { deletedAt: null, status: { notIn: ["REJECTED", "CANCELLED"] }, date: { gte: start, lt: end }, category: { slug: { startsWith: MILK_EXPENSE_SLUG_PREFIX } } }, _sum: { totalPaise: true } }),
     // B2B milk KG sold (for the "B2B KG Sold" KPI) — milk lines billed in KG
     db.businessOrderItem.findMany({ where: { order: { revenuePaise: { not: null }, deliveredAt: { gte: start, lt: end } } }, select: { unit: true, quantity: true, productSlug: true }, take: 8000 }),
     b2bLitresForDay(start, end),

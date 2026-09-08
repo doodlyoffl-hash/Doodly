@@ -8438,6 +8438,44 @@
     var go = function () { openTankerForm(null, function () { dacToast("Tanker added — it now feeds the private module (inventory, chain, FIFO COGS)."); if (typeof onSaved === "function") onSaved(); }); };
     DOODLY_API.get("/api/admin/milk/config").then(function (c) { if (c && c.config) _milkCfg = c.config; }).catch(function () {}).then(go);
   }
+  // Add a MILK-SCOPED expense from inside the private module. Reuses the SAME Daily
+  // Expense engine (POST /api/private/milk-business/expenses → createExpense), but the
+  // category list is limited to the milk cost-centres (slug milk-business-*), so only
+  // these hit the private P&L — separate from the general/retail expenses booked on the
+  // Daily Expenses page. Counts in the P&L immediately (before approval), date-based.
+  function mbAddExpense(onSaved) {
+    if (!window.DOODLY_API) return;
+    var m = asgnModal("Record milk expense", '<p class="muted-sm">Loading milk categories…</p>');
+    DOODLY_API.get("/api/private/milk-business/expenses?view=categories").then(function (r) {
+      var cats = (r && r.categories) || [];
+      if (!cats.length) { m.body.innerHTML = '<p class="dac-err">No milk expense categories available.</p>'; return; }
+      m.body.innerHTML =
+        '<div class="muted-sm" style="margin-bottom:8px">Milk-scoped expense — only <b>Milk Business</b> categories, so it lands in the private P&amp;L (not the general/retail expenses). Counts immediately, on its date.</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+          '<label class="dac-f"><span>Date</span><input class="input" id="mbx-date" type="date" value="' + istTodayStr() + '"></label>' +
+          '<label class="dac-f"><span>Category</span><select class="input" id="mbx-cat">' + cats.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + "</option>"; }).join("") + "</select></label>" +
+          '<label class="dac-f" style="grid-column:1/3"><span>Title</span><input class="input" id="mbx-title" placeholder="e.g. Diesel for tanker run"></label>' +
+          '<label class="dac-f"><span>Amount (₹)</span><input class="input" id="mbx-amt" type="number" min="0" step="0.01" placeholder="0.00"></label>' +
+          '<label class="dac-f"><span>Payment mode</span><select class="input" id="mbx-mode"><option>CASH</option><option>UPI</option><option>BANK_TRANSFER</option><option>CREDIT_CARD</option><option>DEBIT_CARD</option><option>CHEQUE</option><option>WALLET</option><option>OTHER</option></select></label>' +
+          '<label class="dac-f" style="grid-column:1/3"><span>Vendor (optional)</span><input class="input" id="mbx-vendor"></label>' +
+        "</div>" +
+        '<p class="dac-err" id="mbx-err"></p>' +
+        '<div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-primary sm" id="mbx-save">Save expense</button></div>';
+      var err = m.body.querySelector("#mbx-err"), save = m.body.querySelector("#mbx-save");
+      save.addEventListener("click", function () {
+        var amt = Math.round((+m.body.querySelector("#mbx-amt").value || 0) * 100);
+        var title = m.body.querySelector("#mbx-title").value.trim();
+        var catId = m.body.querySelector("#mbx-cat").value;
+        if (!title || title.length < 2) { err.textContent = "Enter a title (2+ characters)."; return; }
+        if (!catId) { err.textContent = "Pick a milk category."; return; }
+        if (!(amt > 0)) { err.textContent = "Enter an amount greater than 0."; return; }
+        save.disabled = true; err.textContent = "";
+        DOODLY_API.post("/api/private/milk-business/expenses", { action: "create", date: m.body.querySelector("#mbx-date").value || istTodayStr(), title: title, categoryId: catId, amountPaise: amt, gstIncluded: false, gstPaise: 0, paymentMode: m.body.querySelector("#mbx-mode").value, vendor: m.body.querySelector("#mbx-vendor").value.trim() || undefined })
+          .then(function (x) { var ex = (x && x.expense) || x; dacToast("Milk expense " + ((ex && ex.code) || "") + " recorded — " + milkRs((ex && ex.totalPaise) || amt) + " · in the private P&L."); m.close(); if (typeof onSaved === "function") onSaved(); })
+          .catch(function (e) { save.disabled = false; err.textContent = e.code === "forbidden" ? "Your role can't record milk expenses (needs Milk Business → create)." : (e.message || "Couldn't save the expense."); });
+      });
+    }).catch(function (e) { m.body.innerHTML = '<p class="dac-err">' + esc((e && e.message) || "Couldn't load milk categories.") + "</p>"; });
+  }
 
   var MB_TABS = [["dashboard", "📊 Dashboard"], ["b2b", "🏢 B2B orders"], ["warehouse", "🏭 Warehouse walk-in"], ["outlet", "🛒 Retail outlet"], ["continuity", "🔗 Continuity"], ["reports", "📄 Reports"]];
   async function wireMilkBusinessBackend() {
@@ -8508,11 +8546,13 @@
       + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px">Day<input type="date" id="mb-date" class="input" value="' + esc(day0) + '"></label>'
       + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px">Month<input type="month" id="mb-month" class="input" value="' + esc(day0.slice(0, 7)) + '"></label>'
       + '<button class="btn btn-ghost" id="mb-refresh">↻ Refresh</button>'
-      + '<button class="btn btn-primary" id="mb-addtanker" style="margin-left:auto">+ Add tanker</button></div>'
+      + '<button class="btn btn-ghost" id="mb-addexpense" style="margin-left:auto">+ Add expense</button>'
+      + '<button class="btn btn-primary" id="mb-addtanker">+ Add tanker</button></div>'
       + '<div id="mb-body"><p class="muted-sm">Loading…</p></div>';
     body.querySelector("#mb-date").addEventListener("change", function () { mbDashLoad(body); });
     body.querySelector("#mb-month").addEventListener("change", function () { mbDashLoad(body); });
     body.querySelector("#mb-refresh").addEventListener("click", function () { mbDashLoad(body); });
+    body.querySelector("#mb-addexpense").addEventListener("click", function () { mbAddExpense(function () { mbDashLoad(body); }); });
     body.querySelector("#mb-addtanker").addEventListener("click", function () { mbAddTanker(function () { mbDashLoad(body); }); });
     mbDashLoad(body);
   }
