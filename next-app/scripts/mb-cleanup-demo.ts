@@ -15,7 +15,10 @@ import { settleDay } from "../lib/milk/settle";
 import { istISO } from "../lib/delivery/stats";
 
 const DEMO_BIZ_CODE = "DOO-B2B-000001";
-const DEMO_TANKER_CODE = "TNK-20260908-0002";
+// The demo continuity tanker to drop; override with --tanker=CODE to remove a
+// specific test tanker (e.g. one added while testing the + Add tanker shortcut).
+const tankerArg = (process.argv.find((a) => a.startsWith("--tanker=")) || "").split("=")[1];
+const DEMO_TANKER_CODE = tankerArg || "TNK-20260908-0002";
 const CONFIRM = process.argv.includes("--confirm");
 
 function assertDevDb() {
