@@ -107,10 +107,31 @@ async function clean() {
   console.log("\n✅ Scenario cleaned.");
 }
 
+// Focused: a few warehouse walk-in sales so the Warehouse sales report has real rows
+// (varied customers / litres / price / payment status). Removed by --clean (marker).
+async function warehouse() {
+  const { iso } = istDayWindow(undefined);
+  const t = await db.milkTanker.findFirst({ where: { deletedAt: null, status: "OPEN", remainingLitres: { gt: 0 } }, select: { code: true } });
+  if (!t) throw new Error("No open tanker with stock — add a tanker first.");
+  const sales: Array<{ name: string; litres: number; price: number; status: string }> = [
+    { name: `Anand Sweets ${MARK}`, litres: 40, price: 8200, status: "PAID" },
+    { name: `Sri Balaji Tiffins ${MARK}`, litres: 25, price: 8000, status: "CREDIT" },
+    { name: `Green Cup Cafe ${MARK}`, litres: 60, price: 7800, status: "PAID" },
+  ];
+  for (const s of sales) {
+    const r = await createWarehouseSale({ customerName: s.name, litres: s.litres, pricePerLitrePaise: s.price, saleDate: iso, paymentStatus: s.status }, mbActor);
+    console.log(`  ${r.sale.code} — ${s.name}: ${s.litres} L @ ₹${(s.price / 100).toFixed(0)} = ₹${(r.sale.netPaise / 100).toFixed(2)} · ${s.status}`);
+  }
+  const s = await settleDay(iso, { actorRole: "super_admin", quiet: true });
+  console.log(`Settled ${iso}: warehouse drew ${s.warehouse.allocatedLitres.toFixed(2)} L, COGS ₹${(s.warehouse.costPaise / 100).toFixed(2)}.`);
+  console.log("\n✅ Warehouse sales seeded. Open Reports → Warehouse walk-in sales.");
+}
+
 async function main() {
   assertDev();
   if (process.argv.includes("--clean")) return clean();
+  if (process.argv.includes("--warehouse")) return warehouse();
   if (process.argv.includes("--seed")) return seed();
-  console.log("Pass --seed or --clean.");
+  console.log("Pass --seed, --warehouse or --clean.");
 }
 main().catch((e) => { console.error(e?.message || e); process.exitCode = 1; }).finally(() => db.$disconnect());
