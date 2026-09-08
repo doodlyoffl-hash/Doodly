@@ -8430,7 +8430,7 @@
   function mbKpi(label, val, sub) { return '<div class="kpi"><div class="n">' + val + '</div><div class="l">' + esc(label) + (sub ? ' <span class="muted-sm">· ' + esc(sub) + '</span>' : '') + '</div></div>'; }
   function mbGroup(title, cards) { return '<div style="margin:6px 0 16px"><h3 style="font-size:.95rem;margin:0 0 8px;color:var(--forest)">' + title + '</h3><div class="kpi-row">' + cards + '</div></div>'; }
 
-  var MB_TABS = [["dashboard", "📊 Dashboard"], ["warehouse", "🏭 Warehouse walk-in"], ["outlet", "🛒 Retail outlet"], ["continuity", "🔗 Continuity"], ["reports", "📄 Reports"]];
+  var MB_TABS = [["dashboard", "📊 Dashboard"], ["b2b", "🏢 B2B orders"], ["warehouse", "🏭 Warehouse walk-in"], ["outlet", "🛒 Retail outlet"], ["continuity", "🔗 Continuity"], ["reports", "📄 Reports"]];
   async function wireMilkBusinessBackend() {
     if (!window.DOODLY_API) return;
     var host = document.getElementById("milkBusinessMount"); if (!host) return;
@@ -8451,6 +8451,7 @@
     host.dataset.tab = tab;
     host.querySelectorAll(".mb-tab").forEach(function (b) { var on = b.dataset.tab === tab; b.classList.toggle("btn-primary", on); b.classList.toggle("btn-ghost", !on); });
     var body = host.querySelector("#mb-tab-body");
+    if (tab === "b2b") return mbB2BTab(body);
     if (tab === "warehouse") return mbWarehouseTab(body);
     if (tab === "outlet") return mbOutletTab(body);
     if (tab === "continuity") return mbContinuityTab(body);
@@ -8797,6 +8798,82 @@
       });
     }).catch(function (e) { box.innerHTML = '<p class="muted-sm">Couldn\'t load sales — ' + esc(e.message || "error") + "</p>"; });
   }
+  /* ---------- B2B orders tab (wraps the existing B2B createOrder engine) ---------- */
+  var _mbBiz = [], _mbBizTypes = [];
+  function mbB2BTab(body) {
+    body.innerHTML = '<div id="mb-b2b"><p class="muted-sm">Loading…</p></div>';
+    var host = body.querySelector("#mb-b2b");
+    Promise.all([
+      DOODLY_API.get("/api/private/milk-business/b2b?view=businesses").catch(function () { return { businesses: [] }; }),
+      DOODLY_API.get("/api/private/milk-business/b2b?view=meta").catch(function () { return { businessTypes: [] }; }),
+    ]).then(function (res) { _mbBiz = (res[0] && res[0].businesses) || []; _mbBizTypes = (res[1] && res[1].businessTypes) || []; mbB2BRender(host); })
+      .catch(function (e) { host.innerHTML = '<div class="panel panel-pad muted-sm">' + (e.code === "forbidden" ? "Your role can't open this (403)." : esc(e.message || "error")) + "</div>"; });
+  }
+  function mbB2BRender(host) {
+    var today = istTodayStr();
+    var bizOpts = _mbBiz.map(function (b) { return '<option value="' + esc(b.id) + '">' + esc(b.name) + (b.code ? " (" + esc(b.code) + ")" : "") + "</option>"; }).join("");
+    host.innerHTML =
+      '<div class="panel panel-pad" style="margin-bottom:14px"><h3 style="margin:0 0 10px;color:var(--forest)">Book a B2B milk order (per KG)</h3>'
+      + (_mbBiz.length
+        ? '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
+          + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px;min-width:220px">Business<select class="input" id="b2b-biz">' + bizOpts + "</select></label>"
+          + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px;width:130px">Quantity (KG)<input class="input" id="b2b-kg" inputmode="decimal" placeholder="0"></label>'
+          + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px;width:160px">Delivery date<input type="date" class="input" id="b2b-date" value="' + esc(today) + '"></label>'
+          + '<button class="btn btn-primary" id="b2b-book">Book order</button></div>'
+          + '<p class="muted-sm" style="margin-top:8px">Price is resolved server-side from the business\'s KG pricing (set under B2B Pricing). Revenue + FIFO COGS recognise when the order is marked <b>Delivered</b>.</p>'
+        : '<p class="muted-sm">No businesses yet — register one below, then book orders.</p>')
+      + '<p class="dac-err" id="b2b-err"></p></div>'
+      + '<div class="panel panel-pad" style="margin-bottom:14px"><h3 style="margin:0 0 10px;color:var(--forest)">Register a business</h3>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      + '<input class="input" id="rb-name" placeholder="Business name" style="width:180px">'
+      + '<select class="input" id="rb-type" style="width:150px">' + _mbBizTypes.map(function (t) { return '<option value="' + esc(t) + '">' + esc(t) + "</option>"; }).join("") + "</select>"
+      + '<input class="input" id="rb-contact" placeholder="Contact person" style="width:150px">'
+      + '<input class="input" id="rb-mobile" placeholder="10-digit mobile" style="width:140px">'
+      + '<input class="input" id="rb-line1" placeholder="Address" style="width:180px">'
+      + '<input class="input" id="rb-pin" placeholder="Pincode" style="width:100px">'
+      + '<button class="btn btn-ghost" id="rb-save">+ Register</button></div><p class="dac-err" id="rb-err" style="margin-top:6px"></p></div>'
+      + '<div class="panel panel-pad"><h3 style="margin:0 0 10px;color:var(--forest)">Recent B2B orders</h3><div id="b2b-orders"><p class="muted-sm">Loading…</p></div></div>';
+
+    var q = function (s) { return host.querySelector(s); };
+    var bookBtn = q("#b2b-book");
+    if (bookBtn) bookBtn.addEventListener("click", function () {
+      var err = q("#b2b-err"); err.textContent = "";
+      var kg = Number(q("#b2b-kg").value) || 0; if (!(kg > 0)) { err.textContent = "Enter KG greater than 0."; return; }
+      bookBtn.disabled = true; bookBtn.textContent = "Booking…";
+      DOODLY_API.post("/api/private/milk-business/b2b", { action: "create", businessId: q("#b2b-biz").value, quantityKg: kg, deliveryDate: q("#b2b-date").value }).then(function (r) {
+        dacToast("Order " + (r.order && r.order.code) + " booked (" + kg + " KG). Mark it Delivered to recognise revenue + COGS."); bookBtn.disabled = false; bookBtn.textContent = "Book order"; q("#b2b-kg").value = ""; mbLoadB2BOrders(host);
+      }).catch(function (e) { err.textContent = e.message || "Couldn't book the order."; bookBtn.disabled = false; bookBtn.textContent = "Book order"; });
+    });
+    q("#rb-save").addEventListener("click", function () {
+      var err = q("#rb-err"); err.textContent = "";
+      var biz = { name: q("#rb-name").value.trim(), type: q("#rb-type").value, contactPerson: q("#rb-contact").value.trim(), mobile: q("#rb-mobile").value.trim(), line1: q("#rb-line1").value.trim(), pincode: q("#rb-pin").value.trim() };
+      if (!biz.name || !biz.contactPerson || !biz.mobile || !biz.line1 || !biz.pincode) { err.textContent = "Name, contact, mobile, address and pincode are required."; return; }
+      DOODLY_API.post("/api/private/milk-business/b2b", { action: "registerBusiness", business: biz }).then(function () { dacToast("Business registered."); mbB2BTab(host.closest("#mb-tab-body")); }).catch(function (e) { err.textContent = e.message || "Couldn't register (check mobile/pincode format)."; });
+    });
+    mbLoadB2BOrders(host);
+  }
+  function mbLoadB2BOrders(host) {
+    var box = host.querySelector("#b2b-orders"); if (!box) return;
+    DOODLY_API.get("/api/private/milk-business/b2b?view=orders").then(function (r) {
+      var orders = (r && r.orders) || [];
+      if (!orders.length) { box.innerHTML = '<p class="muted-sm">No B2B orders yet.</p>'; return; }
+      box.innerHTML = '<div style="overflow-x:auto"><table class="table"><thead><tr><th>Code</th><th>Business</th><th>Qty</th><th>Delivery</th><th>Revenue</th><th>Status</th><th></th></tr></thead><tbody>'
+        + orders.map(function (o) {
+          var kg = (o.items || []).filter(function (i) { return i.productSlug === "milk"; }).reduce(function (s, i) { return s + (i.unit === "KG" ? i.quantity : 0); }, 0);
+          var canDeliver = ["PENDING", "CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"].indexOf(o.status) >= 0;
+          var tone = o.status === "DELIVERED" || o.status === "COMPLETED" ? "green" : o.status === "CANCELLED" ? "grey" : "amber";
+          return "<tr><td>" + esc(o.code) + "</td><td>" + esc((o.business && o.business.name) || "—") + "</td><td>" + (kg ? mbNum(kg) + " KG" : "—") + '</td><td class="muted-sm">' + esc(String(o.deliveryDate).slice(0, 10)) + "</td><td>" + (o.revenuePaise != null ? mbMoney(o.revenuePaise) : "—") + '</td><td><span class="badge ' + tone + '">' + esc(o.status) + "</span></td>"
+            + "<td>" + (canDeliver ? '<button class="btn btn-ghost" data-deliver="' + esc(o.id) + '">Mark delivered</button>' : "") + "</td></tr>";
+        }).join("") + "</tbody></table></div>";
+      box.querySelectorAll("[data-deliver]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-deliver"); if (!confirm("Mark this order delivered? This recognises revenue and draws FIFO milk COGS.")) return;
+          DOODLY_API.post("/api/private/milk-business/b2b", { action: "deliver", id: id }).then(function () { dacToast("Order delivered — revenue + COGS recognised."); mbLoadB2BOrders(host); }).catch(function (e) { dacToast(e.message || "Couldn't mark delivered."); });
+        });
+      });
+    }).catch(function (e) { box.innerHTML = '<p class="muted-sm">Couldn\'t load orders — ' + esc(e.message || "error") + "</p>"; });
+  }
+
   /* ---------- Continuity chains tab ---------- */
   function mbContinuityTab(body) {
     body.innerHTML = '<div id="mb-cont"><p class="muted-sm">Loading…</p></div>';
