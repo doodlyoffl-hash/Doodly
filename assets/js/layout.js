@@ -8126,7 +8126,7 @@
     });
   }
 
-  function openTankerForm(existing) {
+  function openTankerForm(existing, onSaved) {
     var ed = existing || null;
     var m = asgnModal(ed ? "Edit tanker " + ed.code : "Add milk tanker", "");
     m.body.innerHTML =
@@ -8197,7 +8197,7 @@
       };
       if (!body.tankerNo || !body.supplier || !(body.quantityKg > 0)) { err.textContent = "Tanker number, supplier and a positive quantity are required."; return; }
       var pr = ed ? DOODLY_API.patch("/api/admin/milk/tankers/" + ed.id, body) : DOODLY_API.post("/api/admin/milk/tankers", body);
-      pr.then(function (x) { dacToast("Tanker " + (x.tanker ? x.tanker.code : "") + " saved — " + milkRs(x.tanker.totalCostPaise) + "."); m.close(); wireMilkTankersBackend(); })
+      pr.then(function (x) { dacToast("Tanker " + (x.tanker ? x.tanker.code : "") + " saved — " + milkRs(x.tanker.totalCostPaise) + "."); m.close(); if (typeof onSaved === "function") onSaved(x); else wireMilkTankersBackend(); })
         .catch(function (e) { err.textContent = e.code === "forbidden" ? "Your role can't save tankers (needs Procurement → " + (ed ? "edit" : "create") + ")." : (e.message || "Couldn't save."); });
     });
   }
@@ -8429,6 +8429,15 @@
   function mbNum(n) { return (n || 0).toLocaleString("en-IN"); }
   function mbKpi(label, val, sub) { return '<div class="kpi"><div class="n">' + val + '</div><div class="l">' + esc(label) + (sub ? ' <span class="muted-sm">· ' + esc(sub) + '</span>' : '') + '</div></div>'; }
   function mbGroup(title, cards) { return '<div style="margin:6px 0 16px"><h3 style="font-size:.95rem;margin:0 0 8px;color:var(--forest)">' + title + '</h3><div class="kpi-row">' + cards + '</div></div>'; }
+  // Add-tanker shortcut from inside the private module — reuses the SAME procurement
+  // form (openTankerForm) that the Milk Tankers page uses, so there is one entry point
+  // and one continuity/FIFO path. Loads current rates first so the cost preview is exact,
+  // then refreshes the private view (not the standalone tankers page) after save.
+  function mbAddTanker(onSaved) {
+    if (!window.DOODLY_API) return;
+    var go = function () { openTankerForm(null, function () { dacToast("Tanker added — it now feeds the private module (inventory, chain, FIFO COGS)."); if (typeof onSaved === "function") onSaved(); }); };
+    DOODLY_API.get("/api/admin/milk/config").then(function (c) { if (c && c.config) _milkCfg = c.config; }).catch(function () {}).then(go);
+  }
 
   var MB_TABS = [["dashboard", "📊 Dashboard"], ["b2b", "🏢 B2B orders"], ["warehouse", "🏭 Warehouse walk-in"], ["outlet", "🛒 Retail outlet"], ["continuity", "🔗 Continuity"], ["reports", "📄 Reports"]];
   async function wireMilkBusinessBackend() {
@@ -8498,11 +8507,13 @@
     body.innerHTML = '<div class="panel panel-pad" style="margin-bottom:14px;display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">'
       + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px">Day<input type="date" id="mb-date" class="input" value="' + esc(day0) + '"></label>'
       + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px">Month<input type="month" id="mb-month" class="input" value="' + esc(day0.slice(0, 7)) + '"></label>'
-      + '<button class="btn btn-ghost" id="mb-refresh">↻ Refresh</button></div>'
+      + '<button class="btn btn-ghost" id="mb-refresh">↻ Refresh</button>'
+      + '<button class="btn btn-primary" id="mb-addtanker" style="margin-left:auto">+ Add tanker</button></div>'
       + '<div id="mb-body"><p class="muted-sm">Loading…</p></div>';
     body.querySelector("#mb-date").addEventListener("change", function () { mbDashLoad(body); });
     body.querySelector("#mb-month").addEventListener("change", function () { mbDashLoad(body); });
     body.querySelector("#mb-refresh").addEventListener("click", function () { mbDashLoad(body); });
+    body.querySelector("#mb-addtanker").addEventListener("click", function () { mbAddTanker(function () { mbDashLoad(body); }); });
     mbDashLoad(body);
   }
   function mbDashLoad(body) {
@@ -8888,11 +8899,12 @@
     host.innerHTML = '<div class="panel panel-pad" style="margin-bottom:14px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">'
       + '<div style="flex:1;min-width:220px"><h3 style="margin:0;color:var(--forest)">Continuity chains</h3><div class="muted-sm">A chain links tankers where earlier stock carried forward into the next. FIFO consumes oldest-first across the chain; current stock = Σ open remaining (never double-counted).</div></div>'
       + mbKpi("Active milk (all open)", mbL(wf.litres || 0), wf.weightedFat != null ? "weighted FAT " + wf.weightedFat + "%" : "")
-      + '<span style="display:flex;gap:8px;align-items:flex-end"><input class="input" id="cont-order" placeholder="Order/sale ref…" style="width:160px"><button class="btn btn-ghost" id="cont-alloc">Trace order</button><button class="btn btn-ghost" id="cont-validate">✓ Validate chains</button></span></div>'
+      + '<span style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap"><input class="input" id="cont-order" placeholder="Order/sale ref…" style="width:160px"><button class="btn btn-ghost" id="cont-alloc">Trace order</button><button class="btn btn-ghost" id="cont-validate">✓ Validate chains</button><button class="btn btn-primary" id="cont-addtanker">+ Add tanker</button></span></div>'
       + '<div id="cont-result"></div>'
-      + (chains.length ? chains.map(mbChainCard).join("") : '<div class="panel panel-pad muted-sm">No active chains — no open tankers with stock.</div>');
+      + (chains.length ? chains.map(mbChainCard).join("") : '<div class="panel panel-pad muted-sm">No active chains — no open tankers with stock. Add a tanker to start a chain.</div>');
     host.querySelector("#cont-validate").addEventListener("click", function () { mbRunValidate(host); });
     host.querySelector("#cont-alloc").addEventListener("click", function () { mbTraceOrder(host); });
+    host.querySelector("#cont-addtanker").addEventListener("click", function () { mbAddTanker(function () { mbContinuityTab(host.parentNode); }); });
   }
   function mbChainCard(c) {
     var t = c.totals;
