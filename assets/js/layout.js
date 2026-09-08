@@ -8905,14 +8905,45 @@
     host.querySelector("#cont-validate").addEventListener("click", function () { mbRunValidate(host); });
     host.querySelector("#cont-alloc").addEventListener("click", function () { mbTraceOrder(host); });
     host.querySelector("#cont-addtanker").addEventListener("click", function () { mbAddTanker(function () { mbContinuityTab(host.parentNode); }); });
+    host.querySelectorAll(".js-mb-freshout").forEach(function (b) { b.addEventListener("click", function () { mbFreshout(b.dataset.id, b.dataset.code, function () { mbContinuityTab(host.parentNode); }); }); });
+  }
+  // Fresh-out from inside the private module — reuses the SAME per-tanker engine
+  // (PATCH /api/admin/milk/tankers/:id action:freshout → addFreshout) the Milk Tankers
+  // page uses; no duplicated logic. Extra residue litres go onto the same lot, cost is
+  // diluted, affected days re-settle, and a drained lot re-opens (unless manually closed).
+  function mbFreshout(id, code, onSaved) {
+    if (!window.DOODLY_API) return;
+    DOODLY_API.get("/api/admin/milk/config").then(function (c) { if (c && c.config) _milkCfg = c.config; }).catch(function () {}).then(function () {
+      var cf = (_milkCfg && _milkCfg.conversionFactor) || 1.03;
+      var m = asgnModal("Add fresh-out · " + code, "");
+      m.body.innerHTML =
+        '<div class="muted-sm" style="margin-bottom:8px">Extra residue milk squeezed from <b>' + esc(code) + '</b> — added to the <b>same</b> lot (not a new tanker), its cost/litre diluted, affected days re-settled. Re-opens the lot if it had drained (unless it was manually closed).</div>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">' +
+          '<label style="flex:0 0 auto"><span class="muted-sm">Fresh-out (KG)</span><br><input class="input" id="mbf-kg" type="number" min="0" step="0.01" placeholder="e.g. 41.2" style="max-width:140px"></label>' +
+          '<label style="flex:1;min-width:160px"><span class="muted-sm">Remarks (optional)</span><br><input class="input" id="mbf-rem" placeholder="Outlet residue" style="width:100%"></label>' +
+        "</div>" +
+        '<div class="muted-sm" id="mbf-conv" style="margin-top:6px">Converted to litres at ÷ ' + cf + " (same as procurement).</div>" +
+        '<p class="dac-err" id="mbf-err"></p>' +
+        '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px"><button class="btn btn-primary sm" id="mbf-add">Add fresh-out</button></div>';
+      var err = m.body.querySelector("#mbf-err"), conv = m.body.querySelector("#mbf-conv"), kgEl = m.body.querySelector("#mbf-kg"), add = m.body.querySelector("#mbf-add");
+      kgEl.addEventListener("input", function () { var kg = +kgEl.value || 0; conv.textContent = kg > 0 ? "≈ " + (Math.round((kg / cf) * 100) / 100) + " L added (÷ " + cf + ")" : "Converted to litres at ÷ " + cf + " (same as procurement)."; });
+      add.addEventListener("click", function () {
+        var kg = +kgEl.value || 0; if (!(kg > 0)) { err.textContent = "Enter a fresh-out quantity (KG) greater than 0."; return; }
+        add.disabled = true; err.textContent = "";
+        DOODLY_API.patch("/api/admin/milk/tankers/" + id, { action: "freshout", quantityKg: kg, remarks: (m.body.querySelector("#mbf-rem").value || "").trim() || undefined })
+          .then(function (r) { dacToast("Fresh-out +" + (Math.round(((r && r.entry && r.entry.litres) || 0) * 100) / 100) + " L added to " + code + " · stock recalculated."); m.close(); if (typeof onSaved === "function") onSaved(); })
+          .catch(function (e) { add.disabled = false; err.textContent = e.code === "forbidden" ? "Your role can't add fresh-out (needs Procurement → edit)." : (e.message || "Couldn't add fresh-out."); });
+      });
+    });
   }
   function mbChainCard(c) {
     var t = c.totals;
     var rows = c.tankers.map(function (x) {
-      return '<tr><td>' + esc(x.code) + '</td><td><span class="badge ' + (x.continuityType === "CONTINUITY" ? "blue" : "green") + '">' + esc(x.continuityType) + '</span></td><td>' + x.continuitySequence + '</td><td>' + mbL(x.litres) + '</td><td>' + mbL(x.freshoutLitres) + '</td><td>' + mbL(x.consumedLitres) + '</td><td>' + mbL(x.remainingLitres) + '</td><td><span class="badge ' + (x.status === "OPEN" ? "green" : "grey") + '">' + esc(x.status) + '</span></td></tr>';
+      return '<tr><td>' + esc(x.code) + '</td><td><span class="badge ' + (x.continuityType === "CONTINUITY" ? "blue" : "green") + '">' + esc(x.continuityType) + '</span></td><td>' + x.continuitySequence + '</td><td>' + mbL(x.litres) + '</td><td>' + mbL(x.freshoutLitres) + '</td><td>' + mbL(x.consumedLitres) + '</td><td>' + mbL(x.remainingLitres) + '</td><td><span class="badge ' + (x.status === "OPEN" ? "green" : "grey") + '">' + esc(x.status) + '</span></td>'
+        + '<td style="white-space:nowrap">' + (x.status === "OPEN" ? '<button class="btn btn-ghost sm js-mb-freshout" data-id="' + esc(x.id) + '" data-code="' + esc(x.code) + '">+ Fresh-out</button>' : '<span class="muted-sm">—</span>') + '</td></tr>';
     }).join("");
     return '<div class="panel panel-pad" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><h4 style="margin:0;color:var(--forest)">🔗 ' + esc(c.chainId) + '</h4><span class="muted-sm">' + t.tankers + ' tanker(s) · current available <b>' + mbL(t.currentAvailableLitres) + '</b>' + (t.weightedActiveFat != null ? " · weighted FAT " + t.weightedActiveFat + "%" : "") + '</span></div>'
-      + '<div style="overflow-x:auto;margin-top:8px"><table class="table"><thead><tr><th>Tanker</th><th>Type</th><th>Seq</th><th>Original</th><th>Fresh-out</th><th>Consumed</th><th>Remaining</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+      + '<div style="overflow-x:auto;margin-top:8px"><table class="table"><thead><tr><th>Tanker</th><th>Type</th><th>Seq</th><th>Original</th><th>Fresh-out</th><th>Consumed</th><th>Remaining</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
       + '<div class="muted-sm" style="margin-top:6px">Original ' + mbL(t.originalLitres) + ' + fresh-out ' + mbL(t.freshoutLitres) + ' = effective ' + mbL(t.effectiveLitres) + ' · consumed ' + mbL(t.consumedLitres) + ' · <b>current available ' + mbL(t.currentAvailableLitres) + '</b> (Σ open remaining)</div></div>';
   }
   function mbRunValidate(host) {
