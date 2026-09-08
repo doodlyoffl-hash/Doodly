@@ -12,6 +12,7 @@ import { db } from "../lib/db";
 import { istDayWindow, istISO } from "../lib/delivery/stats";
 import { registerBusiness, createOrder, updateOrderStatus } from "../lib/b2b/service";
 import { createPricing } from "../lib/b2b/pricing";
+import { createTanker } from "../lib/milk/tanker";
 import { createWarehouseSale } from "../lib/milk-business/warehouse";
 import { createOutlet, createOutletSale, setOutletPrice } from "../lib/milk-business/outlet";
 import { listMilkExpenseCategories, createMilkExpense } from "../lib/milk-business/expenses";
@@ -98,10 +99,21 @@ async function clean() {
   const expd = await db.expense.deleteMany({ where: { title: { contains: MARK } } });
   if (expd.count) console.log(`Removed ${expd.count} demo expense(s).`);
 
-  // Re-settle today so the reversed sales return their milk to the tanker.
+  // Re-settle today so the reversed sales return their milk to the tanker(s).
   const iso = istISO(new Date());
   const s = await settleDay(iso, { actorRole: "super_admin", quiet: true }).catch(() => null);
   if (s) console.log(`Re-settled ${iso}: drew ${s.totalLitres.toFixed(2)} L (should be ~0).`);
+
+  // Demo continuity tankers (marker on supplier) — only when never drawn, so the
+  // ledger stays consistent (the seed is the oldest, so a demo draw hits it, not these).
+  const demoTankers = await db.milkTanker.findMany({ where: { deletedAt: null, supplier: { contains: MARK } }, select: { id: true, code: true, consumedLitres: true } });
+  for (const dt of demoTankers) {
+    const cons = await db.tankerConsumption.count({ where: { tankerId: dt.id } });
+    if (cons > 0 || (dt.consumedLitres ?? 0) > 0.001) { console.warn(`SKIP tanker ${dt.code}: has consumption — leaving it.`); continue; }
+    await db.milkOrderAllocation.deleteMany({ where: { tankerId: dt.id } });
+    await db.milkTanker.delete({ where: { id: dt.id } });
+    console.log(`Removed demo tanker ${dt.code}.`);
+  }
   const t = await db.milkTanker.findFirst({ where: { deletedAt: null }, orderBy: { procurementDate: "asc" }, select: { code: true, litres: true, consumedLitres: true, remainingLitres: true } });
   if (t) console.log(`Tanker ${t.code}: consumed ${t.consumedLitres} L · remaining ${t.remainingLitres} L (of ${t.litres}).`);
   console.log("\n✅ Scenario cleaned.");
@@ -150,12 +162,30 @@ async function outlet() {
   console.log("\n✅ Outlet sales seeded. Open Reports → Retail outlet sales.");
 }
 
+// Focused: grow the seed tanker's chain with 2 continuity tankers, then a small
+// walk-in draw so FIFO consumes the OLDEST (seq 1) first — the Continuity chains
+// report then shows a real multi-tanker chain with partial consumption. The demo
+// tankers carry the "(demo)" marker in their supplier so --clean removes them.
+async function continuity() {
+  const { iso } = istDayWindow(undefined);
+  const seed = await db.milkTanker.findFirst({ where: { deletedAt: null, status: "OPEN", remainingLitres: { gt: 0 } }, orderBy: { procurementDate: "asc" }, select: { code: true } });
+  if (!seed) throw new Error("No open seed tanker — add a tanker first.");
+  const a = await createTanker({ tankerNo: "TN-CH-A01", supplier: `Demo Dairy North ${MARK}`, quantityKg: 1200, fatPct: 6.8, transportPaise: 950000 }, bizActor);
+  const b = await createTanker({ tankerNo: "TN-CH-B02", supplier: `Demo Dairy South ${MARK}`, quantityKg: 900, fatPct: 7.1, transportPaise: 950000 }, bizActor);
+  console.log(`  Chain: ${seed.code} (PRIMARY) → ${a.code} (CONTINUITY) → ${b.code} (CONTINUITY).`);
+  const wh = await createWarehouseSale({ customerName: `Chain Demo Buyer ${MARK}`, litres: 120, pricePerLitrePaise: 8000, saleDate: iso, paymentStatus: "PAID" }, mbActor);
+  const s = await settleDay(iso, { actorRole: "super_admin", quiet: true });
+  console.log(`  ${wh.sale.code} — 120 L drew ${s.totalLitres.toFixed(2)} L FIFO from the oldest tanker (seq 1).`);
+  console.log("\n✅ Continuity chain seeded. Open Reports → Continuity chains.");
+}
+
 async function main() {
   assertDev();
   if (process.argv.includes("--clean")) return clean();
   if (process.argv.includes("--warehouse")) return warehouse();
   if (process.argv.includes("--outlet")) return outlet();
+  if (process.argv.includes("--continuity")) return continuity();
   if (process.argv.includes("--seed")) return seed();
-  console.log("Pass --seed, --warehouse, --outlet or --clean.");
+  console.log("Pass --seed, --warehouse, --outlet, --continuity or --clean.");
 }
 main().catch((e) => { console.error(e?.message || e); process.exitCode = 1; }).finally(() => db.$disconnect());
