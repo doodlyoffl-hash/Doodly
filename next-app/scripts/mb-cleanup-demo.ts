@@ -102,6 +102,18 @@ async function main() {
     console.log(`No tanker ${DEMO_TANKER_CODE} found (already clean).`);
   }
 
+  // 6) Optionally purge MILK-SCOPED test expenses (category slug `milk-business-*`).
+  //    Opt-in via --expenses so a real dev session's expenses aren't nuked by accident.
+  //    Keeps the categories (scoping infrastructure); deletes only the expense rows
+  //    (children cascade). Never touches general/retail expenses.
+  if (process.argv.includes("--expenses")) {
+    const milkCats = await db.expenseCategory.findMany({ where: { slug: { startsWith: "milk-business-" } }, select: { id: true } });
+    if (milkCats.length) {
+      const del = await db.expense.deleteMany({ where: { categoryId: { in: milkCats.map((c) => c.id) } } });
+      console.log(`Purged ${del.count} milk-business expense(s) (categories kept).`);
+    }
+  }
+
   const after = await snapshot("AFTER");
   const seed = after.tankers.find((t) => t.code === "TNK-20260908-0001");
   const ok = after.biz.length === 0 && after.orders.length === 0 && after.tankers.length === 1 && seed != null && Math.abs((seed.remainingLitres ?? 0) - (seed.litres ?? 0)) < 0.01 && (seed.consumedLitres ?? 0) < 0.01;
