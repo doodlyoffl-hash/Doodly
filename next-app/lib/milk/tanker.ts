@@ -54,7 +54,7 @@ export async function createTanker(input: TankerInput, actor?: { actorId?: strin
   const created = await db.$transaction(async (tx) => {
     const seq = await nextSeq(tx, `tanker:${iso}`);
     const code = `TNK-${iso.replace(/-/g, "")}-${String(seq).padStart(4, "0")}`;
-    return tx.milkTanker.create({
+    const t = await tx.milkTanker.create({
       data: {
         code, procurementDate: start, tankerNo: input.tankerNo.trim(), supplier: input.supplier.trim(),
         farmerId: input.farmerId || null,
@@ -67,11 +67,16 @@ export async function createTanker(input: TankerInput, actor?: { actorId?: strin
         createdById: actor?.actorId ?? null,
       },
     });
+    // Continuity chain assignment (metadata; same tx = atomic). PRIMARY if no earlier
+    // tanker still had stock, else CONTINUITY of that tanker's chain. FIFO is untouched.
+    const { assignContinuityOnCreate } = await import("@/lib/milk/continuity");
+    const cont = await assignContinuityOnCreate(tx, t.id);
+    return { ...t, ...cont };
   });
   await audit({
     userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system",
     action: "milk.tanker.create",
-    target: `${created.code} · ${created.tankerNo} · ${cost.quantityKg}kg @ ${input.fatPct}% · ${cost.litres}L · ₹${(cost.totalCostPaise / 100).toFixed(2)}`,
+    target: `${created.code} · ${created.tankerNo} · ${cost.quantityKg}kg @ ${input.fatPct}% · ${cost.litres}L · ₹${(cost.totalCostPaise / 100).toFixed(2)} · ${created.continuityType}${created.continuityType === "CONTINUITY" ? " → " + created.continuityChainId : " " + created.continuityChainId}`,
   }).catch(() => {});
 
   // FIFO carry-forward: this fresh tanker automatically absorbs any PENDING allocation (days
@@ -242,6 +247,8 @@ export async function closeTanker(args: { id: string; reason?: string | null; fo
 
   // Freeze the immutable closing report from the fresh reconciliation (best-effort — never blocks the close).
   try { const recon = await tankerReconciliation(t.id); if (recon) await freezeTankerReport(t.id, recon, { closedById: actor?.actorId ?? null, closedByRole: actor?.actorRole ?? null, closeReason: args.reason ?? null, forced: wastage > EPS }); } catch { /* report can be frozen lazily on first view */ }
+  // Persist the per-order → tanker allocations (spec §26) from the same reconciliation (best-effort).
+  try { const { freezeOrderAllocations } = await import("@/lib/milk/order-allocation"); await freezeOrderAllocations(t.id); } catch { /* allocation freeze is best-effort */ }
 
   await audit({ userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system", action: "milk.tanker.close", target: `${t.code}${wastage > EPS ? ` · wastage ${Math.round(wastage * 100) / 100}L (forced)` : ""}${args.reason ? ` · ${args.reason}` : ""}` }).catch(() => {});
   if (wastage > EPS) await audit({ userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system", action: "milk.tanker.adjustment", target: `${t.code} · wastage ${Math.round(wastage * 100) / 100}L · ₹${(Math.round(wastage * t.costPerLitrePaise) / 100).toFixed(2)}` }).catch(() => {});

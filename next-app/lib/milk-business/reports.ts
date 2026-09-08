@@ -15,7 +15,7 @@ import { warehouseOutstanding } from "@/lib/milk-business/warehouse";
 import { outletOutstanding } from "@/lib/milk-business/outlet";
 import { outstandingReport as b2bOutstandingReport, agingReport as b2bAgingReport } from "@/lib/b2b/outstanding";
 
-export const MB_REPORT_TYPES = ["private-pnl", "warehouse-sales", "warehouse-customers", "warehouse-outstanding", "outlet-sales", "outlets", "outlet-outstanding", "b2b-outstanding", "b2b-aging", "tanker", "procurement", "inventory", "consumption"] as const;
+export const MB_REPORT_TYPES = ["private-pnl", "warehouse-sales", "warehouse-customers", "warehouse-outstanding", "outlet-sales", "outlets", "outlet-outstanding", "b2b-outstanding", "b2b-aging", "continuity", "tanker", "procurement", "inventory", "consumption"] as const;
 export type MbReportType = (typeof MB_REPORT_TYPES)[number];
 
 const rup = (p: number) => "₹" + ((p || 0) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -80,6 +80,18 @@ export async function buildMbReport(type: MbReportType, fromIso: string, toIso: 
       type: "consumption", title: "Retail Outlet Report", subtitle: `${range} · ${grp.length} outlet(s) · ${stamp}`, rowCount: grp.length,
       columns: [{ label: "Outlet" }, { label: "Litres", right: true }, { label: "Avg ₹/L", right: true }, { label: "Revenue", right: true }, { label: "Sales", right: true }],
       rows, totalRow: ["TOTAL", n2(l) + " L", "", rup(net), ""],
+    };
+  }
+
+  if (type === "continuity") {
+    const tankers = await db.milkTanker.findMany({ where: { deletedAt: null, procurementDate: { gte: start, lt: end } }, orderBy: [{ continuityChainId: "asc" }, { continuitySequence: "asc" }, { procurementDate: "asc" }], select: { code: true, continuityChainId: true, continuityType: true, continuitySequence: true, litres: true, freshoutLitres: true, consumedLitres: true, remainingLitres: true, totalCostPaise: true, fatPct: true, status: true } });
+    const rows = tankers.map((t) => [t.continuityChainId || "—", t.code, t.continuityType, String(t.continuitySequence), n2(t.litres) + " L", n2(t.freshoutLitres) + " L", n2(t.litres + t.freshoutLitres) + " L", n2(t.consumedLitres) + " L", n2(t.remainingLitres) + " L", t.fatPct + "%", rup(t.totalCostPaise), t.status]);
+    const orig = tankers.reduce((s, t) => s + t.litres, 0), fo = tankers.reduce((s, t) => s + t.freshoutLitres, 0), rem = tankers.reduce((s, t) => s + (t.status === "OPEN" ? t.remainingLitres : 0), 0), cash = tankers.reduce((s, t) => s + t.totalCostPaise, 0);
+    const chains = new Set(tankers.map((t) => t.continuityChainId).filter(Boolean)).size;
+    return {
+      type: "tanker", title: "Continuity Chain Report", subtitle: `${range} · ${chains} chain(s) · ${tankers.length} tanker(s) · current available ${n2(rem)} L · ${stamp}`, rowCount: tankers.length,
+      columns: [{ label: "Chain" }, { label: "Tanker" }, { label: "Type" }, { label: "Seq", right: true }, { label: "Original", right: true }, { label: "Fresh-out", right: true }, { label: "Effective", right: true }, { label: "Consumed", right: true }, { label: "Remaining", right: true }, { label: "FAT", right: true }, { label: "Cost", right: true }, { label: "Status" }],
+      rows, totalRow: ["TOTAL", "", "", "", n2(orig) + " L", n2(fo) + " L", n2(orig + fo) + " L", "", n2(rem) + " L (open)", "", rup(cash), ""],
     };
   }
 

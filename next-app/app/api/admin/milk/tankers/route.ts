@@ -15,6 +15,17 @@ export const dynamic = "force-dynamic";
 export const GET = route("admin.milk.tankers.list", async (req: NextRequest) => {
   requirePermission(req, "procurement", "view");
   const sp = req.nextUrl.searchParams;
+  // Continuity add-time preview (spec §35): given a prospective KG + FAT, show what the
+  // new tanker becomes and whether it will be PRIMARY or CONTINUITY. Read-only.
+  if (sp.get("preview")) {
+    const { getMilkConfig } = await import("@/lib/milk/config");
+    const { continuityPreview } = await import("@/lib/milk/continuity");
+    const kg = Number(sp.get("kg")) || 0;
+    const fat = sp.get("fat") != null ? Number(sp.get("fat")) : undefined;
+    const cfg = await getMilkConfig();
+    const litres = cfg.conversionFactor > 0 ? kg / cfg.conversionFactor : 0;
+    return ok({ preview: await continuityPreview(litres, fat) });
+  }
   const [tankers, stats] = await Promise.all([
     listTankers({ from: sp.get("from") ?? undefined, to: sp.get("to") ?? undefined, status: sp.get("status") ?? undefined, search: sp.get("search") ?? undefined }),
     tankerStats(sp.get("date") ?? undefined),

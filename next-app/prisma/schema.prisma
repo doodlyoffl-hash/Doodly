@@ -1738,6 +1738,15 @@ enum TankerStatus {
   CLOSED   // exhausted (or manually closed) — profit locked, no edits
 }
 
+// Continuity chain type. PRIMARY = a tanker that started a fresh chain (no open
+// stock remained when it arrived). CONTINUITY = a tanker added while an earlier
+// tanker in the chain still had milk (carry-forward). This is METADATA over the
+// existing global-FIFO engine — it never changes how milk is consumed.
+enum ContinuityType {
+  PRIMARY
+  CONTINUITY
+}
+
 enum ConsumptionChannel {
   RETAIL       // customer / subscription / trial / one-time (litres)
   B2B          // business order milk lines (litres)
@@ -1940,6 +1949,12 @@ model MilkTanker {
   status           TankerStatus  @default(OPEN)
   closedAt         DateTime?
 
+  // Continuity chain (metadata layer; assigned at create, never mutates cost/FAT/qty).
+  continuityType     ContinuityType @default(PRIMARY)
+  parentTankerId     String?                            // the tanker whose carry-forward this continues (null for PRIMARY)
+  continuityChainId  String?                            // "CHAIN-YYYY-####" — same for every tanker in the chain
+  continuitySequence Int            @default(1)         // 1 for PRIMARY, +1 for each continuity addition
+
   createdById      String?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @default(now()) @updatedAt
@@ -1950,6 +1965,7 @@ model MilkTanker {
 
   @@index([procurementDate])
   @@index([status, procurementDate])
+  @@index([continuityChainId])
   @@index([deletedAt])
 }
 
@@ -1968,6 +1984,31 @@ model MilkTankerFreshout {
   createdAt        DateTime   @default(now())
 
   @@index([tankerId])
+}
+
+// Per-ORDER → tanker allocation (spec §26). FROZEN from the reconciliation's derived
+// per-order attribution when a tanker's closing report is frozen — it does NOT change
+// how milk is consumed (day-FIFO stays authoritative), it persists the audit answer to
+// "which tanker(s) supplied this order". One order can have several rows (multi-tanker).
+model MilkOrderAllocation {
+  id                String             @id @default(cuid())
+  tankerId          String                                  // plain FK (no cascade — append-only audit record)
+  tankerCode        String
+  continuityChainId String?
+  channel           ConsumptionChannel
+  orderRef          String                                  // BusinessOrder / WarehouseSale / OutletSale / Delivery id
+  orderLabel        String?                                 // order/sale code snapshot
+  partyName         String?                                 // business / customer / outlet name snapshot
+  saleDate          DateTime
+  litres            Float
+  costPaise         Int                                     // COGS drawn from THIS tanker for this order
+  revenuePaise      Int?                                    // pro-rata revenue where known
+  frozenAt          DateTime           @default(now())
+
+  @@unique([tankerId, channel, orderRef])
+  @@index([orderRef])
+  @@index([tankerId])
+  @@index([continuityChainId])
 }
 
 // One row per FIFO draw against a tanker. The sum of a tanker's RETAIL+B2B+ADJUSTMENT

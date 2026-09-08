@@ -8141,6 +8141,7 @@
         '<label class="dac-f"><span>Remarks (optional)</span><input class="input" id="tk-rem" value="' + (ed && ed.remarks ? esc(ed.remarks) : "") + '"></label>' +
       "</div>" +
       '<div id="tk-prev" class="panel panel-pad" style="margin-top:10px;background:rgba(31,174,102,.06)"></div>' +
+      (ed ? "" : '<div id="tk-cont" class="panel panel-pad" style="margin-top:8px;background:rgba(31,174,102,.04);border-left:3px solid var(--forest);display:none"></div>') +
       '<p class="dac-err" id="tk-err"></p>' +
       '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px"><button class="btn btn-primary sm" id="tk-save">Save tanker</button></div>';
     var err = m.body.querySelector("#tk-err"), prev = m.body.querySelector("#tk-prev");
@@ -8158,8 +8159,31 @@
         "<div><span class='muted-sm'>Cost / litre</span><br>" + milkRs(p.perL) + "</div>" +
         '</div><div style="border-top:1px solid rgba(0,0,0,.1);margin-top:8px;padding-top:8px"><b style="font-size:18px">Total tanker cost: ' + milkRs(p.total) + "</b> <span class='muted-sm'>· " + milkRs(p.perKg) + "/kg</span></div>";
     }
-    m.body.querySelectorAll("#tk-kg,#tk-fat,#tk-tr").forEach(function (i) { i.addEventListener("input", refresh); });
-    refresh();
+    // Continuity add-time preview (spec §35) — only for a NEW tanker
+    var contEl = m.body.querySelector("#tk-cont"), contT = null;
+    function refreshCont() {
+      if (ed || !contEl) return;
+      var kg = +m.body.querySelector("#tk-kg").value || 0, fat = +m.body.querySelector("#tk-fat").value || 0;
+      if (!(kg > 0)) { contEl.style.display = "none"; return; }
+      if (contT) clearTimeout(contT);
+      contT = setTimeout(function () {
+        DOODLY_API.get("/api/admin/milk/tankers?preview=1&kg=" + kg + "&fat=" + fat).then(function (r) {
+          var p = r && r.preview; if (!p) { return; }
+          var isC = p.continuityType === "CONTINUITY";
+          contEl.style.display = "";
+          contEl.innerHTML = '<div style="font-weight:700;color:var(--forest)">' + (isC ? "🔗 Continuity tanker" : "🆕 New primary tanker") + "</div>"
+            + (isC ? '<div class="muted-sm">Continues <b>' + esc(p.parentCode || "") + "</b> · chain " + esc(p.continuityChainId || "") + " — this tanker will continue the existing balance.</div>" : '<div class="muted-sm">No open stock remains — starts a fresh chain.</div>')
+            + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 14px;margin-top:6px">'
+            + "<div><span class='muted-sm'>Carried forward</span><br><b>" + p.carriedForwardLitres + " L</b></div>"
+            + "<div><span class='muted-sm'>This tanker</span><br><b>" + p.newLitres + " L</b></div>"
+            + "<div><span class='muted-sm'>Active availability</span><br><b style='color:var(--forest)'>" + p.activeAvailabilityLitres + " L</b></div>"
+            + (p.weightedActiveFat != null ? "<div><span class='muted-sm'>Weighted active FAT</span><br>" + p.weightedActiveFat + "%</div>" : "")
+            + "</div>";
+        }).catch(function () {});
+      }, 350);
+    }
+    m.body.querySelectorAll("#tk-kg,#tk-fat,#tk-tr").forEach(function (i) { i.addEventListener("input", function () { refresh(); refreshCont(); }); });
+    refresh(); refreshCont();
     m.body.querySelector("#tk-save").addEventListener("click", function () {
       var body = {
         procurementDate: m.body.querySelector("#tk-date").value || undefined,
@@ -8406,7 +8430,7 @@
   function mbKpi(label, val, sub) { return '<div class="kpi"><div class="n">' + val + '</div><div class="l">' + esc(label) + (sub ? ' <span class="muted-sm">· ' + esc(sub) + '</span>' : '') + '</div></div>'; }
   function mbGroup(title, cards) { return '<div style="margin:6px 0 16px"><h3 style="font-size:.95rem;margin:0 0 8px;color:var(--forest)">' + title + '</h3><div class="kpi-row">' + cards + '</div></div>'; }
 
-  var MB_TABS = [["dashboard", "📊 Dashboard"], ["warehouse", "🏭 Warehouse walk-in"], ["outlet", "🛒 Retail outlet"], ["reports", "📄 Reports"]];
+  var MB_TABS = [["dashboard", "📊 Dashboard"], ["warehouse", "🏭 Warehouse walk-in"], ["outlet", "🛒 Retail outlet"], ["continuity", "🔗 Continuity"], ["reports", "📄 Reports"]];
   async function wireMilkBusinessBackend() {
     if (!window.DOODLY_API) return;
     var host = document.getElementById("milkBusinessMount"); if (!host) return;
@@ -8429,6 +8453,7 @@
     var body = host.querySelector("#mb-tab-body");
     if (tab === "warehouse") return mbWarehouseTab(body);
     if (tab === "outlet") return mbOutletTab(body);
+    if (tab === "continuity") return mbContinuityTab(body);
     if (tab === "reports") return mbReportsTab(body);
     return mbDashboardTab(body);
   }
@@ -8442,6 +8467,7 @@
     ["outlet-outstanding", "Outlet outstanding (credit)"],
     ["b2b-outstanding", "B2B business-wise outstanding"],
     ["b2b-aging", "B2B outstanding — aging"],
+    ["continuity", "Continuity chains"],
     ["tanker", "Tanker cost & consumption"],
     ["procurement", "Procurement (tankers received)"],
     ["inventory", "Inventory on hand"],
@@ -8770,6 +8796,52 @@
         });
       });
     }).catch(function (e) { box.innerHTML = '<p class="muted-sm">Couldn\'t load sales — ' + esc(e.message || "error") + "</p>"; });
+  }
+  /* ---------- Continuity chains tab ---------- */
+  function mbContinuityTab(body) {
+    body.innerHTML = '<div id="mb-cont"><p class="muted-sm">Loading…</p></div>';
+    var host = body.querySelector("#mb-cont");
+    Promise.all([
+      DOODLY_API.get("/api/private/milk-business/continuity?view=weightedFat").catch(function () { return {}; }),
+      DOODLY_API.get("/api/private/milk-business/continuity?view=chains").catch(function () { return { chains: [] }; }),
+    ]).then(function (res) { mbContinuityRender(host, res[0] || {}, (res[1] && res[1].chains) || []); })
+      .catch(function (e) { host.innerHTML = '<div class="panel panel-pad muted-sm">' + (e.code === "forbidden" ? "Your role can't open this (403)." : esc(e.message || "error")) + "</div>"; });
+  }
+  function mbContinuityRender(host, wf, chains) {
+    host.innerHTML = '<div class="panel panel-pad" style="margin-bottom:14px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">'
+      + '<div style="flex:1;min-width:220px"><h3 style="margin:0;color:var(--forest)">Continuity chains</h3><div class="muted-sm">A chain links tankers where earlier stock carried forward into the next. FIFO consumes oldest-first across the chain; current stock = Σ open remaining (never double-counted).</div></div>'
+      + mbKpi("Active milk (all open)", mbL(wf.litres || 0), wf.weightedFat != null ? "weighted FAT " + wf.weightedFat + "%" : "")
+      + '<span style="display:flex;gap:8px;align-items:flex-end"><input class="input" id="cont-order" placeholder="Order/sale ref…" style="width:160px"><button class="btn btn-ghost" id="cont-alloc">Trace order</button><button class="btn btn-ghost" id="cont-validate">✓ Validate chains</button></span></div>'
+      + '<div id="cont-result"></div>'
+      + (chains.length ? chains.map(mbChainCard).join("") : '<div class="panel panel-pad muted-sm">No active chains — no open tankers with stock.</div>');
+    host.querySelector("#cont-validate").addEventListener("click", function () { mbRunValidate(host); });
+    host.querySelector("#cont-alloc").addEventListener("click", function () { mbTraceOrder(host); });
+  }
+  function mbChainCard(c) {
+    var t = c.totals;
+    var rows = c.tankers.map(function (x) {
+      return '<tr><td>' + esc(x.code) + '</td><td><span class="badge ' + (x.continuityType === "CONTINUITY" ? "blue" : "green") + '">' + esc(x.continuityType) + '</span></td><td>' + x.continuitySequence + '</td><td>' + mbL(x.litres) + '</td><td>' + mbL(x.freshoutLitres) + '</td><td>' + mbL(x.consumedLitres) + '</td><td>' + mbL(x.remainingLitres) + '</td><td><span class="badge ' + (x.status === "OPEN" ? "green" : "grey") + '">' + esc(x.status) + '</span></td></tr>';
+    }).join("");
+    return '<div class="panel panel-pad" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><h4 style="margin:0;color:var(--forest)">🔗 ' + esc(c.chainId) + '</h4><span class="muted-sm">' + t.tankers + ' tanker(s) · current available <b>' + mbL(t.currentAvailableLitres) + '</b>' + (t.weightedActiveFat != null ? " · weighted FAT " + t.weightedActiveFat + "%" : "") + '</span></div>'
+      + '<div style="overflow-x:auto;margin-top:8px"><table class="table"><thead><tr><th>Tanker</th><th>Type</th><th>Seq</th><th>Original</th><th>Fresh-out</th><th>Consumed</th><th>Remaining</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+      + '<div class="muted-sm" style="margin-top:6px">Original ' + mbL(t.originalLitres) + ' + fresh-out ' + mbL(t.freshoutLitres) + ' = effective ' + mbL(t.effectiveLitres) + ' · consumed ' + mbL(t.consumedLitres) + ' · <b>current available ' + mbL(t.currentAvailableLitres) + '</b> (Σ open remaining)</div></div>';
+  }
+  function mbRunValidate(host) {
+    var box = host.querySelector("#cont-result"); box.innerHTML = '<div class="panel panel-pad muted-sm">Validating…</div>';
+    DOODLY_API.get("/api/private/milk-business/continuity?view=validate").then(function (r) {
+      var issues = r.issues || [], errs = issues.filter(function (i) { return i.severity === "error"; });
+      if (r.healthy) box.innerHTML = '<div class="panel panel-pad" style="border-left:4px solid var(--leaf-600,#1FAE66)">✓ All ' + r.checkedTankers + ' tanker(s) reconcile — no integrity errors.' + (issues.length ? " (" + issues.length + " warning(s))" : "") + '</div>';
+      else box.innerHTML = '<div class="panel panel-pad" style="border-left:4px solid #c0392b"><b>⚠ ' + errs.length + ' integrity issue(s):</b><ul style="margin:6px 0 0;padding-left:18px">' + issues.map(function (i) { return '<li class="muted-sm">[' + i.severity + "] " + (i.tankerCode ? esc(i.tankerCode) + ": " : "") + esc(i.message) + "</li>"; }).join("") + "</ul></div>";
+    }).catch(function (e) { box.innerHTML = '<div class="panel panel-pad muted-sm">' + (e.message || "Couldn't validate.") + "</div>"; });
+  }
+  function mbTraceOrder(host) {
+    var ref = (host.querySelector("#cont-order").value || "").trim(); if (!ref) { dacToast("Enter an order/sale reference."); return; }
+    var box = host.querySelector("#cont-result"); box.innerHTML = '<div class="panel panel-pad muted-sm">Tracing…</div>';
+    DOODLY_API.get("/api/private/milk-business/continuity?view=order-allocation&orderRef=" + encodeURIComponent(ref)).then(function (r) {
+      var a = r.allocation;
+      if (!a.tankers.length) { box.innerHTML = '<div class="panel panel-pad muted-sm">No frozen tanker allocation for "' + esc(ref) + '" yet — allocations freeze when the supplying tanker closes.</div>'; return; }
+      box.innerHTML = '<div class="panel panel-pad"><b>Order ' + esc(ref) + '</b> — ' + mbL(a.totalLitres) + ' from ' + a.tankers.length + ' tanker(s), COGS ' + mbMoney(a.totalCostPaise) + '<div style="overflow-x:auto;margin-top:6px"><table class="table"><thead><tr><th>Tanker</th><th>Chain</th><th>Channel</th><th>Litres</th><th>COGS</th></tr></thead><tbody>' + a.tankers.map(function (x) { return "<tr><td>" + esc(x.tankerCode) + '</td><td class="muted-sm">' + esc(x.continuityChainId || "—") + "</td><td>" + esc(x.channel) + "</td><td>" + mbL(x.litres) + "</td><td>" + mbMoney(x.costPaise) + "</td></tr>"; }).join("") + "</tbody></table></div></div>";
+    }).catch(function (e) { box.innerHTML = '<div class="panel panel-pad muted-sm">' + (e.message || "Couldn't trace.") + "</div>"; });
   }
   window.DOODLY_ADMIN.wireMilkBusinessBackend = wireMilkBusinessBackend;
 
