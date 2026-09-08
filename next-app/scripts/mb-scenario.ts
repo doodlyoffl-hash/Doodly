@@ -13,7 +13,7 @@ import { istDayWindow, istISO } from "../lib/delivery/stats";
 import { registerBusiness, createOrder, updateOrderStatus } from "../lib/b2b/service";
 import { createPricing } from "../lib/b2b/pricing";
 import { createWarehouseSale } from "../lib/milk-business/warehouse";
-import { createOutlet, createOutletSale } from "../lib/milk-business/outlet";
+import { createOutlet, createOutletSale, setOutletPrice } from "../lib/milk-business/outlet";
 import { listMilkExpenseCategories, createMilkExpense } from "../lib/milk-business/expenses";
 import { settleDay } from "../lib/milk/settle";
 
@@ -127,11 +127,35 @@ async function warehouse() {
   console.log("\n✅ Warehouse sales seeded. Open Reports → Warehouse walk-in sales.");
 }
 
+// Focused: 2 retail outlets (FIXED per-litre price) with a few sales so the Outlet
+// sales report has real rows. Removed by --clean (marker on the outlet name).
+async function outlet() {
+  const { iso } = istDayWindow(undefined);
+  const t = await db.milkTanker.findFirst({ where: { deletedAt: null, status: "OPEN", remainingLitres: { gt: 0 } }, select: { code: true } });
+  if (!t) throw new Error("No open tanker with stock — add a tanker first.");
+  const outlets: Array<{ name: string; location: string; price: number; sales: Array<{ litres: number; status: string }> }> = [
+    { name: `Benz Circle Outlet ${MARK}`, location: "Benz Circle", price: 7600, sales: [{ litres: 35, status: "PAID" }, { litres: 20, status: "PAID" }] },
+    { name: `Governorpet Outlet ${MARK}`, location: "Governorpet", price: 7400, sales: [{ litres: 45, status: "PAID" }, { litres: 15, status: "CREDIT" }] },
+  ];
+  for (const o of outlets) {
+    const created = await createOutlet({ name: o.name, location: o.location }, mbActor);
+    await setOutletPrice(created.id, o.price, new Date(Date.now() - 86400000).toISOString().slice(0, 10), mbActor);
+    for (const s of o.sales) {
+      const r = await createOutletSale({ outletId: created.id, litres: s.litres, pricePerLitrePaise: o.price, saleDate: iso, paymentStatus: s.status }, mbActor);
+      console.log(`  ${r.sale.code} — ${o.name}: ${s.litres} L @ ₹${(o.price / 100).toFixed(0)} = ₹${(r.sale.netPaise / 100).toFixed(2)} · ${s.status}`);
+    }
+  }
+  const s = await settleDay(iso, { actorRole: "super_admin", quiet: true });
+  console.log(`Settled ${iso}: outlet drew ${s.outlet.allocatedLitres.toFixed(2)} L, COGS ₹${(s.outlet.costPaise / 100).toFixed(2)}.`);
+  console.log("\n✅ Outlet sales seeded. Open Reports → Retail outlet sales.");
+}
+
 async function main() {
   assertDev();
   if (process.argv.includes("--clean")) return clean();
   if (process.argv.includes("--warehouse")) return warehouse();
+  if (process.argv.includes("--outlet")) return outlet();
   if (process.argv.includes("--seed")) return seed();
-  console.log("Pass --seed, --warehouse or --clean.");
+  console.log("Pass --seed, --warehouse, --outlet or --clean.");
 }
 main().catch((e) => { console.error(e?.message || e); process.exitCode = 1; }).finally(() => db.$disconnect());
