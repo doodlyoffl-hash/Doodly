@@ -8246,7 +8246,8 @@
               '<div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--leaf-700,#178a52);margin-bottom:6px">🥛 Add Freshout Milk</div>' +
               '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">' +
                 '<label style="flex:0 0 auto"><span class="muted-sm">Freshout (KG)</span><br><input class="input" id="tkm-fkg" type="number" min="0" step="0.01" placeholder="e.g. 41.2" style="max-width:130px"></label>' +
-                '<label style="flex:1;min-width:160px"><span class="muted-sm">Remarks (optional)</span><br><input class="input" id="tkm-frem" placeholder="Outlet residue" style="width:100%"></label>' +
+                '<label style="flex:1;min-width:140px"><span class="muted-sm">Remarks (optional)</span><br><input class="input" id="tkm-frem" placeholder="Outlet residue" style="width:100%"></label>' +
+                '<button class="btn btn-ghost sm" id="tkm-fauto" title="Fill from sales recorded beyond this tanker\'s stock">⚡ Auto from sales</button>' +
                 '<button class="btn btn-primary sm" id="tkm-fadd">Add freshout</button>' +
               "</div>" +
               '<div class="muted-sm" id="tkm-fconv" style="margin-top:5px">Converted to litres at ÷ ' + (t.conversionFactor || 1) + " (same as procurement)." +
@@ -8279,9 +8280,19 @@
       var cl = m.body.querySelector("#tkm-close");
       if (cl) cl.addEventListener("click", function () { closeTankerAction(id, t.code, t.remainingLitres, isSuperM, function () { m.close(); wireMilkTankersBackend(); }); });
       // Freshout: live KG→litres preview + submit (adds to the SAME tanker, re-settles, re-opens modal).
-      var fkg = m.body.querySelector("#tkm-fkg"), fconv = m.body.querySelector("#tkm-fconv"), fadd = m.body.querySelector("#tkm-fadd");
+      var fkg = m.body.querySelector("#tkm-fkg"), fconv = m.body.querySelector("#tkm-fconv"), fadd = m.body.querySelector("#tkm-fadd"), fauto = m.body.querySelector("#tkm-fauto");
       var cf = t.conversionFactor || 1;
-      if (fkg && fconv) fkg.addEventListener("input", function () { var k = Number(fkg.value) || 0; fconv.textContent = k > 0 ? "= " + (Math.round((k / cf) * 100) / 100) + " L (÷ " + cf + ", same as procurement)" : "Converted to litres at ÷ " + cf + " (same as procurement)."; });
+      if (fkg && fconv) fkg.addEventListener("input", function () { var k = Number(fkg.value) || 0; fconv.textContent = k > 0 ? "= " + (Math.round((k / cf) * 100) / 100) + " L (÷ " + cf + ", same as procurement)" : "Enter the residue KG, or click ⚡ Auto from sales."; });
+      if (fauto) fauto.addEventListener("click", function () {
+        err.textContent = ""; fauto.disabled = true;
+        DOODLY_API.get("/api/admin/milk/pending").then(function (p) {
+          fauto.disabled = false;
+          var short = (p && p.totalLitres) || 0;
+          if (short <= 0.01) { fconv.textContent = "✓ No sales recorded beyond stock — nothing to auto-add as fresh-out."; if (fkg) fkg.value = ""; return; }
+          var kg = Math.round(short * cf * 100) / 100; if (fkg) fkg.value = kg;
+          fconv.textContent = "⚡ Auto: " + kg + " KG (≈ " + (Math.round(short * 100) / 100) + " L) to cover sales beyond stock — review, then Add freshout.";
+        }).catch(function (e) { fauto.disabled = false; err.textContent = e.code === "forbidden" ? "Auto needs the Procurement → view permission." : (e.message || "Couldn't read the sales shortfall."); });
+      });
       if (fadd) fadd.addEventListener("click", function () {
         var kg = Number(fkg && fkg.value);
         if (!(kg > 0)) { err.textContent = "Enter a freshout quantity (KG) greater than 0."; return; }
@@ -8974,13 +8985,24 @@
         '<div class="muted-sm" style="margin-bottom:8px">Extra residue milk squeezed from <b>' + esc(code) + "</b> — cost/litre diluted, affected days re-settled, a drained lot re-opened (unless manually closed). <b>If " + esc(code) + " is a continuity tanker, the residue is split equally across every tanker in its chain</b> (primary + continuity).</div>" +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">' +
           '<label style="flex:0 0 auto"><span class="muted-sm">Fresh-out (KG)</span><br><input class="input" id="mbf-kg" type="number" min="0" step="0.01" placeholder="e.g. 41.2" style="max-width:140px"></label>' +
+          '<button class="btn btn-ghost sm" id="mbf-auto" style="flex:0 0 auto" title="Fill from sales recorded beyond this tanker\'s stock">⚡ Auto from sales</button>' +
           '<label style="flex:1;min-width:160px"><span class="muted-sm">Remarks (optional)</span><br><input class="input" id="mbf-rem" placeholder="Outlet residue" style="width:100%"></label>' +
         "</div>" +
-        '<div class="muted-sm" id="mbf-conv" style="margin-top:6px">Converted to litres at ÷ ' + cf + " (same as procurement).</div>" +
+        '<div class="muted-sm" id="mbf-conv" style="margin-top:6px">Enter the residue KG, or click <b>⚡ Auto from sales</b> to fill it from milk sold beyond stock. Converted to litres at ÷ ' + cf + ".</div>" +
         '<p class="dac-err" id="mbf-err"></p>' +
         '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px"><button class="btn btn-primary sm" id="mbf-add">Add fresh-out</button></div>';
-      var err = m.body.querySelector("#mbf-err"), conv = m.body.querySelector("#mbf-conv"), kgEl = m.body.querySelector("#mbf-kg"), add = m.body.querySelector("#mbf-add");
-      kgEl.addEventListener("input", function () { var kg = +kgEl.value || 0; conv.textContent = kg > 0 ? "≈ " + (Math.round((kg / cf) * 100) / 100) + " L added (÷ " + cf + ")" : "Converted to litres at ÷ " + cf + " (same as procurement)."; });
+      var err = m.body.querySelector("#mbf-err"), conv = m.body.querySelector("#mbf-conv"), kgEl = m.body.querySelector("#mbf-kg"), add = m.body.querySelector("#mbf-add"), auto = m.body.querySelector("#mbf-auto");
+      kgEl.addEventListener("input", function () { var kg = +kgEl.value || 0; conv.textContent = kg > 0 ? "≈ " + (Math.round((kg / cf) * 100) / 100) + " L added (÷ " + cf + ")" : "Enter the residue KG, or click ⚡ Auto from sales."; });
+      if (auto) auto.addEventListener("click", function () {
+        err.textContent = ""; auto.disabled = true;
+        DOODLY_API.get("/api/admin/milk/pending").then(function (p) {
+          auto.disabled = false;
+          var short = (p && p.totalLitres) || 0;
+          if (short <= 0.01) { conv.textContent = "✓ No sales recorded beyond stock — nothing to auto-add as fresh-out."; kgEl.value = ""; return; }
+          var kg = Math.round(short * cf * 100) / 100; kgEl.value = kg;
+          conv.textContent = "⚡ Auto: " + kg + " KG (≈ " + (Math.round(short * 100) / 100) + " L) to cover sales beyond stock — review, then Add fresh-out.";
+        }).catch(function (e) { auto.disabled = false; err.textContent = e.code === "forbidden" ? "Auto needs the Procurement → view permission." : (e.message || "Couldn't read the sales shortfall."); });
+      });
       add.addEventListener("click", function () {
         var kg = +kgEl.value || 0; if (!(kg > 0)) { err.textContent = "Enter a fresh-out quantity (KG) greater than 0."; return; }
         add.disabled = true; err.textContent = "";
