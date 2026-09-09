@@ -8287,7 +8287,7 @@
         if (!(kg > 0)) { err.textContent = "Enter a freshout quantity (KG) greater than 0."; return; }
         fadd.disabled = true; err.textContent = "";
         DOODLY_API.patch("/api/admin/milk/tankers/" + id, { action: "freshout", quantityKg: kg, remarks: (m.body.querySelector("#tkm-frem") || {}).value || undefined })
-          .then(function (r) { dacToast("Freshout +" + (Math.round(((r && r.entry && r.entry.litres) || 0) * 100) / 100) + " L added to " + t.code + " · stock recalculated."); m.close(); wireMilkTankersBackend(); openTankerManage(id); })
+          .then(function (r) { dacToast(r && r.tankers > 1 ? ("Fresh-out " + r.totalKg + " KG split equally across " + r.tankers + " chain tankers: " + r.split.map(function (s) { return s.code + " +" + s.litres + "L"; }).join(", ") + ".") : ("Freshout +" + (Math.round(((r && r.entry && r.entry.litres) || 0) * 100) / 100) + " L added to " + t.code + " · stock recalculated.")); m.close(); wireMilkTankersBackend(); openTankerManage(id); })
           .catch(function (e2) { fadd.disabled = false; err.textContent = e2.code === "forbidden" ? "Your role can't edit procurement." : (e2.message || "Couldn't add freshout."); });
       });
     }).catch(function (e) { dacToast(e.message || "Couldn't load the tanker."); });
@@ -8971,7 +8971,7 @@
       var cf = (_milkCfg && _milkCfg.conversionFactor) || 1.03;
       var m = asgnModal("Add fresh-out · " + code, "");
       m.body.innerHTML =
-        '<div class="muted-sm" style="margin-bottom:8px">Extra residue milk squeezed from <b>' + esc(code) + '</b> — added to the <b>same</b> lot (not a new tanker), its cost/litre diluted, affected days re-settled. Re-opens the lot if it had drained (unless it was manually closed).</div>' +
+        '<div class="muted-sm" style="margin-bottom:8px">Extra residue milk squeezed from <b>' + esc(code) + "</b> — cost/litre diluted, affected days re-settled, a drained lot re-opened (unless manually closed). <b>If " + esc(code) + " is a continuity tanker, the residue is split equally across every tanker in its chain</b> (primary + continuity).</div>" +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">' +
           '<label style="flex:0 0 auto"><span class="muted-sm">Fresh-out (KG)</span><br><input class="input" id="mbf-kg" type="number" min="0" step="0.01" placeholder="e.g. 41.2" style="max-width:140px"></label>' +
           '<label style="flex:1;min-width:160px"><span class="muted-sm">Remarks (optional)</span><br><input class="input" id="mbf-rem" placeholder="Outlet residue" style="width:100%"></label>' +
@@ -8985,7 +8985,7 @@
         var kg = +kgEl.value || 0; if (!(kg > 0)) { err.textContent = "Enter a fresh-out quantity (KG) greater than 0."; return; }
         add.disabled = true; err.textContent = "";
         DOODLY_API.patch("/api/admin/milk/tankers/" + id, { action: "freshout", quantityKg: kg, remarks: (m.body.querySelector("#mbf-rem").value || "").trim() || undefined })
-          .then(function (r) { dacToast("Fresh-out +" + (Math.round(((r && r.entry && r.entry.litres) || 0) * 100) / 100) + " L added to " + code + " · stock recalculated."); m.close(); if (typeof onSaved === "function") onSaved(); })
+          .then(function (r) { dacToast(r && r.tankers > 1 ? ("Fresh-out " + r.totalKg + " KG split equally across " + r.tankers + " chain tankers: " + r.split.map(function (s) { return s.code + " +" + s.litres + "L"; }).join(", ") + ".") : ("Fresh-out +" + (Math.round(((r && r.entry && r.entry.litres) || 0) * 100) / 100) + " L added to " + code + " · stock recalculated.")); m.close(); if (typeof onSaved === "function") onSaved(); })
           .catch(function (e) { add.disabled = false; err.textContent = e.code === "forbidden" ? "Your role can't add fresh-out (needs Procurement → edit)." : (e.message || "Couldn't add fresh-out."); });
       });
     });

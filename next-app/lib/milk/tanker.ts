@@ -143,71 +143,103 @@ export async function updateTanker(id: string, patch: Partial<TankerInput>, acto
  * new tanker's arrival). Multiple entries are allowed and summed. Cannot be added once the
  * tanker is permanently CLOSED.
  */
+type FreshoutSlice = { code: string; shareKg: number; litres: number; entry: { id: string; litres: number }; newFreshoutLitres: number; remainingLitres: number; costPerLitrePaise: number; isTarget: boolean };
+
 export async function addFreshout(id: string, input: { quantityKg: number; remarks?: string | null }, actor?: { actorId?: string; actorRole?: string }) {
   const kg = Number(input.quantityKg);
   if (!(kg > 0)) throw Errors.badRequest("Freshout quantity (KG) must be greater than 0.");
 
-  const t = await db.milkTanker.findUnique({ where: { id } });
-  if (!t || t.deletedAt) throw Errors.notFound("Tanker not found.");
+  const target = await db.milkTanker.findUnique({ where: { id } });
+  if (!target || target.deletedAt) throw Errors.notFound("Tanker not found.");
   // A tanker that merely DRAINED (fifo auto-sets status=CLOSED at zero) is only "awaiting final
   // closure" — Freshout is exactly meant for that moment, so it re-opens the lot. Only a MANUAL,
-  // permanent close blocks it. Manual close stamps closedByRole on the frozen report; a lazy
-  // freeze-on-view leaves it null, and that stale snapshot is dropped as the tanker re-opens.
-  if (t.status === "CLOSED") {
-    const frozen = await db.tankerClosingReport.findUnique({ where: { tankerId: t.id }, select: { closedByRole: true } });
-    if (frozen?.closedByRole) throw Errors.badRequest("This tanker has been permanently closed — Freshout can no longer be added.");
-    if (frozen) await db.tankerClosingReport.delete({ where: { tankerId: t.id } }).catch(() => {});
+  // permanent close blocks it (frozen report stamped with a role); a lazy freeze-on-view leaves
+  // closedByRole null and that stale snapshot is dropped as the tanker re-opens.
+  const permaClosed = async (tk: { id: string; status: string }) => {
+    if (tk.status !== "CLOSED") return false;
+    const fr = await db.tankerClosingReport.findUnique({ where: { tankerId: tk.id }, select: { closedByRole: true } });
+    return !!fr?.closedByRole;
+  };
+  if (await permaClosed(target)) throw Errors.badRequest("This tanker has been permanently closed — Freshout can no longer be added.");
+
+  // CHAIN SPLIT: fresh-out added to a CONTINUITY tanker is residue of the shared continuity pool,
+  // so it is divided EQUALLY across every fresh-out-eligible tanker in that chain (the primary +
+  // all continuity tankers). A PRIMARY / standalone tanker keeps the single-lot behaviour. Each
+  // recipient converts its KG share to litres with its OWN factor and dilutes its OWN cost/litre.
+  let members = [target];
+  if (target.continuityType === "CONTINUITY" && target.continuityChainId) {
+    const chain = await db.milkTanker.findMany({ where: { deletedAt: null, continuityChainId: target.continuityChainId }, orderBy: [{ continuitySequence: "asc" }] });
+    const eligible: typeof chain = [];
+    for (const m of chain) if (m.id === target.id || !(await permaClosed(m))) eligible.push(m);
+    if (eligible.length > 1) members = eligible;
   }
+  const n = members.length;
+  // Equal KG split; the last recipient absorbs the rounding remainder so the total stays exact.
+  const per = round3(kg / n);
+  const shareOf = (i: number) => (i < n - 1 ? per : round3(kg - per * (n - 1)));
 
-  const litres = litresOf(kg, t.conversionFactor);               // same conversion as procurement
-  const prevKg = t.freshoutKg, prevLitres = t.freshoutLitres;
-  const newFreshoutKg = prevKg + kg;
-  const newFreshoutLitres = prevLitres + litres;
-  const usableLitres = t.litres + newFreshoutLitres;             // opening + all freshout
-  // Cost is diluted, NOT increased: the same procurement cost now covers more usable litres,
-  // so total COGS over the full lot still equals procurement cost (Step 9 — no new purchase).
-  const costPerLitrePaise = usableLitres > 0 ? Math.round(t.totalCostPaise / usableLitres) : t.costPerLitrePaise;
-  const costPerKgPaise = (t.quantityKg + newFreshoutKg) > 0 ? Math.round(t.totalCostPaise / (t.quantityKg + newFreshoutKg)) : t.costPerKgPaise;
-
-  const entry = await db.$transaction(async (tx) => {
-    const e = await tx.milkTankerFreshout.create({ data: { tankerId: t.id, quantityKg: round3(kg), litres: round3(litres), conversionFactor: t.conversionFactor, enteredById: actor?.actorId ?? null, remarks: input.remarks ?? null } });
-    await tx.milkTanker.update({
-      where: { id: t.id },
-      data: {
-        freshoutKg: round3(newFreshoutKg), freshoutLitres: round3(newFreshoutLitres),
-        remainingLitres: { increment: litres },
-        costPerLitrePaise, costPerKgPaise,
-        // re-open a lot that had drained to zero — its freshout residue is now sellable stock
-        ...(t.status === "CLOSED" ? { status: "OPEN" as const, closedAt: null } : {}),
-      },
-    });
-    return e;
+  const applied: FreshoutSlice[] = await db.$transaction(async (tx) => {
+    const out: FreshoutSlice[] = [];
+    for (let i = 0; i < n; i++) {
+      const m = members[i];
+      const shareKg = shareOf(i);
+      if (!(shareKg > 0)) continue;
+      const litres = litresOf(shareKg, m.conversionFactor);
+      const newFreshoutKg = m.freshoutKg + shareKg;
+      const newFreshoutLitres = m.freshoutLitres + litres;
+      const usableLitres = m.litres + newFreshoutLitres;         // opening + all freshout
+      // Cost is diluted, NOT increased: the same procurement cost now covers more usable litres.
+      const costPerLitrePaise = usableLitres > 0 ? Math.round(m.totalCostPaise / usableLitres) : m.costPerLitrePaise;
+      const costPerKgPaise = (m.quantityKg + newFreshoutKg) > 0 ? Math.round(m.totalCostPaise / (m.quantityKg + newFreshoutKg)) : m.costPerKgPaise;
+      if (m.status === "CLOSED") await tx.tankerClosingReport.deleteMany({ where: { tankerId: m.id } });   // drop a lazy freeze on re-open
+      const entry = await tx.milkTankerFreshout.create({ data: { tankerId: m.id, quantityKg: round3(shareKg), litres: round3(litres), conversionFactor: m.conversionFactor, enteredById: actor?.actorId ?? null, remarks: input.remarks ?? null } });
+      await tx.milkTanker.update({
+        where: { id: m.id },
+        data: {
+          freshoutKg: round3(newFreshoutKg), freshoutLitres: round3(newFreshoutLitres),
+          remainingLitres: { increment: litres },
+          costPerLitrePaise, costPerKgPaise,
+          ...(m.status === "CLOSED" ? { status: "OPEN" as const, closedAt: null } : {}),
+        },
+      });
+      out.push({ code: m.code, shareKg: round3(shareKg), litres: round3(litres), entry, newFreshoutLitres: round3(newFreshoutLitres), remainingLitres: round3(m.remainingLitres + litres), costPerLitrePaise, isTarget: m.id === target.id });
+    }
+    return out;
   });
 
+  const splitNote = n > 1 ? ` · split equally across ${applied.length} chain tanker(s): ${applied.map((a) => a.code + " +" + a.shareKg + "kg").join(", ")}` : "";
   await audit({
     userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system",
     action: "milk.freshout.added",
-    // Step 13: tanker id, KG, litres, previous → new value all captured in the trace.
-    target: `${t.id} · ${t.code} · +${round3(kg)}kg → +${round3(litres)}L freshout · total ${round3(prevLitres)}L→${round3(newFreshoutLitres)}L (${round3(prevKg)}→${round3(newFreshoutKg)}kg) · cost/L ${t.costPerLitrePaise}→${costPerLitrePaise}p${input.remarks ? " · " + input.remarks : ""}`,
+    target: `${target.code} · +${round3(kg)}kg freshout${splitNote}${input.remarks ? " · " + input.remarks : ""}`,
   }).catch(() => {});
 
-  // Re-settle the affected days: this tanker's already-consumed days (refresh their frozen COGS
-  // at the new diluted rate) ∪ any PENDING allocation days (absorb overflow into the freshout
-  // capacity — same mechanism as a new tanker arriving). Oldest-first. Best-effort.
+  // Re-settle affected days: every recipient's already-consumed sale days (refresh frozen COGS at
+  // the new diluted rate) ∪ any PENDING allocation days (absorb overflow into the freshout
+  // capacity). Oldest-first. Best-effort — never blocks the entry.
   try {
     const { settleDay, listPendingAllocations } = await import("@/lib/milk/settle");
     const { istISO } = await import("@/lib/delivery/stats");
-    const myDays = await db.tankerConsumption.findMany({ where: { tankerId: t.id, channel: { in: ["RETAIL", "B2B"] } }, select: { date: true }, distinct: ["date"] });
+    const memberIds = members.map((m) => m.id);
+    const days = await db.tankerConsumption.findMany({ where: { tankerId: { in: memberIds }, channel: { in: ["RETAIL", "B2B", "WAREHOUSE", "OUTLET"] } }, select: { date: true }, distinct: ["date"] });
     const pending = await listPendingAllocations();
     const dayIsos = new Set<string>();
-    for (const d of myDays) dayIsos.add(istISO(d.date));
+    for (const d of days) dayIsos.add(istISO(d.date));
     for (const p of pending) dayIsos.add(istISO(p.date));
     const ordered = [...dayIsos].sort();
-    for (const dayIso of ordered) await settleDay(dayIso, { actorId: actor?.actorId, actorRole: actor?.actorRole ?? "system", quiet: true, clearedByTankerId: t.id });
-    if (ordered.length) await audit({ userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system", action: "milk.tanker.recalculated", target: `${t.code} · re-settled ${ordered.length} day(s) after freshout (${ordered[0]}…${ordered[ordered.length - 1]}) — COGS refreshed + pending absorbed` }).catch(() => {});
-  } catch { /* re-settle after freshout is best-effort — never blocks the entry */ }
+    for (const dayIso of ordered) await settleDay(dayIso, { actorId: actor?.actorId, actorRole: actor?.actorRole ?? "system", quiet: true, clearedByTankerId: target.id });
+    if (ordered.length) await audit({ userId: actor?.actorId ?? null, actorRole: actor?.actorRole ?? "system", action: "milk.tanker.recalculated", target: `${target.code} · re-settled ${ordered.length} day(s) after freshout — COGS refreshed + pending absorbed` }).catch(() => {});
+  } catch { /* best-effort */ }
 
-  return { ok: true as const, entry, freshoutLitres: round3(newFreshoutLitres), remainingLitres: round3(t.remainingLitres + litres), costPerLitrePaise };
+  const tgt = applied.find((a) => a.isTarget) || applied[0];
+  return {
+    ok: true as const,
+    split: applied.map((a) => ({ code: a.code, kg: a.shareKg, litres: a.litres })),
+    tankers: applied.length,
+    totalKg: round3(kg),
+    // backward-compat fields for the tanker the fresh-out was added to:
+    entry: tgt?.entry, freshoutLitres: tgt?.newFreshoutLitres ?? 0, remainingLitres: tgt?.remainingLitres ?? 0, costPerLitrePaise: tgt?.costPerLitrePaise ?? target.costPerLitrePaise,
+  };
 }
 
 export async function deleteTanker(id: string, actor?: { actorId?: string; actorRole?: string }) {
