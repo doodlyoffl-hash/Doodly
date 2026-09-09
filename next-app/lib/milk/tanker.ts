@@ -35,6 +35,7 @@ export interface TankerInput {
   snfPct?: number | null;
   transportPaise?: number | null;    // per-tanker override; default from config
   remarks?: string | null;
+  continuityMode?: "PRIMARY" | "CONTINUITY" | "AUTO" | null;   // operator's chain choice; AUTO/null = engine decides
 }
 
 export async function createTanker(input: TankerInput, actor?: { actorId?: string; actorRole?: string }) {
@@ -70,7 +71,7 @@ export async function createTanker(input: TankerInput, actor?: { actorId?: strin
     // Continuity chain assignment (metadata; same tx = atomic). PRIMARY if no earlier
     // tanker still had stock, else CONTINUITY of that tanker's chain. FIFO is untouched.
     const { assignContinuityOnCreate } = await import("@/lib/milk/continuity");
-    const cont = await assignContinuityOnCreate(tx, t.id);
+    const cont = await assignContinuityOnCreate(tx, t.id, input.continuityMode ?? "AUTO");
     return { ...t, ...cont };
   });
   await audit({

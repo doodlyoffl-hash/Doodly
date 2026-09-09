@@ -10,8 +10,11 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { Errors } from "@/lib/http";
 import { getInventory } from "@/lib/milk/tanker";
 import { milkInventorySummary } from "@/lib/milk/inventory";
+
+export type ContinuityMode = "PRIMARY" | "CONTINUITY" | "AUTO";
 
 const EPS = 1e-6;
 const r2 = (n: number) => Math.round((n || 0) * 100) / 100;
@@ -34,18 +37,31 @@ async function activePredecessor(tx: Prisma.TransactionClient, exceptId: string,
 }
 
 /** Assign continuity metadata to a freshly-created tanker (runs INSIDE createTanker's tx).
- *  PRIMARY when no earlier tanker still had stock; otherwise CONTINUITY of that tanker's chain. */
-export async function assignContinuityOnCreate(tx: Prisma.TransactionClient, newTankerId: string): Promise<{ continuityType: "PRIMARY" | "CONTINUITY"; continuityChainId: string; continuitySequence: number; parentTankerId: string | null }> {
+ *  `mode` is the operator's choice from the Add-Tanker form:
+ *    - "AUTO"       → the engine decides: PRIMARY when no earlier tanker still had stock,
+ *                     else CONTINUITY of that tanker's chain (the original behaviour).
+ *    - "PRIMARY"    → force a fresh chain even if stock remains (a deliberately separate batch).
+ *    - "CONTINUITY" → continue the active predecessor's chain; rejected (400) if there is no
+ *                     open tanker with remaining stock to continue.
+ *  FIFO consumption is unaffected either way — this is only the chain grouping. */
+export async function assignContinuityOnCreate(tx: Prisma.TransactionClient, newTankerId: string, mode: ContinuityMode = "AUTO"): Promise<{ continuityType: "PRIMARY" | "CONTINUITY"; continuityChainId: string; continuitySequence: number; parentTankerId: string | null }> {
   const t = await tx.milkTanker.findUniqueOrThrow({ where: { id: newTankerId }, select: { procurementDate: true } });
   const pred = await activePredecessor(tx, newTankerId, t.procurementDate);
 
-  if (!pred) {
+  if (mode === "CONTINUITY" && !pred) {
+    throw Errors.badRequest("Cannot add a Continuity tanker — there is no open tanker with remaining stock to continue. Add it as a Primary tanker.");
+  }
+  const asContinuity = mode === "CONTINUITY" || (mode === "AUTO" && !!pred);
+
+  if (!asContinuity || !pred) {
+    // PRIMARY — start a fresh chain (chosen, or nothing to continue).
     const chainId = await nextChainCode(tx);
     await tx.milkTanker.update({ where: { id: newTankerId }, data: { continuityType: "PRIMARY", continuityChainId: chainId, continuitySequence: 1, parentTankerId: null } });
     return { continuityType: "PRIMARY", continuityChainId: chainId, continuitySequence: 1, parentTankerId: null };
   }
 
-  // predecessor may predate the continuity feature (no chainId) → start one for it
+  // CONTINUITY — continue the active predecessor's chain (predecessor may predate the
+  // continuity feature and lack a chainId → start one for it).
   let chainId = pred.continuityChainId;
   if (!chainId) {
     chainId = await nextChainCode(tx);

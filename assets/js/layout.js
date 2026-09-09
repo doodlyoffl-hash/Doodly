@@ -8159,26 +8159,39 @@
         "<div><span class='muted-sm'>Cost / litre</span><br>" + milkRs(p.perL) + "</div>" +
         '</div><div style="border-top:1px solid rgba(0,0,0,.1);margin-top:8px;padding-top:8px"><b style="font-size:18px">Total tanker cost: ' + milkRs(p.total) + "</b> <span class='muted-sm'>· " + milkRs(p.perKg) + "/kg</span></div>";
     }
-    // Continuity add-time preview (spec §35) — only for a NEW tanker
-    var contEl = m.body.querySelector("#tk-cont"), contT = null;
+    // Tanker-type chooser (§35 preview + operator's Primary/Continuity choice) — NEW tanker only.
+    // The operator picks; the engine only defaults the pick to the smart recommendation and
+    // blocks Continuity when there's no open stock to continue. FIFO consumption is unaffected.
+    var contEl = m.body.querySelector("#tk-cont"), contT = null, _contMode = null, _lastPrev = null;
+    function renderCont() {
+      var p = _lastPrev; if (!contEl || !p) return;
+      var hasPred = p.continuityType === "CONTINUITY";           // an open predecessor with stock exists
+      if (_contMode == null) _contMode = hasPred ? "CONTINUITY" : "PRIMARY";   // default = smart recommendation
+      if (_contMode === "CONTINUITY" && !hasPred) _contMode = "PRIMARY";       // can't continue nothing
+      var isC = _contMode === "CONTINUITY";
+      contEl.style.display = "";
+      contEl.innerHTML =
+        '<div style="font-weight:700;color:var(--forest);margin-bottom:6px">Tanker type</div>' +
+        '<label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:5px;cursor:pointer"><input type="radio" name="tk-conttype" value="PRIMARY"' + (isC ? "" : " checked") + ' style="margin-top:3px">' +
+          '<span><b>🆕 Primary</b> — starts a new stock chain.' + (hasPred ? ' <span class="muted-sm">The ' + p.carriedForwardLitres + " L already open stays in its own chain (still sold FIFO).</span>" : "") + "</span></label>" +
+        '<label style="display:flex;gap:8px;align-items:flex-start;cursor:' + (hasPred ? "pointer" : "not-allowed") + ';opacity:' + (hasPred ? "1" : ".55") + '"><input type="radio" name="tk-conttype" value="CONTINUITY"' + (isC ? " checked" : "") + (hasPred ? "" : " disabled") + ' style="margin-top:3px">' +
+          "<span><b>🔗 Continuity</b> — " + (hasPred ? "carries forward <b>" + esc(p.parentCode || "") + "</b> (chain " + esc(p.continuityChainId || "") + ")." : '<span class="muted-sm">no open stock to continue right now.</span>') + "</span></label>" +
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 14px;margin-top:8px;border-top:1px dashed rgba(0,0,0,.14);padding-top:8px">' +
+          (isC ? "<div><span class='muted-sm'>Carried forward</span><br><b>" + p.carriedForwardLitres + " L</b></div>" : "") +
+          "<div><span class='muted-sm'>This tanker</span><br><b>" + p.newLitres + " L</b></div>" +
+          "<div><span class='muted-sm'>" + (isC ? "Active availability (chain)" : "New chain stock") + "</span><br><b style='color:var(--forest)'>" + (isC ? p.activeAvailabilityLitres : p.newLitres) + " L</b></div>" +
+          ((isC && p.weightedActiveFat != null) ? "<div><span class='muted-sm'>Weighted active FAT</span><br>" + p.weightedActiveFat + "%</div>" : "") +
+        "</div>";
+      contEl.querySelectorAll('input[name="tk-conttype"]').forEach(function (r) { r.addEventListener("change", function () { _contMode = r.value; renderCont(); }); });
+    }
     function refreshCont() {
       if (ed || !contEl) return;
       var kg = +m.body.querySelector("#tk-kg").value || 0, fat = +m.body.querySelector("#tk-fat").value || 0;
-      if (!(kg > 0)) { contEl.style.display = "none"; return; }
+      if (!(kg > 0)) { contEl.style.display = "none"; _lastPrev = null; return; }
       if (contT) clearTimeout(contT);
       contT = setTimeout(function () {
         DOODLY_API.get("/api/admin/milk/tankers?preview=1&kg=" + kg + "&fat=" + fat).then(function (r) {
-          var p = r && r.preview; if (!p) { return; }
-          var isC = p.continuityType === "CONTINUITY";
-          contEl.style.display = "";
-          contEl.innerHTML = '<div style="font-weight:700;color:var(--forest)">' + (isC ? "🔗 Continuity tanker" : "🆕 New primary tanker") + "</div>"
-            + (isC ? '<div class="muted-sm">Continues <b>' + esc(p.parentCode || "") + "</b> · chain " + esc(p.continuityChainId || "") + " — this tanker will continue the existing balance.</div>" : '<div class="muted-sm">No open stock remains — starts a fresh chain.</div>')
-            + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 14px;margin-top:6px">'
-            + "<div><span class='muted-sm'>Carried forward</span><br><b>" + p.carriedForwardLitres + " L</b></div>"
-            + "<div><span class='muted-sm'>This tanker</span><br><b>" + p.newLitres + " L</b></div>"
-            + "<div><span class='muted-sm'>Active availability</span><br><b style='color:var(--forest)'>" + p.activeAvailabilityLitres + " L</b></div>"
-            + (p.weightedActiveFat != null ? "<div><span class='muted-sm'>Weighted active FAT</span><br>" + p.weightedActiveFat + "%</div>" : "")
-            + "</div>";
+          if (!r || !r.preview) return; _lastPrev = r.preview; renderCont();
         }).catch(function () {});
       }, 350);
     }
@@ -8194,6 +8207,7 @@
         snfPct: m.body.querySelector("#tk-snf").value ? +m.body.querySelector("#tk-snf").value : null,
         transportPaise: Math.round((+m.body.querySelector("#tk-tr").value || 0) * 100),
         remarks: m.body.querySelector("#tk-rem").value.trim() || null,
+        continuityMode: ed ? undefined : (_contMode || undefined),   // operator's Primary/Continuity choice (new tanker only)
       };
       if (!body.tankerNo || !body.supplier || !(body.quantityKg > 0)) { err.textContent = "Tanker number, supplier and a positive quantity are required."; return; }
       var pr = ed ? DOODLY_API.patch("/api/admin/milk/tankers/" + ed.id, body) : DOODLY_API.post("/api/admin/milk/tankers", body);

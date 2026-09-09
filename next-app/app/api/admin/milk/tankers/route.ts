@@ -43,6 +43,7 @@ const createSchema = z.object({
   snfPct: z.number().min(0).max(100).optional().nullable(),
   transportPaise: z.number().int().min(0).optional().nullable(),
   remarks: z.string().max(500).optional().nullable(),
+  continuityMode: z.enum(["PRIMARY", "CONTINUITY", "AUTO"]).optional().nullable(),
 });
 
 export const POST = route("admin.milk.tankers.create", async (req: NextRequest) => {
