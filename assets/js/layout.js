@@ -8502,6 +8502,59 @@
     }).catch(function (e) { m.body.innerHTML = '<p class="dac-err">' + esc((e && e.message) || "Couldn't load milk categories.") + "</p>"; });
   }
 
+  // Add fresh-out from the private module — pick any tanker (not just chain rows on the
+  // Continuity tab), enter the residue KG or ⚡ Auto from sales (fills it from milk sold beyond
+  // stock). Reuses the SAME engine (PATCH /api/admin/milk/tankers/:id action:freshout →
+  // addFreshout): dilutes cost, re-opens a drained lot, splits across the chain for a continuity
+  // tanker. Drained (auto-closed) tankers are included since fresh-out re-opens them.
+  function mbAddFreshout(onSaved) {
+    if (!window.DOODLY_API) return;
+    var m = asgnModal("Add fresh-out", '<p class="muted-sm">Loading tankers…</p>');
+    Promise.all([
+      DOODLY_API.get("/api/admin/milk/tankers").catch(function () { return { tankers: [] }; }),
+      DOODLY_API.get("/api/admin/milk/config").catch(function () { return {}; }),
+    ]).then(function (res) {
+      if (res[1] && res[1].config) _milkCfg = res[1].config;
+      var list = ((res[0] && res[0].tankers) || []).filter(function (t) { return t.status === "OPEN" || t.status === "CLOSED"; });
+      list.sort(function (a, b) { return a.status === b.status ? 0 : a.status === "OPEN" ? -1 : 1; });
+      if (!list.length) { m.body.innerHTML = '<p class="muted-sm">No tankers yet — add a tanker first.</p>'; return; }
+      m.body.innerHTML =
+        '<div class="muted-sm" style="margin-bottom:8px">Record residue (fresh-out) milk on a tanker. On a <b>continuity</b> tanker it splits equally across the chain; a drained tanker re-opens. Use <b>⚡ Auto from sales</b> to fill it from milk sold beyond stock.</div>' +
+        '<label class="dac-f" style="display:block;margin-bottom:8px"><span class="muted-sm">Tanker</span><br><select class="input" id="maf-t" style="min-width:280px">' +
+          list.map(function (t) { return '<option value="' + t.id + '" data-cf="' + (t.conversionFactor || 1.03) + '" data-code="' + esc(t.code) + '">' + esc(t.code) + " · " + esc(t.supplier) + " · " + (Math.round((t.remainingLitres || 0) * 100) / 100) + " L" + (t.continuityType === "CONTINUITY" ? " · 🔗 continuity" : "") + (t.status === "CLOSED" ? " · (drained)" : "") + "</option>"; }).join("") + "</select></label>" +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">' +
+          '<label style="flex:0 0 auto"><span class="muted-sm">Fresh-out (KG)</span><br><input class="input" id="maf-kg" type="number" min="0" step="0.01" placeholder="e.g. 41.2" style="max-width:140px"></label>' +
+          '<button class="btn btn-ghost sm" id="maf-auto" title="Fill from sales recorded beyond stock">⚡ Auto from sales</button>' +
+          '<label style="flex:1;min-width:150px"><span class="muted-sm">Remarks (optional)</span><br><input class="input" id="maf-rem" placeholder="Outlet residue" style="width:100%"></label>' +
+        "</div>" +
+        '<div class="muted-sm" id="maf-conv" style="margin-top:6px">Enter the residue KG, or click ⚡ Auto from sales.</div>' +
+        '<p class="dac-err" id="maf-err"></p>' +
+        '<div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-primary sm" id="maf-add">Add fresh-out</button></div>';
+      var sel = m.body.querySelector("#maf-t"), kgEl = m.body.querySelector("#maf-kg"), conv = m.body.querySelector("#maf-conv"), err = m.body.querySelector("#maf-err"), add = m.body.querySelector("#maf-add"), auto = m.body.querySelector("#maf-auto");
+      var cfOf = function () { var o = sel.options[sel.selectedIndex]; return +(o && o.getAttribute("data-cf")) || 1.03; };
+      var codeOf = function () { var o = sel.options[sel.selectedIndex]; return (o && o.getAttribute("data-code")) || ""; };
+      var note = function () { var kg = +kgEl.value || 0, cf = cfOf(); conv.textContent = kg > 0 ? "≈ " + (Math.round((kg / cf) * 100) / 100) + " L added (÷ " + cf + ")" : "Enter the residue KG, or click ⚡ Auto from sales."; };
+      sel.addEventListener("change", note); kgEl.addEventListener("input", note);
+      auto.addEventListener("click", function () {
+        err.textContent = ""; auto.disabled = true;
+        DOODLY_API.get("/api/admin/milk/pending").then(function (p) {
+          auto.disabled = false;
+          var short = (p && p.totalLitres) || 0;
+          if (short <= 0.01) { conv.textContent = "✓ No sales recorded beyond stock — nothing to auto-add."; kgEl.value = ""; return; }
+          var kg = Math.round(short * cfOf() * 100) / 100; kgEl.value = kg;
+          conv.textContent = "⚡ Auto: " + kg + " KG (≈ " + (Math.round(short * 100) / 100) + " L) to cover sales beyond stock — review, then Add.";
+        }).catch(function (e) { auto.disabled = false; err.textContent = e.code === "forbidden" ? "Auto needs the Procurement → view permission." : (e.message || "Couldn't read the sales shortfall."); });
+      });
+      add.addEventListener("click", function () {
+        var kg = +kgEl.value || 0; if (!(kg > 0)) { err.textContent = "Enter a fresh-out quantity (KG) greater than 0."; return; }
+        add.disabled = true; err.textContent = "";
+        DOODLY_API.patch("/api/admin/milk/tankers/" + sel.value, { action: "freshout", quantityKg: kg, remarks: (m.body.querySelector("#maf-rem").value || "").trim() || undefined })
+          .then(function (r) { dacToast(r && r.tankers > 1 ? ("Fresh-out " + r.totalKg + " KG split equally across " + r.tankers + " chain tankers: " + r.split.map(function (s) { return s.code + " +" + s.litres + "L"; }).join(", ") + ".") : ("Fresh-out +" + (Math.round(((r && r.entry && r.entry.litres) || 0) * 100) / 100) + " L added to " + codeOf() + " · stock recalculated.")); m.close(); if (typeof onSaved === "function") onSaved(); })
+          .catch(function (e) { add.disabled = false; err.textContent = e.code === "forbidden" ? "Your role can't add fresh-out (needs Procurement → edit)." : (e.message || "Couldn't add fresh-out."); });
+      });
+    }).catch(function (e) { m.body.innerHTML = '<p class="dac-err">' + esc((e && e.message) || "Couldn't load tankers.") + "</p>"; });
+  }
+
   var MB_TABS = [["dashboard", "📊 Dashboard"], ["b2b", "🏢 B2B orders"], ["warehouse", "🏭 Warehouse walk-in"], ["outlet", "🛒 Retail outlet"], ["continuity", "🔗 Continuity"], ["reports", "📄 Reports"]];
   async function wireMilkBusinessBackend() {
     if (!window.DOODLY_API) return;
@@ -8572,12 +8625,14 @@
       + '<label class="muted-sm" style="display:flex;flex-direction:column;gap:2px">Month<input type="month" id="mb-month" class="input" value="' + esc(day0.slice(0, 7)) + '"></label>'
       + '<button class="btn btn-ghost" id="mb-refresh">↻ Refresh</button>'
       + '<button class="btn btn-ghost" id="mb-addexpense" style="margin-left:auto">+ Add expense</button>'
+      + '<button class="btn btn-ghost" id="mb-freshout">🥛 + Fresh-out</button>'
       + '<button class="btn btn-primary" id="mb-addtanker">+ Add tanker</button></div>'
       + '<div id="mb-body"><p class="muted-sm">Loading…</p></div>';
     body.querySelector("#mb-date").addEventListener("change", function () { mbDashLoad(body); });
     body.querySelector("#mb-month").addEventListener("change", function () { mbDashLoad(body); });
     body.querySelector("#mb-refresh").addEventListener("click", function () { mbDashLoad(body); });
     body.querySelector("#mb-addexpense").addEventListener("click", function () { mbAddExpense(function () { mbDashLoad(body); }); });
+    body.querySelector("#mb-freshout").addEventListener("click", function () { mbAddFreshout(function () { mbDashLoad(body); }); });
     body.querySelector("#mb-addtanker").addEventListener("click", function () { mbAddTanker(function () { mbDashLoad(body); }); });
     mbDashLoad(body);
   }
